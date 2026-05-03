@@ -1,0 +1,87 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.layout {
+  max-width: 480px;
+  margin: 0 auto;
+  min-height: 100vh;
+  position: relative;
+  background: var(--bg);
+}
+
+.layout-main {
+  padding-bottom: 82px;
+}
+
+/* ── BOTTOM NAV ── */
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 480px;
+  height: 82px;
+  background: var(--s1);
+  border-top: 1px solid var(--bd);
+  display: flex;
+  align-items: flex-start;
+  padding-top: 10px;
+  z-index: 100;
+}
+
+/* Nav položky */
+.nav-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  text-decoration: none;
+  padding: 4px;
+}
+
+.nav-icon {
+  font-size: 21px;
+  line-height: 1;
+}
+
+.nav-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--t3);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.nav-item:hover .nav-label {
+  color: var(--gr);
+}
+
+/* FAB — prostřední + tlačítko */
+.nav-fab {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: var(--gr);
+  color: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  font-weight: 900;
+  text-decoration: none;
+  box-shadow: 0 4px 24px rgba(46, 204, 113, 0.45);
+  border: 3px solid var(--bg);
+  margin-top: -14px;
+  flex-shrink: 0;
+  transition: transform 0.12s;
+}
+
+.nav-fab:hover {
+  transform: scale(1.08);
+}
