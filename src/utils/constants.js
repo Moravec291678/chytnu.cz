@@ -41,14 +41,14 @@ export const DEFAULT_SPECIES = [
   { key: "trout", label: "Pstruh", latinName: "Salmo trutta", isCustom: false },
   { key: "asp", label: "Bolen", latinName: "Aspius aspius", isCustom: false },
 ];
-const DEFAULT_METHODS = [
+export const DEFAULT_METHODS = [
   { key: "ledgering", label: "Položená", isCustom: false },
   { key: "feeder", label: "Feeder", isCustom: false },
   { key: "float", label: "Plavaná", isCustom: false },
   { key: "spinning", label: "Přívlač", isCustom: false },
   { key: "flyFishing", label: "Muškaření", isCustom: false },
 ];
-const DEFAULT_BAITS = [
+export const DEFAULT_BAITS = [
   { key: "corn", label: "Kukuřice", isCustom: false },
   { key: "boilies", label: "Boilies", isCustom: false },
   { key: "worms", label: "Červi", isCustom: false },
