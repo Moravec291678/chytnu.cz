@@ -1,7 +1,7 @@
 import Layout from "../components/Layout";
 import { useCatches } from "../context/CatchContext";
 import { TEST_CATCHES } from "../utils/mockData";
-import SpeciesCard from "../components/speciesCard";
+import SpeciesCard from "../components/SpeciesCard";
 
 function HomePage() {
   const { state, dispatch } = useCatches();

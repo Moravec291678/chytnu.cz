@@ -1,4 +1,5 @@
 import { MOON_PHASE_EMOJI } from "../utils/constants";
+import "../styles/SpeciesCard.css";
 function SpeciesCard({ speciesKey, data, biggest }) {
   return (
     <div className="species-card">
@@ -9,10 +10,20 @@ function SpeciesCard({ speciesKey, data, biggest }) {
           <p>
             📍{biggest.locationName} · 🎣 {biggest.method?.label}
           </p>
-          {biggest.isPersonalBest && <p>🏆 Osobní rekord</p>}
-          {biggest.isSpeciesBest && <p>🥇 Rekord druhu</p>}
-          {biggest.result === "released" && <p>↩️ Puštěno</p>}
-          {biggest.result === "kept" && <p>🧊 Necháno</p>}
+          <div className="tags">
+            {biggest.isPersonalBest && (
+              <span className="tag tag-pb">🏆 Osobní rekord</span>
+            )}
+            {biggest.isSpeciesBest && (
+              <span className="tag tag-species">🥇 Rekord druhu</span>
+            )}
+            {biggest.result === "released" && (
+              <span className="tag tag-released">↩️ Puštěno</span>
+            )}
+            {biggest.result === "kept" && (
+              <span className="tag tag-kept">🧊 Necháno</span>
+            )}
+          </div>
         </div>
         <div className="species-card-right">
           <p>{biggest.weightKg} kg</p>

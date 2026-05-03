@@ -1,0 +1,142 @@
+.species-card {
+  margin: 0 16px 9px;
+  background: var(--s1);
+  border: 1px solid var(--bd);
+  border-radius: 15px;
+  padding: 13px 14px;
+  cursor: pointer;
+  transition: border-color 0.12s;
+}
+
+.species-card:hover {
+  border-color: var(--bd2);
+}
+
+/* Hlavní řádek */
+.species-card-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+}
+
+/* Ikona */
+.species-card-icon {
+  width: 50px;
+  height: 50px;
+  border-radius: 13px;
+  background: var(--gr-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+/* Info sekce */
+.species-card-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.species-card-info h2 {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--t1);
+  line-height: 1.2;
+  margin: 0;
+}
+
+.species-card-info p {
+  font-size: 12px;
+  color: var(--t2);
+  font-weight: 500;
+  margin: 0;
+}
+
+/* Tagy */
+.species-card-info .tags {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.tag {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 7px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.tag-pb {
+  background: var(--go-bg);
+  color: var(--go);
+}
+
+.tag-species {
+  background: var(--bl-bg);
+  color: var(--bl);
+}
+
+.tag-released {
+  background: var(--gr-bg);
+  color: var(--gr);
+}
+
+.tag-kept {
+  background: var(--re-bg);
+  color: var(--re);
+}
+
+/* Pravá část */
+.species-card-right {
+  text-align: right;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.species-card-right p:first-child {
+  font-size: 24px;
+  font-weight: 900;
+  color: var(--t1);
+  line-height: 1;
+  margin: 0;
+}
+
+.species-card-right p:nth-child(2) {
+  font-size: 12px;
+  color: var(--t3);
+  margin: 0;
+}
+
+.species-card-right p:last-child {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--t2);
+  margin-top: 4px;
+}
+
+/* Footer */
+.species-card-footer {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--bd);
+}
+
+.species-card-footer p {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--t3);
+  margin: 0;
+}
