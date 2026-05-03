@@ -1,11 +1,10 @@
 import Layout from "../components/Layout";
 import { useCatches } from "../context/CatchContext";
-import { TEST_CATCHES } from "../utils/mockData";
 import SpeciesCard from "../components/SpeciesCard";
 
 function HomePage() {
   const { state, dispatch } = useCatches();
-  const reducedCatches = TEST_CATCHES.reduce((acc, catchItem) => {
+  const reducedCatches = state.catches.reduce((acc, catchItem) => {
     const key = catchItem.speciesKey;
     if (!acc[key]) {
       acc[key] = {
@@ -21,6 +20,12 @@ function HomePage() {
   const speciesGroups = Object.entries(reducedCatches);
   return (
     <Layout>
+      <header className="home-header">
+        <div className="home-header-rg">
+          <h1>ChytnuCz</h1>
+          {}
+        </div>
+      </header>
       {speciesGroups.map(([speciesKey, data]) => {
         const biggest = data.catches.reduce((max, item) => {
           return item.weightKg > max.weightKg ? item : max;

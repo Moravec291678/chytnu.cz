@@ -1,7 +1,7 @@
 import { createContext, useReducer, useContext } from "react";
-
+import { TEST_CATCHES } from "../utils/mockData";
 const initialState = {
-  catches: [],
+  catches: TEST_CATCHES,
 };
 
 function catchReducer(state, action) {
