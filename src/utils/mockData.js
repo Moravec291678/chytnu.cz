@@ -128,4 +128,52 @@ export const TEST_CATCHES = [
     isSeasonRecord: false,
     isSpeciesBest: false,
   },
+  {
+    id: "catch-004",
+    createdAt: new Date("2026-04-18T20:15:00Z"),
+
+    // Stejný druh jako catch-001, ale jiné parametry
+    species: "Kapr",
+    speciesKey: "carp",
+    speciesLatin: "Cyprinus carpio",
+
+    weightKg: 5.4,
+    lengthCm: 69,
+    girthCm: 44,
+    fightMinutes: 8,
+
+    locationName: "Těrlická přehrada",
+    revierNumber: "471 456",
+    gps: { lat: 49.746, lng: 18.482 },
+    waterDepthM: 2.1,
+    bottomType: "sandy",
+
+    caughtAt: new Date("2026-04-18T19:40:00Z"),
+    tripId: "trip-004",
+
+    method: { key: "float", label: "Splávek", isCustom: false },
+    baits: [
+      { key: "corn", label: "🌽 Kukuřice", isCustom: false },
+      { key: "boilies", label: "⚫ Boilies", isCustom: false },
+    ],
+    result: "released",
+
+    conditions: {
+      airTempC: 16,
+      waterTempC: 13,
+      pressureHpa: 1012,
+      pressureTrend: "falling",
+      windKmh: 14,
+      weather: "oblačno",
+      moonPhase: "fullMoon",
+    },
+
+    photos: ["https://example.com/catch4.jpg"],
+    notes: "Silný boj u rákosí, záběr na kukuřici.",
+    isFavorite: true,
+
+    isPersonalBest: false,
+    isSeasonRecord: false,
+    isSpeciesBest: false,
+  },
 ];
