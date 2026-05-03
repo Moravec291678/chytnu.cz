@@ -1,6 +1,7 @@
 import Layout from "../components/Layout";
 import { useCatches } from "../context/CatchContext";
 import { TEST_CATCHES } from "../utils/mockData";
+import SpeciesCard from "../components/speciesCard";
 
 function HomePage() {
   const { state, dispatch } = useCatches();
@@ -25,12 +26,12 @@ function HomePage() {
           return item.weightKg > max.weightKg ? item : max;
         });
         return (
-          <div key={speciesKey} className="fish-card">
-            <p>{speciesKey}</p>
-            <p>{data.count}</p>
-            <p>{biggest.weightKg} kg</p>
-            <p>{biggest.lengthCm} cm</p>
-          </div>
+          <SpeciesCard
+            key={speciesKey}
+            speciesKey={speciesKey}
+            data={data}
+            biggest={biggest}
+          />
         );
       })}
     </Layout>
