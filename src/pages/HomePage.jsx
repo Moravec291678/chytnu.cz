@@ -19,7 +19,24 @@ function HomePage() {
 
     return acc;
   }, {});
+
   const speciesGroups = Object.entries(reducedCatches);
+  const sortedCatches = speciesGroups.sort(
+    (
+      [, { count: aCount, catches: aCatches }],
+      [, { count: bCount, catches: bCatches }],
+    ) => {
+      if (state.sortBy === "nejvice") return bCount - aCount;
+      if (state.sortBy === "nejmene") return aCount - bCount;
+      if (state.sortBy === "nejnovejsi") {
+        return (
+          Math.max(...bCatches.map((item) => item.caughtAt)) -
+          Math.max(...aCatches.map((item) => item.caughtAt))
+        );
+      }
+      return 0;
+    },
+  );
   return (
     <Layout>
       <header className="home-header">
@@ -40,11 +57,37 @@ function HomePage() {
             <button>🔔</button>
           </div>
         </div>
-        <div className="home-header-bottom">
-          
+
+        <div className="home-header-sort">
+          <button
+            onClick={() => dispatch({ type: "SET_SORT", payload: "vse" })}
+            className="btn-sort"
+          >
+            Vše
+          </button>
+          <button
+            onClick={() => dispatch({ type: "SET_SORT", payload: "nejvice" })}
+            className="btn-sort"
+          >
+            Nejvíce
+          </button>
+          <button
+            onClick={() => dispatch({ type: "SET_SORT", payload: "nejmene" })}
+            className="btn-sort"
+          >
+            Nejméně
+          </button>
+          <button
+            onClick={() =>
+              dispatch({ type: "SET_SORT", payload: "nejnovejsi" })
+            }
+            className="btn-sort"
+          >
+            Nejnovější
+          </button>
         </div>
       </header>
-      {speciesGroups.map(([speciesKey, data]) => {
+      {sortedCatches.map(([speciesKey, data]) => {
         const biggest = data.catches.reduce((max, item) => {
           return item.weightKg > max.weightKg ? item : max;
         });

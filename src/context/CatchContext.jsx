@@ -2,6 +2,7 @@ import { createContext, useReducer, useContext } from "react";
 import { TEST_CATCHES } from "../utils/mockData";
 const initialState = {
   catches: TEST_CATCHES,
+  sortBy: "vse",
 };
 
 function catchReducer(state, action) {
@@ -24,6 +25,11 @@ function catchReducer(state, action) {
             ? { ...item, isFavorite: !item.isFavorite }
             : item;
         }),
+      };
+    case "SET_SORT":
+      return {
+        ...state,
+        sortBy: action.payload,
       };
   }
 }
