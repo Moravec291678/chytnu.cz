@@ -2,6 +2,7 @@ import Layout from "../components/Layout";
 import { useCatches } from "../context/CatchContext";
 import SpeciesCard from "../components/SpeciesCard";
 import { getSeason } from "../utils/helpers";
+import "../styles/HomePage.css";
 
 function HomePage() {
   const { state, dispatch } = useCatches();
@@ -37,43 +38,39 @@ function HomePage() {
       return 0;
     },
   );
+
   return (
     <Layout>
       <header className="home-header">
         <div className="home-header-top">
-          <div className="home-header-rg">
+          <div>
             <h1>ChytnuCz</h1>
-            <div className="home-header-tg-sub">
-              <span>
-                {getSeason()} {year}
-              </span>
-              {" · "}
-              <span> {state.catches.length} úlovků</span>
-              {" · "}
-              <span>{speciesGroups.length} druhů</span>
-            </div>
+            <p>
+              {getSeason()} {year} · {state.catches.length} úlovků ·{" "}
+              {speciesGroups.length} druhů
+            </p>
           </div>
-          <div className="home-header-lf">
-            <button>🔔</button>
+          <div className="home-header-actions">
+            <button className="header-btn">🔔</button>
           </div>
         </div>
 
-        <div className="home-header-sort">
+        <div className="filter-bar">
           <button
             onClick={() => dispatch({ type: "SET_SORT", payload: "vse" })}
-            className="btn-sort"
+            className={state.sortBy === "vse" ? "chip chip-active" : "chip"}
           >
             Vše
           </button>
           <button
             onClick={() => dispatch({ type: "SET_SORT", payload: "nejvice" })}
-            className="btn-sort"
+            className={state.sortBy === "nejvice" ? "chip chip-active" : "chip"}
           >
             Nejvíce
           </button>
           <button
             onClick={() => dispatch({ type: "SET_SORT", payload: "nejmene" })}
-            className="btn-sort"
+            className={state.sortBy === "nejmene" ? "chip chip-active" : "chip"}
           >
             Nejméně
           </button>
@@ -81,12 +78,15 @@ function HomePage() {
             onClick={() =>
               dispatch({ type: "SET_SORT", payload: "nejnovejsi" })
             }
-            className="btn-sort"
+            className={
+              state.sortBy === "nejnovejsi" ? "chip chip-active" : "chip"
+            }
           >
             Nejnovější
           </button>
         </div>
       </header>
+
       {sortedCatches.map(([speciesKey, data]) => {
         const biggest = data.catches.reduce((max, item) => {
           return item.weightKg > max.weightKg ? item : max;
