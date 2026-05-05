@@ -1,0 +1,143 @@
+/* ── HERO ── */
+.species-hero {
+  background: linear-gradient(150deg, #0b221a, #09192a);
+  position: relative;
+  overflow: hidden;
+  padding: 20px 20px 0;
+  flex-shrink: 0;
+}
+
+.species-hero-fish {
+  position: absolute;
+  right: 8px;
+  bottom: 60px;
+  font-size: 115px;
+  opacity: 0.15;
+  transform: scaleX(-1);
+  line-height: 1;
+}
+
+.species-hero-back {
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  color: var(--t2);
+  cursor: pointer;
+  margin-bottom: 16px;
+  text-decoration: none;
+}
+
+.species-latin {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(46, 204, 113, 0.55);
+  font-style: italic;
+  margin-bottom: 2px;
+}
+
+.species-hero h1 {
+  font-size: 26px;
+  font-weight: 900;
+  color: var(--t1);
+  letter-spacing: -0.5px;
+  margin: 0 0 8px;
+}
+
+.species-hero .tags {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.species-hero-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.ib {
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.species-hero-actions {
+  display: flex;
+  gap: 7px;
+}
+
+/* ── MĚŘENÍ STRIP ── */
+.species-measures {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  background: var(--s1);
+  border: 1px solid var(--bd);
+  border-radius: 14px;
+  overflow: hidden;
+  margin: 0 0 0;
+}
+
+.species-measure {
+  padding: 14px 10px;
+  text-align: center;
+  border-right: 1px solid var(--bd);
+}
+
+.species-measure:last-child {
+  border-right: none;
+}
+
+.species-measure span {
+  display: block;
+  font-size: 26px;
+  font-weight: 900;
+  color: var(--t1);
+  line-height: 1;
+}
+
+.species-measure-unit {
+  font-size: 11px;
+  color: var(--t2);
+  font-weight: 500;
+  margin-top: 1px;
+}
+
+.species-measure-label {
+  font-size: 9px;
+  font-weight: 800;
+  color: var(--t3);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  margin-top: 4px;
+}
+
+/* ── SEZNAM ÚLOVKŮ ── */
+.species-catches-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 10px;
+}
+
+.species-catches-title {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--t2);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
