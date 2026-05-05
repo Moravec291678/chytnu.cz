@@ -68,9 +68,8 @@ function SpeciesDetailPage() {
         </span>
       </div>
 
-      {/* Seznam úlovků */}
       {selectedSpecies.map((item) => (
-        <CatchCard catchedFish={item} />
+        <CatchCard key={item.id} catchedFish={item} />
       ))}
     </Layout>
   );

@@ -12,6 +12,10 @@
   border-color: var(--bd2);
 }
 
+.species-card-link {
+  text-decoration: none;
+}
+
 /* Hlavní řádek */
 .species-card-main {
   display: flex;
