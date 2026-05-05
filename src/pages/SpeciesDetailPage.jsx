@@ -2,6 +2,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useCatches } from "../context/CatchContext";
 import Layout from "../components/Layout";
 import "../styles/SpeciesDetailPage.css";
+import CatchCard from "../components/CatchCard";
 
 function SpeciesDetailPage() {
   const { speciesKey } = useParams();
@@ -69,7 +70,7 @@ function SpeciesDetailPage() {
 
       {/* Seznam úlovků */}
       {selectedSpecies.map((item) => (
-        <div key={item.id}>{item.species}</div>
+        <CatchCard catchedFish={item} />
       ))}
     </Layout>
   );

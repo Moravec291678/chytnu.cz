@@ -1,0 +1,100 @@
+/* ── CATCH CARD ── */
+.catch-card {
+  margin: 0 16px 9px;
+  background: var(--s1);
+  border: 1px solid var(--bd);
+  border-radius: 15px;
+  padding: 13px 14px;
+  cursor: pointer;
+  transition: border-color 0.12s;
+}
+
+.catch-card:hover {
+  border-color: var(--bd2);
+}
+
+.catch-card-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+}
+
+.catch-card-icon {
+  width: 50px;
+  height: 50px;
+  border-radius: 13px;
+  background: var(--gr-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.catch-card-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.catch-card-info h2 {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--t1);
+  line-height: 1.2;
+  margin: 0;
+}
+
+.catch-card-info p {
+  font-size: 12px;
+  color: var(--t2);
+  font-weight: 500;
+  margin: 0;
+}
+
+.catch-card-info .tags {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.catch-card-right {
+  text-align: right;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.catch-card-right p:first-child {
+  font-size: 24px;
+  font-weight: 900;
+  color: var(--t1);
+  line-height: 1;
+  margin: 0;
+}
+
+.catch-card-right p:last-child {
+  font-size: 12px;
+  color: var(--t3);
+  margin: 0;
+}
+
+.catch-card-footer {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--bd);
+}
+
+.catch-card-footer p {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--t3);
+  margin: 0;
+}
