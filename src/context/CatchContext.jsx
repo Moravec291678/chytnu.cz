@@ -31,6 +31,8 @@ function catchReducer(state, action) {
         ...state,
         sortBy: action.payload,
       };
+    default:
+      return state;
   }
 }
 export const CatchContext = createContext();

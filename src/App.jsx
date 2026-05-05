@@ -5,11 +5,13 @@ import CatchDetailPage from "./pages/CatchDetailPage";
 import GalleryPage from "./pages/GalleryPage";
 import StatsPage from "./pages/StatsPage";
 import TripsPage from "./pages/TripsPage";
+import SpeciesDetailPage from "./pages/SpeciesDetailPage";
 function App() {
   return (
     <>
       <Routes>
         <Route path="/" element={<HomePage />} />
+        <Route path="/species/:speciesKey" element={<SpeciesDetailPage />} />
         <Route path="/add" element={<AddCatchPage />} />
         <Route path="/catch/:id" element={<CatchDetailPage />} />
         <Route path="/gallery" element={<GalleryPage />} />
