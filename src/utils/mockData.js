@@ -52,7 +52,7 @@ export const TEST_CATCHES = [
     speciesKey: "carp",
     speciesLatin: "Cyprinus carpio",
 
-    weightKg: 5.2,
+    weightKg: 28,
     lengthCm: 68,
     girthCm: 44,
     fightMinutes: 9,
