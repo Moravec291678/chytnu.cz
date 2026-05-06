@@ -3,6 +3,7 @@ import { useCatches } from "../context/CatchContext";
 import SpeciesCard from "../components/SpeciesCard";
 import { getSeason } from "../utils/helpers";
 import "../styles/HomePage.css";
+import { useState } from "react";
 
 function HomePage() {
   const { state, dispatch } = useCatches();
@@ -22,6 +23,7 @@ function HomePage() {
   }, {});
 
   const speciesGroups = Object.entries(reducedCatches);
+  const [sortOpen, setSortOpen] = useState(false);
   const sortedCatches = speciesGroups.sort(
     (
       [, { count: aCount, catches: aCatches }],
@@ -35,6 +37,29 @@ function HomePage() {
           Math.max(...aCatches.map((item) => item.caughtAt))
         );
       }
+      if (state.sortBy === "nejtezsi") {
+        const aMax = Math.max(...aCatches.map((item) => item.weightKg));
+        const bMax = Math.max(...bCatches.map((item) => item.weightKg));
+        return bMax - aMax;
+      }
+      if (state.sortBy === "nejlehci") {
+        const aMin = Math.min(...aCatches.map((item) => item.weightKg));
+        const bMin = Math.min(...bCatches.map((item) => item.weightKg));
+        return aMin - bMin;
+      }
+
+      if (state.sortBy === "nejdelsi") {
+        const aMax = Math.max(...aCatches.map((item) => item.lengthCm));
+        const bMax = Math.max(...bCatches.map((item) => item.lengthCm));
+        return bMax - aMax;
+      }
+
+      if (state.sortBy === "nejkratsi") {
+        const aMin = Math.min(...aCatches.map((item) => item.lengthCm));
+        const bMin = Math.min(...bCatches.map((item) => item.lengthCm));
+        return aMin - bMin;
+      }
+
       return 0;
     },
   );
@@ -62,28 +87,46 @@ function HomePage() {
           >
             Vše
           </button>
-          <button
-            onClick={() => dispatch({ type: "SET_SORT", payload: "nejvice" })}
-            className={state.sortBy === "nejvice" ? "chip chip-active" : "chip"}
-          >
-            Nejvíce
-          </button>
-          <button
-            onClick={() => dispatch({ type: "SET_SORT", payload: "nejmene" })}
-            className={state.sortBy === "nejmene" ? "chip chip-active" : "chip"}
-          >
-            Nejméně
-          </button>
-          <button
-            onClick={() =>
-              dispatch({ type: "SET_SORT", payload: "nejnovejsi" })
-            }
-            className={
-              state.sortBy === "nejnovejsi" ? "chip chip-active" : "chip"
-            }
-          >
-            Nejnovější
-          </button>
+
+          <div className="sort-wrapper">
+            <button
+              className={
+                sortOpen || state.sortBy !== "vse" ? "chip chip-active" : "chip"
+              }
+              onClick={() => setSortOpen(!sortOpen)}
+            >
+              Seřadit ▾
+            </button>
+
+            {sortOpen && (
+              <div className="sort-dropdown">
+                {[
+                  { key: "nejvice", label: "Nejvíce úlovků" },
+                  { key: "nejmene", label: "Nejméně úlovků" },
+                  { key: "nejnovejsi", label: "Nejnovější" },
+                  { key: "nejtezsi", label: "Nejtěžší" },
+                  { key: "nejlehci", label: "Nejlehčí" },
+                  { key: "nejdelsi", label: "Nejdelší" },
+                  { key: "nejkratsi", label: "Nejkratší" },
+                ].map(({ key, label }) => (
+                  <button
+                    key={key}
+                    className={
+                      state.sortBy === key
+                        ? "sort-item sort-item-active"
+                        : "sort-item"
+                    }
+                    onClick={() => {
+                      dispatch({ type: "SET_SORT", payload: key });
+                      setSortOpen(false);
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </header>
 

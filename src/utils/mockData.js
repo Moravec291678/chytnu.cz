@@ -146,7 +146,7 @@ export const TEST_CATCHES = [
     fightMinutes: 10,
 
     locationName: "Štěrkovna",
-    gps: { lat: 49.880, lng: 18.200 },
+    gps: { lat: 49.88, lng: 18.2 },
     waterDepthM: 2.0,
     bottomType: "sandy",
 
@@ -190,7 +190,7 @@ export const TEST_CATCHES = [
     fightMinutes: 8,
 
     locationName: "Odra",
-    gps: { lat: 49.840, lng: 18.280 },
+    gps: { lat: 49.84, lng: 18.28 },
     waterDepthM: 3.9,
     bottomType: "weedy",
 
@@ -233,7 +233,7 @@ export const TEST_CATCHES = [
     fightMinutes: 6,
 
     locationName: "Štěrkovna",
-    gps: { lat: 49.880, lng: 18.200 },
+    gps: { lat: 49.88, lng: 18.2 },
     waterDepthM: 2.5,
     bottomType: "weedy",
 
@@ -273,7 +273,7 @@ export const TEST_CATCHES = [
     lengthCm: 33,
     fightMinutes: 2,
     locationName: "Ostravice",
-    gps: { lat: 49.820, lng: 18.262 },
+    gps: { lat: 49.82, lng: 18.262 },
     waterDepthM: 1.4,
     bottomType: "rocky",
     createdAt: new Date(),
@@ -308,7 +308,7 @@ export const TEST_CATCHES = [
     lengthCm: 28,
     fightMinutes: 2,
     locationName: "Ostravice",
-    gps: { lat: 49.820, lng: 18.262 },
+    gps: { lat: 49.82, lng: 18.262 },
     waterDepthM: 1.2,
     bottomType: "rocky",
     createdAt: new Date(),
@@ -343,7 +343,7 @@ export const TEST_CATCHES = [
     lengthCm: 31,
     fightMinutes: 3,
     locationName: "Ostravice",
-    gps: { lat: 49.820, lng: 18.262 },
+    gps: { lat: 49.82, lng: 18.262 },
     waterDepthM: 1.3,
     bottomType: "rocky",
     createdAt: new Date(),
@@ -415,7 +415,7 @@ export const TEST_CATCHES = [
     lengthCm: 160,
     fightMinutes: 30,
     locationName: "Odra",
-    gps: { lat: 49.840, lng: 18.280 },
+    gps: { lat: 49.84, lng: 18.28 },
     waterDepthM: 6.0,
     bottomType: "muddy",
     createdAt: new Date(),
