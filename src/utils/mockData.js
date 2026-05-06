@@ -76,7 +76,7 @@ export const TEST_CATCHES = [
       pressureTrend: "falling",
       windKmh: 12,
       weather: "oblačno",
-      moonPhase: "fullMoon",
+      moonPhase: "full",
     },
 
     photos: [],
