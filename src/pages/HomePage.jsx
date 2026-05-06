@@ -101,13 +101,13 @@ function HomePage() {
             {sortOpen && (
               <div className="sort-dropdown">
                 {[
-                  { key: "nejvice", label: "Nejvíce úlovků" },
-                  { key: "nejmene", label: "Nejméně úlovků" },
-                  { key: "nejnovejsi", label: "Nejnovější" },
-                  { key: "nejtezsi", label: "Nejtěžší" },
-                  { key: "nejlehci", label: "Nejlehčí" },
-                  { key: "nejdelsi", label: "Nejdelší" },
-                  { key: "nejkratsi", label: "Nejkratší" },
+                  { key: "nejnovejsi", label: "📅 Nejnovější" },
+                  { key: "nejvice", label: "🔢 Nejvíce úlovků" },
+                  { key: "nejmene", label: "🔢 Nejméně úlovků" },
+                  { key: "nejtezsi", label: "⚖️ Nejtěžší" },
+                  { key: "nejlehci", label: "⚖️ Nejlehčí" },
+                  { key: "nejdelsi", label: "📏 Nejdelší" },
+                  { key: "nejkratsi", label: "📏 Nejkratší" },
                 ].map(({ key, label }) => (
                   <button
                     key={key}
