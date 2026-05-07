@@ -5,6 +5,7 @@ import { getSeason } from "../utils/helpers";
 import "../styles/HomePage.css";
 import { useState } from "react";
 import FishActivity from "../components/FishActivity";
+import { getTopMethod } from "../utils/profileStats";
 
 function HomePage() {
   const { state, dispatch } = useCatches();
@@ -22,6 +23,7 @@ function HomePage() {
 
     return acc;
   }, {});
+  console.log(getTopMethod(state.catches));
 
   const speciesGroups = Object.entries(reducedCatches);
   const [sortOpen, setSortOpen] = useState(false);
