@@ -4,6 +4,7 @@ import SpeciesCard from "../components/SpeciesCard";
 import { getSeason } from "../utils/helpers";
 import "../styles/HomePage.css";
 import { useState } from "react";
+import FishActivity from "../components/FishActivity";
 
 function HomePage() {
   const { state, dispatch } = useCatches();
@@ -129,7 +130,7 @@ function HomePage() {
           </div>
         </div>
       </header>
-
+      <FishActivity />
       {sortedCatches.map(([speciesKey, data]) => {
         const biggest = data.catches.reduce((max, item) => {
           return item.weightKg > max.weightKg ? item : max;
