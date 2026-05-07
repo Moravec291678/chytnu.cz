@@ -6,6 +6,7 @@ import "../styles/HomePage.css";
 import { useState } from "react";
 import FishActivity from "../components/FishActivity";
 import { getTopMethod } from "../utils/profileStats";
+import ProfileStatsBar from "../components/ProfileStatsBar";
 
 function HomePage() {
   const { state, dispatch } = useCatches();
@@ -23,7 +24,6 @@ function HomePage() {
 
     return acc;
   }, {});
-  console.log(getTopMethod(state.catches));
 
   const speciesGroups = Object.entries(reducedCatches);
   const [sortOpen, setSortOpen] = useState(false);
@@ -133,6 +133,7 @@ function HomePage() {
         </div>
       </header>
       <FishActivity />
+      <ProfileStatsBar />
       {sortedCatches.map(([speciesKey, data]) => {
         const biggest = data.catches.reduce((max, item) => {
           return item.weightKg > max.weightKg ? item : max;
