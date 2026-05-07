@@ -98,3 +98,9 @@
   color: var(--t3);
   margin: 0;
 }
+
+.catch-card-link {
+  text-decoration: none;
+  color: inherit;
+  display: block;
+}
