@@ -28,7 +28,7 @@ function HomePage() {
   const speciesGroups = Object.entries(reducedCatches);
   const [sortOpen, setSortOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const isSearching = search.trim() !== "";
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
   const sortedCatches = speciesGroups.sort(
     (
       [, { count: aCount, catches: aCatches }],
@@ -136,7 +136,7 @@ function HomePage() {
           </div>
         </div>
       </header>
-      {!isSearching && (
+      {!isSearchFocused && (
         <>
           <FishActivity />
           <ProfileStatsBar />
@@ -152,6 +152,12 @@ function HomePage() {
             placeholder="Hledat druh..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            onFocus={() => setIsSearchFocused(true)}
+            onBlur={() => {
+              setTimeout(() => {
+                setIsSearchFocused(false);
+              }, 150);
+            }}
           />
           {search && (
             <button className="search-clear" onClick={() => setSearch("")}>
