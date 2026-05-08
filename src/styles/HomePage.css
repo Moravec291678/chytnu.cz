@@ -279,6 +279,11 @@
 .search-wrapper {
   padding: 0 16px;
   margin: 14px 0 10px;
+
+  background: var(--bg);
+
+  padding-top: 12px;
+  padding-bottom: 10px;
 }
 
 .search-input {

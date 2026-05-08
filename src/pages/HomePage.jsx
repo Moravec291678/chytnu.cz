@@ -29,6 +29,7 @@ function HomePage() {
   const [sortOpen, setSortOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const isSearchMode = isSearchFocused || search.trim() !== "";
   const sortedCatches = speciesGroups.sort(
     (
       [, { count: aCount, catches: aCatches }],
@@ -136,7 +137,7 @@ function HomePage() {
           </div>
         </div>
       </header>
-      {!isSearchFocused && (
+      {!isSearchMode && (
         <>
           <FishActivity />
           <ProfileStatsBar />
@@ -152,7 +153,16 @@ function HomePage() {
             placeholder="Hledat druh..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            onFocus={() => setIsSearchFocused(true)}
+            onFocus={() => {
+              setIsSearchFocused(true);
+
+              setTimeout(() => {
+                window.scrollTo({
+                  top: 0,
+                  behavior: "smooth",
+                });
+              }, 90);
+            }}
             onBlur={() => {
               setTimeout(() => {
                 setIsSearchFocused(false);
