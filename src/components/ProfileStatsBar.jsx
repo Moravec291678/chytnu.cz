@@ -1,5 +1,9 @@
 import { useCatches } from "../context/CatchContext";
-import { getTopMethod, getReleasedPercentage } from "../utils/profileStats";
+import {
+  getTopMethod,
+  getReleasedPercentage,
+  getTopRevier,
+} from "../utils/profileStats";
 import "../styles/ProfileStatsBar.css";
 
 function ProfileStatsBar() {
@@ -7,6 +11,7 @@ function ProfileStatsBar() {
 
   const topMethod = getTopMethod(state.catches);
   const releasedPercentage = getReleasedPercentage(state.catches);
+  const topRevier = getTopRevier(state.catches);
   return (
     <div className="profile-stats-bar">
       <div className="profile-stat-card">
@@ -25,7 +30,7 @@ function ProfileStatsBar() {
 
       <div className="profile-stat-card">
         <span className="profile-stat-value profile-stat-blue profile-stat-value-small">
-          🌊 Neznámý
+          🌊 {topRevier?.label}
         </span>
 
         <span className="profile-stat-label">TOP REVÍR</span>

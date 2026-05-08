@@ -34,3 +34,23 @@ export function getReleasedPercentage(catches) {
   return Math.round((released / count) * 100);
 }
 
+export function getTopRevier(catches) {
+  const groupLocations = catches.reduce((acc, item) => {
+    const key = item.locationName;
+    if (!acc[key]) {
+      acc[key] = {
+        label: key,
+        count: 0,
+      };
+    }
+    acc[key].count += 1;
+    return acc;
+  }, {});
+  const groupLocationsArr = Object.values(groupLocations);
+  return groupLocationsArr.reduce(
+    (max, item) => {
+      return max.count < item.count ? item : max;
+    },
+    { count: 0 },
+  );
+}
