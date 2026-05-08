@@ -19,6 +19,7 @@ function FishActivity() {
     try {
       setLoading(true);
       const location = await getUserLocation();
+      console.log(location);
       const data = await fetchWeatherData(location.lat, location.lng);
       const currentTime = data.current.time.slice(0, 13);
 

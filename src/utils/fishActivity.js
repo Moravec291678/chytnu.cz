@@ -67,6 +67,7 @@ export function getTimeOfDayScore(
 }
 
 export function getUserLocation() {
+  
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) {
       reject(new Error("Geolokace není podporována"));
@@ -77,8 +78,14 @@ export function getUserLocation() {
         resolve({
           lat: position.coords.latitude,
           lng: position.coords.longitude,
+          accuracy: position.coords.accuracy,
         }),
       (error) => reject(error),
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 0,
+      },
     );
   });
 }
