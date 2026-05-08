@@ -34,5 +34,3 @@ export function getReleasedPercentage(catches) {
   return Math.round((released / count) * 100);
 }
 
-
-export function getTopRevier()
