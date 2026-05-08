@@ -5,3 +5,10 @@ export function getSeason() {
   if (month >= 9 && month <= 11) return "Podzim";
   return "Zima";
 }
+
+export function normalizeText(text) {
+  return text
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}

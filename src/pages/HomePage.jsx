@@ -1,12 +1,12 @@
 import Layout from "../components/Layout";
-import { useCatches } from "../context/CatchContext";
-import SpeciesCard from "../components/SpeciesCard";
-import { getSeason } from "../utils/helpers";
-import "../styles/HomePage.css";
-import { useState } from "react";
-import FishActivity from "../components/FishActivity";
-import { getTopMethod } from "../utils/profileStats";
 import ProfileStatsBar from "../components/ProfileStatsBar";
+import SpeciesCard from "../components/SpeciesCard";
+import FishActivity from "../components/FishActivity";
+import { useCatches } from "../context/CatchContext";
+import { getSeason } from "../utils/helpers";
+import { useState } from "react";
+import { normalizeText } from "../utils/helpers";
+import "../styles/HomePage.css";
 
 function HomePage() {
   const { state, dispatch } = useCatches();
@@ -27,6 +27,8 @@ function HomePage() {
 
   const speciesGroups = Object.entries(reducedCatches);
   const [sortOpen, setSortOpen] = useState(false);
+  const [search, setSearch] = useState("");
+
   const sortedCatches = speciesGroups.sort(
     (
       [, { count: aCount, catches: aCatches }],
@@ -66,7 +68,9 @@ function HomePage() {
       return 0;
     },
   );
-
+  const filteredCatches = sortedCatches.filter(([, data]) =>
+    normalizeText(data.catches[0].species).includes(normalizeText(search)),
+  );
   return (
     <Layout>
       <header className="home-header">
@@ -134,19 +138,44 @@ function HomePage() {
       </header>
       <FishActivity />
       <ProfileStatsBar />
-      {sortedCatches.map(([speciesKey, data]) => {
-        const biggest = data.catches.reduce((max, item) => {
-          return item.weightKg > max.weightKg ? item : max;
-        });
-        return (
-          <SpeciesCard
-            key={speciesKey}
-            speciesKey={speciesKey}
-            data={data}
-            biggest={biggest}
+      <div className="search-wrapper">
+        <div className="search-box">
+          <span className="search-icon">⌕</span>
+
+          <input
+            className="search-input"
+            type="text"
+            placeholder="Hledat druh..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
           />
-        );
-      })}
+          {search && (
+            <button className="search-clear" onClick={() => setSearch("")}>
+              ×
+            </button>
+          )}
+        </div>
+      </div>
+      {filteredCatches.length > 0 ? (
+        filteredCatches.map(([speciesKey, data]) => {
+          const biggest = data.catches.reduce((max, item) => {
+            return item.weightKg > max.weightKg ? item : max;
+          });
+
+          return (
+            <SpeciesCard
+              key={speciesKey}
+              speciesKey={speciesKey}
+              data={data}
+              biggest={biggest}
+            />
+          );
+        })
+      ) : (
+        <div className="empty-search">
+          <p>Žádný druh nenalezen</p>
+        </div>
+      )}
     </Layout>
   );
 }
