@@ -30,7 +30,7 @@
   border-top: 1px solid var(--bd);
   display: flex;
   align-items: flex-start;
-  padding-top: 10px;
+  padding-top: 20px;
   z-index: 100;
 }
 
