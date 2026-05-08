@@ -22,18 +22,23 @@ function ProfileStatsBar() {
 
       <div className="profile-stat-card">
         <span className="profile-stat-value profile-stat-gold profile-stat-value-small">
-          🎣{topMethod?.label || "Žádná"}
+          {topMethod?.count || 0}x
         </span>
 
-        <span className="profile-stat-label">TOP METODA</span>
+        <span className="profile-stat-label">
+          {topMethod?.label?.toUpperCase() || "METODA"}
+        </span>
       </div>
 
       <div className="profile-stat-card">
         <span className="profile-stat-value profile-stat-blue profile-stat-value-small">
-          🌊 {topRevier?.label}
+          {topRevier?.count || 0}x
         </span>
 
-        <span className="profile-stat-label">TOP REVÍR</span>
+        <span className="profile-stat-label">
+          {" "}
+          {topRevier?.label?.toUpperCase() || "REVÍR"}
+        </span>
       </div>
 
       <div className="profile-stat-card">
