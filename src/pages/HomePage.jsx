@@ -28,7 +28,7 @@ function HomePage() {
   const speciesGroups = Object.entries(reducedCatches);
   const [sortOpen, setSortOpen] = useState(false);
   const [search, setSearch] = useState("");
-
+  const isSearching = search.trim() !== "";
   const sortedCatches = speciesGroups.sort(
     (
       [, { count: aCount, catches: aCatches }],
@@ -136,8 +136,12 @@ function HomePage() {
           </div>
         </div>
       </header>
-      <FishActivity />
-      <ProfileStatsBar />
+      {!isSearching && (
+        <>
+          <FishActivity />
+          <ProfileStatsBar />
+        </>
+      )}
       <div className="search-wrapper">
         <div className="search-box">
           <span className="search-icon">⌕</span>
