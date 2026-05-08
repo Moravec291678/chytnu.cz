@@ -54,3 +54,12 @@ export function getTopRevier(catches) {
     { count: 0 },
   );
 }
+
+export function getBiggestCatch(catches) {
+  return catches.reduce(
+    (max, item) => {
+      return max.weightKg < item.weightKg ? item : max;
+    },
+    { weightKg: 0 },
+  );
+}

@@ -10,7 +10,7 @@ function SpeciesCard({ speciesKey, data, biggest }) {
           <div className="species-card-info">
             <h2>{biggest.species}</h2>
             <p>
-              📍{biggest.locationName} · 🎣{biggest.method?.label}
+              📍 {biggest.locationName} · 🎣 {biggest.method?.label}
             </p>
             <div className="tags">
               {biggest.isPersonalBest && (

@@ -3,6 +3,7 @@ import {
   getTopMethod,
   getReleasedPercentage,
   getTopRevier,
+  getBiggestCatch,
 } from "../utils/profileStats";
 import "../styles/ProfileStatsBar.css";
 
@@ -12,10 +13,13 @@ function ProfileStatsBar() {
   const topMethod = getTopMethod(state.catches);
   const releasedPercentage = getReleasedPercentage(state.catches);
   const topRevier = getTopRevier(state.catches);
+  const topCatch = getBiggestCatch(state.catches);
   return (
     <div className="profile-stats-bar">
       <div className="profile-stat-card">
-        <span className="profile-stat-value profile-stat-green">0 kg</span>
+        <span className="profile-stat-value profile-stat-green">
+          {topCatch.weightKg} kg
+        </span>
 
         <span className="profile-stat-label">REKORD</span>
       </div>

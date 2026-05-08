@@ -15,11 +15,11 @@
   min-width: 0;
 
   height: 65px;
-  padding: 17px 8px;
+  padding: 16px 8px;
 
   display: grid;
   grid-template-rows: 20px 22px;
-  gap: 2px;
+  gap: 4px;
   justify-items: center;
 
   border-right: 1px solid var(--bd);
