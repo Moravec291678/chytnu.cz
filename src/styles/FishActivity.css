@@ -86,3 +86,27 @@
   border-radius: 8px;
   padding: 4px 9px;
 }
+
+.fish-activity-retry {
+  margin-top: 10px;
+
+  height: 38px;
+  padding: 0 14px;
+
+  border: 1px solid rgba(46, 204, 113, 0.2);
+  border-radius: 10px;
+
+  background: rgba(46, 204, 113, 0.08);
+
+  color: var(--gr);
+  font-size: 13px;
+  font-weight: 700;
+  transition: all 0.1s;
+}
+
+.fish-activity-retry:hover {
+  cursor: pointer;
+  color: var(--t1);
+  background: rgba(209, 209, 209, 0.08);
+  border: 1px solid rgba(109, 109, 109, 0.836);
+}

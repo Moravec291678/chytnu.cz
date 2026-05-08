@@ -15,42 +15,70 @@ function FishActivity() {
   const [loading, setLoading] = useState(true);
   const [reasons, setReasons] = useState([]);
 
-  useEffect(() => {
-    async function loadData() {
-      try {
-        const location = await getUserLocation();
-        const data = await fetchWeatherData(location.lat, location.lng);
-        const currentTime = data.current.time.slice(0, 13);
+  async function loadData() {
+    try {
+      setLoading(true);
+      const location = await getUserLocation();
+      const data = await fetchWeatherData(location.lat, location.lng);
+      const currentTime = data.current.time.slice(0, 13);
 
-        const currentHourIndex = data.hourly.time.findIndex((time) =>
-          time.startsWith(currentTime),
-        );
-        const weatherData = {
-          temperature: data.current.temperature_2m,
-          windSpeed: data.current.wind_speed_10m,
-          pressure: data.current.surface_pressure,
-          cloudiness: data.current.cloud_cover,
-          rainChance: data.hourly.precipitation_probability[currentHourIndex],
-          sunrise: data.daily.sunrise[0],
-          sunset: data.daily.sunset[0],
-        };
+      const currentHourIndex = data.hourly.time.findIndex((time) =>
+        time.startsWith(currentTime),
+      );
+      const weatherData = {
+        temperature: data.current.temperature_2m,
+        windSpeed: data.current.wind_speed_10m,
+        pressure: data.current.surface_pressure,
+        cloudiness: data.current.cloud_cover,
+        rainChance: data.hourly.precipitation_probability[currentHourIndex],
+        sunrise: data.daily.sunrise[0],
+        sunset: data.daily.sunset[0],
+      };
 
-        setWeather(weatherData);
-        const activity = calculateFishActivity(weatherData);
+      setWeather(weatherData);
+      const activity = calculateFishActivity(weatherData);
 
-        setScore(activity.score);
-        setReasons(activity.reasons);
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
+      setScore(activity.score);
+      setReasons(activity.reasons);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
     }
+  }
+
+  useEffect(() => {
     loadData();
   }, []);
 
   if (loading) return <div className="fish-activity-card">Načítám...</div>;
-  if (error) return <div className="fish-activity-card">Poloha nedostupná</div>;
+  if (error) {
+    return (
+      <div className="fish-activity-card">
+        <span className="fish-activity-label">Aktivita ryb dnes</span>
+
+        <p className="fish-activity-status">Poloha není povolena</p>
+
+        <p className="fish-activity-reason">
+          Povol polohu pro přesnější aktivitu ryb ve tvé oblasti.
+        </p>
+
+        <button
+          className="fish-activity-retry"
+          onClick={async () => {
+            if (loading) return;
+
+            setError(null);
+            setLoading(true);
+
+            await loadData();
+          }}
+        >
+          Zkusit znovu
+        </button>
+      </div>
+    );
+  }
 
   const { label } = getActivityLabel(score);
   const {

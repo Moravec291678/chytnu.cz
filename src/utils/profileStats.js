@@ -12,7 +12,6 @@ export function getTopMethod(catches) {
     return acc;
   }, {});
   const groupMethodsArr = Object.values(groupMethods);
-  console.log(groupMethodsArr);
   return groupMethodsArr.reduce(
     (max, item) => {
       return max.count < item.count ? item : max;
@@ -20,3 +19,20 @@ export function getTopMethod(catches) {
     { count: 0 },
   );
 }
+
+export function getReleasedPercentage(catches) {
+  let released = 0;
+  let count = 0;
+  if (catches.length === 0) return 0;
+  catches.forEach((item) => {
+    if (item.result === "released") {
+      released++;
+    }
+    count++;
+  });
+
+  return Math.round((released / count) * 100);
+}
+
+
+export function getTopRevier()
