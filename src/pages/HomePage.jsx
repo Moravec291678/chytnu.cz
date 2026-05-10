@@ -2,10 +2,12 @@ import Layout from "../components/Layout";
 import ProfileStatsBar from "../components/ProfileStatsBar";
 import SpeciesCard from "../components/SpeciesCard";
 import FishActivity from "../components/FishActivity";
+import TripPill from "../components/TripPill";
 import { useCatches } from "../context/CatchContext";
 import { getSeason } from "../utils/helpers";
 import { useState } from "react";
 import { normalizeText } from "../utils/helpers";
+import { ACTIVE_TRIP } from "../data/activeTrip";
 import "../styles/HomePage.css";
 
 function HomePage() {
@@ -72,6 +74,7 @@ function HomePage() {
   const filteredCatches = sortedCatches.filter(([, data]) =>
     normalizeText(data.catches[0].species).includes(normalizeText(search)),
   );
+  const [activeTrip, setActiveTrip] = useState(ACTIVE_TRIP);
   return (
     <Layout>
       <header className="home-header">
@@ -141,6 +144,7 @@ function HomePage() {
         <>
           <FishActivity />
           <ProfileStatsBar />
+          {activeTrip?.isActive && <TripPill activeTrip={activeTrip} />}
         </>
       )}
       <div className="search-wrapper">
@@ -176,6 +180,7 @@ function HomePage() {
           )}
         </div>
       </div>
+      <h3 className="section-title">Poslední úlovky</h3>
       {filteredCatches.length > 0 ? (
         filteredCatches.map(([speciesKey, data]) => {
           const biggest = data.catches.reduce((max, item) => {
