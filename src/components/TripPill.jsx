@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import "../styles/TripPill.css";
 function TripPill({ activeTrip }) {
   const [duration, setDuration] = useState("");
@@ -26,23 +27,25 @@ function TripPill({ activeTrip }) {
     return () => clearInterval(interval);
   }, [activeTrip.startedAt]);
   return (
-    <div className="trip-pill">
-      <div className="trip-pill-left">
-        <div className="dot"></div>
+    <Link to={"/trips"} className="trip-pill-link">
+      <div className="trip-pill">
+        <div className="trip-pill-left">
+          <div className="dot"></div>
 
-        <div>
-          <p className="trip-pill-title">
-            {activeTrip.locationName} · aktivní výlet
-          </p>
+          <div>
+            <p className="trip-pill-title">
+              {activeTrip.locationName} · aktivní výlet
+            </p>
 
-          <p className="trip-pill-subtitle">
-            {activeTrip.method} · 3 chyceno dnes
-          </p>
+            <p className="trip-pill-subtitle">
+              {activeTrip.method} · 3 chyceno dnes
+            </p>
+          </div>
         </div>
-      </div>
 
-      <div className="trip-pill-timer">{duration}</div>
-    </div>
+        <div className="trip-pill-timer">{duration}</div>
+      </div>
+    </Link>
   );
 }
 

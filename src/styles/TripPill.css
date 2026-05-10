@@ -55,3 +55,7 @@
   color: var(--gr);
   font-variant-numeric: tabular-nums;
 }
+
+.trip-pill-link {
+  text-decoration: none;
+}
