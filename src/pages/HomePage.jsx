@@ -165,7 +165,7 @@ function HomePage() {
                   top: 0,
                   behavior: "smooth",
                 });
-              }, 90);
+              }, 100);
             }}
             onBlur={() => {
               setTimeout(() => {
