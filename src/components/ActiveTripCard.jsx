@@ -1,6 +1,32 @@
 import "../styles/ActiveTripCard.css";
+import { useState, useEffect } from "react";
 
 function ActiveTripCard({ activeTrip }) {
+  const [duration, setDuration] = useState("");
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = new Date();
+
+      const startedAt = new Date(activeTrip.startedAt);
+
+      const diffMs = now - startedAt;
+
+      const hours = Math.floor(diffMs / 1000 / 60 / 60);
+
+      const minutes = Math.floor((diffMs / 1000 / 60) % 60);
+
+      const seconds = Math.floor((diffMs / 1000) % 60);
+
+      const formatted = [hours, minutes, seconds]
+        .map((value) => String(value).padStart(2, "0"))
+        .join(":");
+
+      setDuration(formatted);
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [activeTrip.startedAt]);
+
   return (
     <div className="active-trip-card">
       <div className="active-trip-top">
@@ -8,11 +34,16 @@ function ActiveTripCard({ activeTrip }) {
           <p className="active-trip-title">📍 {activeTrip.locationName}</p>
 
           <p className="active-trip-subtitle">
-            {activeTrip.method} · od 06:00 · dnes
+            {activeTrip.method} ·{" "}
+            {activeTrip.startedAt.toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}{" "}
+            · dnes
           </p>
         </div>
 
-        <div className="active-trip-timer">03:42:31</div>
+        <div className="active-trip-timer">{duration}</div>
       </div>
 
       <div className="active-trip-stats">
