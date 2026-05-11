@@ -1,0 +1,76 @@
+.trip-card {
+  background: #1b2430;
+
+  border: 1px solid #2a3544;
+  border-radius: 16px;
+
+  padding: 14px;
+
+  margin-bottom: 14px;
+}
+
+.trip-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+
+  gap: 12px;
+}
+
+.trip-card-title {
+  font-size: 18px;
+  font-weight: 700;
+
+  line-height: 1.1;
+
+  color: white;
+}
+
+.trip-card-meta {
+  margin-top: 4px;
+
+  font-size: 14px;
+
+  color: #8b98a7;
+}
+
+.trip-card-duration {
+  font-size: 14px;
+  font-weight: 700;
+
+  color: #7fa6d6;
+
+  white-space: nowrap;
+}
+
+.trip-card-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+
+  margin-top: 10px;
+
+  font-size: 14px;
+
+  color: #dbe7f5;
+}
+
+.trip-card-species {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+
+  margin-top: 12px;
+}
+
+.trip-species-pill {
+  padding: 4px 8px;
+
+  border-radius: 999px;
+
+  background: #243041;
+
+  font-size: 12px;
+
+  color: #cfe1f5;
+}

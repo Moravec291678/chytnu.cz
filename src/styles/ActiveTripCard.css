@@ -1,0 +1,81 @@
+.active-trip-card {
+  margin-top: 18px;
+
+  background: linear-gradient(180deg, #071d1a 0%, #081a20 100%);
+
+  border: 1px solid #11453d;
+  border-radius: 18px;
+
+  overflow: hidden;
+}
+
+.active-trip-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+
+  gap: 16px;
+
+  padding: 18px;
+}
+
+.active-trip-title {
+  font-size: 18px;
+  font-weight: 700;
+
+  color: white;
+}
+
+.active-trip-subtitle {
+  margin-top: 4px;
+
+  font-size: 14px;
+
+  color: #8ba3a0;
+}
+
+.active-trip-timer {
+  font-size: 26px;
+  font-weight: 800;
+
+  color: #2cf28c;
+
+  white-space: nowrap;
+}
+
+.active-trip-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+
+  border-top: 1px solid #103a35;
+}
+
+.active-trip-stat {
+  padding: 14px 10px;
+
+  text-align: center;
+
+  border-right: 1px solid #103a35;
+}
+
+.active-trip-stat:last-child {
+  border-right: none;
+}
+
+.active-trip-stat-value {
+  font-size: 28px;
+  font-weight: 800;
+
+  color: #2cf28c;
+}
+
+.active-trip-stat-label {
+  margin-top: 4px;
+
+  font-size: 11px;
+  font-weight: 700;
+
+  letter-spacing: 0.08em;
+
+  color: #5f8f87;
+}
