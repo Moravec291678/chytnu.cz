@@ -4,6 +4,32 @@ export const MOCK_TRIPS = [
 
     title: "Jižní záliv",
 
+    locationName: "Lipno - sever",
+    createdAt: "2026-03-10T08:00:00",
+    startedAt: new Date("2026-05-10T01:00:00"),
+    endedAt: null,
+
+    isActive: true,
+
+    methodKey: "feeder",
+
+    coverPhoto: null,
+
+    isPublic: true,
+
+    speciesKeys: ["zander", "trout"],
+
+    stats: {
+      catchesCount: 4,
+      speciesCount: 3,
+      biggestCatchKg: 4.7,
+    },
+  },
+  {
+    id: "trip-002",
+
+    title: "Jižní záliv",
+
     locationName: "Máchovo jezero",
     createdAt: "2026-03-10T08:00:00",
     startedAt: "2026-03-01T06:00:00",
@@ -25,7 +51,7 @@ export const MOCK_TRIPS = [
   },
 
   {
-    id: "trip-002",
+    id: "trip-003",
 
     title: "Večerní feeder pod mostem",
 
@@ -50,7 +76,7 @@ export const MOCK_TRIPS = [
   },
 
   {
-    id: "trip-003",
+    id: "trip-004",
 
     title: "Noční výprava u stromů",
 
@@ -75,7 +101,7 @@ export const MOCK_TRIPS = [
   },
 
   {
-    id: "trip-004",
+    id: "trip-005",
 
     title: "Ranní okouni",
 
@@ -100,7 +126,7 @@ export const MOCK_TRIPS = [
   },
 
   {
-    id: "trip-005",
+    id: "trip-006",
 
     title: "Deep jig hrany",
 
@@ -125,7 +151,7 @@ export const MOCK_TRIPS = [
   },
 
   {
-    id: "trip-006",
+    id: "trip-007",
 
     title: "Muškaření pod splavem",
 

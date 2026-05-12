@@ -3,6 +3,7 @@ import TripCard from "../features/trips/components/TripCard";
 import ActiveTripCard from "../features/trips/components/ActiveTripCard";
 import { MOCK_TRIPS } from "../features/trips/data/mockTrips";
 import { ACTIVE_TRIP } from "../features/trips/data/activeTrip";
+import { getTripsCount } from "../features/trips/utils/tripStats";
 import "./TripsPage.css";
 
 function TripsPage() {
@@ -15,7 +16,7 @@ function TripsPage() {
               <h1>Výlety</h1>
 
               <p className="trips-subtitle">
-                12 výletů · 187 hodin · 42 úlovků
+                {getTripsCount(MOCK_TRIPS)} výletů · 187 hodin · 42 úlovků
               </p>
             </div>
             <button className="trips-add-btn header-btn">➕</button>
