@@ -1,4 +1,4 @@
-import "../styles/TripCard.css";
+import "./TripCard.css";
 
 function TripCard({ trip }) {
   const start = new Date(trip.startedAt);

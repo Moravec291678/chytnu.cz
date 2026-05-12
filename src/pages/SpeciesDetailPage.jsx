@@ -1,8 +1,8 @@
 import { useParams, useNavigate } from "react-router-dom";
-import { useCatches } from "../context/CatchContext";
-import Layout from "../components/Layout";
-import "../styles/SpeciesDetailPage.css";
-import CatchCard from "../components/CatchCard";
+import { useCatches } from "../features/catches/context/CatchContext";
+import Layout from "../shared/layout/Layout";
+import CatchCard from "../features/catches/components/CatchCard";
+import "./SpeciesDetailPage.css";
 
 function SpeciesDetailPage() {
   const { speciesKey } = useParams();

@@ -1,31 +1,8 @@
-import "../styles/ActiveTripCard.css";
-import { useState, useEffect } from "react";
+import "./ActiveTripCard.css";
+import useLiveDuration from "../../../hooks/useLiveDuration";
 
 function ActiveTripCard({ activeTrip }) {
-  const [duration, setDuration] = useState("");
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const now = new Date();
-
-      const startedAt = new Date(activeTrip.startedAt);
-
-      const diffMs = now - startedAt;
-
-      const hours = Math.floor(diffMs / 1000 / 60 / 60);
-
-      const minutes = Math.floor((diffMs / 1000 / 60) % 60);
-
-      const seconds = Math.floor((diffMs / 1000) % 60);
-
-      const formatted = [hours, minutes, seconds]
-        .map((value) => String(value).padStart(2, "0"))
-        .join(":");
-
-      setDuration(formatted);
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [activeTrip.startedAt]);
+  const duration = useLiveDuration(activeTrip.startedAt);
 
   return (
     <div className="active-trip-card">

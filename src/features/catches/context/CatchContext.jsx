@@ -1,5 +1,5 @@
 import { createContext, useReducer, useContext } from "react";
-import { TEST_CATCHES } from "../utils/mockData";
+import { TEST_CATCHES } from "../data/mockCatches";
 const initialState = {
   catches: TEST_CATCHES,
   sortBy: "vse",

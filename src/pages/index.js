@@ -1,0 +1,7 @@
+export { default as AddCatchPage } from "./AddCatchPage";
+export { default as CatchDetailPage } from "./CatchDetailPage";
+export { default as GalleryPage } from "./GalleryPage";
+export { default as HomePage } from "./HomePage";
+export { default as SpeciesDetailPage } from "./SpeciesDetailPage";
+export { default as StatsPage } from "./StatsPage";
+export { default as TripsPage } from "./TripsPage";

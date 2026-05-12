@@ -1,11 +1,11 @@
-import { useCatches } from "../context/CatchContext";
+import { useCatches } from "../../catches/context/CatchContext";
 import {
   getTopMethod,
   getReleasedPercentage,
   getTopRevier,
   getBiggestCatch,
 } from "../utils/profileStats";
-import "../styles/ProfileStatsBar.css";
+import "./ProfileStatsBar.css";
 
 function ProfileStatsBar() {
   const { state } = useCatches();

@@ -1,11 +1,13 @@
 import { Routes, Route } from "react-router-dom";
-import HomePage from "./pages/HomePage";
-import AddCatchPage from "./pages/AddCatchPage";
-import CatchDetailPage from "./pages/CatchDetailPage";
-import GalleryPage from "./pages/GalleryPage";
-import StatsPage from "./pages/StatsPage";
-import TripsPage from "./pages/TripsPage";
-import SpeciesDetailPage from "./pages/SpeciesDetailPage";
+import {
+  AddCatchPage,
+  CatchDetailPage,
+  GalleryPage,
+  HomePage,
+  SpeciesDetailPage,
+  StatsPage,
+  TripsPage,
+} from "../pages";
 function App() {
   return (
     <>

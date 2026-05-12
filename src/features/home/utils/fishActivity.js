@@ -1,4 +1,4 @@
-import { MOON_PHASE_EMOJI } from "./constants";
+import { MOON_PHASE_EMOJI } from "../../../shared/constants/constants";
 
 export function getMoonPhase(date = new Date()) {
   const knownNewMoon = new Date("2000-01-06");

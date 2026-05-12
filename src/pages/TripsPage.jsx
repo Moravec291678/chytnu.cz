@@ -1,11 +1,9 @@
-import Layout from "../components/Layout";
-import TripCard from "../components/TripCard";
-import ActiveTripCard from "../components/ActiveTripCard";
-
-import { MOCK_TRIPS } from "../data/mockTrips";
-import { ACTIVE_TRIP } from "../data/activeTrip";
-
-import "../styles/TripsPage.css";
+import Layout from "../shared/layout/Layout";
+import TripCard from "../features/trips/components/TripCard";
+import ActiveTripCard from "../features/trips/components/ActiveTripCard";
+import { MOCK_TRIPS } from "../features/trips/data/mockTrips";
+import { ACTIVE_TRIP } from "../features/trips/data/activeTrip";
+import "./TripsPage.css";
 
 function TripsPage() {
   return (

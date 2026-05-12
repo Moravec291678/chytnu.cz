@@ -1,80 +1,107 @@
-import Layout from "../components/Layout";
-import ProfileStatsBar from "../components/ProfileStatsBar";
-import SpeciesCard from "../components/SpeciesCard";
-import FishActivity from "../components/FishActivity";
-import TripPill from "../components/TripPill";
-import { useCatches } from "../context/CatchContext";
-import { getSeason } from "../utils/helpers";
 import { useState } from "react";
-import { normalizeText } from "../utils/helpers";
-import { ACTIVE_TRIP } from "../data/activeTrip";
-import "../styles/HomePage.css";
+import Layout from "../shared/layout/Layout";
+import ProfileStatsBar from "../features/home/components/ProfileStatsBar";
+import SpeciesCard from "../features/species/components/SpeciesCard";
+import FishActivity from "../features/home/components/FishActivity";
+import TripPill from "../features/trips/components/TripPill";
+import { useCatches } from "../features/catches/context/CatchContext";
+import { getSeason, normalizeText } from "../shared/utils/helpers";
+import { ACTIVE_TRIP } from "../features/trips/data/activeTrip";
+import "./HomePage.css";
 
-function HomePage() {
-  const { state, dispatch } = useCatches();
-  const year = new Date().getFullYear();
-  const reducedCatches = state.catches.reduce((acc, catchItem) => {
-    const key = catchItem.speciesKey;
-    if (!acc[key]) {
-      acc[key] = {
-        count: 0,
-        catches: [],
-      };
-    }
-    acc[key].count += 1;
-    acc[key].catches.push(catchItem);
+const SORT_OPTIONS = [
+  { key: "nejnovejsi", label: "đź“… NejnovÄ›jĹˇĂ­" },
+  { key: "nejvice", label: "đź”˘ NejvĂ­ce ĂşlovkĹŻ" },
+  { key: "nejmene", label: "đź”˘ NejmĂ©nÄ› ĂşlovkĹŻ" },
+  { key: "nejtezsi", label: "âš–ď¸Ź NejtÄ›ĹľĹˇĂ­" },
+  { key: "nejlehci", label: "âš–ď¸Ź NejlehÄŤĂ­" },
+  { key: "nejdelsi", label: "đź“Ź NejdelĹˇĂ­" },
+  { key: "nejkratsi", label: "đź“Ź NejkratĹˇĂ­" },
+];
 
-    return acc;
-  }, {});
+function groupCatchesBySpecies(catches) {
+  return Object.entries(
+    catches.reduce((acc, catchItem) => {
+      const key = catchItem.speciesKey;
 
-  const speciesGroups = Object.entries(reducedCatches);
-  const [sortOpen, setSortOpen] = useState(false);
-  const [search, setSearch] = useState("");
-  const [isSearchFocused, setIsSearchFocused] = useState(false);
-  const isSearchMode = isSearchFocused || search.trim() !== "";
-  const sortedCatches = speciesGroups.sort(
+      if (!acc[key]) {
+        acc[key] = {
+          count: 0,
+          catches: [],
+        };
+      }
+
+      acc[key].count += 1;
+      acc[key].catches.push(catchItem);
+
+      return acc;
+    }, {}),
+  );
+}
+
+function sortSpeciesGroups(speciesGroups, sortBy) {
+  return [...speciesGroups].sort(
     (
       [, { count: aCount, catches: aCatches }],
       [, { count: bCount, catches: bCatches }],
     ) => {
-      if (state.sortBy === "nejvice") return bCount - aCount;
-      if (state.sortBy === "nejmene") return aCount - bCount;
-      if (state.sortBy === "nejnovejsi") {
+      if (sortBy === "nejvice") return bCount - aCount;
+      if (sortBy === "nejmene") return aCount - bCount;
+
+      if (sortBy === "nejnovejsi") {
         return (
           Math.max(...bCatches.map((item) => item.caughtAt)) -
           Math.max(...aCatches.map((item) => item.caughtAt))
         );
       }
-      if (state.sortBy === "nejtezsi") {
+
+      if (sortBy === "nejtezsi") {
         const aMax = Math.max(...aCatches.map((item) => item.weightKg));
         const bMax = Math.max(...bCatches.map((item) => item.weightKg));
+
         return bMax - aMax;
       }
-      if (state.sortBy === "nejlehci") {
+
+      if (sortBy === "nejlehci") {
         const aMin = Math.min(...aCatches.map((item) => item.weightKg));
         const bMin = Math.min(...bCatches.map((item) => item.weightKg));
+
         return aMin - bMin;
       }
 
-      if (state.sortBy === "nejdelsi") {
+      if (sortBy === "nejdelsi") {
         const aMax = Math.max(...aCatches.map((item) => item.lengthCm));
         const bMax = Math.max(...bCatches.map((item) => item.lengthCm));
+
         return bMax - aMax;
       }
 
-      if (state.sortBy === "nejkratsi") {
+      if (sortBy === "nejkratsi") {
         const aMin = Math.min(...aCatches.map((item) => item.lengthCm));
         const bMin = Math.min(...bCatches.map((item) => item.lengthCm));
+
         return aMin - bMin;
       }
 
       return 0;
     },
   );
+}
+
+function HomePage() {
+  const { state, dispatch } = useCatches();
+  const year = new Date().getFullYear();
+  const speciesGroups = groupCatchesBySpecies(state.catches);
+  const [sortOpen, setSortOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const isSearchMode = isSearchFocused || search.trim() !== "";
+  const sortedCatches = sortSpeciesGroups(speciesGroups, state.sortBy);
   const filteredCatches = sortedCatches.filter(([, data]) =>
     normalizeText(data.catches[0].species).includes(normalizeText(search)),
   );
-  const [activeTrip, setActiveTrip] = useState(ACTIVE_TRIP);
+  const activeTrip = ACTIVE_TRIP;
+
   return (
     <Layout>
       <header className="home-header">
@@ -82,12 +109,12 @@ function HomePage() {
           <div>
             <h1>ChytnuCz</h1>
             <p>
-              {getSeason()} {year} · {state.catches.length} úlovků ·{" "}
-              {speciesGroups.length} druhů
+              {getSeason()} {year} Â· {state.catches.length} ĂşlovkĹŻ Â·{" "}
+              {speciesGroups.length} druhĹŻ
             </p>
           </div>
           <div className="home-header-actions">
-            <button className="header-btn">🔔</button>
+            <button className="header-btn">đź””</button>
           </div>
         </div>
 
@@ -96,7 +123,7 @@ function HomePage() {
             onClick={() => dispatch({ type: "SET_SORT", payload: "vse" })}
             className={state.sortBy === "vse" ? "chip chip-active" : "chip"}
           >
-            Vše
+            VĹˇe
           </button>
 
           <div className="sort-wrapper">
@@ -106,20 +133,12 @@ function HomePage() {
               }
               onClick={() => setSortOpen(!sortOpen)}
             >
-              Seřadit ▾
+              SeĹ™adit â–ľ
             </button>
 
             {sortOpen && (
               <div className="sort-dropdown">
-                {[
-                  { key: "nejnovejsi", label: "📅 Nejnovější" },
-                  { key: "nejvice", label: "🔢 Nejvíce úlovků" },
-                  { key: "nejmene", label: "🔢 Nejméně úlovků" },
-                  { key: "nejtezsi", label: "⚖️ Nejtěžší" },
-                  { key: "nejlehci", label: "⚖️ Nejlehčí" },
-                  { key: "nejdelsi", label: "📏 Nejdelší" },
-                  { key: "nejkratsi", label: "📏 Nejkratší" },
-                ].map(({ key, label }) => (
+                {SORT_OPTIONS.map(({ key, label }) => (
                   <button
                     key={key}
                     className={
@@ -149,7 +168,7 @@ function HomePage() {
       )}
       <div className="search-wrapper">
         <div className="search-box">
-          <span className="search-icon">⌕</span>
+          <span className="search-icon">âŚ•</span>
 
           <input
             className="search-input"
@@ -175,12 +194,12 @@ function HomePage() {
           />
           {search && (
             <button className="search-clear" onClick={() => setSearch("")}>
-              ×
+              Ă—
             </button>
           )}
         </div>
       </div>
-      <h3 className="section-title">Poslední úlovky</h3>
+      <h3 className="section-title">PoslednĂ­ Ăşlovky</h3>
       {filteredCatches.length > 0 ? (
         filteredCatches.map(([speciesKey, data]) => {
           const biggest = data.catches.reduce((max, item) => {
@@ -198,7 +217,7 @@ function HomePage() {
         })
       ) : (
         <div className="empty-search">
-          <p>Žádný druh nenalezen</p>
+          <p>Ĺ˝ĂˇdnĂ˝ druh nenalezen</p>
         </div>
       )}
     </Layout>

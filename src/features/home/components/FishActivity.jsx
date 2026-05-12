@@ -5,9 +5,8 @@ import {
   calculateFishActivity,
   getActivityLabel,
   getMoonPhase,
-  getSeasonScore,
 } from "../utils/fishActivity";
-import "../styles/FishActivity.css";
+import "./FishActivity.css";
 function FishActivity() {
   const [score, setScore] = useState(null);
   const [weather, setWeather] = useState(null);

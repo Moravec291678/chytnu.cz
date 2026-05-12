@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import "../styles/Layout.css";
+import "./Layout.css";
 
 function Layout({ children }) {
   return (
