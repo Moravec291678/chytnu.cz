@@ -10,13 +10,13 @@ import { ACTIVE_TRIP } from "../features/trips/data/activeTrip";
 import "./HomePage.css";
 
 const SORT_OPTIONS = [
-  { key: "nejnovejsi", label: "đź“… NejnovÄ›jĹˇĂ­" },
-  { key: "nejvice", label: "đź”˘ NejvĂ­ce ĂşlovkĹŻ" },
-  { key: "nejmene", label: "đź”˘ NejmĂ©nÄ› ĂşlovkĹŻ" },
-  { key: "nejtezsi", label: "âš–ď¸Ź NejtÄ›ĹľĹˇĂ­" },
-  { key: "nejlehci", label: "âš–ď¸Ź NejlehÄŤĂ­" },
-  { key: "nejdelsi", label: "đź“Ź NejdelĹˇĂ­" },
-  { key: "nejkratsi", label: "đź“Ź NejkratĹˇĂ­" },
+  { key: "nejnovejsi", label: "🕒 Nejnovější" },
+  { key: "nejvice", label: "🔝 Nejvíce úlovků" },
+  { key: "nejmene", label: "🔽 Nejméně úlovků" },
+  { key: "nejtezsi", label: "⚖️ Nejtěžší" },
+  { key: "nejlehci", label: "⚖️ Nejlehčí" },
+  { key: "nejdelsi", label: "📏 Nejdelší" },
+  { key: "nejkratsi", label: "📏 Nejkratší" },
 ];
 
 function groupCatchesBySpecies(catches) {
@@ -90,16 +90,25 @@ function sortSpeciesGroups(speciesGroups, sortBy) {
 
 function HomePage() {
   const { state, dispatch } = useCatches();
+
   const year = new Date().getFullYear();
+
   const speciesGroups = groupCatchesBySpecies(state.catches);
+
   const [sortOpen, setSortOpen] = useState(false);
+
   const [search, setSearch] = useState("");
+
   const [isSearchFocused, setIsSearchFocused] = useState(false);
+
   const isSearchMode = isSearchFocused || search.trim() !== "";
+
   const sortedCatches = sortSpeciesGroups(speciesGroups, state.sortBy);
+
   const filteredCatches = sortedCatches.filter(([, data]) =>
     normalizeText(data.catches[0].species).includes(normalizeText(search)),
   );
+
   const activeTrip = ACTIVE_TRIP;
 
   return (
@@ -108,13 +117,15 @@ function HomePage() {
         <div className="home-header-top">
           <div>
             <h1>ChytnuCz</h1>
+
             <p>
-              {getSeason()} {year} Â· {state.catches.length} ĂşlovkĹŻ Â·{" "}
-              {speciesGroups.length} druhĹŻ
+              {getSeason()} {year} · {state.catches.length} úlovků ·{" "}
+              {speciesGroups.length} druhů
             </p>
           </div>
+
           <div className="home-header-actions">
-            <button className="header-btn">đź””</button>
+            <button className="header-btn">🔔</button>
           </div>
         </div>
 
@@ -123,7 +134,7 @@ function HomePage() {
             onClick={() => dispatch({ type: "SET_SORT", payload: "vse" })}
             className={state.sortBy === "vse" ? "chip chip-active" : "chip"}
           >
-            VĹˇe
+            Vše
           </button>
 
           <div className="sort-wrapper">
@@ -133,7 +144,7 @@ function HomePage() {
               }
               onClick={() => setSortOpen(!sortOpen)}
             >
-              SeĹ™adit â–ľ
+              Seřadit ▾
             </button>
 
             {sortOpen && (
@@ -148,6 +159,7 @@ function HomePage() {
                     }
                     onClick={() => {
                       dispatch({ type: "SET_SORT", payload: key });
+
                       setSortOpen(false);
                     }}
                   >
@@ -159,16 +171,20 @@ function HomePage() {
           </div>
         </div>
       </header>
+
       {!isSearchMode && (
         <>
           <FishActivity />
+
           <ProfileStatsBar />
+
           {activeTrip?.isActive && <TripPill activeTrip={activeTrip} />}
         </>
       )}
+
       <div className="search-wrapper">
         <div className="search-box">
-          <span className="search-icon">âŚ•</span>
+          <span className="search-icon">⌕</span>
 
           <input
             className="search-input"
@@ -192,14 +208,17 @@ function HomePage() {
               }, 150);
             }}
           />
+
           {search && (
             <button className="search-clear" onClick={() => setSearch("")}>
-              Ă—
+              ×
             </button>
           )}
         </div>
       </div>
-      <h3 className="section-title">PoslednĂ­ Ăşlovky</h3>
+
+      <h3 className="section-title">Poslední úlovky</h3>
+
       {filteredCatches.length > 0 ? (
         filteredCatches.map(([speciesKey, data]) => {
           const biggest = data.catches.reduce((max, item) => {
@@ -217,7 +236,7 @@ function HomePage() {
         })
       ) : (
         <div className="empty-search">
-          <p>Ĺ˝ĂˇdnĂ˝ druh nenalezen</p>
+          <p>Žádný druh nenalezen</p>
         </div>
       )}
     </Layout>
