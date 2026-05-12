@@ -10,9 +10,17 @@ function TripsPage() {
     <Layout>
       <div className="trips-page">
         <header className="trips-header">
-          <h1>Výlety</h1>
+          <div className="trips-header-top">
+            <div className="trips-header-top-wrapper">
+              <h1>Výlety</h1>
 
-          <p className="trips-subtitle">12 výletů · 187 hodin · 42 úlovků</p>
+              <p className="trips-subtitle">
+                12 výletů · 187 hodin · 42 úlovků
+              </p>
+            </div>
+            <button className="trips-add-btn header-btn">➕</button>
+          </div>
+          <div className="trips-header-bottom">{/* filters*/}</div>
         </header>
 
         <ActiveTripCard activeTrip={ACTIVE_TRIP} />

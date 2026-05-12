@@ -15,6 +15,12 @@
   color: white;
 }
 
+.trips-header-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
 .trips-subtitle {
   margin-top: 6px;
 
@@ -22,6 +28,10 @@
   font-weight: 500;
 
   color: #8b98a7;
+}
+
+.trips-add-btn {
+  font-size: 14px;
 }
 
 .trips-section {
