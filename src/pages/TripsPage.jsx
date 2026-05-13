@@ -24,8 +24,7 @@ function TripsPage() {
               <h1>Výlety</h1>
 
               <p className="trips-subtitle">
-                {getTripsCount(MOCK_TRIPS)} výletů · {totalTripsHours} hodin ·
-                42 úlovků
+                {getTripsCount(MOCK_TRIPS)} výletů · {totalTripsHours} hodin
               </p>
             </div>
             <button className="trips-add-btn header-btn">➕</button>
