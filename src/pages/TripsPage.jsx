@@ -3,13 +3,18 @@ import TripCard from "../features/trips/components/TripCard";
 import ActiveTripCard from "../features/trips/components/ActiveTripCard";
 import { MOCK_TRIPS } from "../features/trips/data/mockTrips";
 import { getActiveTrip } from "../features/trips/utils/getActiveTrip";
-import { getTripsCount } from "../features/trips/utils/tripStats";
-import "./TripsPage.css";
+import {
+  getTotalTripsHours,
+  getTripsCount,
+} from "../features/trips/utils/tripStats";
 import { getCompletedTrips } from "../features/trips/utils/getCompletedTrips";
+import "./TripsPage.css";
 
 function TripsPage() {
   const activeTrip = getActiveTrip(MOCK_TRIPS);
   const completedTrips = getCompletedTrips(MOCK_TRIPS);
+  const totalTripsHours = getTotalTripsHours(MOCK_TRIPS);
+  console.log(totalTripsHours);
   return (
     <Layout>
       <div className="trips-page">
@@ -19,7 +24,8 @@ function TripsPage() {
               <h1>Výlety</h1>
 
               <p className="trips-subtitle">
-                {getTripsCount(MOCK_TRIPS)} výletů · 187 hodin · 42 úlovků
+                {getTripsCount(MOCK_TRIPS)} výletů · {totalTripsHours} hodin ·
+                42 úlovků
               </p>
             </div>
             <button className="trips-add-btn header-btn">➕</button>
