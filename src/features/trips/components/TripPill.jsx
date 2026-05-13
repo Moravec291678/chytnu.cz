@@ -1,8 +1,10 @@
 import { Link } from "react-router-dom";
 import "./TripPill.css";
 import useLiveDuration from "../../../hooks/useLiveDuration";
+import { getMethodLabel } from "../../../shared/utils/getMethodLabel";
 
 function TripPill({ activeTrip }) {
+  const activeTripMethod = getMethodLabel(activeTrip);
   const duration = useLiveDuration(activeTrip.startedAt);
   return (
     <Link to={"/trips"} className="trip-pill-link">
@@ -16,7 +18,7 @@ function TripPill({ activeTrip }) {
             </p>
 
             <p className="trip-pill-subtitle">
-              {activeTrip.method} · 3 chyceno dnes
+              {activeTripMethod} · 3 chyceno dnes
             </p>
           </div>
         </div>

@@ -2,11 +2,15 @@ import Layout from "../shared/layout/Layout";
 import TripCard from "../features/trips/components/TripCard";
 import ActiveTripCard from "../features/trips/components/ActiveTripCard";
 import { MOCK_TRIPS } from "../features/trips/data/mockTrips";
-import { ACTIVE_TRIP } from "../features/trips/data/activeTrip";
+import { getActiveTrip } from "../features/trips/utils/getActiveTrip";
 import { getTripsCount } from "../features/trips/utils/tripStats";
 import "./TripsPage.css";
+import { getCompletedTrips } from "../features/trips/utils/getCompletedTrips";
 
 function TripsPage() {
+  const activeTrip = getActiveTrip(MOCK_TRIPS);
+  const completedTrips = getCompletedTrips(MOCK_TRIPS);
+  console.log(activeTrip)
   return (
     <Layout>
       <div className="trips-page">
@@ -24,12 +28,12 @@ function TripsPage() {
           <div className="trips-header-bottom">{/* filters*/}</div>
         </header>
 
-        <ActiveTripCard activeTrip={ACTIVE_TRIP} />
+        {activeTrip && <ActiveTripCard activeTrip={activeTrip} />}
 
         <section className="trips-section">
           <h3 className="section-title">Minulé výlety</h3>
 
-          {MOCK_TRIPS.map((trip) => (
+          {completedTrips.map((trip) => (
             <TripCard key={trip.id} trip={trip} />
           ))}
         </section>

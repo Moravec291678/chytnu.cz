@@ -6,7 +6,8 @@ import FishActivity from "../features/home/components/FishActivity";
 import TripPill from "../features/trips/components/TripPill";
 import { useCatches } from "../features/catches/context/CatchContext";
 import { getSeason, normalizeText } from "../shared/utils/helpers";
-import { ACTIVE_TRIP } from "../features/trips/data/activeTrip";
+import { MOCK_TRIPS } from "../features/trips/data/mockTrips";
+import { getActiveTrip } from "../features/trips/utils/getActiveTrip";
 import "./HomePage.css";
 
 const SORT_OPTIONS = [
@@ -89,6 +90,8 @@ function sortSpeciesGroups(speciesGroups, sortBy) {
 }
 
 function HomePage() {
+  const activeTrip = getActiveTrip(MOCK_TRIPS);
+
   const { state, dispatch } = useCatches();
 
   const year = new Date().getFullYear();
@@ -108,8 +111,6 @@ function HomePage() {
   const filteredCatches = sortedCatches.filter(([, data]) =>
     normalizeText(data.catches[0].species).includes(normalizeText(search)),
   );
-
-  const activeTrip = ACTIVE_TRIP;
 
   return (
     <Layout>

@@ -2,11 +2,11 @@ export const MOCK_TRIPS = [
   {
     id: "trip-001",
 
-    title: "Jižní záliv",
+    title: "Orlik",
 
     locationName: "Lipno - sever",
     createdAt: "2026-03-10T08:00:00",
-    startedAt: new Date("2026-05-10T01:00:00"),
+    startedAt: new Date("2026-05-13T05:54:00"),
     endedAt: null,
 
     isActive: true,

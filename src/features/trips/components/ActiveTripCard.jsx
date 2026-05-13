@@ -1,9 +1,10 @@
 import "./ActiveTripCard.css";
 import useLiveDuration from "../../../hooks/useLiveDuration";
+import { getMethodLabel } from "../../../shared/utils/getMethodLabel";
 
 function ActiveTripCard({ activeTrip }) {
   const duration = useLiveDuration(activeTrip.startedAt);
-
+  const activeTripMethod = getMethodLabel(activeTrip);
   return (
     <div className="active-trip-card">
       <div className="active-trip-top">
@@ -11,7 +12,7 @@ function ActiveTripCard({ activeTrip }) {
           <p className="active-trip-title">📍 {activeTrip.locationName}</p>
 
           <p className="active-trip-subtitle">
-            {activeTrip.method} ·{" "}
+            {activeTripMethod} ·{" "}
             {activeTrip.startedAt.toLocaleTimeString([], {
               hour: "2-digit",
               minute: "2-digit",
@@ -25,7 +26,9 @@ function ActiveTripCard({ activeTrip }) {
 
       <div className="active-trip-stats">
         <div className="active-trip-stat">
-          <p className="active-trip-stat-value">3</p>
+          <p className="active-trip-stat-value">
+            {activeTrip.stats.catchesCount}
+          </p>
 
           <p className="active-trip-stat-label">ÚLOVKY</p>
         </div>
@@ -37,7 +40,9 @@ function ActiveTripCard({ activeTrip }) {
         </div>
 
         <div className="active-trip-stat">
-          <p className="active-trip-stat-value">2</p>
+          <p className="active-trip-stat-value">
+            {activeTrip.stats.speciesCount}
+          </p>
 
           <p className="active-trip-stat-label">DRUHY</p>
         </div>
