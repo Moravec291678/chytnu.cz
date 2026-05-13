@@ -10,7 +10,6 @@ import { getCompletedTrips } from "../features/trips/utils/getCompletedTrips";
 function TripsPage() {
   const activeTrip = getActiveTrip(MOCK_TRIPS);
   const completedTrips = getCompletedTrips(MOCK_TRIPS);
-  console.log(activeTrip)
   return (
     <Layout>
       <div className="trips-page">

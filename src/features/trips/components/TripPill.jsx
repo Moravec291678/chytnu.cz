@@ -18,7 +18,7 @@ function TripPill({ activeTrip }) {
             </p>
 
             <p className="trip-pill-subtitle">
-              {activeTripMethod} · 3 chyceno dnes
+              {activeTripMethod} · {activeTrip.stats.catchesCount} chyceno
             </p>
           </div>
         </div>

@@ -1,10 +1,12 @@
 import "./ActiveTripCard.css";
 import useLiveDuration from "../../../hooks/useLiveDuration";
 import { getMethodLabel } from "../../../shared/utils/getMethodLabel";
+import { getStartedTripDayLabel } from "../utils/getStartedTripDayLabel";
 
 function ActiveTripCard({ activeTrip }) {
   const duration = useLiveDuration(activeTrip.startedAt);
   const activeTripMethod = getMethodLabel(activeTrip);
+  const activeTripDayLabel = getStartedTripDayLabel(activeTrip);
   return (
     <div className="active-trip-card">
       <div className="active-trip-top">
@@ -17,7 +19,7 @@ function ActiveTripCard({ activeTrip }) {
               hour: "2-digit",
               minute: "2-digit",
             })}{" "}
-            · dnes
+            · {activeTripDayLabel}
           </p>
         </div>
 
