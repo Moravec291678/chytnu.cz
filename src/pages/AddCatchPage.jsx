@@ -1,10 +1,11 @@
 import { useState } from "react";
+import { DEFAULT_SPECIES } from "../shared/constants/constants";
+import { SPECIES_ICONS } from "../features/species/data/speciesIcons";
 import Layout from "../shared/layout/Layout";
 import "./AddCatchPage.css";
 
 function AddCatchPage() {
   const [displayFull, setDisplayFull] = useState(false);
-
   const [catchData, setCatchData] = useState({
     weightKg: "",
     lengthCm: "",
@@ -66,7 +67,22 @@ function AddCatchPage() {
         <section className="add-catch-section">
           <h2>🐟 Druh ryby</h2>
 
-          <div className="species-grid"></div>
+          <div className="species-grid">
+            {DEFAULT_SPECIES.map((item) => {
+              const icon = SPECIES_ICONS[item.iconKey];
+              return (
+                <button key={item.key} className="species-grid-item">
+                  <img src={icon} alt={item.label} />
+                  <span className="species-grid-item-label">{item.label}</span>
+                </button>
+              );
+            })}
+            <button className="species-grid-item species-grid-item-add">
+              <span className="species-grid-item-add-icon">➕</span>
+
+              <span className="species-grid-item-label">Přidat</span>
+            </button>
+          </div>
         </section>
 
         <section className="add-catch-section">
@@ -217,35 +233,35 @@ function AddCatchPage() {
                 />
               </label>
             )}
-              <label className="input-group">
-                <span>Datum</span>
+            <label className="input-group">
+              <span>Datum</span>
 
-                <input
-                  type="date"
-                  value={catchData.catchDate}
-                  onChange={(e) =>
-                    setCatchData({
-                      ...catchData,
-                      catchDate: e.target.value,
-                    })
-                  }
-                />
-              </label>
+              <input
+                type="date"
+                value={catchData.catchDate}
+                onChange={(e) =>
+                  setCatchData({
+                    ...catchData,
+                    catchDate: e.target.value,
+                  })
+                }
+              />
+            </label>
 
-              <label className="input-group">
-                <span>Čas záběru</span>
+            <label className="input-group">
+              <span>Čas záběru</span>
 
-                <input
-                  type="time"
-                  value={catchData.catchTime}
-                  onChange={(e) =>
-                    setCatchData({
-                      ...catchData,
-                      catchTime: e.target.value,
-                    })
-                  }
-                />
-              </label>
+              <input
+                type="time"
+                value={catchData.catchTime}
+                onChange={(e) =>
+                  setCatchData({
+                    ...catchData,
+                    catchTime: e.target.value,
+                  })
+                }
+              />
+            </label>
             {displayFull && (
               <>
                 <label className="input-group input-group-full">
