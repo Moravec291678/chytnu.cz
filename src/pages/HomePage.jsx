@@ -12,8 +12,8 @@ import "./HomePage.css";
 
 const SORT_OPTIONS = [
   { key: "nejnovejsi", label: "🕒 Nejnovější" },
-  { key: "nejvice", label: "🔝 Nejvíce úlovků" },
-  { key: "nejmene", label: "🔽 Nejméně úlovků" },
+  { key: "nejvice", label: "⬆️ Nejvíce úlovků" },
+  { key: "nejmene", label: "⬇️ Nejméně úlovků" },
   { key: "nejtezsi", label: "⚖️ Nejtěžší" },
   { key: "nejlehci", label: "⚖️ Nejlehčí" },
   { key: "nejdelsi", label: "📏 Nejdelší" },
