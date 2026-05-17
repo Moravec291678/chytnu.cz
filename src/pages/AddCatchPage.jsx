@@ -24,8 +24,6 @@ function AddCatchPage() {
     bottomType: "",
   });
 
-  console.log(catchData);
-
   return (
     <Layout>
       <div className="add-catch-page">
@@ -40,9 +38,7 @@ function AddCatchPage() {
         <section className="add-catch-mode-switch">
           <button
             className={
-              !displayFull
-                ? "mode-button mode-button-active"
-                : "mode-button"
+              !displayFull ? "mode-button mode-button-active" : "mode-button"
             }
             onClick={() => setDisplayFull(false)}
           >
@@ -51,9 +47,7 @@ function AddCatchPage() {
 
           <button
             className={
-              displayFull
-                ? "mode-button mode-button-active"
-                : "mode-button"
+              displayFull ? "mode-button mode-button-active" : "mode-button"
             }
             onClick={() => setDisplayFull(true)}
           >
@@ -223,37 +217,35 @@ function AddCatchPage() {
                 />
               </label>
             )}
+              <label className="input-group">
+                <span>Datum</span>
 
-            <label className="input-group">
-              <span>Datum</span>
+                <input
+                  type="date"
+                  value={catchData.catchDate}
+                  onChange={(e) =>
+                    setCatchData({
+                      ...catchData,
+                      catchDate: e.target.value,
+                    })
+                  }
+                />
+              </label>
 
-              <input
-                type="date"
-                value={catchData.catchDate}
-                onChange={(e) =>
-                  setCatchData({
-                    ...catchData,
-                    catchDate: e.target.value,
-                  })
-                }
-              />
-            </label>
+              <label className="input-group">
+                <span>Čas záběru</span>
 
-            <label className="input-group">
-              <span>Čas záběru</span>
-
-              <input
-                type="time"
-                value={catchData.catchTime}
-                onChange={(e) =>
-                  setCatchData({
-                    ...catchData,
-                    catchTime: e.target.value,
-                  })
-                }
-              />
-            </label>
-
+                <input
+                  type="time"
+                  value={catchData.catchTime}
+                  onChange={(e) =>
+                    setCatchData({
+                      ...catchData,
+                      catchTime: e.target.value,
+                    })
+                  }
+                />
+              </label>
             {displayFull && (
               <>
                 <label className="input-group input-group-full">
@@ -349,9 +341,7 @@ function AddCatchPage() {
           <section className="add-catch-section">
             <h2>📝 Poznámky</h2>
 
-            <textarea
-              placeholder="Například počasí, aktivita ryb..."
-            ></textarea>
+            <textarea placeholder="Například počasí, aktivita ryb..."></textarea>
 
             <label className="favorite-checkbox">
               <input type="checkbox" />
@@ -361,9 +351,7 @@ function AddCatchPage() {
           </section>
         )}
 
-        <button className="save-catch-button">
-          ✓ Uložit úlovek
-        </button>
+        <button className="save-catch-button">✓ Uložit úlovek</button>
       </div>
     </Layout>
   );
