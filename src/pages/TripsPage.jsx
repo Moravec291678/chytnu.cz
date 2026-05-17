@@ -14,7 +14,6 @@ function TripsPage() {
   const activeTrip = getActiveTrip(MOCK_TRIPS);
   const completedTrips = getCompletedTrips(MOCK_TRIPS);
   const totalTripsHours = getTotalTripsHours(MOCK_TRIPS);
-  console.log(totalTripsHours);
   return (
     <Layout>
       <div className="trips-page">

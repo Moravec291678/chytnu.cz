@@ -37,7 +37,9 @@
 .active-trip-timer {
   font-size: 26px;
   font-weight: 800;
+  min-width: 160px;
 
+  text-align: right;
   color: #2cf28c;
 
   white-space: nowrap;

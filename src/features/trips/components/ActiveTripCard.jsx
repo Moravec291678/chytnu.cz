@@ -12,15 +12,14 @@ function ActiveTripCard({ activeTrip }) {
       <div className="active-trip-top">
         <div>
           <p className="active-trip-title">📍 {activeTrip.locationName}</p>
-
           <p className="active-trip-subtitle">
             {activeTripMethod} ·{" "}
             {activeTrip.startedAt.toLocaleTimeString([], {
               hour: "2-digit",
               minute: "2-digit",
-            })}{" "}
-            · {activeTripDayLabel}
+            })}
           </p>
+          <p className="active-trip-subtitle">{activeTripDayLabel}</p>
         </div>
 
         <div className="active-trip-timer">{duration}</div>

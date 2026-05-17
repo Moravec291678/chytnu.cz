@@ -6,7 +6,7 @@ export const MOCK_TRIPS = [
 
     locationName: "Lipno - sever",
     createdAt: "2026-03-10T08:00:00",
-    startedAt: new Date("2026-05-13T05:54:00"),
+    startedAt: new Date("2026-05-17T18:00:00"),
     endedAt: null,
 
     isActive: true,
