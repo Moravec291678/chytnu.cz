@@ -1,14 +1,38 @@
 import { useState } from "react";
 import Layout from "../shared/layout/Layout";
 import "./AddCatchPage.css";
+
 function AddCatchPage() {
   const [displayFull, setDisplayFull] = useState(false);
+
+  const [catchData, setCatchData] = useState({
+    weightKg: "",
+    lengthCm: "",
+
+    girthCm: "",
+    fightDurationMin: "",
+
+    locationName: "",
+    waterNumber: "",
+
+    catchDate: "",
+    catchTime: "",
+
+    gpsLocation: "",
+
+    depthM: "",
+    bottomType: "",
+  });
+
+  console.log(catchData);
+
   return (
     <Layout>
       <div className="add-catch-page">
         <header className="add-catch-header">
           <div>
             <h1>Nový úlovek</h1>
+
             <p>Přidej svůj úlovek</p>
           </div>
         </header>
@@ -16,7 +40,9 @@ function AddCatchPage() {
         <section className="add-catch-mode-switch">
           <button
             className={
-              !displayFull ? "mode-button mode-button-active" : " mode-button"
+              !displayFull
+                ? "mode-button mode-button-active"
+                : "mode-button"
             }
             onClick={() => setDisplayFull(false)}
           >
@@ -25,7 +51,9 @@ function AddCatchPage() {
 
           <button
             className={
-              displayFull ? "mode-button mode-button-active" : " mode-button"
+              displayFull
+                ? "mode-button mode-button-active"
+                : "mode-button"
             }
             onClick={() => setDisplayFull(true)}
           >
@@ -36,6 +64,7 @@ function AddCatchPage() {
         <section className="add-catch-photo-section">
           <button className="photo-upload-button">
             <span>📷</span>
+
             <span>Přidat fotku</span>
           </button>
         </section>
@@ -49,14 +78,245 @@ function AddCatchPage() {
         <section className="add-catch-section">
           <h2>📏 Míry</h2>
 
-          <div className="measurements-grid">
-            {/* {displayFull && input.delkaBoje} */}
+          <div
+            className={
+              displayFull
+                ? "measurements-grid measurements-grid-full"
+                : "measurements-grid"
+            }
+          >
+            <label className="input-group">
+              <span>Váha (kg)</span>
+
+              <input
+                type="number"
+                inputMode="decimal"
+                step="0.01"
+                min="0"
+                placeholder="Např. 4.70"
+                value={catchData.weightKg}
+                onChange={(e) => {
+                  const value = e.target.value;
+
+                  if (Number(value) < 0) return;
+
+                  setCatchData({
+                    ...catchData,
+                    weightKg: value,
+                  });
+                }}
+              />
+            </label>
+
+            <label className="input-group">
+              <span>Délka (cm)</span>
+
+              <input
+                type="number"
+                inputMode="numeric"
+                min="0"
+                placeholder="Např. 68"
+                value={catchData.lengthCm}
+                onChange={(e) => {
+                  const value = e.target.value;
+
+                  if (Number(value) < 0) return;
+
+                  setCatchData({
+                    ...catchData,
+                    lengthCm: value,
+                  });
+                }}
+              />
+            </label>
+
+            {displayFull && (
+              <>
+                <label className="input-group">
+                  <span>Obvod (cm)</span>
+
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min="0"
+                    placeholder="Např. 42"
+                    value={catchData.girthCm}
+                    onChange={(e) => {
+                      const value = e.target.value;
+
+                      if (Number(value) < 0) return;
+
+                      setCatchData({
+                        ...catchData,
+                        girthCm: value,
+                      });
+                    }}
+                  />
+                </label>
+
+                <label className="input-group input-group-full">
+                  <span>Délka boje (min)</span>
+
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min="0"
+                    placeholder="Např. 8"
+                    value={catchData.fightDurationMin}
+                    onChange={(e) => {
+                      const value = e.target.value;
+
+                      if (Number(value) < 0) return;
+
+                      setCatchData({
+                        ...catchData,
+                        fightDurationMin: value,
+                      });
+                    }}
+                  />
+                </label>
+              </>
+            )}
           </div>
         </section>
 
         <section className="add-catch-section">
           <h2>📍 Místo a čas</h2>
-          {/* {displayFull && input.cisloReviru, typ dna, hloubka, } */}
+
+          <div className="measurements-grid">
+            <label className="input-group input-group-full">
+              <span>Revír / lokalita</span>
+
+              <input
+                type="text"
+                placeholder="Např. Lipno - sever"
+                value={catchData.locationName}
+                onChange={(e) =>
+                  setCatchData({
+                    ...catchData,
+                    locationName: e.target.value,
+                  })
+                }
+              />
+            </label>
+
+            {displayFull && (
+              <label className="input-group input-group-full">
+                <span>Číslo revíru (ČRS)</span>
+
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min="0"
+                  placeholder="Např. 411001"
+                  value={catchData.waterNumber}
+                  onChange={(e) => {
+                    const value = e.target.value;
+
+                    if (Number(value) < 0) return;
+
+                    setCatchData({
+                      ...catchData,
+                      waterNumber: value,
+                    });
+                  }}
+                />
+              </label>
+            )}
+
+            <label className="input-group">
+              <span>Datum</span>
+
+              <input
+                type="date"
+                value={catchData.catchDate}
+                onChange={(e) =>
+                  setCatchData({
+                    ...catchData,
+                    catchDate: e.target.value,
+                  })
+                }
+              />
+            </label>
+
+            <label className="input-group">
+              <span>Čas záběru</span>
+
+              <input
+                type="time"
+                value={catchData.catchTime}
+                onChange={(e) =>
+                  setCatchData({
+                    ...catchData,
+                    catchTime: e.target.value,
+                  })
+                }
+              />
+            </label>
+
+            {displayFull && (
+              <>
+                <label className="input-group input-group-full">
+                  <span>GPS poloha</span>
+
+                  <input
+                    type="text"
+                    placeholder="📍 Klepnout pro polohu"
+                    value={catchData.gpsLocation}
+                    onChange={(e) =>
+                      setCatchData({
+                        ...catchData,
+                        gpsLocation: e.target.value,
+                      })
+                    }
+                  />
+                </label>
+
+                <label className="input-group">
+                  <span>Hloubka (m)</span>
+
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    step="0.1"
+                    min="0"
+                    placeholder="Např. 3.5"
+                    value={catchData.depthM}
+                    onChange={(e) => {
+                      const value = e.target.value;
+
+                      if (Number(value) < 0) return;
+
+                      setCatchData({
+                        ...catchData,
+                        depthM: value,
+                      });
+                    }}
+                  />
+                </label>
+
+                <label className="input-group">
+                  <span>Typ dna</span>
+
+                  <select
+                    value={catchData.bottomType}
+                    onChange={(e) =>
+                      setCatchData({
+                        ...catchData,
+                        bottomType: e.target.value,
+                      })
+                    }
+                  >
+                    <option value="">—</option>
+                    <option value="mud">Bahno</option>
+                    <option value="sand">Písek</option>
+                    <option value="gravel">Štěrk</option>
+                    <option value="rocks">Kamení</option>
+                  </select>
+                </label>
+              </>
+            )}
+          </div>
         </section>
 
         {displayFull && (
@@ -89,7 +349,9 @@ function AddCatchPage() {
           <section className="add-catch-section">
             <h2>📝 Poznámky</h2>
 
-            <textarea placeholder="Například počasí, aktivita ryb..."></textarea>
+            <textarea
+              placeholder="Například počasí, aktivita ryb..."
+            ></textarea>
 
             <label className="favorite-checkbox">
               <input type="checkbox" />
@@ -99,7 +361,9 @@ function AddCatchPage() {
           </section>
         )}
 
-        <button className="save-catch-button">✓ Uložit úlovek</button>
+        <button className="save-catch-button">
+          ✓ Uložit úlovek
+        </button>
       </div>
     </Layout>
   );
