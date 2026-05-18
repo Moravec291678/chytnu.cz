@@ -6,6 +6,7 @@ import "./AddCatchPage.css";
 
 function AddCatchPage() {
   const [displayFull, setDisplayFull] = useState(false);
+
   const [catchData, setCatchData] = useState({
     weightKg: "",
     lengthCm: "",
@@ -25,8 +26,10 @@ function AddCatchPage() {
     bottomType: "",
 
     speciesKey: "",
+    resultKey: "released",
   });
-
+  const isActiveResult = catchData.resultKey === "released";
+  console.log(catchData.resultKey);
   return (
     <Layout>
       <div className="add-catch-page">
@@ -362,11 +365,31 @@ function AddCatchPage() {
 
         <section className="add-catch-section">
           <h2>🔁 Výsledek</h2>
-
+          {console.log(isActiveResult)}
           <div className="result-buttons">
-            <button>↩️ Puštěno zpět</button>
+            <button
+              className={
+                isActiveResult ? "result-button button-active" : "result-button"
+              }
+              onClick={() => {
+                setCatchData({ ...catchData, resultKey: "released" });
+              }}
+            >
+              ↩️ Puštěno zpět
+            </button>
 
-            <button>🧊 Necháno</button>
+            <button
+              className={
+                !isActiveResult
+                  ? "result-button button-active"
+                  : "result-button"
+              }
+              onClick={() => {
+                setCatchData({ ...catchData, resultKey: "kept" });
+              }}
+            >
+              🧊 Necháno
+            </button>
           </div>
         </section>
 
