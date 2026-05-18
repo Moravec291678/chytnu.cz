@@ -23,6 +23,8 @@ function AddCatchPage() {
 
     depthM: "",
     bottomType: "",
+
+    speciesKey: "",
   });
 
   return (
@@ -70,8 +72,23 @@ function AddCatchPage() {
           <div className="species-grid">
             {DEFAULT_SPECIES.map((item) => {
               const icon = SPECIES_ICONS[item.iconKey];
+              const isActiveSpecies = catchData.speciesKey === item.key;
               return (
-                <button key={item.key} className="species-grid-item">
+                <button
+                  onClick={() => {
+                    setCatchData({
+                      ...catchData,
+                      speciesKey:
+                        catchData.speciesKey === item.key ? "" : item.key,
+                    });
+                  }}
+                  key={item.key}
+                  className={
+                    isActiveSpecies
+                      ? "species-grid-item species-grid-item-active"
+                      : "species-grid-item"
+                  }
+                >
                   <img src={icon} alt={item.label} />
                   <span className="species-grid-item-label">{item.label}</span>
                 </button>
