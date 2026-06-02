@@ -1,6 +1,5 @@
 import { useState } from "react";
-import { DEFAULT_SPECIES } from "../shared/constants/constants";
-import { SPECIES_ICONS } from "../features/species/data/speciesIcons";
+import { SPECIES_CATEGORIES } from "../shared/constants/constants";
 import Layout from "../shared/layout/Layout";
 import "./AddCatchPage.css";
 
@@ -69,11 +68,12 @@ function AddCatchPage() {
           </button>
         </section>
 
-        <section className="add-catch-section">
+        {/* OLD SPECIES GRID */}
+        {/* <section className="add-catch-section">
           <h2>🐟 Druh ryby</h2>
 
           <div className="species-grid">
-            {DEFAULT_SPECIES.map((item) => {
+            {SPECIES_CATEGORIES.map((item) => {
               const icon = SPECIES_ICONS[item.iconKey];
               const isActiveSpecies = catchData.speciesKey === item.key;
               return (
@@ -103,8 +103,26 @@ function AddCatchPage() {
               <span className="species-grid-item-label">Přidat</span>
             </button>
           </div>
-        </section>
+        </section> */}
+        <section className="add-catch-section">
+          <h2>🐟 Druh ryby</h2>
 
+          <div className="species-list">
+            {SPECIES_CATEGORIES.map((category) => {
+              return (
+                <div key={category.key} className="species-category">
+                  <button className="species-category-header">
+                    <div className="species-category-label">
+                      <span>{category.label}</span>
+                    </div>
+
+                    <span className="species-category-arrow">▶</span>
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </section>
         <section className="add-catch-section">
           <h2>📏 Míry</h2>
 
