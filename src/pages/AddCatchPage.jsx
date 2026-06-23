@@ -5,7 +5,7 @@ import "./AddCatchPage.css";
 
 function AddCatchPage() {
   const [displayFull, setDisplayFull] = useState(false);
-
+  const [expandedCategoryKey, setExpandedCategoryKey] = useState(null);
   const [catchData, setCatchData] = useState({
     weightKg: "",
     lengthCm: "",
@@ -28,7 +28,6 @@ function AddCatchPage() {
     resultKey: "released",
   });
   const isActiveResult = catchData.resultKey === "released";
-  console.log(catchData.resultKey);
   return (
     <Layout>
       <div className="add-catch-page">
@@ -67,57 +66,36 @@ function AddCatchPage() {
             <span>Přidat fotku</span>
           </button>
         </section>
-
-        {/* OLD SPECIES GRID */}
-        {/* <section className="add-catch-section">
-          <h2>🐟 Druh ryby</h2>
-
-          <div className="species-grid">
-            {SPECIES_CATEGORIES.map((item) => {
-              const icon = SPECIES_ICONS[item.iconKey];
-              const isActiveSpecies = catchData.speciesKey === item.key;
-              return (
-                <button
-                  onClick={() => {
-                    setCatchData({
-                      ...catchData,
-                      speciesKey:
-                        catchData.speciesKey === item.key ? "" : item.key,
-                    });
-                  }}
-                  key={item.key}
-                  className={
-                    isActiveSpecies
-                      ? "species-grid-item species-grid-item-active"
-                      : "species-grid-item"
-                  }
-                >
-                  <img src={icon} alt={item.label} />
-                  <span className="species-grid-item-label">{item.label}</span>
-                </button>
-              );
-            })}
-            <button className="species-grid-item species-grid-item-add">
-              <span className="species-grid-item-add-icon">➕</span>
-
-              <span className="species-grid-item-label">Přidat</span>
-            </button>
-          </div>
-        </section> */}
         <section className="add-catch-section">
           <h2>🐟 Druh ryby</h2>
-
           <div className="species-list">
             {SPECIES_CATEGORIES.map((category) => {
               return (
                 <div key={category.key} className="species-category">
-                  <button className="species-category-header">
+                  <button
+                    onClick={() => {
+                      if (expandedCategoryKey !== category.key) {
+                        setExpandedCategoryKey(category.key);
+                      } else {
+                        setExpandedCategoryKey(null);
+                      }
+                    }}
+                    className="species-category-header"
+                  >
                     <div className="species-category-label">
                       <span>{category.label}</span>
                     </div>
 
-                    <span className="species-category-arrow">▶</span>
+                    <span className="species-category-arrow">
+                      {expandedCategoryKey === category.key ? "▼" : "▶"}
+                    </span>
                   </button>
+
+                  {expandedCategoryKey === category.key && (
+                    <div className="species-category-content">
+                      <p>TEST</p>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -383,7 +361,6 @@ function AddCatchPage() {
 
         <section className="add-catch-section">
           <h2>🔁 Výsledek</h2>
-          {console.log(isActiveResult)}
           <div className="result-buttons">
             <button
               className={

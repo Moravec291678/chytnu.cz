@@ -147,11 +147,8 @@
 .species-list {
   display: flex;
   flex-direction: column;
-
+  max-height: 300px;
   overflow-y: auto;
-  max-height: 250px;
-  padding-right: 4px;
-
   gap: 8px;
 
   scrollbar-width: thin;
@@ -177,12 +174,13 @@
 }
 
 .species-category {
-  overflow: hidden;
+  overflow: visible;
   min-height: 52px;
   border: 1px solid #314055;
   border-radius: 14px;
 
   background: #243041;
+  transition: background 0.2s ease;
 }
 
 .species-category-header {
@@ -205,11 +203,10 @@
   font-weight: 700;
 
   cursor: pointer;
-
-  transition: background 0.2s ease;
+  border-radius: 14px;
 }
 
-.species-category-header:hover {
+.species-category:hover {
   background: #314055;
 }
 
@@ -241,6 +238,7 @@
   padding: 10px;
 
   border-top: 1px solid #314055;
+  min-height: 100px;
 }
 
 .species-item {
