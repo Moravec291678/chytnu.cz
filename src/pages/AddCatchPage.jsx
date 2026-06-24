@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { SPECIES_CATEGORIES } from "../shared/constants/constants";
 import Layout from "../shared/layout/Layout";
+import { DEFAULT_SPECIES } from "../shared/constants/constants";
 import "./AddCatchPage.css";
 
 function AddCatchPage() {
@@ -68,38 +69,56 @@ function AddCatchPage() {
         </section>
         <section className="add-catch-section">
           <h2>🐟 Druh ryby</h2>
-          <div className="species-list">
-            {SPECIES_CATEGORIES.map((category) => {
-              return (
-                <div key={category.key} className="species-category">
-                  <button
-                    onClick={() => {
-                      if (expandedCategoryKey !== category.key) {
-                        setExpandedCategoryKey(category.key);
-                      } else {
-                        setExpandedCategoryKey(null);
-                      }
-                    }}
-                    className="species-category-header"
-                  >
-                    <div className="species-category-label">
-                      <span>{category.label}</span>
-                    </div>
+          {expandedCategoryKey === null && (
+            <div className="species-list">
+              {SPECIES_CATEGORIES.map((category) => {
+                return (
+                  <div key={category.key} className="species-category">
+                    <button
+                      onClick={() => {
+                        if (expandedCategoryKey !== category.key) {
+                          setExpandedCategoryKey(category.key);
+                        } else {
+                          setExpandedCategoryKey(null);
+                        }
+                      }}
+                      className="species-category-header"
+                    >
+                      <div className="species-category-label">
+                        <span>{category.label}</span>
+                      </div>
 
-                    <span className="species-category-arrow">
-                      {expandedCategoryKey === category.key ? "▼" : "▶"}
-                    </span>
-                  </button>
+                      <span className="species-category-arrow">
+                        {expandedCategoryKey === category.key ? "▼" : "▶"}
+                      </span>
+                    </button>
 
-                  {expandedCategoryKey === category.key && (
-                    <div className="species-category-content">
-                      <p>TEST</p>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+                    {expandedCategoryKey === category.key && (
+                      <div className="species-category-content">
+                        <p>TEST</p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {expandedCategoryKey !== null && (
+            <div>
+              <p
+                onClick={() => {
+                  setExpandedCategoryKey(null);
+                }}
+              >
+                zpet
+              </p>
+              {DEFAULT_SPECIES.filter((oneFish) => {
+                return expandedCategoryKey === oneFish.categoryKey;
+              }).map((item) => {
+                return <div key={item.key}>{item.label}</div>;
+              })}
+            </div>
+          )}
         </section>
         <section className="add-catch-section">
           <h2>📏 Míry</h2>
