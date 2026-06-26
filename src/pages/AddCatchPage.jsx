@@ -92,32 +92,33 @@ function AddCatchPage() {
 
           {selectedSpecies ? (
             <div className="selected-species">
-              <div className="selected-species-info">
-                <span className="selected-species-icon">🐟</span>
+              <span className="selected-species-title">Vybraná ryba</span>
 
-                <div className="selected-species-text">
-                  <span className="selected-species-title">Vybraná ryba</span>
+              <div className="selected-species-content">
+                <span className="selected-species-name">
+                  {selectedSpecies.label}
+                </span>
 
-                  <strong>{selectedSpecies.label}</strong>
-                </div>
+                <button
+                  className="selected-species-button"
+                  onClick={() => {
+                    setCatchData({
+                      ...catchData,
+                      speciesKey: "",
+                    });
+
+                    setExpandedCategoryKey(null);
+                  }}
+                >
+                  ✏️ Změnit
+                </button>
               </div>
-
-              <button
-                className="selected-species-edit"
-                onClick={() => {
-                  setCatchData({
-                    ...catchData,
-                    speciesKey: "",
-                  });
-                }}
-              >
-                ✏️
-              </button>
             </div>
           ) : (
             <>
               {expandedCategoryKey === null && (
                 <div className="species-list">
+                  <input type="text" placeholder="Kapr obecný" />
                   {SPECIES_CATEGORIES.map((category) => {
                     return (
                       <div key={category.key} className="species-category">
@@ -151,7 +152,7 @@ function AddCatchPage() {
                       setExpandedCategoryKey(null);
                     }}
                   >
-                    ← Zpět
+                    ← Kategorie
                   </button>
 
                   <div className="species-items">

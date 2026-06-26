@@ -434,7 +434,7 @@ textarea {
 
   gap: 8px;
 
-  max-height: 320px;
+  max-height: 340px;
 
   overflow-y: auto;
 
@@ -497,4 +497,88 @@ textarea {
 
 .species-item:active {
   transform: scale(0.98);
+}
+
+/* ==========================================
+   Selected species
+========================================== */
+
+.selected-species {
+  display: flex;
+  flex-direction: column;
+
+  gap: 10px;
+
+  padding: 16px;
+
+  border: 1px solid #314055;
+  border-radius: 16px;
+
+  background: #243041;
+}
+
+.selected-species-title {
+  font-size: 11px;
+  font-weight: 700;
+
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+
+  color: #7f92a8;
+}
+
+.selected-species-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  gap: 12px;
+}
+
+.selected-species-name {
+  color: white;
+
+  font-size: 18px;
+  font-weight: 700;
+
+  line-height: 1.3;
+}
+
+.selected-species-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  gap: 6px;
+
+  height: 38px;
+
+  padding: 0 14px;
+
+  border: 1px solid #314055;
+  border-radius: 10px;
+
+  background: #1b2430;
+
+  color: white;
+
+  font-size: 13px;
+  font-weight: 600;
+
+  cursor: pointer;
+
+  white-space: nowrap;
+
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    transform 0.15s ease;
+}
+
+.selected-species-button:hover {
+  background: #314055;
+}
+
+.selected-species-button:active {
+  transform: scale(0.97);
 }
