@@ -147,7 +147,7 @@
 .species-list {
   display: flex;
   flex-direction: column;
-  max-height: 300px;
+  max-height: 340px;
   overflow-y: auto;
   gap: 8px;
 
@@ -220,64 +220,10 @@
 .species-category-arrow {
   color: #8fa4bc;
 
-  font-size: 14px;
+  font-size: 20px;
 
   transition: transform 0.2s ease;
 }
-
-.species-category-arrow-open {
-  transform: rotate(90deg);
-}
-
-.species-category-content {
-  display: flex;
-  flex-direction: column;
-
-  gap: 6px;
-
-  padding: 10px;
-
-  border-top: 1px solid #314055;
-  min-height: 100px;
-}
-
-.species-item {
-  display: flex;
-  align-items: center;
-
-  min-height: 42px;
-
-  padding: 0 12px;
-
-  border: 1px solid #314055;
-  border-radius: 10px;
-
-  background: #1b2430;
-
-  color: white;
-
-  font-size: 13px;
-  font-weight: 600;
-
-  cursor: pointer;
-
-  transition:
-    background 0.2s ease,
-    border-color 0.2s ease;
-}
-
-.species-item:hover {
-  background: #314055;
-}
-
-.species-item-active {
-  border-color: #24ff91;
-
-  background: rgba(36, 255, 145, 0.12);
-
-  color: #24ff91;
-}
-
 .measurements-grid-full {
   grid-template-columns: repeat(3, 1fr);
 }
@@ -440,4 +386,115 @@ textarea {
   background: rgba(36, 255, 145, 0.12);
 
   color: #24ff91;
+}
+
+/* ==========================================
+   Species selection
+========================================== */
+
+.species-selection {
+  display: flex;
+  flex-direction: column;
+
+  gap: 14px;
+}
+
+.species-back-button {
+  align-self: flex-start;
+
+  height: 40px;
+
+  padding: 0 14px;
+
+  border: 1px solid #314055;
+  border-radius: 10px;
+
+  background: #243041;
+
+  color: white;
+
+  font-size: 13px;
+  font-weight: 600;
+
+  cursor: pointer;
+
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.species-back-button:hover {
+  background: #314055;
+}
+
+.species-items {
+  display: grid;
+
+  grid-template-columns: repeat(2, 1fr);
+
+  gap: 8px;
+
+  max-height: 320px;
+
+  overflow-y: auto;
+
+  padding-right: 4px;
+
+  scrollbar-width: thin;
+  scrollbar-color: rgba(49, 64, 85, 0.45) transparent;
+}
+
+.species-items::-webkit-scrollbar {
+  width: 4px;
+}
+
+.species-items::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.species-items::-webkit-scrollbar-thumb {
+  background: rgba(49, 64, 85, 0.45);
+
+  border-radius: 999px;
+}
+
+.species-items::-webkit-scrollbar-thumb:hover {
+  background: #42536b;
+}
+
+.species-item {
+  min-height: 54px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 10px;
+
+  border: 1px solid #314055;
+  border-radius: 12px;
+
+  background: #243041;
+
+  color: white;
+
+  text-align: center;
+
+  font-size: 13px;
+  font-weight: 600;
+
+  cursor: pointer;
+
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    transform 0.15s ease;
+}
+
+.species-item:hover {
+  background: #314055;
+}
+
+.species-item:active {
+  transform: scale(0.98);
 }

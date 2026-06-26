@@ -322,7 +322,7 @@ export const DEFAULT_SPECIES = [
 
   {
     key: "hybridSilverBigheadCarp",
-    label: "Tolstolobik bílý × pestrý",
+    label: "Tolstolobik bílý / pestrý",
     latinName: "Hypophthalmichthys spp.",
     categoryKey: "cyprinids",
     isCommon: true,

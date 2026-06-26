@@ -7,6 +7,23 @@ import "./AddCatchPage.css";
 function AddCatchPage() {
   const [displayFull, setDisplayFull] = useState(false);
   const [expandedCategoryKey, setExpandedCategoryKey] = useState(null);
+  const visibleSpecies = DEFAULT_SPECIES.filter((item) => {
+    if (expandedCategoryKey === "predators") {
+      return item.isPredator;
+    }
+    if (expandedCategoryKey === "common") {
+      return item.isCommon;
+    }
+    if (expandedCategoryKey === "protected") {
+      return item.isProtected;
+    }
+    if (expandedCategoryKey === "nonNative") {
+      return item.isNonNative;
+    } else {
+      return item.categoryKey === expandedCategoryKey;
+    }
+  });
+
   const [catchData, setCatchData] = useState({
     weightKg: "",
     lengthCm: "",
@@ -29,6 +46,9 @@ function AddCatchPage() {
     resultKey: "released",
   });
   const isActiveResult = catchData.resultKey === "released";
+  const selectedSpecies = DEFAULT_SPECIES.find(
+    (item) => catchData.speciesKey === item.key,
+  );
   return (
     <Layout>
       <div className="add-catch-page">
@@ -69,55 +89,96 @@ function AddCatchPage() {
         </section>
         <section className="add-catch-section">
           <h2>🐟 Druh ryby</h2>
-          {expandedCategoryKey === null && (
-            <div className="species-list">
-              {SPECIES_CATEGORIES.map((category) => {
-                return (
-                  <div key={category.key} className="species-category">
-                    <button
-                      onClick={() => {
-                        if (expandedCategoryKey !== category.key) {
-                          setExpandedCategoryKey(category.key);
-                        } else {
-                          setExpandedCategoryKey(null);
-                        }
-                      }}
-                      className="species-category-header"
-                    >
-                      <div className="species-category-label">
-                        <span>{category.label}</span>
-                      </div>
 
-                      <span className="species-category-arrow">
-                        {expandedCategoryKey === category.key ? "▼" : "▶"}
-                      </span>
-                    </button>
+          {selectedSpecies ? (
+            <div className="selected-species">
+              <div className="selected-species-info">
+                <span className="selected-species-icon">🐟</span>
 
-                    {expandedCategoryKey === category.key && (
-                      <div className="species-category-content">
-                        <p>TEST</p>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-          {expandedCategoryKey !== null && (
-            <div>
-              <p
+                <div className="selected-species-text">
+                  <span className="selected-species-title">Vybraná ryba</span>
+
+                  <strong>{selectedSpecies.label}</strong>
+                </div>
+              </div>
+
+              <button
+                className="selected-species-edit"
                 onClick={() => {
-                  setExpandedCategoryKey(null);
+                  setCatchData({
+                    ...catchData,
+                    speciesKey: "",
+                  });
                 }}
               >
-                zpet
-              </p>
-              {DEFAULT_SPECIES.filter((oneFish) => {
-                return expandedCategoryKey === oneFish.categoryKey;
-              }).map((item) => {
-                return <div key={item.key}>{item.label}</div>;
-              })}
+                ✏️
+              </button>
             </div>
+          ) : (
+            <>
+              {expandedCategoryKey === null && (
+                <div className="species-list">
+                  {SPECIES_CATEGORIES.map((category) => {
+                    return (
+                      <div key={category.key} className="species-category">
+                        <button
+                          className="species-category-header"
+                          onClick={() => {
+                            if (expandedCategoryKey !== category.key) {
+                              setExpandedCategoryKey(category.key);
+                            } else {
+                              setExpandedCategoryKey(null);
+                            }
+                          }}
+                        >
+                          <div className="species-category-label">
+                            <span>{category.label}</span>
+                          </div>
+
+                          <span className="species-category-arrow">›</span>
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {expandedCategoryKey !== null && (
+                <div className="species-selection">
+                  <button
+                    className="species-back-button"
+                    onClick={() => {
+                      setExpandedCategoryKey(null);
+                    }}
+                  >
+                    ← Zpět
+                  </button>
+
+                  <div className="species-items">
+                    {visibleSpecies.map((item) => {
+                      return (
+                        <button
+                          key={item.key}
+                          className="species-item"
+                          onClick={() => {
+                            setCatchData({
+                              ...catchData,
+                              speciesKey: item.key,
+                            });
+
+                            setExpandedCategoryKey(null);
+                          }}
+                        >
+                          <span className="species-item-label">
+                            {item.label}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </section>
         <section className="add-catch-section">
