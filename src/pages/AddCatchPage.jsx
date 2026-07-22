@@ -3,25 +3,26 @@ import { SPECIES_CATEGORIES } from "../shared/constants/constants";
 import Layout from "../shared/layout/Layout";
 import { DEFAULT_SPECIES } from "../shared/constants/constants";
 import "./AddCatchPage.css";
+import { normalizeText } from "../shared/utils/helpers";
 
 function AddCatchPage() {
   const [displayFull, setDisplayFull] = useState(false);
   const [expandedCategoryKey, setExpandedCategoryKey] = useState(null);
-  const visibleSpecies = DEFAULT_SPECIES.filter((item) => {
+  const visibleSpecies = DEFAULT_SPECIES.filter((species) => {
     if (expandedCategoryKey === "predators") {
-      return item.isPredator;
+      return species.isPredator;
     }
     if (expandedCategoryKey === "common") {
-      return item.isCommon;
+      return species.isCommon;
     }
     if (expandedCategoryKey === "protected") {
-      return item.isProtected;
+      return species.isProtected;
     }
     if (expandedCategoryKey === "nonNative") {
-      return item.isNonNative;
-    } else {
-      return item.categoryKey === expandedCategoryKey;
+      return species.isNonNative;
     }
+
+    return species.categoryKey === expandedCategoryKey;
   });
 
   const [catchData, setCatchData] = useState({
@@ -47,17 +48,20 @@ function AddCatchPage() {
   });
   const isActiveResult = catchData.resultKey === "released";
   const selectedSpecies = DEFAULT_SPECIES.find(
-    (item) => catchData.speciesKey === item.key,
+    (species) => catchData.speciesKey === species.key,
   );
+  const [speciesSearch, setSpeciesSearch] = useState("");
+  const normalizedSearch = normalizeText(speciesSearch);
+  const filteredSpecies = visibleSpecies.filter((species) => {
+    return normalizeText(species.label).includes(normalizedSearch);
+  });
   return (
     <Layout>
       <div className="add-catch-page">
         <header className="add-catch-header">
-          <div>
-            <h1>Nový úlovek</h1>
+          <h1>Nový úlovek</h1>
 
-            <p>Přidej svůj úlovek</p>
-          </div>
+          <p>Přidej svůj úlovek</p>
         </header>
 
         <section className="add-catch-mode-switch">
@@ -118,18 +122,17 @@ function AddCatchPage() {
             <>
               {expandedCategoryKey === null && (
                 <div className="species-list">
-                  <input type="text" placeholder="Kapr obecný" />
                   {SPECIES_CATEGORIES.map((category) => {
                     return (
                       <div key={category.key} className="species-category">
                         <button
                           className="species-category-header"
                           onClick={() => {
-                            if (expandedCategoryKey !== category.key) {
-                              setExpandedCategoryKey(category.key);
-                            } else {
-                              setExpandedCategoryKey(null);
-                            }
+                            setExpandedCategoryKey(
+                              expandedCategoryKey === category.key
+                                ? null
+                                : category.key,
+                            );
                           }}
                         >
                           <div className="species-category-label">
@@ -150,38 +153,73 @@ function AddCatchPage() {
                     className="species-back-button"
                     onClick={() => {
                       setExpandedCategoryKey(null);
+                      setSpeciesSearch("");
                     }}
                   >
                     ← Kategorie
                   </button>
 
-                  <div className="species-items">
-                    {visibleSpecies.map((item) => {
-                      return (
+                  <div className="species-search">
+                    <input
+                      className="species-search-input"
+                      value={speciesSearch}
+                      onChange={(e) => setSpeciesSearch(e.target.value)}
+                      type="text"
+                      placeholder="Hledat rybu..."
+                    />
+
+                    {speciesSearch && (
+                      <button
+                        className="species-search-clear"
+                        onClick={() => setSpeciesSearch("")}
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+
+                  {filteredSpecies.length === 0 ? (
+                    <div className="species-empty">
+                      <span className="species-empty-icon">🐟</span>
+
+                      <p className="species-empty-title">
+                        Žádná ryba nebyla nalezena
+                      </p>
+
+                      <p className="species-empty-text">
+                        Zkus jiný název nebo vymaž hledání.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="species-items">
+                      {filteredSpecies.map((species) => (
                         <button
-                          key={item.key}
+                          key={species.key}
                           className="species-item"
                           onClick={() => {
+                            setSpeciesSearch("");
+
                             setCatchData({
                               ...catchData,
-                              speciesKey: item.key,
+                              speciesKey: species.key,
                             });
 
                             setExpandedCategoryKey(null);
                           }}
                         >
                           <span className="species-item-label">
-                            {item.label}
+                            {species.label}
                           </span>
                         </button>
-                      );
-                    })}
-                  </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </>
           )}
         </section>
+
         <section className="add-catch-section">
           <h2>📏 Míry</h2>
 

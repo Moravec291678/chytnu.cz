@@ -582,3 +582,120 @@ textarea {
 .selected-species-button:active {
   transform: scale(0.97);
 }
+
+/* ==========================================
+   Species search
+========================================== */
+
+.species-search {
+  position: relative;
+}
+
+.species-search-input {
+  width: 100%;
+  height: 44px;
+
+  padding: 0 46px 0 14px;
+
+  border: 1px solid #314055;
+  border-radius: 12px;
+
+  background: #243041;
+
+  color: white;
+
+  font-size: 14px;
+
+  outline: none;
+
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease;
+}
+
+.species-search-input::placeholder {
+  color: #6f8399;
+}
+
+.species-search-input:focus {
+  border-color: #24ff91;
+}
+
+.species-search-clear {
+  position: absolute;
+
+  top: 50%;
+  right: 8px;
+
+  transform: translateY(-50%);
+
+  width: 30px;
+  height: 30px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border: none;
+  border-radius: 8px;
+
+  background: transparent;
+
+  color: #8fa4bc;
+
+  font-size: 18px;
+
+  cursor: pointer;
+
+  transition:
+    background 0.2s ease,
+    color 0.2s ease;
+}
+
+.species-search-clear:hover {
+  background: #314055;
+  color: white;
+}
+
+/* ==========================================
+   Empty species state
+========================================== */
+
+.species-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+
+  gap: 6px;
+
+  padding: 30px 18px;
+
+  border: 1px dashed #314055;
+  border-radius: 14px;
+
+  background: #243041;
+
+  text-align: center;
+}
+
+.species-empty-icon {
+  font-size: 28px;
+}
+
+.species-empty-title {
+  margin: 0;
+
+  color: white;
+
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.species-empty-text {
+  margin: 0;
+
+  color: #8fa4bc;
+
+  font-size: 13px;
+  line-height: 1.5;
+}

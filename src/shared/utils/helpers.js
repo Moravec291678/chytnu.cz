@@ -6,9 +6,11 @@ export function getSeason() {
   return "Zima";
 }
 
-export function normalizeText(text) {
+export function normalizeText(text = "") {
   return text
+    .trim()
     .toLowerCase()
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ");
 }
