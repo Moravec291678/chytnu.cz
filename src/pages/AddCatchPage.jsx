@@ -55,6 +55,13 @@ function AddCatchPage() {
   const filteredSpecies = visibleSpecies.filter((species) => {
     return normalizeText(species.label).includes(normalizedSearch);
   });
+
+  const updateCatchData = (field, value) => {
+    setCatchData((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  };
   return (
     <Layout>
       <div className="add-catch-page">
@@ -106,10 +113,7 @@ function AddCatchPage() {
                 <button
                   className="selected-species-button"
                   onClick={() => {
-                    setCatchData({
-                      ...catchData,
-                      speciesKey: "",
-                    });
+                    updateCatchData("speciesKey", "");
 
                     setExpandedCategoryKey(null);
                   }}
@@ -198,11 +202,7 @@ function AddCatchPage() {
                           className="species-item"
                           onClick={() => {
                             setSpeciesSearch("");
-
-                            setCatchData({
-                              ...catchData,
-                              speciesKey: species.key,
-                            });
+                            updateCatchData("speciesKey", species.key);
 
                             setExpandedCategoryKey(null);
                           }}
@@ -245,10 +245,7 @@ function AddCatchPage() {
 
                   if (Number(value) < 0) return;
 
-                  setCatchData({
-                    ...catchData,
-                    weightKg: value,
-                  });
+                  updateCatchData("weightKg", value);
                 }}
               />
             </label>
@@ -266,11 +263,7 @@ function AddCatchPage() {
                   const value = e.target.value;
 
                   if (Number(value) < 0) return;
-
-                  setCatchData({
-                    ...catchData,
-                    lengthCm: value,
-                  });
+                  updateCatchData("lengthCm", value);
                 }}
               />
             </label>
@@ -290,11 +283,7 @@ function AddCatchPage() {
                       const value = e.target.value;
 
                       if (Number(value) < 0) return;
-
-                      setCatchData({
-                        ...catchData,
-                        girthCm: value,
-                      });
+                      updateCatchData("girthCm", value);
                     }}
                   />
                 </label>
@@ -312,11 +301,7 @@ function AddCatchPage() {
                       const value = e.target.value;
 
                       if (Number(value) < 0) return;
-
-                      setCatchData({
-                        ...catchData,
-                        fightDurationMin: value,
-                      });
+                      updateCatchData("fightDurationMin", value);
                     }}
                   />
                 </label>
@@ -337,10 +322,7 @@ function AddCatchPage() {
                 placeholder="Např. Lipno - sever"
                 value={catchData.locationName}
                 onChange={(e) =>
-                  setCatchData({
-                    ...catchData,
-                    locationName: e.target.value,
-                  })
+                  updateCatchData("locationName", e.target.value)
                 }
               />
             </label>
@@ -359,11 +341,7 @@ function AddCatchPage() {
                     const value = e.target.value;
 
                     if (Number(value) < 0) return;
-
-                    setCatchData({
-                      ...catchData,
-                      waterNumber: value,
-                    });
+                    updateCatchData("waterNumber", value);
                   }}
                 />
               </label>
@@ -374,12 +352,7 @@ function AddCatchPage() {
               <input
                 type="date"
                 value={catchData.catchDate}
-                onChange={(e) =>
-                  setCatchData({
-                    ...catchData,
-                    catchDate: e.target.value,
-                  })
-                }
+                onChange={(e) => updateCatchData("catchDate", e.target.value)}
               />
             </label>
 
@@ -389,12 +362,7 @@ function AddCatchPage() {
               <input
                 type="time"
                 value={catchData.catchTime}
-                onChange={(e) =>
-                  setCatchData({
-                    ...catchData,
-                    catchTime: e.target.value,
-                  })
-                }
+                onChange={(e) => updateCatchData("catchTime", e.target.value)}
               />
             </label>
             {displayFull && (
@@ -407,10 +375,7 @@ function AddCatchPage() {
                     placeholder="📍 Klepnout pro polohu"
                     value={catchData.gpsLocation}
                     onChange={(e) =>
-                      setCatchData({
-                        ...catchData,
-                        gpsLocation: e.target.value,
-                      })
+                      updateCatchData("gpsLocation", e.target.value)
                     }
                   />
                 </label>
@@ -429,11 +394,7 @@ function AddCatchPage() {
                       const value = e.target.value;
 
                       if (Number(value) < 0) return;
-
-                      setCatchData({
-                        ...catchData,
-                        depthM: value,
-                      });
+                      updateCatchData("depthM", value);
                     }}
                   />
                 </label>
@@ -444,10 +405,7 @@ function AddCatchPage() {
                   <select
                     value={catchData.bottomType}
                     onChange={(e) =>
-                      setCatchData({
-                        ...catchData,
-                        bottomType: e.target.value,
-                      })
+                      updateCatchData("bottomType", e.target.value)
                     }
                   >
                     <option value="">—</option>
@@ -486,7 +444,7 @@ function AddCatchPage() {
                 isActiveResult ? "result-button button-active" : "result-button"
               }
               onClick={() => {
-                setCatchData({ ...catchData, resultKey: "released" });
+                updateCatchData("resultKey", "released");
               }}
             >
               ↩️ Puštěno zpět
@@ -499,7 +457,7 @@ function AddCatchPage() {
                   : "result-button"
               }
               onClick={() => {
-                setCatchData({ ...catchData, resultKey: "kept" });
+                updateCatchData("resultKey", "kept");
               }}
             >
               🧊 Necháno
