@@ -396,35 +396,40 @@ textarea {
   display: flex;
   flex-direction: column;
 
-  gap: 14px;
+  gap: 18px;
 }
 
 .species-back-button {
-  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 
-  height: 40px;
+  flex-shrink: 0;
 
-  padding: 0 14px;
+  height: 36px;
+
+  padding: 0 12px;
 
   border: 1px solid #314055;
   border-radius: 10px;
 
-  background: #243041;
+  background: transparent;
 
-  color: white;
+  color: #8fa4bc;
 
   font-size: 13px;
   font-weight: 600;
 
   cursor: pointer;
 
-  transition:
-    background 0.2s ease,
-    border-color 0.2s ease;
+  transition: all 0.2s ease;
 }
 
 .species-back-button:hover {
-  background: #314055;
+  border-color: #42536b;
+  background: #243041;
+
+  color: white;
 }
 
 .species-items {
@@ -497,6 +502,24 @@ textarea {
 
 .species-item:active {
   transform: scale(0.98);
+}
+
+.species-selection-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  gap: 16px;
+
+  margin-bottom: 2px;
+}
+.species-selection-title {
+  color: white;
+
+  font-size: 22px;
+  font-weight: 800;
+
+  line-height: 1.2;
 }
 
 /* ==========================================
@@ -589,6 +612,7 @@ textarea {
 
 .species-search {
   position: relative;
+  margin-top: -2px;
 }
 
 .species-search-input {

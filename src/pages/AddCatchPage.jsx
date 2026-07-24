@@ -56,6 +56,10 @@ function AddCatchPage() {
     return normalizeText(species.label).includes(normalizedSearch);
   });
 
+  const selectedCategory = SPECIES_CATEGORIES.find(
+    (category) => category.key === expandedCategoryKey,
+  );
+
   const updateCatchData = (field, value) => {
     setCatchData((prev) => ({
       ...prev,
@@ -153,15 +157,21 @@ function AddCatchPage() {
 
               {expandedCategoryKey !== null && (
                 <div className="species-selection">
-                  <button
-                    className="species-back-button"
-                    onClick={() => {
-                      setExpandedCategoryKey(null);
-                      setSpeciesSearch("");
-                    }}
-                  >
-                    ← Kategorie
-                  </button>
+                  <div className="species-selection-header">
+                    <div className="species-selection-title">
+                      {selectedCategory.label}
+                    </div>
+                    <button
+                      className="species-back-button"
+                      onClick={() => {
+                        setExpandedCategoryKey(null);
+                        setSpeciesSearch("");
+                      }}
+                    >
+                      ←  Kategorie
+                    </button>
+                    
+                  </div>
 
                   <div className="species-search">
                     <input
