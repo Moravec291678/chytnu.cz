@@ -74,6 +74,10 @@
 }
 
 .add-catch-photo-section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+
   border: 1px dashed #314055;
   border-radius: 18px;
 
@@ -722,4 +726,58 @@ textarea {
 
   font-size: 13px;
   line-height: 1.5;
+}
+
+.photo-preview-item {
+  overflow: hidden;
+
+  border-radius: 18px;
+
+  background: var(--surface-2);
+
+  border: 1px solid var(--border-color);
+}
+
+.photo-preview-item img {
+  display: block;
+
+  width: 100%;
+
+  aspect-ratio: 4 / 3;
+
+  object-fit: cover;
+}
+
+.photo-actions {
+  display: flex;
+
+  gap: 12px;
+}
+
+.photo-action-button {
+  flex: 1;
+
+  padding: 14px;
+
+  border: none;
+  border-radius: 14px;
+
+  background: var(--surface-2);
+
+  color: var(--text-primary);
+
+  font-size: 0.95rem;
+  font-weight: 600;
+
+  cursor: pointer;
+
+  transition: 0.2s;
+}
+
+.photo-action-button:hover {
+  background: var(--surface-3);
+}
+
+.photo-action-button:active {
+  transform: scale(0.98);
 }

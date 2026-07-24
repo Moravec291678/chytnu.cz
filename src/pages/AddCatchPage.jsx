@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { SPECIES_CATEGORIES } from "../shared/constants/constants";
 import Layout from "../shared/layout/Layout";
 import { DEFAULT_SPECIES } from "../shared/constants/constants";
@@ -24,6 +24,30 @@ function AddCatchPage() {
 
     return species.categoryKey === expandedCategoryKey;
   });
+  const fileInputRef = useRef(null);
+  const handleAddPhoto = () => {
+    fileInputRef.current.value = "";
+    fileInputRef.current.click();
+  };
+
+  const removePhoto = () => {
+    updateCatchData("photos", []);
+  };
+
+  const handleFileChange = (event) => {
+    const selectedPhoto = event.target.files[0];
+    if (!selectedPhoto) return;
+
+    const previewUrl = URL.createObjectURL(selectedPhoto);
+
+    const photo = {
+      id: crypto.randomUUID(),
+      file: selectedPhoto,
+      previewUrl,
+    };
+
+    setPhotos([photo]);
+  };
 
   const [catchData, setCatchData] = useState({
     weightKg: "",
@@ -45,7 +69,11 @@ function AddCatchPage() {
 
     speciesKey: "",
     resultKey: "released",
+
+    photos: [],
   });
+
+  const photo = catchData.photos[0];
   const isActiveResult = catchData.resultKey === "released";
   const selectedSpecies = DEFAULT_SPECIES.find(
     (species) => catchData.speciesKey === species.key,
@@ -65,6 +93,9 @@ function AddCatchPage() {
       ...prev,
       [field]: value,
     }));
+  };
+  const setPhotos = (photos) => {
+    updateCatchData("photos", photos);
   };
   return (
     <Layout>
@@ -96,11 +127,39 @@ function AddCatchPage() {
         </section>
 
         <section className="add-catch-photo-section">
-          <button className="photo-upload-button">
-            <span>📷</span>
+          <input
+            type="file"
+            ref={fileInputRef}
+            hidden
+            onChange={handleFileChange}
+            accept=".jpg,.jpeg,.png,.webp,.heic"
+          />
 
-            <span>Přidat fotku</span>
-          </button>
+          {photo ? (
+            <>
+              <div className="photo-preview-item">
+                <img src={photo.previewUrl} alt="Fotka úlovku" />
+              </div>
+
+              <div className="photo-actions">
+                <button className="photo-action-button" onClick={removePhoto}>
+                  🗑 Smazat
+                </button>
+
+                <button
+                  className="photo-action-button"
+                  onClick={handleAddPhoto}
+                >
+                  ✏️ Změnit
+                </button>
+              </div>
+            </>
+          ) : (
+            <button onClick={handleAddPhoto} className="photo-upload-button">
+              <span>📷</span>
+              <span>Přidat fotku</span>
+            </button>
+          )}
         </section>
         <section className="add-catch-section">
           <h2>🐟 Druh ryby</h2>
@@ -168,9 +227,8 @@ function AddCatchPage() {
                         setSpeciesSearch("");
                       }}
                     >
-                      ←  Kategorie
+                      ← Kategorie
                     </button>
-                    
                   </div>
 
                   <div className="species-search">
