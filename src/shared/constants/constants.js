@@ -1,3 +1,9 @@
+import ledgering from "../../assets/method-icons/ledgering.png";
+import feeder from "../../assets/method-icons/feeder.png";
+import float from "../../assets/method-icons/float.png";
+import spinning from "../../assets/method-icons/spinning.png";
+import flyFishing from "../../assets/method-icons/flyFishing.png";
+import winterFishing from "../../assets/method-icons/winterFishing.png";
 export const DEFAULT_SPECIES = [
   // =========================
   // KAPROVITÉ (CYPRINIDS)
@@ -887,11 +893,42 @@ export const SPECIES_CATEGORIES = [
 ];
 
 export const DEFAULT_METHODS = [
-  { key: "ledgering", label: "Položená", isCustom: false },
-  { key: "feeder", label: "Feeder", isCustom: false },
-  { key: "float", label: "Plavaná", isCustom: false },
-  { key: "spinning", label: "Přívlač", isCustom: false },
-  { key: "flyFishing", label: "Muškaření", isCustom: false },
+  {
+    key: "ledgering",
+    label: "Položená",
+    icon: ledgering,
+    isCustom: false,
+  },
+  {
+    key: "feeder",
+    label: "Feeder",
+    icon: feeder,
+    isCustom: false,
+  },
+  {
+    key: "float",
+    label: "Plavaná",
+    icon: float,
+    isCustom: false,
+  },
+  {
+    key: "spinning",
+    label: "Přívlač",
+    icon: spinning,
+    isCustom: false,
+  },
+  {
+    key: "flyFishing",
+    label: "Muškaření",
+    icon: flyFishing,
+    isCustom: false,
+  },
+  {
+    key: "winterFishing",
+    label: "Dírky",
+    icon: winterFishing,
+    isCustom: false,
+  },
 ];
 export const DEFAULT_BAITS = [
   { key: "corn", label: "Kukuřice", isCustom: false },

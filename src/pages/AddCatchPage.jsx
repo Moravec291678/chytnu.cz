@@ -1,5 +1,8 @@
 import { useRef, useState } from "react";
-import { SPECIES_CATEGORIES } from "../shared/constants/constants";
+import {
+  DEFAULT_METHODS,
+  SPECIES_CATEGORIES,
+} from "../shared/constants/constants";
 import Layout from "../shared/layout/Layout";
 import { DEFAULT_SPECIES } from "../shared/constants/constants";
 import "./AddCatchPage.css";
@@ -70,6 +73,7 @@ function AddCatchPage() {
     speciesKey: "",
     resultKey: "released",
 
+    fishingMethod: "",
     photos: [],
   });
 
@@ -97,6 +101,7 @@ function AddCatchPage() {
   const setPhotos = (photos) => {
     updateCatchData("photos", photos);
   };
+
   return (
     <Layout>
       <div className="add-catch-page">
@@ -492,6 +497,35 @@ function AddCatchPage() {
           <>
             <section className="add-catch-section">
               <h2>🎣 Metoda lovu</h2>
+
+              <div className="fishing-methods-grid">
+                {DEFAULT_METHODS.map((method) => {
+                  return (
+                    <button
+                      key={method.key}
+                      type="button"
+                      className={
+                        catchData.fishingMethod === method.key
+                          ? "fishing-method-card active"
+                          : "fishing-method-card"
+                      }
+                      onClick={() =>
+                        updateCatchData("fishingMethod", method.key)
+                      }
+                    >
+                      <img
+                        src={method.icon}
+                        alt={method.label}
+                        className="fishing-method-icon"
+                      />
+
+                      <span className="fishing-method-label">
+                        {method.label}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </section>
 
             <section className="add-catch-section">

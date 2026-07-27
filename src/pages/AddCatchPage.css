@@ -781,3 +781,72 @@ textarea {
 .photo-action-button:active {
   transform: scale(0.98);
 }
+
+.fishing-methods-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.fishing-method-card {
+  border: 2px solid var(--bd);
+  appearance: none;
+  outline: none;
+  font: inherit;
+  color: inherit;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+
+  gap: 8px;
+
+  width: 100%;
+  min-height: 100px;
+
+  padding: 14px 10px;
+
+  background: var(--s2);
+  border: 2px solid var(--bd);
+  border-radius: 14px;
+
+  cursor: pointer;
+
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    transform 0.15s ease;
+}
+
+.fishing-method-card:hover {
+  background: var(--s1);
+  border-color: var(--bd2);
+}
+
+.fishing-method-card:active {
+  transform: scale(0.97);
+}
+
+.fishing-method-icon {
+  width: 42px;
+  height: 42px;
+  object-fit: contain;
+}
+
+.fishing-method-label {
+  color: var(--t1);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.25;
+  text-align: center;
+}
+
+.fishing-method-card.active {
+  background: var(--gr-bg);
+  border-color: var(--gr);
+}
+
+.fishing-method-card.active .fishing-method-label {
+  color: var(--gr);
+}
