@@ -11,6 +11,14 @@
   overflow: hidden;
 }
 
+.profile-stats-empty,
+.profile-stats-note {
+  margin: 0 20px 12px;
+  color: var(--t3);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 .profile-stat-card {
   min-width: 0;
 

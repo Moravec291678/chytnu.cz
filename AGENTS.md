@@ -28,6 +28,13 @@
 - Keep precise fishing locations private by default.
 - Use official documentation for external APIs and platform requirements.
 
+## Product UX principles
+- Optimize every screen and feature for practical value, comfort, clarity, and fast use by anglers; user satisfaction takes priority over feature count.
+- Keep interfaces uncluttered. Do not add controls, panels, or copy without clear user value, and do not duplicate actions without a verified UX reason.
+- Respect the established navigation, visual identity, and layout. On mobile, expose the main content early; make large secondary panels collapsible when they delay it.
+- Preserve useful existing functions. Before removing or moving a control, inspect its behavior and dependencies; never leave decorative or placeholder actions that appear functional.
+- Review the complete screen and its relationship to navigation and adjacent flows before finishing a UX change. Prefer a simpler solution when a feature makes an existing flow harder.
+
 ## Delivery process
 - Work in small, documented phases.
 - Each phase must include implementation, relevant tests, review, and a summary of remaining risks.

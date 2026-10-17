@@ -1,5 +1,6 @@
 export function getTopMethod(catches) {
   const groupMethods = catches.reduce((acc, item) => {
+    if (!item.method?.key) return acc;
     const key = item.method.key;
     if (!acc[key]) {
       acc[key] = {
@@ -20,23 +21,27 @@ export function getTopMethod(catches) {
   );
 }
 
-export function getReleasedPercentage(catches) {
-  let released = 0;
-  let count = 0;
-  if (catches.length === 0) return 0;
-  catches.forEach((item) => {
-    if (item.result === "released") {
-      released++;
-    }
-    count++;
-  });
+export function getCatchOutcomeStats(catches) {
+  const knownResults = catches.filter((item) => item.result === "released" || item.result === "kept");
+  if (knownResults.length === 0) return null;
+  const released = knownResults.filter((item) => item.result === "released").length;
+  const kept = knownResults.length - released;
+  return {
+    released,
+    kept,
+    known: knownResults.length,
+    percentageReleased: Math.round((released / knownResults.length) * 100),
+  };
+}
 
-  return Math.round((released / count) * 100);
+export function getReleasedPercentage(catches) {
+  return getCatchOutcomeStats(catches)?.percentageReleased ?? null;
 }
 
 export function getTopRevier(catches) {
   const groupLocations = catches.reduce((acc, item) => {
-    const key = item.locationName;
+    const key = item.locationName?.trim();
+    if (!key) return acc;
     if (!acc[key]) {
       acc[key] = {
         label: key,
@@ -56,10 +61,21 @@ export function getTopRevier(catches) {
 }
 
 export function getBiggestCatch(catches) {
-  return catches.reduce(
-    (max, item) => {
-      return max.weightKg < item.weightKg ? item : max;
-    },
-    { weightKg: 0 },
-  );
+  return catches.filter((item) => Number.isFinite(item.weightKg))
+    .reduce((max, item) => !max || item.weightKg > max.weightKg ? item : max, null);
+}
+
+export function getAvailableProfileStats(catches) {
+  const stats = [];
+  const biggestCatch = getBiggestCatch(catches);
+  const topMethod = getTopMethod(catches);
+  const topRevier = getTopRevier(catches);
+  const releasedPercentage = getReleasedPercentage(catches);
+
+  if (biggestCatch) stats.push({ key: "record", value: `${biggestCatch.weightKg} kg`, label: "REKORD", tone: "green" });
+  if (topMethod.count > 0) stats.push({ key: "method", value: `${topMethod.count}×`, label: topMethod.label?.toUpperCase() || "METODA", tone: "gold" });
+  if (topRevier.count > 0) stats.push({ key: "location", value: `${topRevier.count}×`, label: topRevier.label.toUpperCase(), tone: "blue" });
+  if (releasedPercentage !== null) stats.push({ key: "released", value: `${releasedPercentage}%`, label: "PUŠTĚNO", tone: "green" });
+
+  return stats;
 }

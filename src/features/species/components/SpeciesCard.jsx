@@ -17,9 +17,7 @@ function SpeciesCard({ speciesKey, data, biggest }) {
           <div className="species-card-info">
             <h2>{biggest.species}</h2>
 
-            <p>
-              📍 {biggest.locationName} · 🎣 {biggest.method?.label}
-            </p>
+            {(biggest.locationName || biggest.method?.label) && <p>📍 {biggest.locationName || "Lokalita neuvedena"}{biggest.method?.label ? ` · 🎣 ${biggest.method.label}` : ""}</p>}
 
             <div className="tags">
               {biggest.isPersonalBest && (
@@ -41,9 +39,9 @@ function SpeciesCard({ speciesKey, data, biggest }) {
           </div>
 
           <div className="species-card-right">
-            <p>{biggest.weightKg} kg</p>
+            {biggest.weightKg != null && <p>{biggest.weightKg} kg</p>}
 
-            <p>{biggest.lengthCm} cm</p>
+            {biggest.lengthCm != null && <p>{biggest.lengthCm} cm</p>}
 
             <p>{data.count}x</p>
           </div>
@@ -52,7 +50,7 @@ function SpeciesCard({ speciesKey, data, biggest }) {
         <div className="species-card-footer">
           <p>🕒 {formatCatchDateTime(biggest.caughtAt)}</p>
 
-          <p>⏱️ {formatFightDuration(biggest.fightMinutes)}</p>
+          {biggest.fightMinutes != null && <p>⏱️ {formatFightDuration(biggest.fightMinutes)}</p>}
 
           <p>{MOON_PHASE_EMOJI[biggest.conditions?.moonPhase] || "-"}</p>
         </div>

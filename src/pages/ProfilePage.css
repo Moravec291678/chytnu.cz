@@ -1,0 +1,241 @@
+.profile-page {
+  padding: 20px 16px 28px;
+}
+
+.profile-header {
+  margin: 0 4px 18px;
+}
+
+.profile-header h1 {
+  color: var(--t1);
+  font-size: 24px;
+  font-weight: 900;
+  letter-spacing: -0.5px;
+}
+
+.profile-header p,
+.profile-panel p {
+  margin-top: 6px;
+  color: var(--t2);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.profile-panel {
+  padding: 14px;
+  background: var(--s1);
+  border: 1px solid var(--bd);
+  border-radius: 14px;
+}
+
+.profile-panel h2 {
+  color: var(--t1);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.profile-panel .profile-privacy-note {
+  color: var(--t3);
+  font-size: 11px;
+}
+
+.profile-backup-button {
+  min-height: 44px;
+  margin-top: 14px;
+  padding: 0 13px;
+  color: var(--t1);
+  background: var(--s2);
+  border: 1px solid var(--bd2);
+  border-radius: 10px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.profile-backup-button:hover:not(:disabled) {
+  border-color: var(--gr2);
+}
+
+.profile-backup-button:focus-visible {
+  outline: 2px solid var(--bl);
+  outline-offset: 2px;
+}
+
+.profile-backup-button:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.profile-restore {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--bd);
+}
+
+.profile-restore h3 {
+  color: var(--t1);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.profile-file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
+.profile-file-input:focus-visible + .profile-backup-button {
+  outline: 2px solid var(--bl);
+  outline-offset: 2px;
+}
+
+.profile-restore-preview {
+  margin-top: 14px;
+  padding: 12px;
+  background: var(--s2);
+  border: 1px solid var(--bd);
+  border-radius: 10px;
+}
+
+.profile-restore-preview p:first-child {
+  margin-top: 0;
+  color: var(--t1);
+}
+
+.profile-restore-mode {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+  color: var(--t2);
+  font-size: 12px;
+}
+
+.profile-restore-mode select {
+  min-height: 42px;
+  padding: 0 10px;
+  color: var(--t1);
+  background: var(--s1);
+  border: 1px solid var(--bd2);
+  border-radius: 9px;
+  font: inherit;
+}
+
+.profile-restore-mode select:focus-visible {
+  outline: 2px solid var(--bl);
+  outline-offset: 2px;
+}
+
+.profile-panel .profile-feedback,
+.profile-panel .profile-error {
+  margin-top: 10px;
+  font-size: 12px;
+}
+
+.profile-panel .profile-feedback {
+  color: var(--gr);
+}
+
+.profile-panel .profile-error {
+  color: var(--re);
+}
+
+.profile-account {
+  margin-top: 14px;
+}
+
+.profile-account-form,
+.profile-account-signed-in {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.profile-account-field {
+  display: grid;
+  gap: 6px;
+  color: var(--t2);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.profile-account-field input {
+  min-height: 44px;
+  padding: 0 11px;
+  color: var(--t1);
+  background: var(--bg);
+  border: 1px solid var(--bd2);
+  border-radius: 9px;
+}
+
+.profile-account-field input:focus-visible {
+  outline: 2px solid var(--bl);
+  outline-offset: 2px;
+}
+
+.profile-account .profile-backup-button,
+.profile-account .profile-account-secondary,
+.profile-account .profile-account-link {
+  margin-top: 0;
+}
+
+.profile-account-secondary,
+.profile-account-link {
+  min-height: 42px;
+  padding: 0 10px;
+  color: var(--t2);
+  background: transparent;
+  border: 1px solid var(--bd);
+  border-radius: 9px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.profile-conflict { padding: 12px 0; border-top: 1px solid var(--bd); }
+.profile-conflict:first-of-type { margin-top: 8px; }
+.profile-conflict p { margin: 4px 0; }
+.profile-conflict-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+
+.profile-account-secondary:hover:not(:disabled),
+.profile-account-link:hover:not(:disabled) {
+  color: var(--t1);
+  border-color: var(--bd2);
+}
+
+.profile-account-secondary:focus-visible,
+.profile-account-link:focus-visible {
+  outline: 2px solid var(--bl);
+  outline-offset: 2px;
+}
+
+.profile-account-link {
+  min-height: 36px;
+  justify-self: start;
+  padding: 0 2px;
+  border-color: transparent;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.profile-account .profile-account-verification {
+  margin-top: 0;
+  color: var(--go);
+  font-size: 12px;
+}
+
+.profile-account-signed-in strong {
+  overflow-wrap: anywhere;
+  color: var(--t1);
+  font-size: 14px;
+}
+
+.profile-account button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}

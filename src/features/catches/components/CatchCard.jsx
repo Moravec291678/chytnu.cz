@@ -1,5 +1,5 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { MOON_PHASE_EMOJI } from "../../../shared/constants/constants";
 
 import {
   formatCatchDateTime,
@@ -8,52 +8,56 @@ import {
 
 import "./CatchCard.css";
 
+function CatchPhoto({ blob, species }) {
+  const [photoUrl, setPhotoUrl] = useState("");
+  useEffect(() => {
+    if (!blob) return undefined;
+    const url = URL.createObjectURL(blob);
+    let active = true;
+    Promise.resolve().then(() => { if (active) setPhotoUrl(url); });
+    return () => { active = false; URL.revokeObjectURL(url); };
+  }, [blob]);
+  return photoUrl ? <img className="catch-card-photo" src={photoUrl} alt={`Úlovek – ${species}`} /> : <div className="catch-card-icon" aria-hidden="true">🐟</div>;
+}
+
 function CatchCard({ catchedFish }) {
   return (
     <Link to={`/catch/${catchedFish.id}`} className="catch-card-link">
       <div className="catch-card">
         <div className="catch-card-main">
-          <div className="catch-card-icon">🐟</div>
+          {catchedFish.photos?.[0]?.blob ? <CatchPhoto blob={catchedFish.photos[0].blob} species={catchedFish.species} /> : <div className="catch-card-icon" aria-hidden="true">🐟</div>}
 
           <div className="catch-card-info">
             <h2>{catchedFish.species}</h2>
 
-            <p>
-              📍 {catchedFish.locationName} · 🎣 {catchedFish.method.label}
-            </p>
+            {(catchedFish.locationName || catchedFish.method?.label) && <p>📍 {catchedFish.locationName || "Lokalita neuvedena"}{catchedFish.method?.label ? ` · 🎣 ${catchedFish.method.label}` : ""}</p>}
 
             <div className="tags">
-              {catchedFish.isPersonalBest && (
-                <span className="tag tag-pb">🏆 Osobní rekord</span>
-              )}
-
-              {catchedFish.isSpeciesBest && (
-                <span className="tag tag-species">🥇 Rekord druhu</span>
-              )}
+              {catchedFish.isFavorite && <span className="catch-card-tag">Oblíbený</span>}
 
               {catchedFish.result === "released" && (
                 <span className="tag tag-released">↩️ Puštěno</span>
               )}
 
               {catchedFish.result === "kept" && (
-                <span className="tag tag-kept">🧊 Necháno</span>
+                <span className="tag tag-kept">Ponecháno</span>
               )}
+              {catchedFish.tripTitle && <span className="catch-card-tag">Výprava: {catchedFish.tripTitle}</span>}
             </div>
           </div>
 
           <div className="catch-card-right">
-            <p>{catchedFish.weightKg} kg</p>
+            {catchedFish.weightKg != null && <p>{catchedFish.weightKg} kg</p>}
 
-            <p>{catchedFish.lengthCm} cm</p>
+            {catchedFish.lengthCm != null && <p>{catchedFish.lengthCm} cm</p>}
           </div>
         </div>
 
         <div className="catch-card-footer">
-          <p>🕒 {formatCatchDateTime(catchedFish.caughtAt)}</p>
+          <p>{formatCatchDateTime(catchedFish.caughtAt)}</p>
 
-          <p>⏱️ {formatFightDuration(catchedFish.fightMinutes)}</p>
+          {catchedFish.fightMinutes != null && <p>⏱️ {formatFightDuration(catchedFish.fightMinutes)}</p>}
 
-          <p>{MOON_PHASE_EMOJI[catchedFish.conditions?.moonPhase] || "-"}</p>
         </div>
       </div>
     </Link>

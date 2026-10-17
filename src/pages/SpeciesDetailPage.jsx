@@ -1,7 +1,8 @@
 import { useParams, useNavigate } from "react-router-dom";
-import { useCatches } from "../features/catches/context/CatchContext";
+import { useCatches } from "../features/catches/context/useCatches";
 import Layout from "../shared/layout/Layout";
 import CatchCard from "../features/catches/components/CatchCard";
+import { Link } from "react-router-dom";
 import "./SpeciesDetailPage.css";
 
 function SpeciesDetailPage() {
@@ -10,10 +11,9 @@ function SpeciesDetailPage() {
   const selectedSpecies = state.catches.filter((item) => {
     return item.speciesKey === speciesKey;
   });
-  const biggest = selectedSpecies.reduce((a, b) => {
-    return a.weightKg > b.weightKg ? a : b;
-  });
+  const biggest = selectedSpecies.filter((item) => Number.isFinite(item.weightKg)).reduce((a, b) => a.weightKg > b.weightKg ? a : b, selectedSpecies[0]);
   const navigate = useNavigate();
+  if (!biggest) return <Layout><div className="species-hero"><button className="species-hero-back" onClick={() => navigate(-1)}>←</button><h1>Druh zatím nemá úlovky</h1><Link to="/add">Přidat úlovek</Link></div></Layout>;
   return (
     <Layout>
       <div className="species-hero">
@@ -22,10 +22,6 @@ function SpeciesDetailPage() {
           <button className="species-hero-back" onClick={() => navigate(-1)}>
             ←
           </button>
-          <div className="species-hero-actions">
-            <button className="ib">⭐</button>
-            <button className="ib">✏️</button>
-          </div>
         </div>
 
         <p className="species-latin">{biggest.speciesLatin}</p>
@@ -34,7 +30,7 @@ function SpeciesDetailPage() {
           {biggest.isPersonalBest && (
             <span className="tag tag-pb">🏆 Osobní rekord</span>
           )}
-          <span className="tag tag-species">🥇 Rekord druhu</span>
+          {Number.isFinite(biggest.weightKg) && <span className="tag tag-species">Nejtěžší zaznamenaný úlovek</span>}
           {biggest.result === "released" && (
             <span className="tag tag-released">↩️ Puštěno</span>
           )}
@@ -45,12 +41,12 @@ function SpeciesDetailPage() {
 
         <div className="species-measures">
           <div className="species-measure">
-            <span>{biggest.weightKg}</span>
+            <span>{biggest.weightKg ?? "—"}</span>
             <div className="species-measure-unit">kg</div>
             <div className="species-measure-label">Hmotnost</div>
           </div>
           <div className="species-measure">
-            <span>{biggest.lengthCm}</span>
+            <span>{biggest.lengthCm ?? "—"}</span>
             <div className="species-measure-unit">cm</div>
             <div className="species-measure-label">Délka</div>
           </div>

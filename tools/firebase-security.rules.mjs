@@ -1,0 +1,205 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { after, before, beforeEach, test } from "node:test";
+import {
+  assertFails,
+  assertSucceeds,
+  initializeTestEnvironment,
+} from "@firebase/rules-unit-testing";
+import { collection, deleteDoc, doc, getDoc, getDocs, setDoc, updateDoc } from "firebase/firestore";
+import { deleteObject, getBytes, ref, uploadBytes } from "firebase/storage";
+
+const projectId = "demo-chytnucz-local";
+const catchPath = (userId, catchId) => `users/${userId}/catches/${catchId}`;
+const tripPath = (userId, tripId) => `users/${userId}/trips/${tripId}`;
+const photoPath = (userId, catchId, photoId, hash) => `users/${userId}/catches/${catchId}/photos/${photoId}/${hash}`;
+
+function makeTrip(id, ownerId) {
+  return {
+    schemaVersion: 1,
+    id,
+    ownerId,
+    title: "Ranní výprava",
+    locationName: "Labe",
+    methodKey: "feeder",
+    createdAt: "2026-10-17T06:00:00.000Z",
+    updatedAt: "2026-10-17T06:00:00.000Z",
+    startedAt: "2026-10-17T06:00:00.000Z",
+    endedAt: null,
+  };
+}
+
+function makeCatch(id, ownerId, tripId = null) {
+  return {
+    schemaVersion: 1,
+    id,
+    ownerId,
+    createdAt: "2026-10-17T06:00:00.000Z",
+    updatedAt: "2026-10-17T06:00:00.000Z",
+    caughtAt: "2026-10-17T06:00:00.000Z",
+    species: "Kapr obecný",
+    speciesKey: "carp",
+    speciesLatin: "Cyprinus carpio",
+    weightKg: null,
+    lengthCm: 72,
+    girthCm: null,
+    fightMinutes: null,
+    locationName: "Labe",
+    waterNumber: null,
+    gpsLocation: "50.0000, 14.0000",
+    waterDepthM: null,
+    bottomType: null,
+    tripId,
+    method: { key: "feeder", label: "Feeder", isCustom: false },
+    baits: [],
+    result: "released",
+    photos: [],
+    notes: "Soukromá poznámka",
+    isFavorite: false,
+  };
+}
+
+let testEnv;
+let alice;
+let bob;
+let anonymous;
+
+before(async () => {
+  testEnv = await initializeTestEnvironment({
+    projectId,
+    firestore: {
+      host: "127.0.0.1",
+      port: 8080,
+      rules: await readFile(new URL("../firestore.rules", import.meta.url), "utf8"),
+    },
+    storage: {
+      host: "127.0.0.1",
+      port: 9199,
+      rules: await readFile(new URL("../storage.rules", import.meta.url), "utf8"),
+    },
+  });
+  alice = testEnv.authenticatedContext("angler-a");
+  bob = testEnv.authenticatedContext("angler-b");
+  anonymous = testEnv.unauthenticatedContext();
+});
+
+beforeEach(async () => {
+  await testEnv.clearFirestore();
+  await testEnv.clearStorage();
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    const db = context.firestore();
+    await setDoc(doc(db, tripPath("angler-a", "trip-a")), makeTrip("trip-a", "angler-a"));
+    await setDoc(doc(db, tripPath("angler-b", "trip-b")), makeTrip("trip-b", "angler-b"));
+    await setDoc(doc(db, catchPath("angler-a", "catch-a")), makeCatch("catch-a", "angler-a", "trip-a"));
+    await setDoc(doc(db, catchPath("angler-b", "catch-b")), makeCatch("catch-b", "angler-b", "trip-b"));
+  });
+});
+
+after(async () => {
+  await testEnv?.cleanup();
+});
+
+test("nepřihlášený uživatel nemůže číst, zapisovat ani mazat soukromý úlovek a výpravu", async () => {
+  const db = anonymous.firestore();
+  await assertFails(getDoc(doc(db, catchPath("angler-a", "catch-a"))));
+  await assertFails(getDocs(collection(db, "users/angler-a/catches")));
+  await assertFails(setDoc(doc(db, catchPath("angler-a", "catch-new")), makeCatch("catch-new", "angler-a")));
+  await assertFails(updateDoc(doc(db, catchPath("angler-a", "catch-a")), { notes: "nepovolená změna" }));
+  await assertFails(deleteDoc(doc(db, catchPath("angler-a", "catch-a"))));
+  await assertFails(getDoc(doc(db, tripPath("angler-a", "trip-a"))));
+  await assertFails(setDoc(doc(db, tripPath("angler-a", "trip-new")), makeTrip("trip-new", "angler-a")));
+  await assertFails(deleteDoc(doc(db, tripPath("angler-a", "trip-a"))));
+});
+
+test("vlastník čte své záznamy; zápis vyžaduje synchronizační protokol a přímé mazání je zakázáno", async () => {
+  const db = alice.firestore();
+  const catchRef = doc(db, catchPath("angler-a", "catch-a"));
+  const tripRef = doc(db, tripPath("angler-a", "trip-a"));
+  await assertFails(setDoc(doc(db, catchPath("angler-a", "catch-new")), makeCatch("catch-new", "angler-a")));
+  await assertFails(setDoc(doc(db, tripPath("angler-a", "trip-new")), makeTrip("trip-new", "angler-a")));
+  assert.equal((await assertSucceeds(getDocs(collection(db, "users/angler-a/catches")))).size, 1);
+  await assertSucceeds(getDoc(catchRef));
+  await assertSucceeds(getDoc(tripRef));
+  await assertFails(updateDoc(catchRef, {
+    notes: "Upravená soukromá poznámka",
+    updatedAt: "2026-10-17T07:00:00.000Z",
+  }));
+  await assertFails(updateDoc(tripRef, {
+    title: "Odpolední výprava",
+    updatedAt: "2026-10-17T07:00:00.000Z",
+  }));
+  await assertFails(deleteDoc(catchRef));
+  await assertFails(deleteDoc(tripRef));
+});
+
+test("uživatel A nemůže číst, měnit ani mazat záznamy uživatele B", async () => {
+  const db = alice.firestore();
+  const foreignCatch = doc(db, catchPath("angler-b", "catch-b"));
+  const foreignTrip = doc(db, tripPath("angler-b", "trip-b"));
+  await assertFails(getDocs(collection(db, "users/angler-b/catches")));
+  await assertFails(getDoc(foreignCatch));
+  await assertFails(updateDoc(foreignCatch, { notes: "cizí zápis" }));
+  await assertFails(deleteDoc(foreignCatch));
+  await assertFails(getDoc(foreignTrip));
+  await assertFails(updateDoc(foreignTrip, { title: "cizí výprava" }));
+  await assertFails(deleteDoc(foreignTrip));
+});
+
+test("pravidla odmítnou převzetí vlastníka, změnu chráněných polí i neznámá pole", async () => {
+  const db = alice.firestore();
+  const catchRef = doc(db, catchPath("angler-a", "catch-a"));
+  const tripRef = doc(db, tripPath("angler-a", "trip-a"));
+  await assertFails(updateDoc(catchRef, { ownerId: "angler-b" }));
+  await assertFails(updateDoc(catchRef, { id: "catch-b" }));
+  await assertFails(updateDoc(catchRef, { createdAt: "2020-01-01T00:00:00.000Z" }));
+  await assertFails(updateDoc(catchRef, { public: true }));
+  await assertFails(updateDoc(tripRef, { ownerId: "angler-b" }));
+  await assertFails(updateDoc(tripRef, { startedAt: "2020-01-01T00:00:00.000Z" }));
+  await assertFails(setDoc(doc(db, catchPath("angler-a", "spoofed")), makeCatch("spoofed", "angler-b")));
+  await assertFails(setDoc(doc(db, "users/angler-a/profiles/profile-a"), { ownerId: "angler-a" }));
+});
+
+test("úlovek nemůže obejít validaci polí ani odkazovat na neexistující výpravu", async () => {
+  const db = alice.firestore();
+  const catchRef = doc(db, catchPath("angler-a", "catch-a"));
+  await assertFails(updateDoc(catchRef, { weightKg: -1 }));
+  await assertFails(updateDoc(catchRef, { photos: [{ id: "p1", name: "x.jpg", type: "image/jpeg", size: 20, blob: "data" }] }));
+  await assertFails(updateDoc(catchRef, { tripId: "trip-does-not-exist" }));
+  await assertFails(updateDoc(catchRef, { tripId: null }));
+});
+
+test("fotografie jsou soukromé, svázané s úlovkem a omezené na povolené typy a velikost", async () => {
+  const photo = new Uint8Array([0xff, 0xd8, 0xff, 0x00]);
+  const hash = createHash("sha256").update(photo).digest("hex");
+  const ownPhoto = ref(alice.storage(), photoPath("angler-a", "catch-a", "photo-a", hash));
+  const foreignPhoto = ref(bob.storage(), photoPath("angler-a", "catch-a", "photo-a", hash));
+  const anonymousPhoto = ref(anonymous.storage(), photoPath("angler-a", "catch-a", "photo-a", hash));
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), catchPath("angler-a", "catch-a")), {
+      ...makeCatch("catch-a", "angler-a", "trip-a"),
+      deleted: false,
+      photos: [{
+        id: "photo-a", name: "kapr.jpg", type: "image/jpeg", size: photo.byteLength, sha256: hash,
+        storagePath: photoPath("angler-a", "catch-a", "photo-a", hash),
+      }],
+    });
+  });
+
+  await assertSucceeds(uploadBytes(ownPhoto, photo, { contentType: "image/jpeg", customMetadata: { sha256: hash } }));
+  assert.deepEqual([...new Uint8Array(await getBytes(ownPhoto))], [...photo]);
+  await assertFails(getBytes(foreignPhoto));
+  await assertFails(uploadBytes(foreignPhoto, photo, { contentType: "image/jpeg", customMetadata: { sha256: hash } }));
+  await assertFails(deleteObject(foreignPhoto));
+  await assertFails(getBytes(anonymousPhoto));
+  await assertFails(uploadBytes(anonymousPhoto, photo, { contentType: "image/jpeg", customMetadata: { sha256: hash } }));
+  await assertFails(deleteObject(anonymousPhoto));
+  await assertFails(uploadBytes(ref(alice.storage(), photoPath("angler-a", "missing-catch", "photo", hash)), photo, { contentType: "image/jpeg", customMetadata: { sha256: hash } }));
+  await assertFails(uploadBytes(ref(alice.storage(), photoPath("angler-a", "catch-a", "script", hash)), photo, { contentType: "text/html", customMetadata: { sha256: hash } }));
+  await assertFails(uploadBytes(
+    ref(alice.storage(), photoPath("angler-a", "catch-a", "too-large", hash)),
+    new Uint8Array(10485761),
+    { contentType: "image/png", customMetadata: { sha256: hash } },
+  ));
+  await assertSucceeds(deleteObject(ownPhoto));
+});

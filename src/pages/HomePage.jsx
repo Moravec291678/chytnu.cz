@@ -1,247 +1,89 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Layout from "../shared/layout/Layout";
+import { DEFAULT_METHODS } from "../shared/constants/constants";
+import CatchCard from "../features/catches/components/CatchCard";
 import ProfileStatsBar from "../features/home/components/ProfileStatsBar";
-import SpeciesCard from "../features/species/components/SpeciesCard";
 import FishActivity from "../features/home/components/FishActivity";
-import TripPill from "../features/trips/components/TripPill";
-import { useCatches } from "../features/catches/context/CatchContext";
-import { getSeason, normalizeText } from "../shared/utils/helpers";
-import { MOCK_TRIPS } from "../features/trips/data/mockTrips";
-import { getActiveTrip } from "../features/trips/utils/getActiveTrip";
+import { useCatches } from "../features/catches/context/useCatches";
+import { useTrips } from "../features/trips/context/useTrips";
+import { filterAndSortCatches, hasActiveJournalFilters } from "../features/catches/utils/catchJournal";
+import { normalizeText } from "../shared/utils/helpers";
 import "./HomePage.css";
 
-const SORT_OPTIONS = [
-  { key: "nejnovejsi", label: "🕒 Nejnovější" },
-  { key: "nejvice", label: "⬆️ Nejvíce úlovků" },
-  { key: "nejmene", label: "⬇️ Nejméně úlovků" },
-  { key: "nejtezsi", label: "⚖️ Nejtěžší" },
-  { key: "nejlehci", label: "⚖️ Nejlehčí" },
-  { key: "nejdelsi", label: "📏 Nejdelší" },
-  { key: "nejkratsi", label: "📏 Nejkratší" },
+const EMPTY_FILTERS = { search: "", speciesKey: "", dateFrom: "", dateTo: "", favoriteOnly: false, result: "", methodKey: "", tripId: "", sort: "newest" };
+const SORTS = [
+  ["newest", "Nejnovější"], ["oldest", "Nejstarší"], ["heaviest", "Nejtěžší"],
+  ["lightest", "Nejlehčí"], ["longest", "Nejdelší"], ["shortest", "Nejkratší"],
 ];
 
-function groupCatchesBySpecies(catches) {
-  return Object.entries(
-    catches.reduce((acc, catchItem) => {
-      const key = catchItem.speciesKey;
-
-      if (!acc[key]) {
-        acc[key] = {
-          count: 0,
-          catches: [],
-        };
-      }
-
-      acc[key].count += 1;
-      acc[key].catches.push(catchItem);
-
-      return acc;
-    }, {}),
-  );
-}
-
-function sortSpeciesGroups(speciesGroups, sortBy) {
-  return [...speciesGroups].sort(
-    (
-      [, { count: aCount, catches: aCatches }],
-      [, { count: bCount, catches: bCatches }],
-    ) => {
-      if (sortBy === "nejvice") return bCount - aCount;
-      if (sortBy === "nejmene") return aCount - bCount;
-
-      if (sortBy === "nejnovejsi") {
-        return (
-          Math.max(...bCatches.map((item) => item.caughtAt)) -
-          Math.max(...aCatches.map((item) => item.caughtAt))
-        );
-      }
-
-      if (sortBy === "nejtezsi") {
-        const aMax = Math.max(...aCatches.map((item) => item.weightKg));
-        const bMax = Math.max(...bCatches.map((item) => item.weightKg));
-
-        return bMax - aMax;
-      }
-
-      if (sortBy === "nejlehci") {
-        const aMin = Math.min(...aCatches.map((item) => item.weightKg));
-        const bMin = Math.min(...bCatches.map((item) => item.weightKg));
-
-        return aMin - bMin;
-      }
-
-      if (sortBy === "nejdelsi") {
-        const aMax = Math.max(...aCatches.map((item) => item.lengthCm));
-        const bMax = Math.max(...bCatches.map((item) => item.lengthCm));
-
-        return bMax - aMax;
-      }
-
-      if (sortBy === "nejkratsi") {
-        const aMin = Math.min(...aCatches.map((item) => item.lengthCm));
-        const bMin = Math.min(...bCatches.map((item) => item.lengthCm));
-
-        return aMin - bMin;
-      }
-
-      return 0;
-    },
-  );
+function pluralize(count, forms) {
+  const remainder = count % 100;
+  if (remainder >= 11 && remainder <= 14) return forms[2];
+  const lastDigit = count % 10;
+  if (lastDigit === 1) return forms[0];
+  if (lastDigit >= 2 && lastDigit <= 4) return forms[1];
+  return forms[2];
 }
 
 function HomePage() {
-  const activeTrip = getActiveTrip(MOCK_TRIPS);
+  const { state } = useCatches();
+  const { state: tripState } = useTrips();
+  const [filters, setFilters] = useState(EMPTY_FILTERS);
+  const [filtersExpanded, setFiltersExpanded] = useState(false);
+  const species = useMemo(() => [...new Map(state.catches.map((item) => [item.speciesKey, { key: item.speciesKey, label: item.species }])).values()]
+    .sort((a, b) => normalizeText(a.label).localeCompare(normalizeText(b.label), "cs")), [state.catches]);
+  const results = useMemo(() => filterAndSortCatches(state.catches, filters, tripState.trips), [state.catches, filters, tripState.trips]);
+  const activeFilters = hasActiveJournalFilters(filters);
+  const activeFilterCount = [filters.speciesKey, filters.dateFrom, filters.dateTo, filters.favoriteOnly, filters.result, filters.methodKey, filters.tripId]
+    .filter(Boolean).length;
+  const tripsById = useMemo(() => new Map(tripState.trips.map((trip) => [trip.id, trip.title])), [tripState.trips]);
+  const visibleCatches = results.map((item) => ({ ...item, tripTitle: tripsById.get(item.tripId) }));
+  const setFilter = (key, value) => setFilters((current) => ({ ...current, [key]: value }));
+  const resetFilters = () => setFilters(EMPTY_FILTERS);
 
-  const { state, dispatch } = useCatches();
-
-  const year = new Date().getFullYear();
-
-  const speciesGroups = groupCatchesBySpecies(state.catches);
-
-  const [sortOpen, setSortOpen] = useState(false);
-
-  const [search, setSearch] = useState("");
-
-  const [isSearchFocused, setIsSearchFocused] = useState(false);
-
-  const isSearchMode = isSearchFocused || search.trim() !== "";
-
-  const sortedCatches = sortSpeciesGroups(speciesGroups, state.sortBy);
-
-  const filteredCatches = sortedCatches.filter(([, data]) =>
-    normalizeText(data.catches[0].species).includes(normalizeText(search)),
-  );
-
-  return (
-    <Layout>
-      <header className="home-header">
-        <div className="home-header-top">
-          <div>
-            <h1>ChytnuCz</h1>
-
-            <p>
-              {getSeason()} {year} · {state.catches.length} úlovků ·{" "}
-              {speciesGroups.length} druhů
-            </p>
-          </div>
-
-          <div className="home-header-actions">
-            <button className="header-btn">🔔</button>
-          </div>
-        </div>
-
-        <div className="filter-bar">
-          <button
-            onClick={() => dispatch({ type: "SET_SORT", payload: "vse" })}
-            className={state.sortBy === "vse" ? "chip chip-active" : "chip"}
-          >
-            Vše
-          </button>
-
-          <div className="sort-wrapper">
-            <button
-              className={
-                sortOpen || state.sortBy !== "vse" ? "chip chip-active" : "chip"
-              }
-              onClick={() => setSortOpen(!sortOpen)}
-            >
-              Seřadit ▾
-            </button>
-
-            {sortOpen && (
-              <div className="sort-dropdown">
-                {SORT_OPTIONS.map(({ key, label }) => (
-                  <button
-                    key={key}
-                    className={
-                      state.sortBy === key
-                        ? "sort-item sort-item-active"
-                        : "sort-item"
-                    }
-                    onClick={() => {
-                      dispatch({ type: "SET_SORT", payload: key });
-
-                      setSortOpen(false);
-                    }}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </header>
-
-      {!isSearchMode && (
-        <>
-          <FishActivity />
-
-          <ProfileStatsBar />
-
-          {activeTrip?.isActive && <TripPill activeTrip={activeTrip} />}
-        </>
-      )}
-
-      <div className="search-wrapper">
-        <div className="search-box">
-          <span className="search-icon">⌕</span>
-
-          <input
-            className="search-input"
-            type="text"
-            placeholder="Hledat druh..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            onFocus={() => {
-              setIsSearchFocused(true);
-
-              setTimeout(() => {
-                window.scrollTo({
-                  top: 0,
-                  behavior: "smooth",
-                });
-              }, 100);
-            }}
-            onBlur={() => {
-              setTimeout(() => {
-                setIsSearchFocused(false);
-              }, 150);
-            }}
-          />
-
-          {search && (
-            <button className="search-clear" onClick={() => setSearch("")}>
-              ×
-            </button>
-          )}
+  return <Layout>
+    <header className="home-header">
+      <div className="home-header-top">
+        <div>
+          <h1>Deník úlovků</h1>
+          <p>{state.catches.length} {pluralize(state.catches.length, ["úlovek", "úlovky", "úlovků"])} · {species.length} {pluralize(species.length, ["druh", "druhy", "druhů"])}</p>
         </div>
       </div>
-
-      <h3 className="section-title">Poslední úlovky</h3>
-
-      {filteredCatches.length > 0 ? (
-        filteredCatches.map(([speciesKey, data]) => {
-          const biggest = data.catches.reduce((max, item) => {
-            return item.weightKg > max.weightKg ? item : max;
-          });
-
-          return (
-            <SpeciesCard
-              key={speciesKey}
-              speciesKey={speciesKey}
-              data={data}
-              biggest={biggest}
-            />
-          );
-        })
-      ) : (
-        <div className="empty-search">
-          <p>Žádný druh nenalezen</p>
+      <div className="journal-controls">
+        <label className="journal-search-label" htmlFor="catch-search">Hledat v deníku</label>
+        <input id="catch-search" className="journal-control" type="search" placeholder="Druh, lokalita, metoda, nástraha…" value={filters.search} onChange={(event) => setFilter("search", event.target.value)} />
+        <div className="journal-filter-actions">
+          <button className="journal-filter-toggle" type="button" aria-expanded={filtersExpanded} aria-controls="journal-filter-panel" onClick={() => setFiltersExpanded((expanded) => !expanded)}>
+            <span>Filtry</span>
+            {activeFilterCount > 0 && <span className="journal-filter-count" aria-label={`${activeFilterCount} aktivní filtry`}>{activeFilterCount}</span>}
+            <span aria-hidden="true">{filtersExpanded ? "⌃" : "⌄"}</span>
+          </button>
+          {activeFilters && <button className="journal-reset-button" type="button" onClick={resetFilters}>Vymazat</button>}
         </div>
-      )}
-    </Layout>
-  );
+        {filtersExpanded && <div id="journal-filter-panel" className="journal-filter-panel">
+        <div className="journal-filter-grid">
+          <label>Druh<select className="journal-control" value={filters.speciesKey} onChange={(event) => setFilter("speciesKey", event.target.value)}><option value="">Všechny druhy</option>{species.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}</select></label>
+          <label>Řazení<select className="journal-control" value={filters.sort} onChange={(event) => setFilter("sort", event.target.value)}>{SORTS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+          <label>Od<input className="journal-control" aria-label="Datum od" type="date" value={filters.dateFrom} onChange={(event) => setFilter("dateFrom", event.target.value)} /></label>
+          <label>Do<input className="journal-control" aria-label="Datum do" type="date" value={filters.dateTo} onChange={(event) => setFilter("dateTo", event.target.value)} /></label>
+          <label>Výsledek<select className="journal-control" value={filters.result} onChange={(event) => setFilter("result", event.target.value)}><option value="">Jakýkoli</option><option value="released">Puštěno</option><option value="kept">Ponecháno</option><option value="unspecified">Neuvedeno</option></select></label>
+          <label>Metoda<select className="journal-control" value={filters.methodKey} onChange={(event) => setFilter("methodKey", event.target.value)}><option value="">Všechny metody</option>{DEFAULT_METHODS.map((method) => <option key={method.key} value={method.key}>{method.label}</option>)}</select></label>
+          <label>Výprava<select className="journal-control" value={filters.tripId} onChange={(event) => setFilter("tripId", event.target.value)}><option value="">Všechny výpravy</option>{tripState.trips.map((trip) => <option key={trip.id} value={trip.id}>{trip.title}</option>)}</select></label>
+        </div>
+        <label className="journal-favorite-filter"><input type="checkbox" checked={filters.favoriteOnly} onChange={(event) => setFilter("favoriteOnly", event.target.checked)} /> Jen oblíbené</label>
+        </div>}
+      </div>
+    </header>
+
+    {!activeFilters && <><FishActivity /><ProfileStatsBar /></>}
+
+    <h2 className="section-title">{activeFilters ? `Výsledky · ${results.length}` : "Všechny úlovky"}</h2>
+    {state.loading ? <div className="empty-search"><p>Načítám místní deník…</p></div>
+      : state.error ? <div className="empty-search" role="alert"><p>{state.error}</p><button type="button" onClick={() => window.location.reload()}>Zkusit znovu</button></div>
+        : state.catches.length === 0 ? <div className="empty-search"><p>Zatím tu nejsou žádné úlovky. První přidáš tlačítkem + dole.</p></div>
+          : visibleCatches.length === 0 ? <div className="empty-search"><p>Žádný úlovek neodpovídá zvolenému hledání a filtrům.</p><button type="button" onClick={resetFilters}>Vymazat filtry</button></div>
+            : visibleCatches.map((item) => <CatchCard key={item.id} catchedFish={item} />)}
+  </Layout>;
 }
 
 export default HomePage;

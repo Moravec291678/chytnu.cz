@@ -5,7 +5,7 @@ export function getTripsCount(MOCK_TRIPS) {
 export function getTotalTripsHours(trips) {
   const totalHours = trips.reduce(
     (acc, trip) =>
-      (acc +=
+      (acc +
         (trip.endedAt
           ? new Date(trip.endedAt) - new Date(trip.startedAt)
           : new Date() - new Date(trip.startedAt)) /

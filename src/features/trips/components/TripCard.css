@@ -9,6 +9,9 @@
   margin-bottom: 14px;
 }
 
+.trip-card-link { display: block; color: inherit; text-decoration: none; }
+.trip-card-link:hover .trip-card { border-color: var(--bd2); }
+
 .trip-card-top {
   display: flex;
   justify-content: space-between;
@@ -24,6 +27,7 @@
   line-height: 1.1;
 
   color: white;
+  margin: 0;
 }
 
 .trip-card-meta {

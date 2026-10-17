@@ -47,10 +47,12 @@
 
 .active-trip-stats {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
 
   border-top: 1px solid #103a35;
 }
+
+.active-trip-open { display: block; padding: 12px 18px; color: #2cf28c; font-size: 13px; font-weight: 700; text-decoration: none; border-top: 1px solid #103a35; }
 
 .active-trip-stat {
   padding: 14px 10px;

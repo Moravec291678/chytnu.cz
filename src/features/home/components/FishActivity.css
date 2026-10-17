@@ -6,6 +6,15 @@
   padding: 14px 16px;
 }
 
+.fish-activity-card--muted {
+  background: var(--s1);
+  border-color: var(--bd);
+}
+
+.fish-activity-card--muted .fish-activity-label {
+  color: var(--t2);
+}
+
 .fish-activity-header {
   display: flex;
   align-items: flex-start;
@@ -19,6 +28,14 @@
   color: var(--gr);
   text-transform: uppercase;
   letter-spacing: 1px;
+}
+
+.fish-activity-disclaimer {
+  max-width: 260px;
+  margin-top: 6px;
+  color: var(--t2);
+  font-size: 11px;
+  line-height: 1.4;
 }
 
 .fish-activity-score {
@@ -71,6 +88,22 @@
   margin: -4px 0 12px;
 }
 
+.fish-activity-attribution {
+  margin-top: 10px;
+  color: var(--t3);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.fish-activity-attribution a {
+  color: var(--t2);
+  text-underline-offset: 2px;
+}
+
+.fish-activity-card--muted .fish-activity-reason {
+  margin: 6px 0 0;
+}
+
 .fish-activity-tags {
   display: flex;
   flex-wrap: wrap;
@@ -109,4 +142,32 @@
   color: var(--t1);
   background: rgba(209, 209, 209, 0.08);
   border: 1px solid rgba(109, 109, 109, 0.836);
+}
+
+.fish-activity-action {
+  min-height: 44px;
+  margin-top: 10px;
+  padding: 0 13px;
+  color: var(--t1);
+  background: var(--s2);
+  border: 1px solid var(--bd);
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, transform 0.12s ease;
+}
+
+.fish-activity-action:hover {
+  background: var(--bd);
+  border-color: var(--bd2);
+}
+
+.fish-activity-action:focus-visible {
+  outline: 2px solid var(--bl);
+  outline-offset: 2px;
+}
+
+.fish-activity-action:active {
+  transform: scale(0.98);
 }

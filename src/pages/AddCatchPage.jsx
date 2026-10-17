@@ -1,5 +1,7 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import {
+  DEFAULT_BAITS,
   DEFAULT_METHODS,
   SPECIES_CATEGORIES,
 } from "../shared/constants/constants";
@@ -7,9 +9,40 @@ import Layout from "../shared/layout/Layout";
 import { DEFAULT_SPECIES } from "../shared/constants/constants";
 import "./AddCatchPage.css";
 import { normalizeText } from "../shared/utils/helpers";
+import { useCatches } from "../features/catches/context/useCatches";
+import { catchToForm, createCatchRecord, validateCatchForm } from "../features/catches/data/catchModel";
+import { useTrips } from "../features/trips/context/useTrips";
+
+function localDateTime() {
+  const now = new Date();
+  const pad = (value) => String(value).padStart(2, "0");
+  return { date: `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`, time: `${pad(now.getHours())}:${pad(now.getMinutes())}` };
+}
+
+async function optimizePhoto(file) {
+  if (typeof createImageBitmap !== "function") return file;
+  const bitmap = await createImageBitmap(file);
+  try {
+    const scale = Math.min(1, 1920 / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    const optimized = await new Promise((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("Fotografii se nepodařilo připravit.")), "image/jpeg", 0.82));
+    return optimized;
+  } finally {
+    bitmap.close();
+  }
+}
 
 function AddCatchPage() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const { state, createCatch, updateCatch } = useCatches();
+  const { state: tripState } = useTrips();
+  const existingCatch = id ? state.catches.find((item) => item.id === id) : null;
   const [displayFull, setDisplayFull] = useState(false);
+  const [photoProcessing, setPhotoProcessing] = useState(false);
   const [expandedCategoryKey, setExpandedCategoryKey] = useState(null);
   const visibleSpecies = DEFAULT_SPECIES.filter((species) => {
     if (expandedCategoryKey === "predators") {
@@ -28,28 +61,65 @@ function AddCatchPage() {
     return species.categoryKey === expandedCategoryKey;
   });
   const fileInputRef = useRef(null);
+  const photoUrlsRef = useRef(new Set());
+  useEffect(() => {
+    const photoUrls = photoUrlsRef.current;
+    return () => photoUrls.forEach((url) => URL.revokeObjectURL(url));
+  }, []);
   const handleAddPhoto = () => {
     fileInputRef.current.value = "";
     fileInputRef.current.click();
   };
 
   const removePhoto = () => {
+    catchData.photos.forEach((item) => {
+      if (item.previewUrl) {
+        URL.revokeObjectURL(item.previewUrl);
+        photoUrlsRef.current.delete(item.previewUrl);
+      }
+    });
     updateCatchData("photos", []);
   };
 
-  const handleFileChange = (event) => {
+  const handleFileChange = async (event) => {
     const selectedPhoto = event.target.files[0];
     if (!selectedPhoto) return;
 
-    const previewUrl = URL.createObjectURL(selectedPhoto);
+    if (!["image/jpeg", "image/png", "image/webp"].includes(selectedPhoto.type)) {
+      setFormError("Podporované jsou fotografie JPG, PNG a WebP.");
+      return;
+    }
+    if (selectedPhoto.size > 10 * 1024 * 1024) {
+      setFormError("Fotografie může mít nejvýše 10 MB.");
+      return;
+    }
+    setPhotoProcessing(true);
+    try {
+      const optimizedPhoto = await optimizePhoto(selectedPhoto);
+      const previewUrl = URL.createObjectURL(optimizedPhoto);
+      photoUrlsRef.current.add(previewUrl);
+      catchData.photos.forEach((item) => {
+        if (item.previewUrl) {
+          URL.revokeObjectURL(item.previewUrl);
+          photoUrlsRef.current.delete(item.previewUrl);
+        }
+      });
 
-    const photo = {
-      id: crypto.randomUUID(),
-      file: selectedPhoto,
-      previewUrl,
-    };
+      const photo = {
+        id: crypto.randomUUID(),
+        blob: optimizedPhoto,
+        name: selectedPhoto.name,
+        type: optimizedPhoto.type || selectedPhoto.type,
+        previewUrl,
+      };
 
-    setPhotos([photo]);
+      setPhotos([photo]);
+      setFormError("");
+    } catch (error) {
+      setFormError(error.message || "Fotografii se nepodařilo připravit.");
+    } finally {
+      setPhotoProcessing(false);
+    }
   };
 
   const [catchData, setCatchData] = useState({
@@ -62,8 +132,8 @@ function AddCatchPage() {
     locationName: "",
     waterNumber: "",
 
-    catchDate: "",
-    catchTime: "",
+    catchDate: localDateTime().date,
+    catchTime: localDateTime().time,
 
     gpsLocation: "",
 
@@ -71,14 +141,65 @@ function AddCatchPage() {
     bottomType: "",
 
     speciesKey: "",
-    resultKey: "released",
+    resultKey: "unspecified",
 
     fishingMethod: "",
     photos: [],
+    baits: [], notes: "", isFavorite: false, tripId: "",
   });
+  const [formError, setFormError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState({});
+  const [loadedId, setLoadedId] = useState("");
+
+  useEffect(() => {
+    if (!id || !existingCatch || loadedId === id) return;
+    const photoUrls = photoUrlsRef.current;
+    const values = catchToForm(existingCatch);
+    values.photos = values.photos.map((item) => {
+      if (!(item.blob instanceof Blob)) return { ...item, previewUrl: "" };
+      const previewUrl = URL.createObjectURL(item.blob);
+      photoUrls.add(previewUrl);
+      return { ...item, previewUrl };
+    });
+    let active = true;
+    Promise.resolve().then(() => {
+      if (!active) return;
+      setCatchData(values);
+      setDisplayFull(true);
+      setLoadedId(id);
+    });
+    return () => { active = false; };
+  }, [existingCatch, id, loadedId]);
+
+  const handleSave = async () => {
+    if (saving) return;
+    const errors = validateCatchForm(catchData);
+    setFieldErrors(errors);
+    if (Object.keys(errors).length) {
+      setFormError(Object.values(errors)[0]);
+      return;
+    }
+    const selected = DEFAULT_SPECIES.find((item) => item.key === catchData.speciesKey);
+    if (!selected) {
+      setFormError("Vybraný druh ryby už není v katalogu. Vyber jej znovu.");
+      return;
+    }
+    setSaving(true);
+    setFormError("");
+    try {
+      const record = createCatchRecord(catchData, selected, DEFAULT_METHODS, existingCatch, DEFAULT_BAITS);
+      if (existingCatch) await updateCatch(record);
+      else await createCatch(record);
+      navigate(`/catch/${record.id}`, { replace: true, state: { saved: true } });
+    } catch (error) {
+      setFormError(error.message || "Úlovek se nepodařilo uložit. Zkus to znovu.");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const photo = catchData.photos[0];
-  const isActiveResult = catchData.resultKey === "released";
   const selectedSpecies = DEFAULT_SPECIES.find(
     (species) => catchData.speciesKey === species.key,
   );
@@ -106,7 +227,7 @@ function AddCatchPage() {
     <Layout>
       <div className="add-catch-page">
         <header className="add-catch-header">
-          <h1>Nový úlovek</h1>
+          <h1>{id ? "Upravit úlovek" : "Nový úlovek"}</h1>
 
           <p>Přidej svůj úlovek</p>
         </header>
@@ -137,13 +258,13 @@ function AddCatchPage() {
             ref={fileInputRef}
             hidden
             onChange={handleFileChange}
-            accept=".jpg,.jpeg,.png,.webp,.heic"
+            accept="image/jpeg,image/png,image/webp"
           />
 
           {photo ? (
             <>
               <div className="photo-preview-item">
-                <img src={photo.previewUrl} alt="Fotka úlovku" />
+                {photo.previewUrl ? <img src={photo.previewUrl} alt="Fotka úlovku" /> : <p>Fotografie je dostupná po dokončení synchronizace.</p>}
               </div>
 
               <div className="photo-actions">
@@ -167,7 +288,8 @@ function AddCatchPage() {
           )}
         </section>
         <section className="add-catch-section">
-          <h2>🐟 Druh ryby</h2>
+          <h2>🐟 Druh ryby *</h2>
+          {fieldErrors.species && <p role="alert">{fieldErrors.species}</p>}
 
           {selectedSpecies ? (
             <div className="selected-species">
@@ -295,6 +417,7 @@ function AddCatchPage() {
 
         <section className="add-catch-section">
           <h2>📏 Míry</h2>
+          {(fieldErrors.Váha || fieldErrors.Délka || fieldErrors.Obvod || fieldErrors["Délka boje"]) && <p role="alert">{Object.values(fieldErrors)[0]}</p>}
 
           <div
             className={
@@ -307,7 +430,7 @@ function AddCatchPage() {
               <span>Váha (kg)</span>
 
               <input
-                type="number"
+                  type="text"
                 inputMode="decimal"
                 step="0.01"
                 min="0"
@@ -315,8 +438,6 @@ function AddCatchPage() {
                 value={catchData.weightKg}
                 onChange={(e) => {
                   const value = e.target.value;
-
-                  if (Number(value) < 0) return;
 
                   updateCatchData("weightKg", value);
                 }}
@@ -327,7 +448,7 @@ function AddCatchPage() {
               <span>Délka (cm)</span>
 
               <input
-                type="number"
+                type="text"
                 inputMode="numeric"
                 min="0"
                 placeholder="Např. 68"
@@ -335,7 +456,6 @@ function AddCatchPage() {
                 onChange={(e) => {
                   const value = e.target.value;
 
-                  if (Number(value) < 0) return;
                   updateCatchData("lengthCm", value);
                 }}
               />
@@ -347,7 +467,7 @@ function AddCatchPage() {
                   <span>Obvod (cm)</span>
 
                   <input
-                    type="number"
+                    type="text"
                     inputMode="numeric"
                     min="0"
                     placeholder="Např. 42"
@@ -355,7 +475,6 @@ function AddCatchPage() {
                     onChange={(e) => {
                       const value = e.target.value;
 
-                      if (Number(value) < 0) return;
                       updateCatchData("girthCm", value);
                     }}
                   />
@@ -365,7 +484,7 @@ function AddCatchPage() {
                   <span>Délka boje (min)</span>
 
                   <input
-                    type="number"
+                    type="text"
                     inputMode="numeric"
                     min="0"
                     placeholder="Např. 8"
@@ -373,7 +492,6 @@ function AddCatchPage() {
                     onChange={(e) => {
                       const value = e.target.value;
 
-                      if (Number(value) < 0) return;
                       updateCatchData("fightDurationMin", value);
                     }}
                   />
@@ -405,7 +523,7 @@ function AddCatchPage() {
                 <span>Číslo revíru (ČRS)</span>
 
                 <input
-                  type="number"
+                type="text"
                   inputMode="numeric"
                   min="0"
                   placeholder="Např. 411001"
@@ -413,7 +531,6 @@ function AddCatchPage() {
                   onChange={(e) => {
                     const value = e.target.value;
 
-                    if (Number(value) < 0) return;
                     updateCatchData("waterNumber", value);
                   }}
                 />
@@ -441,11 +558,11 @@ function AddCatchPage() {
             {displayFull && (
               <>
                 <label className="input-group input-group-full">
-                  <span>GPS poloha</span>
+                  <span>GPS souřadnice (volitelné)</span>
 
                   <input
                     type="text"
-                    placeholder="📍 Klepnout pro polohu"
+                    placeholder="Např. 50.08, 14.42 — lze zadat ručně"
                     value={catchData.gpsLocation}
                     onChange={(e) =>
                       updateCatchData("gpsLocation", e.target.value)
@@ -457,7 +574,7 @@ function AddCatchPage() {
                   <span>Hloubka (m)</span>
 
                   <input
-                    type="number"
+                    type="text"
                     inputMode="decimal"
                     step="0.1"
                     min="0"
@@ -466,7 +583,6 @@ function AddCatchPage() {
                     onChange={(e) => {
                       const value = e.target.value;
 
-                      if (Number(value) < 0) return;
                       updateCatchData("depthM", value);
                     }}
                   />
@@ -529,21 +645,31 @@ function AddCatchPage() {
             </section>
 
             <section className="add-catch-section">
-              <h2>🪱 Nástraha</h2>
+              <h2>🪱 Nástrahy</h2>
+              {DEFAULT_BAITS.map((bait) => <label key={bait.key} className="favorite-checkbox"><input type="checkbox" checked={catchData.baits.includes(bait.key)} onChange={(event) => updateCatchData("baits", event.target.checked ? [...catchData.baits, bait.key] : catchData.baits.filter((key) => key !== bait.key))} />{bait.label}</label>)}
             </section>
 
-            <section className="add-catch-section">
-              <h2>🌤️ Podmínky</h2>
-            </section>
           </>
         )}
+
+        <section className="add-catch-section">
+          <h2>🗺️ Výprava</h2>
+          <label className="input-group">
+            <span>Zařadit úlovek k výpravě</span>
+            <select value={catchData.tripId} onChange={(event) => updateCatchData("tripId", event.target.value)} disabled={tripState.loading}>
+              <option value="">Bez výpravy</option>
+              {tripState.trips.map((trip) => <option key={trip.id} value={trip.id}>{trip.title}{trip.endedAt ? " · dokončená" : " · aktivní"}</option>)}
+            </select>
+          </label>
+          {tripState.error && <p role="status">Výpravy se nepodařilo načíst; úlovek lze uložit samostatně.</p>}
+        </section>
 
         <section className="add-catch-section">
           <h2>🔁 Výsledek</h2>
           <div className="result-buttons">
             <button
               className={
-                isActiveResult ? "result-button button-active" : "result-button"
+                catchData.resultKey === "released" ? "result-button button-active" : "result-button"
               }
               onClick={() => {
                 updateCatchData("resultKey", "released");
@@ -554,7 +680,7 @@ function AddCatchPage() {
 
             <button
               className={
-                !isActiveResult
+                catchData.resultKey === "kept"
                   ? "result-button button-active"
                   : "result-button"
               }
@@ -564,6 +690,12 @@ function AddCatchPage() {
             >
               🧊 Necháno
             </button>
+            <button
+              className={catchData.resultKey === "unspecified" ? "result-button button-active" : "result-button"}
+              onClick={() => updateCatchData("resultKey", "unspecified")}
+            >
+              Neuvedeno
+            </button>
           </div>
         </section>
 
@@ -571,17 +703,21 @@ function AddCatchPage() {
           <section className="add-catch-section">
             <h2>📝 Poznámky</h2>
 
-            <textarea placeholder="Například počasí, aktivita ryb..."></textarea>
+            <textarea value={catchData.notes} onChange={(event) => updateCatchData("notes", event.target.value)} placeholder="Poznámky k úlovku..." />
 
             <label className="favorite-checkbox">
-              <input type="checkbox" />
+              <input type="checkbox" checked={catchData.isFavorite} onChange={(event) => updateCatchData("isFavorite", event.target.checked)} />
 
               <span>⭐ Označit jako oblíbený</span>
             </label>
           </section>
         )}
 
-        <button className="save-catch-button">✓ Uložit úlovek</button>
+        {formError && <p role="alert" className="catch-form-error">{formError}</p>}
+        {state.error && <p role="alert" className="catch-form-error">{state.error}</p>}
+        {id && state.loading && <p>Načítám úlovek…</p>}
+        {id && !state.loading && !existingCatch && <p role="alert">Tento úlovek nebyl nalezen. <Link to="/">Zpět do deníku</Link></p>}
+        <button type="button" className="save-catch-button" onClick={handleSave} disabled={saving || photoProcessing || (id && !existingCatch)}>{photoProcessing ? "Připravuji fotografii…" : saving ? "Ukládám…" : id ? "✓ Uložit změny" : "✓ Uložit úlovek"}</button>
       </div>
     </Layout>
   );

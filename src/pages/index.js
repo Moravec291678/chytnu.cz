@@ -4,4 +4,5 @@ export { default as GalleryPage } from "./GalleryPage";
 export { default as HomePage } from "./HomePage";
 export { default as SpeciesDetailPage } from "./SpeciesDetailPage";
 export { default as StatsPage } from "./StatsPage";
+export { default as ProfilePage } from "./ProfilePage";
 export { default as TripsPage } from "./TripsPage";

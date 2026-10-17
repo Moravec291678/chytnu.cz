@@ -4,6 +4,7 @@ import float from "../../assets/method-icons/float.png";
 import spinning from "../../assets/method-icons/spinning.png";
 import flyFishing from "../../assets/method-icons/flyFishing.png";
 import winterFishing from "../../assets/method-icons/winterFishing.png";
+export { MOON_PHASE_EMOJI } from "./moonPhaseEmoji.js";
 export const DEFAULT_SPECIES = [
   // =========================
   // KAPROVITÉ (CYPRINIDS)
@@ -839,7 +840,6 @@ export const DEFAULT_SPECIES = [
     isPredator: false,
   },
 ];
-
 export const SPECIES_CATEGORIES = [
   {
     key: "common",
@@ -940,14 +940,3 @@ export const DEFAULT_BAITS = [
   { key: "maggots", label: "Oparák", isCustom: false },
   { key: "other", label: "Jiná", isCustom: false },
 ];
-
-export const MOON_PHASE_EMOJI = {
-  new: "🌑 Nov",
-  waxingCrescent: "🌒 Dorůstající srpek",
-  firstQuarter: "🌓 První čtvrt",
-  waxingGibbous: "🌔 Dorůstá",
-  full: "🌕 Úplněk",
-  waningGibbous: "🌖 Ubývá",
-  lastQuarter: "🌗 Poslední čtvrt",
-  waningCrescent: "🌘 Ubývající srpek",
-};

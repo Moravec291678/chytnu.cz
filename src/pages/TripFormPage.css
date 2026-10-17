@@ -1,0 +1,22 @@
+.trip-form-page { padding: 24px 16px 120px; }
+.trip-back-link { color: var(--bl); text-decoration: none; font-weight: 700; font-size: 14px; }
+.trip-form-page header { margin: 24px 0; }
+.trip-form-page header h1 { font-size: 30px; line-height: 1.1; margin: 5px 0; }
+.trip-form-page header p { color: var(--t2); font-size: 14px; }
+.trip-form-page form { display: grid; gap: 16px; }
+.trip-form-page form label { display: grid; gap: 7px; color: var(--t2); font-size: 13px; font-weight: 700; }
+.trip-form-page input, .trip-form-page select { width: 100%; border: 1px solid var(--bd); border-radius: 10px; background: var(--s1); color: var(--t1); padding: 12px; }
+.trip-form-notice, .trip-form-error { margin: 12px 0; color: var(--re); font-size: 14px; }
+.trip-status-active { color: var(--gr) !important; font-weight: 700; }
+.trip-status-complete { color: var(--t3) !important; font-weight: 700; }
+.trip-detail-summary { display: grid; gap: 1px; overflow: hidden; border: 1px solid var(--bd); border-radius: 14px; background: var(--bd); }
+.trip-detail-summary div { display: grid; gap: 5px; padding: 12px; background: var(--s1); }
+.trip-detail-summary span { color: var(--t3); font-size: 11px; text-transform: uppercase; font-weight: 700; }
+.trip-detail-summary strong { font-size: 14px; color: var(--t1); }
+.trip-end-button { width: 100%; margin-top: 16px; padding: 13px; border-radius: 10px; border: 1px solid rgba(232,85,85,.4); background: var(--re-bg); color: var(--re); font-size: 14px; font-weight: 800; }
+.trip-delete-section { margin-top: 16px; color: var(--t3); font-size: 12px; line-height: 1.5; }
+.trip-delete-button { border: 1px solid rgba(232,85,85,.4); border-radius: 9px; padding: 10px 12px; background: var(--re-bg); color: var(--re); font-size: 13px; font-weight: 700; }
+.trip-edit-link { display: block; margin-top: 12px; width: 100%; padding: 12px; border: 1px solid var(--bd); border-radius: 10px; color: var(--t1); text-align: center; text-decoration: none; font-size: 14px; font-weight: 700; background: var(--s1); }
+.trip-form-page .section-title { padding: 0; margin-top: 26px; }
+.trips-add-btn { color: var(--gr); text-decoration: none; font-size: 24px; }
+.trips-empty-history { color: var(--t3); font-size: 13px; }

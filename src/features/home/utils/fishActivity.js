@@ -1,4 +1,4 @@
-import { MOON_PHASE_EMOJI } from "../../../shared/constants/constants";
+import { MOON_PHASE_EMOJI } from "../../../shared/constants/moonPhaseEmoji.js";
 
 export function getMoonPhase(date = new Date()) {
   const knownNewMoon = new Date("2000-01-06");
@@ -66,11 +66,13 @@ export function getTimeOfDayScore(
   return 0.3;
 }
 
+// Version 1 is a transparent product heuristic, not an empirically validated fish-bite model.
+export const FISH_ACTIVITY_ALGORITHM_VERSION = "1";
+
 export function getUserLocation() {
-  
   return new Promise((resolve, reject) => {
-    if (!navigator.geolocation) {
-      reject(new Error("Geolokace není podporována"));
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      reject(Object.assign(new Error("Poloha není v tomto prohlížeči dostupná."), { kind: "location-unsupported" }));
       return;
     }
     navigator.geolocation.getCurrentPosition(
@@ -82,27 +84,15 @@ export function getUserLocation() {
         }),
       (error) => reject(error),
       {
-        enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 0,
+        enableHighAccuracy: false,
+        timeout: 10000,
+        maximumAge: 300000,
       },
     );
   });
 }
 
-export async function fetchWeatherData(lat, lng) {
-  try {
-    const response = await fetch(
-      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,wind_speed_10m,surface_pressure,cloud_cover&hourly=precipitation_probability&daily=sunrise,sunset&timezone=auto`,
-    );
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    throw error;
-  }
-}
-
-export function calculateFishActivity(weatherData) {
+export function calculateFishActivity(weatherData, now = new Date()) {
   const { temperature, windSpeed, pressure, cloudiness, rainChance } =
     weatherData;
 
@@ -160,7 +150,7 @@ export function calculateFishActivity(weatherData) {
   }
 
   // Fáze měsíce — nejlepší ubývající (0.5–0.75)
-  const { phase } = getMoonPhase();
+  const { phase } = getMoonPhase(now);
   let moonScore;
   if (phase >= 0.5 && phase <= 0.75) moonScore = 1.0;
   else if (phase >= 0.75 && phase <= 0.85) moonScore = 0.8;
@@ -181,8 +171,8 @@ export function calculateFishActivity(weatherData) {
     rainScore = 0.5;
   }
 
-  const timeScore = getTimeOfDayScore();
-  const seasonScore = getSeasonScore();
+  const timeScore = getTimeOfDayScore(now.getHours(), now.getMonth());
+  const seasonScore = getSeasonScore(now.getMonth());
 
   const total =
     pressureScore * 0.23 +
@@ -199,27 +189,27 @@ export function calculateFishActivity(weatherData) {
   const reasons = [];
 
   if (windScore >= 1.0) {
-    reasons.push("Lehký vítr podporuje aktivitu ryb.");
+    reasons.push("Vítr spadá do příznivého pásma použitého odhadu.");
   }
 
   if (cloudScore >= 1.0) {
-    reasons.push("Zatažená obloha vytváří dobré podmínky.");
+    reasons.push("Oblačnost spadá do příznivého pásma použitého odhadu.");
   }
 
   if (tempScore >= 1.0) {
-    reasons.push("Teplota je ideální pro aktivitu ryb.");
+    reasons.push("Teplota vzduchu spadá do příznivého pásma použitého odhadu.");
   }
 
   if (rainScore >= 1.0) {
-    reasons.push("Možný déšť může zvýšit aktivitu ryb.");
+    reasons.push("Pravděpodobnost srážek spadá do příznivého pásma použitého odhadu.");
   }
 
   if (pressureScore <= 0.3) {
-    reasons.push("Nízký nebo extrémní tlak aktivitu snižuje.");
+    reasons.push("Tlak je mimo příznivé pásmo použitého odhadu.");
   }
 
   if (timeScore >= 1.0) {
-    reasons.push("Denní doba přeje rybolovu.");
+    reasons.push("Denní doba spadá do příznivého pásma použitého odhadu.");
   }
 
   return {
@@ -230,9 +220,9 @@ export function calculateFishActivity(weatherData) {
 
 export function getActivityLabel(score) {
   if (score >= 8)
-    return { label: "Výborná — ideální den na ryby", color: "green" };
-  if (score >= 6) return { label: "Dobrá — stojí za to jít", color: "yellow" };
+    return { label: "Podmínky vycházejí příznivě", color: "green" };
+  if (score >= 6) return { label: "Podmínky vypadají příznivě", color: "yellow" };
   if (score >= 4)
-    return { label: "Průměrná — možné, ale nejisté", color: "orange" };
-  return { label: "Slabá — ryby nejsou aktivní", color: "red" };
+    return { label: "Podmínky jsou smíšené", color: "orange" };
+  return { label: "Podmínky vycházejí méně příznivě", color: "red" };
 }

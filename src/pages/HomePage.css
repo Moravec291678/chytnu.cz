@@ -337,6 +337,129 @@
   color: var(--t1);
 }
 
+.journal-controls {
+  display: grid;
+  gap: 6px;
+}
+
+.journal-search-label,
+.journal-filter-grid label {
+  display: grid;
+  gap: 5px;
+  color: var(--t2);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.journal-control {
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  color: var(--t1);
+  background: var(--s1);
+  border: 1px solid var(--bd);
+  border-radius: 11px;
+  padding: 9px 12px;
+  font-size: 14px !important;
+}
+
+.journal-filter-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 36px;
+}
+
+.journal-filter-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 12px;
+  color: var(--t1);
+  background: var(--s1);
+  border: 1px solid var(--bd);
+  border-radius: 10px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, transform 0.12s ease;
+}
+
+.journal-filter-toggle:hover {
+  background: var(--s2);
+  border-color: var(--bd2);
+}
+
+.journal-filter-toggle:focus-visible {
+  outline: 2px solid var(--bl);
+  outline-offset: 2px;
+}
+
+.journal-filter-toggle:active {
+  transform: scale(0.97);
+}
+
+.journal-filter-toggle span {
+  color: var(--t2);
+  font-size: 17px;
+}
+
+.journal-filter-toggle .journal-filter-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  min-height: 22px;
+  padding: 0 6px;
+  color: var(--bl);
+  background: var(--bl-bg);
+  border: 1px solid var(--bd);
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.journal-filter-panel {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  background: var(--s1);
+  border: 1px solid var(--bd);
+  border-radius: 14px;
+}
+
+.journal-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.journal-favorite-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--t2);
+  font-size: 13px;
+}
+
+.journal-favorite-filter input { accent-color: var(--gr); }
+
+.journal-reset-button {
+  color: var(--bl);
+  background: transparent;
+  border: 0;
+  padding: 8px 0;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+@media (min-width: 420px) {
+  .journal-filter-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
 .search-clear:active {
   transform: scale(0.92);
 }

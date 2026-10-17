@@ -13,10 +13,12 @@ export function formatDurationFromStart(startedAt) {
 }
 
 export function formatCatchDateTime(date) {
-  return `${date.toLocaleDateString("cs-CZ", {
+  const value = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(value.getTime())) return "Datum neuvedeno";
+  return `${value.toLocaleDateString("cs-CZ", {
     day: "numeric",
     month: "numeric",
-  })} · ${date.toLocaleTimeString([], {
+  })} · ${value.toLocaleTimeString([], {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,

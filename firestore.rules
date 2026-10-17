@@ -1,0 +1,321 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedInAs(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    function optionalString(value) {
+      return value == null || value is string;
+    }
+
+    function optionalNumber(value, maximum) {
+      return value == null || (value is number && value >= 0 && value <= maximum);
+    }
+
+    function validMethod(value) {
+      return value == null || (
+        value is map
+        && value.keys().hasAll(['key', 'label', 'isCustom'])
+        && value.keys().hasOnly(['key', 'label', 'isCustom'])
+        && value.key is string
+        && value.label is string
+        && value.isCustom is bool
+      );
+    }
+
+    function validPhotoMetadata(value, userId, catchId) {
+      return value is map
+        && value.keys().hasAll(['id', 'name', 'type', 'size'])
+        && value.keys().hasOnly(['id', 'name', 'type', 'size', 'storagePath', 'sha256'])
+        && value.id is string
+        && value.name is string
+        && value.type in ['image/jpeg', 'image/png', 'image/webp']
+        && value.size is int
+        && value.size >= 0
+        && value.size <= 10485760
+        && (!value.keys().hasAny(['storagePath', 'sha256']) || (
+          value.keys().hasAll(['storagePath', 'sha256'])
+          && value.sha256 is string
+          && value.sha256.matches('^[a-f0-9]{64}$')
+          && value.storagePath == 'users/' + userId + '/catches/' + catchId + '/photos/' + value.id + '/' + value.sha256
+        ));
+    }
+
+    function validEnvelope(data, userId, entityType, entityId) {
+      return data.ownerId == userId
+        && data.id == entityId
+        && data.entityType == entityType
+        && data.serverRevision is int
+        && data.serverRevision >= 1
+        && data.syncSequence is int
+        && data.syncSequence >= 1
+        && data.lastOperationId is string
+        && data.lastOperationId.size() > 0
+        && data.clientLocalRevision is int
+        && data.clientLocalRevision >= 1
+        && data.operationDigest is string
+        && data.operationDigest.size() == 64
+        && data.lastReceiptId is string
+        && data.lastReceiptId.size() > 0
+        && data.deleted is bool
+        && optionalString(data.deletedAt)
+        && data.photoState in ['none', 'metadata-only'];
+    }
+
+    function tombstoneKeys() {
+      return ['schemaVersion', 'id', 'ownerId', 'entityType', 'deleted', 'deletedAt',
+        'serverRevision', 'syncSequence', 'lastOperationId', 'clientLocalRevision',
+        'operationDigest', 'lastReceiptId', 'photoState'];
+    }
+
+    function validCatchContent(data, userId, catchId) {
+      return data.schemaVersion == 1
+        && data.entityType == 'catch'
+        && data.id == catchId
+        && data.ownerId == userId
+        && data.caughtAt is string
+        && data.species is string
+        && data.speciesKey is string
+        && optionalString(data.speciesLatin)
+        && optionalNumber(data.weightKg, 1000)
+        && optionalNumber(data.lengthCm, 2000)
+        && optionalNumber(data.girthCm, 2000)
+        && optionalNumber(data.fightMinutes, 10000)
+        && data.locationName is string
+        && optionalNumber(data.waterNumber, 99999999)
+        && data.gpsLocation is string
+        && optionalNumber(data.waterDepthM, 2000)
+        && optionalString(data.bottomType)
+        && (data.tripId == null || (
+          data.tripId is string
+          && exists(/databases/$(database)/documents/users/$(userId)/trips/$(data.tripId))
+          && get(/databases/$(database)/documents/users/$(userId)/trips/$(data.tripId)).data.deleted == false
+        ))
+        && validMethod(data.method)
+        && data.baits is list
+        && data.baits.size() <= 20
+        && data.result is string
+        && data.photos is list
+        && data.photos.size() <= 1
+        && (data.photos.size() == 0 || validPhotoMetadata(data.photos[0], userId, catchId))
+        && data.notes is string
+        && data.isFavorite is bool
+        && data.createdAt is string
+        && data.updatedAt is string
+        && data.keys().hasOnly([
+          'schemaVersion', 'id', 'ownerId', 'entityType', 'createdAt', 'updatedAt', 'caughtAt',
+          'species', 'speciesKey', 'speciesLatin', 'weightKg', 'lengthCm', 'girthCm', 'fightMinutes',
+          'locationName', 'waterNumber', 'gpsLocation', 'waterDepthM', 'bottomType', 'tripId', 'method',
+          'baits', 'result', 'photos', 'notes', 'isFavorite', 'deleted', 'deletedAt', 'serverRevision',
+          'syncSequence', 'lastOperationId', 'clientLocalRevision', 'operationDigest', 'lastReceiptId', 'photoState'
+        ]);
+    }
+
+    function validTripContent(data, userId, tripId) {
+      return data.keys().hasOnly([
+          'schemaVersion', 'id', 'ownerId', 'entityType', 'title', 'locationName', 'methodKey',
+          'createdAt', 'updatedAt', 'startedAt', 'endedAt', 'deleted', 'deletedAt',
+          'serverRevision', 'syncSequence', 'lastOperationId', 'clientLocalRevision',
+          'operationDigest', 'lastReceiptId', 'photoState'
+        ])
+        && data.schemaVersion == 1
+        && data.entityType == 'trip'
+        && data.id == tripId
+        && data.ownerId == userId
+        && data.title is string
+        && data.locationName is string
+        && optionalString(data.methodKey)
+        && data.createdAt is string
+        && data.updatedAt is string
+        && data.startedAt is string
+        && optionalString(data.endedAt);
+    }
+
+    function validTombstone(data, userId, entityType, entityId) {
+      return data.keys().hasAll(tombstoneKeys())
+        && data.keys().hasOnly(tombstoneKeys())
+        && data.schemaVersion == 1
+        && data.deleted == true
+        && data.deletedAt is string
+        && data.ownerId == userId
+        && data.entityType == entityType
+        && data.id == entityId;
+    }
+
+    function entityAfter(userId, entityType, entityId) {
+      return entityType == 'catch'
+        ? getAfter(/databases/$(database)/documents/users/$(userId)/catches/$(entityId)).data
+        : getAfter(/databases/$(database)/documents/users/$(userId)/trips/$(entityId)).data;
+    }
+
+    function validReceiptLink(userId, receiptId, receiptData) {
+      let event = getAfter(/databases/$(database)/documents/users/$(userId)/syncChanges/$(receiptId)).data;
+      let state = getAfter(/databases/$(database)/documents/users/$(userId)/sync/state).data;
+      let entity = entityAfter(userId, receiptData.entityType, receiptData.entityId);
+      return existsAfter(/databases/$(database)/documents/users/$(userId)/syncChanges/$(receiptId))
+        && existsAfter(/databases/$(database)/documents/users/$(userId)/sync/state)
+        && entity.ownerId == userId
+        && entity.serverRevision == receiptData.serverRevision
+        && entity.syncSequence == receiptData.sequence
+        && entity.lastOperationId == receiptData.operationId
+        && entity.clientLocalRevision == receiptData.localRevision
+        && entity.lastReceiptId == receiptId
+        && event.ownerId == userId
+        && event.receiptId == receiptId
+        && event.sequence == receiptData.sequence
+        && event.entityType == receiptData.entityType
+        && event.entityId == receiptData.entityId
+        && event.operationId == receiptData.operationId
+        && event.serverRevision == receiptData.serverRevision
+        && event.localRevision == receiptData.localRevision
+        && event.kind == receiptData.kind
+        && state.ownerId == userId
+        && state.cursor == receiptData.sequence
+        && state.lastReceiptId == receiptId;
+    }
+
+    function validChangeLink(userId, receiptId, eventData) {
+      let receipt = getAfter(/databases/$(database)/documents/users/$(userId)/syncOperations/$(receiptId)).data;
+      let state = getAfter(/databases/$(database)/documents/users/$(userId)/sync/state).data;
+      let entity = entityAfter(userId, eventData.entityType, eventData.entityId);
+      return existsAfter(/databases/$(database)/documents/users/$(userId)/syncOperations/$(receiptId))
+        && existsAfter(/databases/$(database)/documents/users/$(userId)/sync/state)
+        && entity.ownerId == userId
+        && entity.serverRevision == eventData.serverRevision
+        && entity.syncSequence == eventData.sequence
+        && entity.lastOperationId == eventData.operationId
+        && entity.clientLocalRevision == eventData.localRevision
+        && entity.lastReceiptId == receiptId
+        && receipt.ownerId == userId
+        && receipt.receiptId == receiptId
+        && receipt.sequence == eventData.sequence
+        && receipt.entityType == eventData.entityType
+        && receipt.entityId == eventData.entityId
+        && receipt.operationId == eventData.operationId
+        && receipt.serverRevision == eventData.serverRevision
+        && receipt.localRevision == eventData.localRevision
+        && receipt.kind == eventData.kind
+        && state.ownerId == userId
+        && state.cursor == eventData.sequence
+        && state.lastReceiptId == receiptId;
+    }
+
+    function validSyncWrite(userId, entityType, entityId, data) {
+      return signedInAs(userId)
+        && validEnvelope(data, userId, entityType, entityId)
+        && data.lastReceiptId is string
+        && existsAfter(/databases/$(database)/documents/users/$(userId)/syncOperations/$(data.lastReceiptId))
+        && existsAfter(/databases/$(database)/documents/users/$(userId)/syncChanges/$(data.lastReceiptId))
+        && validReceiptLink(userId, data.lastReceiptId,
+          getAfter(/databases/$(database)/documents/users/$(userId)/syncOperations/$(data.lastReceiptId)).data);
+    }
+
+    match /users/{userId}/catches/{catchId} {
+      allow get, list: if signedInAs(userId);
+      allow create: if validSyncWrite(userId, 'catch', catchId, request.resource.data)
+        && request.resource.data.serverRevision == 1
+        && (validCatchContent(request.resource.data, userId, catchId)
+          || validTombstone(request.resource.data, userId, 'catch', catchId));
+      allow update: if resource.data.deleted == false
+        && validSyncWrite(userId, 'catch', catchId, request.resource.data)
+        && (validCatchContent(request.resource.data, userId, catchId)
+          || validTombstone(request.resource.data, userId, 'catch', catchId))
+        && request.resource.data.serverRevision == resource.data.serverRevision + 1
+        && request.resource.data.ownerId == resource.data.ownerId
+        && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if false;
+    }
+
+    match /users/{userId}/trips/{tripId} {
+      allow get, list: if signedInAs(userId);
+      allow create: if validSyncWrite(userId, 'trip', tripId, request.resource.data)
+        && request.resource.data.serverRevision == 1
+        && (validTripContent(request.resource.data, userId, tripId)
+          || validTombstone(request.resource.data, userId, 'trip', tripId));
+      allow update: if resource.data.deleted == false
+        && validSyncWrite(userId, 'trip', tripId, request.resource.data)
+        && (validTripContent(request.resource.data, userId, tripId)
+          || validTombstone(request.resource.data, userId, 'trip', tripId))
+        && request.resource.data.serverRevision == resource.data.serverRevision + 1
+        && request.resource.data.ownerId == resource.data.ownerId
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.startedAt == resource.data.startedAt;
+      allow delete: if false;
+    }
+
+    match /users/{userId}/sync/{stateId} {
+      allow get: if signedInAs(userId) && stateId == 'state';
+      allow list: if false;
+      allow create: if signedInAs(userId)
+        && stateId == 'state'
+        && request.resource.data.keys().hasOnly(['ownerId', 'cursor', 'lastReceiptId'])
+        && request.resource.data.ownerId == userId
+        && request.resource.data.cursor == 1
+        && request.resource.data.lastReceiptId is string
+        && existsAfter(/databases/$(database)/documents/users/$(userId)/syncChanges/$(request.resource.data.lastReceiptId))
+        && getAfter(/databases/$(database)/documents/users/$(userId)/syncChanges/$(request.resource.data.lastReceiptId)).data.sequence == request.resource.data.cursor;
+      allow update: if signedInAs(userId)
+        && stateId == 'state'
+        && resource.data.ownerId == userId
+        && request.resource.data.keys().hasOnly(['ownerId', 'cursor', 'lastReceiptId'])
+        && request.resource.data.ownerId == userId
+        && request.resource.data.cursor == resource.data.cursor + 1
+        && request.resource.data.lastReceiptId is string
+        && existsAfter(/databases/$(database)/documents/users/$(userId)/syncChanges/$(request.resource.data.lastReceiptId))
+        && getAfter(/databases/$(database)/documents/users/$(userId)/syncChanges/$(request.resource.data.lastReceiptId)).data.sequence == request.resource.data.cursor;
+      allow delete: if false;
+    }
+
+    match /users/{userId}/syncOperations/{receiptId} {
+      allow get, list: if signedInAs(userId);
+      allow create: if signedInAs(userId)
+        && request.resource.data.keys().hasOnly([
+          'ownerId', 'receiptId', 'operationId', 'entityType', 'entityId', 'serverRevision',
+          'sequence', 'localRevision', 'operationDigest', 'kind', 'createdAt'
+        ])
+        && request.resource.data.ownerId == userId
+        && request.resource.data.receiptId == receiptId
+        && request.resource.data.entityType in ['catch', 'trip']
+        && request.resource.data.kind in ['upsert', 'delete']
+        && request.resource.data.operationId is string
+        && request.resource.data.entityId is string
+        && request.resource.data.serverRevision is int
+        && request.resource.data.sequence is int
+        && request.resource.data.localRevision is int
+        && request.resource.data.operationDigest is string
+        && request.resource.data.operationDigest.size() == 64
+        && request.resource.data.createdAt is string
+        && validReceiptLink(userId, receiptId, request.resource.data);
+      allow update, delete: if false;
+    }
+
+    match /users/{userId}/syncChanges/{receiptId} {
+      allow get, list: if signedInAs(userId);
+      allow create: if signedInAs(userId)
+        && request.resource.data.keys().hasOnly([
+          'ownerId', 'receiptId', 'operationId', 'entityType', 'entityId', 'serverRevision',
+          'sequence', 'localRevision', 'operationDigest', 'kind', 'createdAt'
+        ])
+        && request.resource.data.ownerId == userId
+        && request.resource.data.receiptId == receiptId
+        && request.resource.data.entityType in ['catch', 'trip']
+        && request.resource.data.kind in ['upsert', 'delete']
+        && request.resource.data.operationId is string
+        && request.resource.data.entityId is string
+        && request.resource.data.serverRevision is int
+        && request.resource.data.sequence is int
+        && request.resource.data.localRevision is int
+        && request.resource.data.operationDigest is string
+        && request.resource.data.operationDigest.size() == 64
+        && request.resource.data.createdAt is string
+        && validChangeLink(userId, receiptId, request.resource.data);
+      allow update, delete: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

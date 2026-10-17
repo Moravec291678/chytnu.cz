@@ -1,128 +1,137 @@
-import { useState, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
-  getUserLocation,
-  fetchWeatherData,
   calculateFishActivity,
+  FISH_ACTIVITY_ALGORITHM_VERSION,
   getActivityLabel,
   getMoonPhase,
+  getUserLocation,
 } from "../utils/fishActivity";
+import { fetchWeatherData, getWeatherConditions } from "../utils/weatherApi";
 import "./FishActivity.css";
+
+async function getFishActivityData(signal) {
+  const location = await getUserLocation();
+  const response = await fetchWeatherData(location.lat, location.lng, { signal });
+  const weatherData = getWeatherConditions(response.data);
+
+  return { weatherData, activity: calculateFishActivity(weatherData), fetchedAt: response.fetchedAt, cached: response.cached };
+}
+
+function getErrorKind(error) {
+  if (error?.kind) return error.kind;
+  if (error?.code === 1) return "location-denied";
+  if (error?.code === 2 || error?.code === 3) return "location-unavailable";
+  return "weather-unavailable";
+}
+
 function FishActivity() {
-  const [score, setScore] = useState(null);
-  const [weather, setWeather] = useState(null);
-  const [error, setError] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [reasons, setReasons] = useState([]);
+  const [status, setStatus] = useState("idle");
+  const [errorKind, setErrorKind] = useState(null);
+  const [activityData, setActivityData] = useState(null);
+  const requestIdRef = useRef(0);
+  const abortControllerRef = useRef(null);
 
-  async function loadData() {
-    try {
-      setLoading(true);
-      const location = await getUserLocation();
-      const data = await fetchWeatherData(location.lat, location.lng);
-      const currentTime = data.current.time.slice(0, 13);
-
-      const currentHourIndex = data.hourly.time.findIndex((time) =>
-        time.startsWith(currentTime),
-      );
-      const weatherData = {
-        temperature: data.current.temperature_2m,
-        windSpeed: data.current.wind_speed_10m,
-        pressure: data.current.surface_pressure,
-        cloudiness: data.current.cloud_cover,
-        rainChance: data.hourly.precipitation_probability[currentHourIndex],
-        sunrise: data.daily.sunrise[0],
-        sunset: data.daily.sunset[0],
-      };
-
-      setWeather(weatherData);
-      const activity = calculateFishActivity(weatherData);
-
-      setScore(activity.score);
-      setReasons(activity.reasons);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    loadData();
+  useEffect(() => () => {
+    requestIdRef.current += 1;
+    abortControllerRef.current?.abort();
   }, []);
 
-  if (loading) return <div className="fish-activity-card">Načítám...</div>;
-  if (error) {
+  const loadActivity = async () => {
+    abortControllerRef.current?.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    const requestId = ++requestIdRef.current;
+    setStatus("loading");
+    setErrorKind(null);
+
+    try {
+      const result = await getFishActivityData(controller.signal);
+      if (requestId !== requestIdRef.current) return;
+      setActivityData(result);
+      setStatus("success");
+    } catch (error) {
+      if (requestId !== requestIdRef.current) return;
+      setErrorKind(getErrorKind(error));
+      setStatus("error");
+    }
+  };
+
+  if (status === "idle") {
     return (
-      <div className="fish-activity-card">
-        <span className="fish-activity-label">Aktivita ryb dnes</span>
-
-        <p className="fish-activity-status">Poloha není povolena</p>
-
-        <p className="fish-activity-reason">
-          Povol polohu pro přesnější aktivitu ryb ve tvé oblasti.
-        </p>
-
-        <button
-          className="fish-activity-retry"
-          onClick={async () => {
-            if (loading) return;
-
-            setError(null);
-            setLoading(true);
-
-            await loadData();
-          }}
-        >
-          Zkusit znovu
-        </button>
-      </div>
+      <section className="fish-activity-card fish-activity-card--muted" aria-labelledby="fish-activity-title">
+        <span id="fish-activity-title" className="fish-activity-label">Orientační podmínky</span>
+        <p className="fish-activity-reason">Po klepnutí požádáme o polohu a její souřadnice pošleme Open-Meteo kvůli místnímu modelovému počasí. Deník funguje i bez toho.</p>
+        <button className="fish-activity-action" type="button" onClick={loadActivity}>Zobrazit odhad</button>
+      </section>
     );
   }
 
-  const { label } = getActivityLabel(score);
-  const {
-    pressure,
-    temperature,
-    windSpeed,
-    cloudiness,
-    rainChance,
-    sunrise,
-    sunset,
-  } = weather;
+  if (status === "loading") {
+    return (
+      <section className="fish-activity-card fish-activity-card--muted" role="status" aria-live="polite">
+        <span className="fish-activity-label">Orientační podmínky</span>
+        <p className="fish-activity-reason">Načítám místní počasí…</p>
+      </section>
+    );
+  }
+
+  if (status === "error") {
+    const locationDenied = errorKind === "location-denied";
+    const locationUnavailable = errorKind === "location-unavailable";
+    const locationUnsupported = errorKind === "location-unsupported";
+    const message = locationDenied
+      ? "Bez polohy tento odhad nespočítám. Deník můžeš používat dál; po změně oprávnění v nastavení prohlížeče můžeš načtení zkusit znovu."
+      : locationUnsupported
+        ? "Tento prohlížeč polohu neposkytuje. Deník můžeš používat dál bez odhadu."
+      : locationUnavailable
+        ? "Polohu se nepodařilo zjistit. Bez ní odhad podmínek není dostupný."
+        : "Počasí teď není dostupné. Zkontroluj připojení a zkus to znovu.";
+
+    return (
+      <section className="fish-activity-card fish-activity-card--muted" aria-labelledby="fish-activity-title">
+        <span id="fish-activity-title" className="fish-activity-label">Orientační podmínky</span>
+        <p className="fish-activity-status">{locationDenied || locationUnsupported ? "Odhad není dostupný" : locationUnavailable ? "Poloha teď není dostupná" : "Počasí není dostupné"}</p>
+        <p className="fish-activity-reason">{message}</p>
+        {!locationUnsupported && <button className="fish-activity-action" type="button" onClick={loadActivity}>{locationDenied ? "Ověřit polohu znovu" : "Zkusit znovu"}</button>}
+      </section>
+    );
+  }
+
+  const { weatherData, activity, fetchedAt, cached } = activityData;
+  const { label } = getActivityLabel(activity.score);
+  const { pressure, temperature, windSpeed, cloudiness, rainChance, sunrise, sunset } = weatherData;
   const moon = getMoonPhase();
 
   return (
-    <div className="fish-activity-card">
+    <section className="fish-activity-card" aria-labelledby="fish-activity-title">
       <div className="fish-activity-header">
-        <span className="fish-activity-label">Aktivita ryb dnes</span>
-        <div className="fish-activity-score-wrapper">
-          <div className="fish-activity-score">{score}</div>
-
-          <div className="fish-activity-progress">
-            <div
-              className="fish-activity-progress-fill"
-              style={{ width: `${score * 10}%` }}
-            ></div>
+        <div>
+          <span id="fish-activity-title" className="fish-activity-label">Orientační podmínky</span>
+          <p className="fish-activity-disclaimer">Výpočet z počasí, denní doby a fáze měsíce; nejde o předpověď záběrů.</p>
+        </div>
+        <div className="fish-activity-score-wrapper" aria-label={`Orientační hodnocení ${activity.score} z 10`}>
+          <div className="fish-activity-score">{activity.score}</div>
+          <div className="fish-activity-progress" aria-hidden="true">
+            <div className="fish-activity-progress-fill" style={{ width: `${activity.score * 10}%` }} />
           </div>
         </div>
       </div>
       <p className="fish-activity-status">{label}</p>
-      {reasons.length > 0 && (
-        <p className="fish-activity-reason">{reasons[0]}</p>
-      )}
+      {activity.reasons.length > 0 && <p className="fish-activity-reason">{activity.reasons[0]}</p>}
       <div className="fish-activity-tags">
         <span className="fish-activity-tag">🔵 {Math.round(pressure)} hPa</span>
         <span className="fish-activity-tag">{moon.label}</span>
         <span className="fish-activity-tag">🌡️ {temperature}°C vzduch</span>
         <span className="fish-activity-tag">💨 {windSpeed} km/h vítr</span>
-        <span className="fish-activity-tag">
-          🌅 {sunrise.slice(11, 16)} · 🌇 {sunset.slice(11, 16)}
-        </span>
+        <span className="fish-activity-tag">🌅 {sunrise.slice(11, 16)} · 🌇 {sunset.slice(11, 16)}</span>
         <span className="fish-activity-tag">☁️ {cloudiness}% oblačnost</span>
-
         <span className="fish-activity-tag">🌧️ {rainChance}% šance deště</span>
       </div>
-    </div>
+      <p className="fish-activity-attribution">
+        Modelové údaje k {weatherData.currentTime.slice(11, 16)} {weatherData.timezoneAbbreviation || weatherData.timezone || "místního času"} · načteno {new Intl.DateTimeFormat("cs-CZ", { dateStyle: "short", timeStyle: "short" }).format(fetchedAt)}{cached ? " · z místní cache" : ""}. Algoritmus odhadu v{FISH_ACTIVITY_ALGORITHM_VERSION}. Data: <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo (CC BY 4.0)</a>.
+      </p>
+      <button className="fish-activity-action" type="button" onClick={loadActivity}>Obnovit počasí</button>
+    </section>
   );
 }
 

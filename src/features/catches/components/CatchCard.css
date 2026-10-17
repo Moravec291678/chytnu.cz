@@ -31,6 +31,14 @@
   flex-shrink: 0;
 }
 
+.catch-card-photo {
+  width: 50px;
+  height: 50px;
+  border-radius: 13px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
 .catch-card-info {
   flex: 1;
   min-width: 0;
@@ -59,6 +67,15 @@
   gap: 4px;
   flex-wrap: wrap;
   margin-top: 4px;
+}
+
+.catch-card-tag {
+  font-size: 11px;
+  color: var(--t2);
+  background: var(--s2);
+  border: 1px solid var(--bd);
+  border-radius: 999px;
+  padding: 3px 7px;
 }
 
 .catch-card-right {

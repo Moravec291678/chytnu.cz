@@ -1,0 +1,53 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedInAs(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    function catchBelongsTo(userId, catchId) {
+      let catchRef = /databases/(default)/documents/users/$(userId)/catches/$(catchId);
+      return firestore.exists(catchRef)
+        && firestore.get(catchRef).data.ownerId == userId;
+    }
+
+    function catchHasPhoto(userId, catchId, photoId, hash) {
+      let catchRef = /databases/(default)/documents/users/$(userId)/catches/$(catchId);
+      let catchData = firestore.get(catchRef).data;
+      return catchBelongsTo(userId, catchId)
+        && catchData.deleted == false
+        && catchData.photos is list
+        && catchData.photos.size() == 1
+        && catchData.photos[0].id == photoId
+        && catchData.photos[0].sha256 == hash
+        && catchData.photos[0].storagePath == 'users/' + userId + '/catches/' + catchId + '/photos/' + photoId + '/' + hash;
+    }
+
+    function validPhotoUpload(userId, catchId, photoId, hash) {
+      return signedInAs(userId)
+        && catchHasPhoto(userId, catchId, photoId, hash)
+        && request.resource != null
+        && request.resource.size <= 10485760
+        && request.resource.contentType in ['image/jpeg', 'image/png', 'image/webp']
+        && request.resource.metadata.keys().hasAll(['sha256'])
+        && request.resource.metadata.sha256 == hash
+        && firestore.get(/databases/(default)/documents/users/$(userId)/catches/$(catchId)).data.photos[0].size == request.resource.size
+        && firestore.get(/databases/(default)/documents/users/$(userId)/catches/$(catchId)).data.photos[0].type == request.resource.contentType;
+    }
+
+    match /users/{userId}/catches/{catchId}/photos/{photoId}/{hash} {
+      allow read: if signedInAs(userId) && catchHasPhoto(userId, catchId, photoId, hash);
+      allow create, update: if validPhotoUpload(userId, catchId, photoId, hash);
+      allow delete: if signedInAs(userId);
+    }
+
+    match /users/{userId}/catches/{catchId}/photos/{nested=**} {
+      allow list: if signedInAs(userId) && catchBelongsTo(userId, catchId);
+    }
+
+    match /{object=**} {
+      allow read, write: if false;
+    }
+  }
+}

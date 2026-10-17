@@ -94,6 +94,8 @@ Zachovej charakter současného designu, pokud audit neprokáže konkrétní dů
 - zaoblené karty, jemné hranice a střídmé barevné akcenty;
 - bottom navigation pro hlavní části aplikace, pokud je vhodná pro zvolenou platformu;
 - formuláře použitelné jednou rukou, s rozumnými velikostmi dotykových cílů.
+
+Pro všechny obrazovky a etapy závazně dodržuj také sekci `Product UX principles` v kořenovém `AGENTS.md`: upřednostni praktickou hodnotu, pohodlí, rychlost a přehlednost; nezahlcuj UI ani neduplikuj akce; na mobilu nech hlavní obsah dostupný co nejdříve; rozsáhlé vedlejší panely umožni sbalit; zachovávej užitečné funkce a nepředstírej chování dekorativními či placeholder ovládacími prvky. Před dokončením posuzuj celý uživatelský tok, nejen jednotlivou komponentu.
 Současná dokumentace používá CSS proměnné:
 - --bg: #111820
 - --s1: #1c2635
