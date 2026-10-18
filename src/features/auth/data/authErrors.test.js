@@ -11,5 +11,6 @@ test("auth errors map to clear Czech messages without exposing internals", () =>
 
 test("only non-local auth configuration errors are reported as unavailable", () => {
   assert.equal(isInvalidAuthConfiguration({ code: "auth/emulator-config-required" }), true);
+  assert.equal(isInvalidAuthConfiguration({ code: "auth/backend-config-required" }), true);
   assert.equal(isInvalidAuthConfiguration({ code: "auth/network-request-failed" }), false);
 });

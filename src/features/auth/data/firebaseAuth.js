@@ -1,75 +1,60 @@
-import { getApps, initializeApp } from "firebase/app";
-import {
-  browserLocalPersistence,
-  getAuth,
-  createUserWithEmailAndPassword,
-  initializeAuth,
-  onAuthStateChanged,
-  sendEmailVerification,
-  sendPasswordResetEmail,
-  signInWithEmailAndPassword,
-  signOut,
-  connectAuthEmulator,
-} from "firebase/auth";
+import { getBackendConfiguration, readBackendCapabilities } from "./backendConfig.js";
 
-const APP_NAME = "chytnucz-local-auth-emulator";
-const PROJECT_ID = "demo-chytnucz-local";
 const EMULATOR_URL = "http://127.0.0.1:9099";
-const ALLOWED_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+const EMULATOR_CONNECTIONS = Symbol.for("chytnucz.firebaseEmulatorConnections");
 
 let authInstance;
 let authConfigurationError;
-const EMULATOR_CONNECTIONS = Symbol.for("chytnucz.firebaseEmulatorConnections");
+let firebaseAppApi;
+let firebaseAuthApi;
+let firebaseModulesPromise;
 
 function connectedEmulators() {
   globalThis[EMULATOR_CONNECTIONS] ??= new Set();
   return globalThis[EMULATOR_CONNECTIONS];
 }
 
-function canUseLocalEmulator() {
-  return Boolean(import.meta.env?.DEV)
-    && typeof window !== "undefined"
-    && ALLOWED_HOSTS.has(window.location.hostname);
+async function loadFirebaseModules() {
+  firebaseModulesPromise ??= Promise.all([import("firebase/app"), import("firebase/auth")]).then(([appApi, authApi]) => {
+    firebaseAppApi = appApi;
+    firebaseAuthApi = authApi;
+    return { appApi, authApi };
+  });
+  return firebaseModulesPromise;
 }
 
 export function getLocalFirebaseApp() {
   if (authConfigurationError) throw authConfigurationError;
-  if (!canUseLocalEmulator()) {
-    authConfigurationError = Object.assign(
-      new Error("Lokální emulátor účtů není v tomto prostředí povolen."),
-      { code: "auth/emulator-config-required" },
-    );
-    throw authConfigurationError;
+  if (!firebaseAppApi) {
+    throw Object.assign(new Error("Firebase SDK ještě není připravené."), { code: "auth/backend-config-required" });
   }
-
   try {
-    const existingApp = getApps().find((app) => app.name === APP_NAME);
-    return existingApp ?? initializeApp({
-      apiKey: "demo-api-key",
-      authDomain: "localhost",
-      projectId: PROJECT_ID,
-      storageBucket: `${PROJECT_ID}.appspot.com`,
-    }, APP_NAME);
+    const config = getBackendConfiguration();
+    const appName = `chytnucz-${config.mode}-${config.firebase.projectId}`;
+    const existingApp = firebaseAppApi.getApps().find((app) => app.name === appName);
+    return existingApp ?? firebaseAppApi.initializeApp(config.firebase, appName);
   } catch (error) {
     authConfigurationError = error;
     throw error;
   }
 }
 
-function getAuthInstance() {
+async function getAuthInstance() {
   if (authInstance) return authInstance;
+  await loadFirebaseModules();
   const app = getLocalFirebaseApp();
   try {
     let auth;
     try {
-      auth = initializeAuth(app, { persistence: browserLocalPersistence });
+      auth = firebaseAuthApi.initializeAuth(app, { persistence: firebaseAuthApi.browserLocalPersistence });
     } catch (error) {
       if (error?.code !== "auth/already-initialized") throw error;
-      auth = getAuth(app);
+      auth = firebaseAuthApi.getAuth(app);
     }
-    if (!connectedEmulators().has(`auth:${APP_NAME}`)) {
-      connectAuthEmulator(auth, EMULATOR_URL, { disableWarnings: true });
-      connectedEmulators().add(`auth:${APP_NAME}`);
+    const config = getBackendConfiguration();
+    if (config.mode === "emulator" && !connectedEmulators().has(`auth:${app.name}`)) {
+      firebaseAuthApi.connectAuthEmulator(auth, EMULATOR_URL, { disableWarnings: true });
+      connectedEmulators().add(`auth:${app.name}`);
     }
     authInstance = auth;
     return authInstance;
@@ -80,44 +65,63 @@ function getAuthInstance() {
 }
 
 export const firebaseAuth = {
+  capabilities: readBackendCapabilities,
   currentUserId() {
-    return getAuthInstance().currentUser?.uid ?? null;
+    return authInstance?.currentUser?.uid ?? null;
   },
   observe(listener, onError) {
-    try {
-      return onAuthStateChanged(getAuthInstance(), listener, onError);
-    } catch (error) {
-      onError?.(error);
-      return () => {};
-    }
+    let active = true;
+    let unsubscribe = () => {};
+    getAuthInstance().then((auth) => {
+      if (!active) return;
+      unsubscribe = firebaseAuthApi.onAuthStateChanged(auth, listener, onError);
+    }).catch((error) => onError?.(error));
+    return () => {
+      active = false;
+      unsubscribe();
+    };
   },
   async register(email, password) {
-    const credential = await createUserWithEmailAndPassword(getAuthInstance(), email.trim(), password);
+    const auth = await getAuthInstance();
+    const credential = await firebaseAuthApi.createUserWithEmailAndPassword(auth, email.trim(), password);
     let verificationEmailSent = false;
     try {
-      await sendEmailVerification(credential.user);
+      await firebaseAuthApi.sendEmailVerification(credential.user);
       verificationEmailSent = true;
     } catch {
-      // Account creation has already succeeded; verification can be requested again.
+      // Account creation succeeded; verification can be requested again later.
     }
     return { user: credential.user, verificationEmailSent };
   },
   async signIn(email, password) {
-    const credential = await signInWithEmailAndPassword(getAuthInstance(), email.trim(), password);
+    const auth = await getAuthInstance();
+    const credential = await firebaseAuthApi.signInWithEmailAndPassword(auth, email.trim(), password);
     return credential.user;
   },
-  signOut() {
-    return signOut(getAuthInstance());
+  async signInWithGoogle() {
+    const config = getBackendConfiguration();
+    if (!config.googleAuthEnabled) {
+      throw Object.assign(new Error("Google přihlášení není v tomto prostředí zapnuté."), { code: "auth/provider-disabled" });
+    }
+    const auth = await getAuthInstance();
+    const credential = await firebaseAuthApi.signInWithPopup(auth, new firebaseAuthApi.GoogleAuthProvider());
+    return credential.user;
+  },
+  async signOut() {
+    const auth = await getAuthInstance();
+    return firebaseAuthApi.signOut(auth);
   },
   async resetPassword(email) {
     try {
-      await sendPasswordResetEmail(getAuthInstance(), email.trim());
+      const auth = await getAuthInstance();
+      await firebaseAuthApi.sendPasswordResetEmail(auth, email.trim());
     } catch (error) {
       if (error?.code === "auth/user-not-found") return;
       throw error;
     }
   },
   async resendVerification(user) {
-    await sendEmailVerification(user);
+    await loadFirebaseModules();
+    await firebaseAuthApi.sendEmailVerification(user);
   },
 };

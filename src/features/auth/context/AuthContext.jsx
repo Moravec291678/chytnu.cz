@@ -4,6 +4,7 @@ import { firebaseAuth } from "../data/firebaseAuth.js";
 import { getAuthErrorMessage, isInvalidAuthConfiguration } from "../data/authErrors.js";
 
 export function AuthProvider({ children }) {
+  const capabilities = useMemo(() => firebaseAuth.capabilities(), []);
   const [user, setUser] = useState(null);
   const [status, setStatus] = useState("loading");
   const [error, setError] = useState("");
@@ -31,6 +32,7 @@ export function AuthProvider({ children }) {
 
   const register = useCallback((email, password) => run(() => firebaseAuth.register(email, password)), [run]);
   const signIn = useCallback((email, password) => run(() => firebaseAuth.signIn(email, password)), [run]);
+  const signInWithGoogle = useCallback(() => run(() => firebaseAuth.signInWithGoogle()), [run]);
   const resetPassword = useCallback((email) => run(() => firebaseAuth.resetPassword(email)), [run]);
   const resendVerification = useCallback((currentUser) => run(() => firebaseAuth.resendVerification(currentUser)), [run]);
   const logOut = useCallback(() => run(() => firebaseAuth.signOut()), [run]);
@@ -40,12 +42,14 @@ export function AuthProvider({ children }) {
     status,
     error,
     clearError: () => setError(""),
+    ...capabilities,
     register,
     signIn,
+    signInWithGoogle,
     resetPassword,
     resendVerification,
     logOut,
-  }), [user, status, error, register, signIn, resetPassword, resendVerification, logOut]);
+  }), [user, status, error, capabilities, register, signIn, signInWithGoogle, resetPassword, resendVerification, logOut]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

@@ -8,7 +8,7 @@ The configured emulators are Authentication, Cloud Firestore, and Cloud Storage.
 
 The Firebase CLI is a development dependency; the existing app Firebase SDK initializes only on a local Vite development host. React contexts and repositories remain the application boundary and IndexedDB remains the local source of truth.
 
-Use a Java 21+ runtime on `PATH` or set `JAVA_HOME` before running the emulator commands. This machine only has Java 8 installed system-wide; verification used a temporary JRE 21 outside the repository. The temporary runtime is not a project dependency and is not installed globally.
+Use a Java 21+ runtime on `PATH` or set `JAVA_HOME` before running the emulator commands. This machine only has Java 8 installed system-wide; verification used an isolated JRE 21 in the ignored `node_modules/.cache` directory. The runtime is not a package dependency and is not installed globally.
 
 ## Data boundary
 
@@ -36,7 +36,7 @@ The suite executes Firestore and Storage requests against the emulators using `@
 
 Security Rules apply to client SDK requests; privileged server SDKs bypass them and must be protected separately with IAM. Emulator success is not a production deployment review. The emulator does not prove production indexes, service quotas, billing, data residency, backup policy, or mobile background synchronization. Do not deploy these rules or create a cloud project until those decisions are separately approved. Existing ownerless local data is linked only through an explicit confirmed UI action.
 
-The emulators are local development tools, not production service replacements. The machine's installed system Java is 8; tests use an existing isolated Java 21 runtime in the temporary user directory by setting `JAVA_HOME` for the command. This does not change system Java or project dependencies. Downloading a photo back for a content hash check adds transfer traffic; production billing/region, retention, backup, and a lower-cost trusted integrity strategy still need owner review before a live Firebase project is enabled.
+The emulators are local development tools, not production service replacements. The machine's installed system Java is 8; tests set `JAVA_HOME` to the ignored isolated Java 21 runtime. This does not change system Java or project dependencies. Downloading a photo back for a content hash check adds transfer traffic; production billing/region, retention, backup, and a lower-cost trusted integrity strategy still need owner review before a live Firebase project is enabled.
 
 ## Application authentication (stage 6H)
 
@@ -46,4 +46,4 @@ Email/password registration, sign-in, sign-out, local browser session restoratio
 
 Run the isolated auth integration suite with `npm run test:auth`. It uses synthetic records with `fake-indexeddb`, checks registration/sign-in/errors/reset/sign-out/session restoration/unavailable-emulator handling, and confirms auth actions themselves do not mutate local data. The sync provider starts metadata synchronization only for records already owned by the currently signed-in emulator UID; it does not associate existing local records automatically.
 
-Google sign-in is not part of this implementation. The Auth Emulator can exercise SDK-driven third-party-provider flows with emulated identities, but that does not configure or verify a production Google OAuth client or native app identity. Real provider setup and platform-specific redirect/deep-link behavior need a later, separately approved stage.
+Google sign-in uses the same Firebase Auth adapter and is enabled automatically only in emulator mode. The isolated auth integration suite exercises the SDK credential path with an Auth Emulator mock Google identity. Staging and production expose the Google button only when `VITE_FIREBASE_GOOGLE_AUTH_ENABLED=true`; that flag must be set only after the provider and authorized domains are configured. The emulator test does not prove a real Google popup, production OAuth client, or native app identity.

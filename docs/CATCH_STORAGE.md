@@ -8,7 +8,7 @@ The initial store is empty. `src/features/catches/data/mockCatches.js` remains a
 
 ## Record contract
 
-Records use `schemaVersion: 1` and include a stable `id`, ISO `createdAt`, `updatedAt`, ISO `caughtAt`, species key and labels, nullable measurements, location text, optional GPS text, method, bait list, result, notes, favorite state and photos. `sync: { status: "local", revision: 1 }` reserves a small explicit place for future synchronization metadata. Unset measurements remain `null` and are omitted from detail views.
+Records use `schemaVersion: 1` and include a stable `id`, ISO `createdAt`, `updatedAt`, ISO `caughtAt`, species key and labels, nullable measurements, location text, optional legacy GPS text, optional structured `coordinates`, method, bait list, result, notes, favorite state and photos. Sync metadata tracks ownership, revision and queue state. Unset measurements remain `null` and are omitted from detail views.
 
 Photos are stored as Blob objects inside the catch record's IndexedDB value. Accepted source files are JPEG, PNG and WebP, up to 10 MB. When `createImageBitmap` is available, the app resizes the longest edge to at most 1920 px and encodes JPEG at quality 0.82 before saving. Browsers without that API store the accepted source unchanged. Deleting a catch deletes its embedded photo data in the same IndexedDB record operation.
 
@@ -18,7 +18,7 @@ Photos are stored as Blob objects inside the catch record's IndexedDB value. Acc
 - Browser storage can be cleared by the user or evicted by the platform; local export and restore are available.
 - Catch/Trip/photo sync, conflict-resolution UI and explicit ownerless account linking are available only in the local development emulator. Production sync, tombstone retention and account deletion are not implemented.
 - Only one photo per catch is available in the current form.
-- GPS is a manually entered text value; there is no location permission request or coordinate validation.
+- GPS is optional. The form requests browser geolocation only after an explicit click and stores validated latitude/longitude; denial, timeout or unavailability never blocks saving. A manually entered unambiguous dot-decimal pair can be parsed, while ambiguous legacy text is kept without inventing coordinates.
 - Catches may optionally reference a trip by stable `tripId`; a catch without a trip remains a complete independent record.
 - Trips use a separate local record with `schemaVersion`, stable `id`, `createdAt`, `updatedAt`, `startedAt`, nullable `endedAt`, optional title/location/method and reserved local sync metadata. Trip fields can be edited without changing ID, ownership or Catch links. Trip catch counts and measurements are derived from linked catches, never stored as mock statistics.
 - Only one active trip may be started at a time; the uniqueness check and insertion happen in the same IndexedDB read/write transaction. Finishing a trip stores an `endedAt` timestamp; completed trips remain in history.

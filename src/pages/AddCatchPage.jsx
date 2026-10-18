@@ -12,6 +12,7 @@ import { normalizeText } from "../shared/utils/helpers";
 import { useCatches } from "../features/catches/context/useCatches";
 import { catchToForm, createCatchRecord, validateCatchForm } from "../features/catches/data/catchModel";
 import { useTrips } from "../features/trips/context/useTrips";
+import { formatCoordinates } from "../features/catches/data/coordinates";
 
 function localDateTime() {
   const now = new Date();
@@ -136,6 +137,7 @@ function AddCatchPage() {
     catchTime: localDateTime().time,
 
     gpsLocation: "",
+    coordinates: null,
 
     depthM: "",
     bottomType: "",
@@ -149,7 +151,9 @@ function AddCatchPage() {
   });
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
-  const [fieldErrors, setFieldErrors] = useState({});
+  const [gpsLoading, setGpsLoading] = useState(false);
+  const [gpsMessage, setGpsMessage] = useState("");
+  const savingRef = useRef(false);
   const [loadedId, setLoadedId] = useState("");
 
   useEffect(() => {
@@ -173,9 +177,8 @@ function AddCatchPage() {
   }, [existingCatch, id, loadedId]);
 
   const handleSave = async () => {
-    if (saving) return;
+    if (savingRef.current) return;
     const errors = validateCatchForm(catchData);
-    setFieldErrors(errors);
     if (Object.keys(errors).length) {
       setFormError(Object.values(errors)[0]);
       return;
@@ -185,6 +188,7 @@ function AddCatchPage() {
       setFormError("Vybraný druh ryby už není v katalogu. Vyber jej znovu.");
       return;
     }
+    savingRef.current = true;
     setSaving(true);
     setFormError("");
     try {
@@ -195,6 +199,7 @@ function AddCatchPage() {
     } catch (error) {
       setFormError(error.message || "Úlovek se nepodařilo uložit. Zkus to znovu.");
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
@@ -214,14 +219,47 @@ function AddCatchPage() {
   );
 
   const updateCatchData = (field, value) => {
+    setFormError("");
     setCatchData((prev) => ({
       ...prev,
       [field]: value,
     }));
   };
+
+  const updateGpsLocation = (value, coordinates = null) => {
+    setFormError("");
+    setGpsMessage("");
+    setCatchData((previous) => ({ ...previous, gpsLocation: value, coordinates }));
+  };
+
+  const useCurrentLocation = () => {
+    if (gpsLoading) return;
+    if (!navigator.geolocation) {
+      setFormError("Tento prohlížeč polohu neposkytuje. Souřadnice můžeš zadat ručně.");
+      return;
+    }
+    setGpsLoading(true);
+    setFormError("");
+    setGpsMessage("");
+    navigator.geolocation.getCurrentPosition((position) => {
+      const coordinates = { latitude: position.coords.latitude, longitude: position.coords.longitude };
+      updateGpsLocation(formatCoordinates(coordinates), coordinates);
+      setGpsMessage("Aktuální poloha byla vložena. Úlovek ji uloží až po potvrzení formuláře.");
+      setGpsLoading(false);
+    }, (locationError) => {
+      setFormError(locationError.code === 1
+        ? "Poloha nebyla povolena. Úlovek můžeš uložit bez ní nebo souřadnice zadat ručně."
+        : "Polohu se nepodařilo zjistit. Úlovek můžeš uložit bez ní nebo souřadnice zadat ručně.");
+      setGpsLoading(false);
+    }, { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 });
+  };
   const setPhotos = (photos) => {
     updateCatchData("photos", photos);
   };
+
+  if (id && !state.loading && !existingCatch) {
+    return <Layout><section className="add-catch-section"><h1>Úlovek nenalezen</h1><p>Tento úlovek mohl být smazán nebo není v místním deníku dostupný.</p><Link to="/">Zpět do deníku</Link></section></Layout>;
+  }
 
   return (
     <Layout>
@@ -289,7 +327,6 @@ function AddCatchPage() {
         </section>
         <section className="add-catch-section">
           <h2>🐟 Druh ryby *</h2>
-          {fieldErrors.species && <p role="alert">{fieldErrors.species}</p>}
 
           {selectedSpecies ? (
             <div className="selected-species">
@@ -417,7 +454,6 @@ function AddCatchPage() {
 
         <section className="add-catch-section">
           <h2>📏 Míry</h2>
-          {(fieldErrors.Váha || fieldErrors.Délka || fieldErrors.Obvod || fieldErrors["Délka boje"]) && <p role="alert">{Object.values(fieldErrors)[0]}</p>}
 
           <div
             className={
@@ -564,10 +600,10 @@ function AddCatchPage() {
                     type="text"
                     placeholder="Např. 50.08, 14.42 — lze zadat ručně"
                     value={catchData.gpsLocation}
-                    onChange={(e) =>
-                      updateCatchData("gpsLocation", e.target.value)
-                    }
+                    onChange={(e) => updateGpsLocation(e.target.value)}
                   />
+                  <span className="gps-actions"><button type="button" className="photo-action-button" onClick={useCurrentLocation} disabled={gpsLoading}>{gpsLoading ? "Zjišťuji polohu…" : "Použít aktuální polohu"}</button>{catchData.gpsLocation && <button type="button" className="photo-action-button" onClick={() => updateGpsLocation("")}>Odstranit GPS</button>}</span>
+                  {gpsMessage && <small className="gps-message" role="status">{gpsMessage}</small>}
                 </label>
 
                 <label className="input-group">
@@ -716,7 +752,6 @@ function AddCatchPage() {
         {formError && <p role="alert" className="catch-form-error">{formError}</p>}
         {state.error && <p role="alert" className="catch-form-error">{state.error}</p>}
         {id && state.loading && <p>Načítám úlovek…</p>}
-        {id && !state.loading && !existingCatch && <p role="alert">Tento úlovek nebyl nalezen. <Link to="/">Zpět do deníku</Link></p>}
         <button type="button" className="save-catch-button" onClick={handleSave} disabled={saving || photoProcessing || (id && !existingCatch)}>{photoProcessing ? "Připravuji fotografii…" : saving ? "Ukládám…" : id ? "✓ Uložit změny" : "✓ Uložit úlovek"}</button>
       </div>
     </Layout>

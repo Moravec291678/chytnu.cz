@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import Layout from "../shared/layout/Layout";
 import { useAuth } from "../features/auth/context/authContextValue.js";
 import { useSync } from "../features/sync/context/syncContextValue.js";
@@ -16,6 +17,11 @@ import {
   readOwnerlessSummary,
   resolveSyncConflict,
 } from "../features/sync/data/localSyncRepository.js";
+import { validateAuthForm } from "../features/auth/data/authFormValidation.js";
+import ConfirmDialog from "../shared/components/ConfirmDialog";
+import { useCatches } from "../features/catches/context/useCatches";
+import { useTrips } from "../features/trips/context/useTrips";
+import { calculateProgression } from "../features/progression/data/progression";
 import "./ProfilePage.css";
 
 function formatCount(count, one, few, many) {
@@ -38,11 +44,28 @@ function ProfilePage() {
   const [password, setPassword] = useState("");
   const [authBusy, setAuthBusy] = useState(false);
   const [authMessage, setAuthMessage] = useState("");
+  const [authFormError, setAuthFormError] = useState("");
   const [ownerless, setOwnerless] = useState({ catches: 0, trips: 0, photos: 0 });
   const [conflicts, setConflicts] = useState([]);
   const [dataActionBusy, setDataActionBusy] = useState(false);
+  const [confirmingLink, setConfirmingLink] = useState(false);
+  const [confirmingReplace, setConfirmingReplace] = useState(false);
+  const [pendingConflict, setPendingConflict] = useState(null);
+  const authActionRef = useRef(false);
+  const dataActionRef = useRef(false);
+  const backupActionRef = useRef(false);
   const auth = useAuth();
   const sync = useSync();
+  const { state: catchState } = useCatches();
+  const { state: tripState } = useTrips();
+  const progression = calculateProgression(catchState.catches, tripState.trips);
+  const accountEnvironment = auth.mode === "emulator"
+    ? "Účet v této vývojové verzi používá pouze lokální Firebase emulátor."
+    : auth.mode === "staging"
+      ? "Účet je připojený k oddělenému stagingovému prostředí."
+      : auth.mode === "production"
+        ? "Účet je připojený k produkčnímu prostředí."
+        : "Účet pro toto prostředí zatím není nastavený.";
 
   const refreshAccountData = useCallback(async () => {
     const [localSummary, accountConflicts] = await Promise.all([
@@ -66,12 +89,15 @@ function ProfilePage() {
     return () => { active = false; };
   }, [auth.user, sync.conflicts, sync.pending]);
 
-  const linkLocalJournal = async () => {
-    if (!auth.user || dataActionBusy || ownerless.catches + ownerless.trips === 0) return;
-    const confirmed = window.confirm(
-      `Propojit s účtem ${auth.user.email}? Do synchronizační fronty se připraví ${ownerless.catches} úlovků, ${ownerless.trips} výprav a ${ownerless.photos} fotografií. Místní kopie zůstanou v tomto zařízení. Doporučujeme mít předem staženou zálohu.`,
-    );
-    if (!confirmed) return;
+  const linkLocalJournal = () => {
+    if (!auth.user || dataActionRef.current || ownerless.catches + ownerless.trips === 0) return;
+    setConfirmingLink(true);
+  };
+
+  const performLinkLocalJournal = async () => {
+    if (!auth.user || dataActionRef.current || ownerless.catches + ownerless.trips === 0) return;
+    setConfirmingLink(false);
+    dataActionRef.current = true;
     setDataActionBusy(true);
     setError("");
     try {
@@ -82,13 +108,20 @@ function ProfilePage() {
       await refreshAccountData();
     } catch (linkError) {
       setError(linkError?.message || "Deník se nepodařilo propojit. Data zůstala beze změny.");
-    } finally { setDataActionBusy(false); }
+    } finally { dataActionRef.current = false; setDataActionBusy(false); }
   };
 
-  const resolveConflict = async (conflict, choice) => {
-    if (!auth.user || dataActionBusy) return;
+  const resolveConflict = (conflict, choice) => {
+    if (!auth.user || dataActionRef.current) return;
+    setPendingConflict({ conflict, choice });
+  };
+
+  const performResolveConflict = async () => {
+    if (!auth.user || dataActionRef.current || !pendingConflict) return;
+    const { conflict, choice } = pendingConflict;
+    setPendingConflict(null);
     const label = choice === "local" ? "místní" : "vzdálenou";
-    if (!window.confirm(`Použít ${label} verzi? Druhá verze zůstane zachovaná v konfliktu až do dokončení této akce.`)) return;
+    dataActionRef.current = true;
     setDataActionBusy(true);
     setError("");
     try {
@@ -99,10 +132,12 @@ function ProfilePage() {
       await refreshAccountData();
     } catch (resolveError) {
       setError(resolveError?.message || "Konflikt se nepodařilo vyřešit. Obě verze zůstaly zachované.");
-    } finally { setDataActionBusy(false); }
+    } finally { dataActionRef.current = false; setDataActionBusy(false); }
   };
 
   const runAuthAction = async (action, successMessage) => {
+    if (authActionRef.current) return null;
+    authActionRef.current = true;
     setAuthBusy(true);
     setAuthMessage("");
     auth.clearError();
@@ -114,11 +149,14 @@ function ProfilePage() {
       // AuthContext exposes a user-facing Czech error without Firebase internals.
       return null;
     } finally {
+      authActionRef.current = false;
       setAuthBusy(false);
     }
   };
 
   const exportBackup = async () => {
+    if (backupActionRef.current) return;
+    backupActionRef.current = true;
     setExporting(true);
     setMessage("");
     setError("");
@@ -139,6 +177,7 @@ function ProfilePage() {
     } catch (exportError) {
       setError(exportError?.message || "Zálohu se nepodařilo připravit. Místní data zůstala zachována.");
     } finally {
+      backupActionRef.current = false;
       setExporting(false);
     }
   };
@@ -156,6 +195,8 @@ function ProfilePage() {
       return;
     }
 
+    if (backupActionRef.current) return;
+    backupActionRef.current = true;
     setReading(true);
     try {
       const parsed = parseLocalBackupJson(await file.text());
@@ -167,18 +208,28 @@ function ProfilePage() {
     } catch (readError) {
       setError(readError?.message || "Zálohu se nepodařilo ověřit. Místní data nebyla změněna.");
     } finally {
+      backupActionRef.current = false;
       setReading(false);
     }
   };
 
-  const restoreBackup = async () => {
-    if (!backup || !summary) return;
+  const restoreBackup = () => {
+    if (!backup || !summary || backupActionRef.current) return;
     if (mode === "merge" && summary.conflictCount > 0) {
       setError("Sloučení není možné: záloha obsahuje ID s jiným obsahem. Zvol nahrazení, pokud chceš celý místní deník nahradit.");
       return;
     }
-    if (mode === "replace" && !window.confirm("Nahrazení trvale přepíše všechny místní úlovky a výpravy obsahem této zálohy. Opravdu pokračovat?")) return;
+    if (mode === "replace") {
+      setConfirmingReplace(true);
+      return;
+    }
+    performRestoreBackup();
+  };
 
+  const performRestoreBackup = async () => {
+    if (!backup || !summary || backupActionRef.current) return;
+    setConfirmingReplace(false);
+    backupActionRef.current = true;
     setRestoring(true);
     setError("");
     setMessage("");
@@ -193,6 +244,7 @@ function ProfilePage() {
     } catch (restoreError) {
       setError(restoreError?.message || "Obnovu se nepodařilo dokončit. Místní data zůstala zachována.");
     } finally {
+      backupActionRef.current = false;
       setRestoring(false);
     }
   };
@@ -249,9 +301,18 @@ function ProfilePage() {
         {error && <p className="profile-error" role="alert">{error}</p>}
       </section>
 
+      <section className="profile-panel profile-progress" aria-labelledby="progress-title">
+        <div className="profile-progress-heading"><div><h2 id="progress-title">Rybářský postup</h2><p>Vychází přímo z aktuálních záznamů v deníku.</p></div><strong>Level {progression.level}</strong></div>
+        <div className="profile-progress-bar" role="progressbar" aria-label="Postup do dalšího levelu" aria-valuemin="0" aria-valuemax="100" aria-valuenow={progression.progressPercent}><span style={{ width: `${progression.progressPercent}%` }} /></div>
+        <p>{progression.xp} XP{progression.nextThreshold ? ` · další level při ${progression.nextThreshold} XP` : " · dosažen nejvyšší level MVP"}</p>
+        <div className="profile-progress-links"><Link to="/album">Druhové album · {formatCount(progression.speciesCount, "druh", "druhy", "druhů")}</Link><Link to="/map">Soukromá mapa úlovků</Link></div>
+        <h3>Milníky · {progression.completedAchievementCount}/{progression.achievements.length}</h3>
+        <ul className="profile-achievements">{progression.achievements.map((achievement) => <li className={achievement.isCompleted ? "is-complete" : ""} key={achievement.id}><span aria-hidden="true">{achievement.isCompleted ? "✓" : "○"}</span><div><strong>{achievement.name}</strong><small>{achievement.description}</small></div></li>)}</ul>
+      </section>
+
       <section className="profile-panel profile-account" aria-labelledby="account-title">
         <h2 id="account-title">Uživatelský účet</h2>
-        <p>Účet v této vývojové verzi používá pouze lokální Firebase emulátor. Přihlášení nemění místní úlovky ani výpravy.</p>
+        <p>{accountEnvironment} Přihlášení nemění místní úlovky ani výpravy.</p>
         {auth.status === "loading" && <p role="status">Ověřuji stav účtu…</p>}
         {auth.status === "unavailable" && <p className="profile-error" role="alert">Přihlášení je dostupné pouze při lokálním spuštění aplikace s emulátorem.</p>}
         {auth.status === "error" && <p className="profile-error" role="alert">{auth.error}</p>}
@@ -282,29 +343,43 @@ function ProfilePage() {
               {dataActionBusy ? "Propojuji…" : "Propojit místní deník s účtem"}
             </button>
           </div>}
-        </div> : auth.status !== "loading" && auth.status !== "unavailable" && <form className="profile-account-form" onSubmit={(event) => {
+        </div> : auth.status !== "loading" && auth.status !== "unavailable" && <form className="profile-account-form" noValidate onSubmit={(event) => {
           event.preventDefault();
+          const validationError = validateAuthForm({ email, password });
+          setAuthFormError(validationError);
+          if (validationError) return;
           runAuthAction(() => auth.signIn(email, password));
         }}>
           <label className="profile-account-field">E-mail
-            <input type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required disabled={authBusy} />
+            <input type="email" autoComplete="email" value={email} onChange={(event) => { setEmail(event.target.value); setAuthFormError(""); }} aria-invalid={Boolean(authFormError)} aria-describedby={authFormError ? "auth-form-error" : undefined} required disabled={authBusy} />
           </label>
           <label className="profile-account-field">Heslo
-            <input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={6} required disabled={authBusy} />
+            <input type="password" autoComplete="current-password" value={password} onChange={(event) => { setPassword(event.target.value); setAuthFormError(""); }} aria-invalid={Boolean(authFormError)} aria-describedby={authFormError ? "auth-form-error" : undefined} minLength={6} required disabled={authBusy} />
           </label>
+          {authFormError && <p id="auth-form-error" className="profile-error" role="alert">{authFormError}</p>}
           <button className="profile-backup-button" type="submit" disabled={authBusy || auth.status === "loading"}>
             {authBusy ? "Přihlašuji…" : "Přihlásit se"}
           </button>
-          <button className="profile-account-secondary" type="button" disabled={authBusy || !email.trim()} onClick={() => runAuthAction(
-            () => auth.register(email, password),
-            (result) => result?.verificationEmailSent
+          {auth.googleAuthEnabled && <>
+            <div className="profile-account-divider"><span>nebo</span></div>
+            <button className="profile-account-secondary" type="button" disabled={authBusy} onClick={() => runAuthAction(auth.signInWithGoogle)}>
+              {authBusy ? "Přihlašuji…" : "Pokračovat přes Google"}
+            </button>
+          </>}
+          <button className="profile-account-secondary" type="button" disabled={authBusy} onClick={() => {
+            const validationError = validateAuthForm({ email, password });
+            setAuthFormError(validationError);
+            if (validationError) return;
+            runAuthAction(() => auth.register(email, password), (result) => result?.verificationEmailSent
               ? "Účet je vytvořený. Ověřovací e-mail byl předán emulátoru."
-              : "Účet je vytvořený. Ověřovací e-mail se nepodařilo předat; můžeš to zkusit znovu po přihlášení.",
-          )}>{authBusy ? "Vytvářím účet…" : "Vytvořit účet"}</button>
-          <button className="profile-account-link" type="button" disabled={authBusy || !email.trim()} onClick={() => runAuthAction(
-            () => auth.resetPassword(email),
-            "Pokud účet existuje, odkaz pro obnovu byl předán lokálnímu emulátoru.",
-          )}>Zapomněl/a jsi heslo?</button>
+              : "Účet je vytvořený. Ověřovací e-mail se nepodařilo předat; můžeš to zkusit znovu po přihlášení.");
+          }}>{authBusy ? "Vytvářím účet…" : "Vytvořit účet"}</button>
+          <button className="profile-account-link" type="button" disabled={authBusy} onClick={() => {
+            const validationError = validateAuthForm({ email, requirePassword: false });
+            setAuthFormError(validationError);
+            if (validationError) return;
+            runAuthAction(() => auth.resetPassword(email), "Pokud účet existuje, odkaz pro obnovu byl předán lokálnímu emulátoru.");
+          }}>Zapomněl/a jsi heslo?</button>
         </form>}
         {auth.error && auth.status === "ready" && <p className="profile-error" role="alert">{auth.error}</p>}
         {authMessage && <p className="profile-feedback" role="status">{authMessage}</p>}
@@ -332,6 +407,9 @@ function ProfilePage() {
         </div>}
         <p className="profile-privacy-note">Odhlášení místní data nemaže. Starší deník bez účtu se přenese jen po výslovném potvrzení výše.</p>
       </section>
+      {confirmingReplace && <ConfirmDialog titleId="replace-backup-title" descriptionId="replace-backup-description" title="Nahradit místní deník?" description="Všechny místní úlovky a výpravy budou nahrazeny obsahem vybrané zálohy. Tuto akci nelze vrátit." busy={restoring} confirmLabel="Nahradit deník" busyLabel="Obnovuji…" confirmClassName="catch-delete-confirm" onCancel={() => setConfirmingReplace(false)} onConfirm={performRestoreBackup} />}
+      {confirmingLink && <ConfirmDialog titleId="link-journal-title" descriptionId="link-journal-description" title="Propojit místní deník s účtem?" description={`Do synchronizační fronty se připraví ${ownerless.catches} úlovků, ${ownerless.trips} výprav a ${ownerless.photos} fotografií. Místní kopie zůstanou v tomto zařízení.`} busy={dataActionBusy} confirmLabel="Propojit deník" busyLabel="Propojuji…" confirmClassName="profile-account-secondary" onCancel={() => setConfirmingLink(false)} onConfirm={performLinkLocalJournal} />}
+      {pendingConflict && <ConfirmDialog titleId="resolve-conflict-title" descriptionId="resolve-conflict-description" title="Vyřešit konflikt synchronizace?" description={`Použije se ${pendingConflict.choice === "local" ? "místní" : "vzdálená"} verze. Druhá verze zůstane zachovaná, dokud se tato akce úspěšně nedokončí.`} busy={dataActionBusy} confirmLabel={`Použít ${pendingConflict.choice === "local" ? "místní" : "vzdálenou"} verzi`} busyLabel="Ukládám…" confirmClassName="profile-account-secondary" onCancel={() => setPendingConflict(null)} onConfirm={performResolveConflict} />}
     </div>
   </Layout>;
 }

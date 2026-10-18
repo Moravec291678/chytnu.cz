@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { initializeApp, deleteApp } from "firebase/app";
-import { browserLocalPersistence, connectAuthEmulator, createUserWithEmailAndPassword, initializeAuth, onAuthStateChanged, sendEmailVerification, sendPasswordResetEmail, signInWithEmailAndPassword, signOut } from "firebase/auth";
+import { browserLocalPersistence, connectAuthEmulator, createUserWithEmailAndPassword, GoogleAuthProvider, initializeAuth, onAuthStateChanged, sendEmailVerification, sendPasswordResetEmail, signInWithCredential, signInWithEmailAndPassword, signOut } from "firebase/auth";
 import "fake-indexeddb/auto";
 import { catchRepository, outboxRepository } from "../src/features/catches/data/catchRepository.js";
 import { createCatchRecord } from "../src/features/catches/data/catchModel.js";
@@ -77,6 +77,15 @@ try {
   });
   assert.equal(restoredUser?.email, email, "browser persistence must restore the signed-in user after client reinitialization");
 
+  await signOut(auth);
+  const googleEmail = `google-emulator-${crypto.randomUUID()}@example.test`;
+  const googleCredential = GoogleAuthProvider.credential(JSON.stringify({
+    sub: `google-${crypto.randomUUID()}`, email: googleEmail, email_verified: true,
+  }));
+  const googleUser = await signInWithCredential(auth, googleCredential);
+  assert.equal(googleUser.user.email, googleEmail);
+  assert.equal(googleUser.user.providerData[0]?.providerId, "google.com");
+
   const offlineApp = initializeApp({ apiKey: "demo-api-key", authDomain: "localhost", projectId }, `auth-offline-${crypto.randomUUID()}`);
   const offlineAuth = initializeAuth(offlineApp, { persistence: browserLocalPersistence });
   connectAuthEmulator(offlineAuth, "http://127.0.0.1:9098", { disableWarnings: true });
@@ -89,7 +98,7 @@ try {
   const afterAuth = await snapshotLocalData();
   assert.deepEqual(afterAuth, beforeAuth, "auth actions must not alter local catches, trips, or outbox");
   await signOut(auth);
-  console.log("Auth Emulator passed: registration, verification/reset email requests, sign-in, invalid credentials, session restoration, sign-out, unavailable-emulator error, local records/outbox isolation.");
+  console.log("Auth Emulator passed: email registration/login/verification/reset, Google credential flow, invalid credentials, session restoration, sign-out, unavailable-emulator error, and local data isolation.");
 } finally {
   await deleteApp(app);
 }

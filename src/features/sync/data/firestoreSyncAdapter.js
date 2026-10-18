@@ -14,18 +14,19 @@ import {
   connectFirestoreEmulator,
 } from "firebase/firestore";
 import { firebaseAuth, getLocalFirebaseApp } from "../../auth/data/firebaseAuth.js";
+import { getBackendConfiguration } from "../../auth/data/backendConfig.js";
 import { SyncPortError } from "./syncPort.js";
 
 const EMULATOR_HOST = "127.0.0.1";
 const EMULATOR_PORT = 8080;
 const GLOBAL_CONNECTIONS = Symbol.for("chytnucz.firebaseEmulatorConnections");
 
-function getFirestoreEmulator() {
+function getConfiguredFirestore() {
   const app = getLocalFirebaseApp();
   globalThis[GLOBAL_CONNECTIONS] ??= new Set();
   const db = getFirestore(app);
   const key = `firestore:${app.name}`;
-  if (!globalThis[GLOBAL_CONNECTIONS].has(key)) {
+  if (getBackendConfiguration().mode === "emulator" && !globalThis[GLOBAL_CONNECTIONS].has(key)) {
     connectFirestoreEmulator(db, EMULATOR_HOST, EMULATOR_PORT);
     globalThis[GLOBAL_CONNECTIONS].add(key);
   }
@@ -92,6 +93,7 @@ export function toRemoteRecord(entityType, record, ownerId) {
     locationName: requireValue(record.locationName, ""),
     waterNumber: requireValue(record.waterNumber, null),
     gpsLocation: requireValue(record.gpsLocation, ""),
+    coordinates: requireValue(record.coordinates, null),
     waterDepthM: requireValue(record.waterDepthM, null),
     bottomType: requireValue(record.bottomType, null),
     tripId: requireValue(record.tripId, null),
@@ -182,7 +184,7 @@ function makePortError(error) {
 }
 
 export function createFirestoreSyncAdapter({ now = () => new Date().toISOString(), db: suppliedDb, getCurrentUserId } = {}) {
-  const db = suppliedDb ?? getFirestoreEmulator();
+  const db = suppliedDb ?? getConfiguredFirestore();
   const currentUserId = getCurrentUserId ?? (() => firebaseAuth.currentUserId());
 
   return {

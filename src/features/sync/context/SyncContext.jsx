@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "../../auth/context/authContextValue.js";
 import { firebaseAuth } from "../../auth/data/firebaseAuth.js";
-import { createFirestoreSyncAdapter } from "../data/firestoreSyncAdapter.js";
-import { createFirebasePhotoStorage } from "../data/firebasePhotoStorage.js";
 import { createSyncPort } from "../data/syncPort.js";
 import { createSyncService } from "../data/syncService.js";
 import { readSyncSummary } from "../data/localSyncRepository.js";
@@ -47,6 +45,10 @@ export function SyncProvider({ children }) {
     setState((previous) => ({ ...previous, status: "syncing", error: "" }));
     try {
       if (!serviceRef.current) {
+        const [{ createFirestoreSyncAdapter }, { createFirebasePhotoStorage }] = await Promise.all([
+          import("../data/firestoreSyncAdapter.js"),
+          import("../data/firebasePhotoStorage.js"),
+        ]);
         const port = createSyncPort(createFirestoreSyncAdapter());
         serviceRef.current = createSyncService({ port, photoStorage: createFirebasePhotoStorage(), getCurrentOwnerId: () => {
           try { return firebaseAuth.currentUserId(); } catch { return null; }

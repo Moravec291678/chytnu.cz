@@ -20,9 +20,11 @@ Po přihlášení se synchronizují pouze záznamy vytvořené pro toto UID. Sta
 - Přechodná chyba zvyšuje retry delay exponenciálně s horní hranicí 30 minut. Neodeslaná operace zůstává ve frontě a poslední chyba je viditelná v Profilu. Připojení ani přijetí HTTP požadavku samo o sobě není potvrzením.
 - Změna účtu během požadavku zastaví další čtení/zápisy a klient potvrdí pouze účet, který zůstal aktivní.
 
-## Datová projekce a fotografie
+## Datová projekce, GPS a fotografie
 
 Firestore používá cesty `/users/{uid}/catches/{catchId}` a `/users/{uid}/trips/{tripId}`. Vlastnictví a ID jsou ověřena pravidly. Catch může odkazovat pouze na existující výpravu téhož vlastníka. Lokální `sync.revision` je oddělená od serverové revize.
+
+Volitelná přesná poloha se přenáší jako `coordinates: { latitude, longitude }` nebo `null`. Pravidla přijmou jen konečná čísla v rozsahu zeměpisné šířky `-90..90` a délky `-180..180`; starší textové `gpsLocation` zůstává kvůli kompatibilitě. Nejednoznačný starší text se automaticky nepřevádí. Souřadnice jsou součástí soukromého dokumentu vlastníka a nevzniká žádná veřejná mapová kolekce. Album druhů, XP, levely, achievementy a mapové body jsou deterministické projekce lokálně viditelných Catch/Trip a samostatně se nesynchronizují.
 
 Do Firestore se posílají pouze metadata fotografie (ID, název, MIME, velikost, hash a soukromá Storage cesta). Blob zůstává v IndexedDB; synchronizátor jej kopíruje do soukromého Storage pouze pro Catch s ověřeným `ownerId` shodným s právě přihlášeným UID. Ownerless data ani jejich fotografie se nepřenášejí.
 
@@ -36,7 +38,7 @@ Storage Rules vyžadují přihlášeného vlastníka, odpovídající Catch meta
 
 - `npm test` obsahuje testy in-memory adapteru a služby: push/pull, explicitní změna vlastníka, řešení Catch i Trip konfliktu, retry, legacy záznamy, lokální Blob, změna během čekajícího ACK a cursor.
 - `npm run test:rules` ověřuje odmítnutí přístupu bez vlastníka, napříč vlastníky a přímých zápisů mimo receipt/cursor protokol, a samostatná Storage pravidla.
-- `npm run test:sync` ověřuje skutečný SDK/Auth/Firestore tok výprava → úlovek, vazbu trip, metadata-only fotografii, ponechání lokálního Blobu, opakování a tombstone v emulátoru.
+- `npm run test:sync` ověřuje skutečný SDK/Auth/Firestore tok výprava → úlovek včetně strukturovaných souřadnic, vazbu trip, metadata-only fotografii, ponechání lokálního Blobu, opakování, odmítnutí GPS mimo rozsah a tombstone v emulátoru.
 - `npm run test:photos` ověřuje Storage upload a obsah, opakování po výpadku před uploadem i po uploadu při selhání úklidu, druhou izolovanou IndexedDB, Blob integrity, nahrazení/odstranění fotky, odhlášení, explicitní ownerless migraci a smazání Catch.
 
 Emulátorové výsledky neprokazují produkční fakturaci, region, indexy/kvóty, zálohy Storage objektů, skutečné e-maily, mobilní background sync ani chování při dlouhém síťovém přerušení na reálných zařízeních. Produkční projekt, region/fakturace, object backup/retence a migrace nejsou povoleny tímto nastavením.

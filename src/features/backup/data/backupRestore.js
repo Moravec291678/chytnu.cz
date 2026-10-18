@@ -32,6 +32,16 @@ function requireOptionalNumber(value, label) {
   }
 }
 
+function requireCoordinates(value, label) {
+  if (value === undefined || value === null) return;
+  if (!isRecord(value)
+    || Object.keys(value).some((key) => !["latitude", "longitude"].includes(key))
+    || typeof value.latitude !== "number" || value.latitude < -90 || value.latitude > 90
+    || typeof value.longitude !== "number" || value.longitude < -180 || value.longitude > 180) {
+    fail(`Záloha obsahuje neplatné souřadnice v poli ${label}.`);
+  }
+}
+
 function decodeBase64(value, label) {
   if (typeof value !== "string" || value.length % 4 !== 0 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value)) {
     fail(`Fotografii ${label} se nepodařilo bezpečně dekódovat.`);
@@ -90,6 +100,7 @@ function decodeCatch(record, tripIds) {
     fail(`Úlovek ${record.id} odkazuje na výpravu, která v záloze není.`);
   }
   if (record.bottomType !== null && typeof record.bottomType !== "string") fail(`Úlovek ${record.id} obsahuje neplatný typ dna.`);
+  requireCoordinates(record.coordinates, `coordinates úlovku ${record.id}`);
   if (record.method !== null && (!isRecord(record.method) || typeof record.method.key !== "string" || typeof record.method.label !== "string")) {
     fail(`Úlovek ${record.id} obsahuje neplatnou metodu.`);
   }
@@ -178,14 +189,25 @@ export async function recordsAreEqual(left, right) {
   return JSON.stringify(stableLeft) === JSON.stringify(stableRight);
 }
 
-function recordsMatchWithinTransaction(left, right) {
+function normalizeCatchForBackupComparison(record) {
+  return {
+    ...record,
+    photos: (record.photos ?? []).map((photo) => ({
+      ...photo,
+      photoStatus: photo.photoStatus ?? (photo.blob ? "local-only" : "metadata-only"),
+    })),
+  };
+}
+
+function recordsMatchWithinTransaction(left, right, entityType) {
   function comparable(value) {
     if (value instanceof Blob) return { $blob: value.type, size: value.size };
     if (Array.isArray(value)) return value.map(comparable);
     if (isRecord(value)) return Object.fromEntries(Object.keys(value).sort().map((key) => [key, comparable(value[key])]));
     return value;
   }
-  return JSON.stringify(comparable(left)) === JSON.stringify(comparable(right));
+  const normalize = entityType === "catch" ? normalizeCatchForBackupComparison : (record) => record;
+  return JSON.stringify(comparable(normalize(left))) === JSON.stringify(comparable(normalize(right)));
 }
 
 export async function summarizeLocalBackupRestore(backup, current) {
@@ -193,12 +215,13 @@ export async function summarizeLocalBackupRestore(backup, current) {
   const currentTrips = new Map(current.trips.map((record) => [record.id, record]));
   let unchanged = 0;
   let conflicts = 0;
-  for (const [incoming, existing] of [
-    ...backup.catches.map((record) => [record, currentCatches.get(record.id)]),
-    ...backup.trips.map((record) => [record, currentTrips.get(record.id)]),
+  for (const [entityType, incoming, existing] of [
+    ...backup.catches.map((record) => ["catch", record, currentCatches.get(record.id)]),
+    ...backup.trips.map((record) => ["trip", record, currentTrips.get(record.id)]),
   ]) {
     if (!existing) continue;
-    if (await recordsAreEqual(incoming, existing)) unchanged += 1;
+    const normalize = entityType === "catch" ? normalizeCatchForBackupComparison : (record) => record;
+    if (await recordsAreEqual(normalize(incoming), normalize(existing))) unchanged += 1;
     else conflicts += 1;
   }
   return {
@@ -255,13 +278,13 @@ export async function restoreLocalBackup(backup, mode, openDatabase = openLocalD
             for (const record of backup.catches) {
               const existing = catchMap.get(record.id);
               if (!existing) catchesToWrite.push(record);
-              else if (!recordsMatchWithinTransaction(record, existing)) conflicts.push(`úlovek ${record.id}`);
+              else if (!recordsMatchWithinTransaction(record, existing, "catch")) conflicts.push(`úlovek ${record.id}`);
               else skippedCount += 1;
             }
             for (const record of backup.trips) {
               const existing = tripMap.get(record.id);
               if (!existing) tripsToWrite.push(record);
-              else if (!recordsMatchWithinTransaction(record, existing)) conflicts.push(`výprava ${record.id}`);
+              else if (!recordsMatchWithinTransaction(record, existing, "trip")) conflicts.push(`výprava ${record.id}`);
               else skippedCount += 1;
             }
             if (conflicts.length) fail(`Sloučení zastaveno: stejná ID mají odlišný obsah (${conflicts.slice(0, 3).join(", ")}${conflicts.length > 3 ? "…" : ""}). Zvol nahrazení jen tehdy, pokud chceš celý místní deník nahradit zálohou.`);
@@ -276,7 +299,7 @@ export async function restoreLocalBackup(backup, mode, openDatabase = openLocalD
             tripsToDelete = existingTrips.filter((record) => !backupTripIds.has(record.id));
             catchesToWrite = backup.catches.filter((record) => {
               const existing = catchMap.get(record.id);
-              if (existing && recordsMatchWithinTransaction(record, existing)) {
+              if (existing && recordsMatchWithinTransaction(record, existing, "catch")) {
                 skippedCount += 1;
                 return false;
               }
@@ -284,7 +307,7 @@ export async function restoreLocalBackup(backup, mode, openDatabase = openLocalD
             });
             tripsToWrite = backup.trips.filter((record) => {
               const existing = tripMap.get(record.id);
-              if (existing && recordsMatchWithinTransaction(record, existing)) {
+              if (existing && recordsMatchWithinTransaction(record, existing, "trip")) {
                 skippedCount += 1;
                 return false;
               }

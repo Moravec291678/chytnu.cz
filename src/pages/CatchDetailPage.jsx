@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useLocation } from "react-router-dom";
 import Layout from "../shared/layout/Layout";
 import { useCatches } from "../features/catches/context/useCatches";
 import { useTrips } from "../features/trips/context/useTrips";
+import { formatBottomType } from "../features/catches/data/catchFormatting";
+import ConfirmDialog from "../shared/components/ConfirmDialog";
 import "./AddCatchPage.css";
 
 function formatDate(value) {
@@ -25,6 +27,7 @@ function CatchDetailPage() {
   const [photos, setPhotos] = useState([]);
   const [error, setError] = useState("");
   const [deleting, setDeleting] = useState(false);
+  const deletingRef = useRef(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   useEffect(() => {
@@ -39,7 +42,8 @@ function CatchDetailPage() {
   }, [item]);
 
   const handleDelete = async () => {
-    if (deleting) return;
+    if (deletingRef.current) return;
+    deletingRef.current = true;
     setDeleting(true);
     setError("");
     try {
@@ -47,9 +51,11 @@ function CatchDetailPage() {
       navigate("/", { replace: true });
     } catch (deleteError) {
       setError(deleteError.message || "Úlovek se nepodařilo smazat.");
+      deletingRef.current = false;
       setDeleting(false);
     }
   };
+  const closeDeleteDialog = useCallback(() => setConfirmingDelete(false), []);
 
   if (state.loading) return <Layout><p>Načítám úlovek…</p></Layout>;
   if (!item) return <Layout><section className="add-catch-section"><h1>Úlovek nenalezen</h1><p>Mohl být smazán nebo uložené místní úložiště není dostupné.</p><Link to="/">Zpět do deníku</Link></section></Layout>;
@@ -59,14 +65,14 @@ function CatchDetailPage() {
     ["Obvod", valueLabel(item.girthCm, "cm")], ["Délka boje", valueLabel(item.fightMinutes, "min")],
     ["Lokalita", item.locationName], ["Číslo revíru", item.waterNumber],
     ["GPS poloha", item.gpsLocation], ["Hloubka", valueLabel(item.waterDepthM, "m")],
-    ["Typ dna", item.bottomType], ["Metoda", item.method?.label],
+    ["Typ dna", formatBottomType(item.bottomType)], ["Metoda", item.method?.label],
     ["Výsledek", item.result === "released" ? "Puštěno zpět" : item.result === "kept" ? "Ponecháno" : null],
     ["Nástrahy", item.baits?.map((bait) => bait.label).join(", ")],
     ["Výprava", trip?.title],
   ].filter(([, value]) => value !== null && value !== undefined && value !== "");
 
   return <Layout>
-    <main className="add-catch-page">
+    <div className="add-catch-page">
       <header className="add-catch-header">
         <Link to="/">← Deník</Link>
         <h1>{item.species}</h1>
@@ -81,8 +87,8 @@ function CatchDetailPage() {
       {item.isFavorite && <p>⭐ Oblíbený úlovek</p>}
       {trip && <p><Link to={`/trips/${trip.id}`}>Otevřít výpravu: {trip.title}</Link></p>}
       <div className="catch-detail-actions"><Link className="save-catch-button" to={`/catch/${item.id}/edit`}>Upravit úlovek</Link><button className="photo-action-button" type="button" onClick={() => setConfirmingDelete(true)} disabled={deleting}>{deleting ? "Mažu…" : "Smazat úlovek"}</button></div>
-      {confirmingDelete && <div className="catch-confirm-backdrop"><section className="catch-confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="delete-catch-title" aria-describedby="delete-catch-description"><h2 id="delete-catch-title">Smazat úlovek?</h2><p id="delete-catch-description">Tato akce smaže úlovek i jeho lokálně uloženou fotografii. Nelze ji vrátit.</p><div className="catch-detail-actions"><button className="photo-action-button" type="button" onClick={() => setConfirmingDelete(false)} disabled={deleting}>Zrušit</button><button className="catch-delete-confirm" type="button" onClick={handleDelete} disabled={deleting}>{deleting ? "Mažu…" : "Smazat úlovek"}</button></div></section></div>}
-    </main>
+      {confirmingDelete && <ConfirmDialog titleId="delete-catch-title" descriptionId="delete-catch-description" title="Smazat úlovek?" description="Tato akce smaže úlovek i jeho lokálně uloženou fotografii. Nelze ji vrátit." busy={deleting} confirmLabel="Smazat úlovek" busyLabel="Mažu…" confirmClassName="catch-delete-confirm" onCancel={closeDeleteDialog} onConfirm={handleDelete} />}
+    </div>
   </Layout>;
 }
 

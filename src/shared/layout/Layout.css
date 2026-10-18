@@ -62,6 +62,16 @@
   color: var(--gr);
 }
 
+.nav-item-active .nav-label {
+  color: var(--gr);
+}
+
+.nav-item:focus-visible,
+.nav-fab:focus-visible {
+  outline: 2px solid var(--bl);
+  outline-offset: 2px;
+}
+
 /* FAB — prostřední + tlačítko */
 .nav-fab {
   width: 54px;

@@ -6,7 +6,7 @@ import { getBiggestCatch } from "../../home/utils/profileStats.js";
 const minimalForm = {
   speciesKey: "carp", catchDate: "2026-10-16", catchTime: "12:30",
   weightKg: "", lengthCm: "", girthCm: "", fightDurationMin: "", depthM: "", waterNumber: "",
-  locationName: "", gpsLocation: "", bottomType: "", fishingMethod: "", baits: [], photos: [],
+  locationName: "", gpsLocation: "", coordinates: null, bottomType: "", fishingMethod: "", baits: [], photos: [],
   notes: "", isFavorite: false, resultKey: "released",
 };
 
@@ -30,7 +30,24 @@ test("record has stable local-first metadata and preserves optional nulls", () =
   assert.equal(record.weightKg, null);
   assert.equal(record.lengthCm, null);
   assert.equal(record.species, "Kapr");
+  assert.equal(record.coordinates, null);
   assert.ok(record.createdAt && record.updatedAt && record.caughtAt);
+});
+
+test("record keeps structured coordinates and only migrates unambiguous legacy text", () => {
+  const species = { key: "carp", label: "Kapr" };
+  const structured = createCatchRecord({
+    ...minimalForm,
+    gpsLocation: "ručně popsané místo",
+    coordinates: { latitude: 50.087, longitude: 14.421 },
+  }, species, []);
+  assert.deepEqual(structured.coordinates, { latitude: 50.087, longitude: 14.421 });
+  assert.deepEqual(catchToForm(structured).coordinates, structured.coordinates);
+
+  const migrated = createCatchRecord({ ...minimalForm, gpsLocation: "50.087, 14.421" }, species, []);
+  assert.deepEqual(migrated.coordinates, { latitude: 50.087, longitude: 14.421 });
+  const ambiguous = createCatchRecord({ ...minimalForm, gpsLocation: "50,087; 14,421" }, species, []);
+  assert.equal(ambiguous.coordinates, null);
 });
 
 test("editing keeps the original id and creation time", () => {

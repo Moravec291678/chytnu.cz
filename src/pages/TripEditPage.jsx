@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import Layout from "../shared/layout/Layout";
 import { DEFAULT_METHODS } from "../shared/constants/constants";
@@ -11,8 +11,8 @@ function TripEditPage() {
   const navigate = useNavigate();
   const { state, updateTrip } = useTrips();
   const trip = state.trips.find((item) => item.id === id);
-  if (state.loading) return <Layout><main className="trip-form-page"><p>Načítám výpravu…</p></main></Layout>;
-  if (!trip) return <Layout><main className="trip-form-page"><h1>Výprava nenalezena</h1><Link to="/trips">Zpět na výpravy</Link></main></Layout>;
+  if (state.loading) return <Layout><div className="trip-form-page"><p>Načítám výpravu…</p></div></Layout>;
+  if (!trip) return <Layout><div className="trip-form-page"><h1>Výprava nenalezena</h1><Link to="/trips">Zpět na výpravy</Link></div></Layout>;
   return <TripEditForm key={trip.id} trip={trip} updateTrip={updateTrip} navigate={navigate} />;
 }
 
@@ -20,10 +20,12 @@ function TripEditForm({ trip, updateTrip, navigate }) {
   const [values, setValues] = useState(() => tripToForm(trip));
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
   const update = (key, value) => setValues((current) => ({ ...current, [key]: value }));
   const submit = async (event) => {
     event.preventDefault();
-    if (saving) return;
+    if (savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     setError("");
     try {
@@ -31,9 +33,9 @@ function TripEditForm({ trip, updateTrip, navigate }) {
       navigate(`/trips/${trip.id}`, { replace: true });
     } catch (saveError) {
       setError(saveError?.message || "Výpravu se nepodařilo upravit.");
-    } finally { setSaving(false); }
+    } finally { savingRef.current = false; setSaving(false); }
   };
-  return <Layout><main className="trip-form-page">
+  return <Layout><div className="trip-form-page">
     <Link to={`/trips/${trip.id}`} className="trip-back-link">← Detail výpravy</Link>
     <header><h1>Upravit výpravu</h1><p>Úlovky a jejich vazby zůstanou zachované.</p></header>
     <form onSubmit={submit}>
@@ -45,7 +47,7 @@ function TripEditForm({ trip, updateTrip, navigate }) {
       {error && <p className="trip-form-error" role="alert">{error}</p>}
       <button className="save-catch-button" type="submit" disabled={saving}>{saving ? "Ukládám…" : "Uložit změny"}</button>
     </form>
-  </main></Layout>;
+  </div></Layout>;
 }
 
 export default TripEditPage;

@@ -849,6 +849,9 @@ textarea {
 .catch-detail-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .catch-detail-actions a { display: flex; align-items: center; justify-content: center; text-decoration: none; }
 .catch-form-error { color: #ff8b8b; }
+.gps-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.gps-actions .photo-action-button { min-height: 42px; }
+.gps-message { display: block; margin-top: 6px; color: var(--gr); line-height: 1.4; }
 .catch-gallery-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .catch-gallery-item { overflow: hidden; border-radius: 14px; border: 1px solid var(--bd); color: var(--t1); text-decoration: none; background: var(--s1); }
 .catch-gallery-item img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; }

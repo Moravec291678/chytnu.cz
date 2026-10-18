@@ -48,6 +48,7 @@ function makeCatch(id, ownerId, tripId = null) {
     locationName: "Labe",
     waterNumber: null,
     gpsLocation: "50.0000, 14.0000",
+    coordinates: { latitude: 50, longitude: 14 },
     waterDepthM: null,
     bottomType: null,
     tripId,

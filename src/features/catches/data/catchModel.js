@@ -1,3 +1,5 @@
+import { normalizeCoordinates, parseCoordinateText } from "./coordinates.js";
+
 export function parseOptionalNumber(value, label, errors, { max = Number.MAX_SAFE_INTEGER } = {}) {
   if (value === null || value === undefined || String(value).trim() === "") return null;
   const normalized = String(value).trim().replace(",", ".");
@@ -8,7 +10,6 @@ export function parseOptionalNumber(value, label, errors, { max = Number.MAX_SAF
   }
   return number;
 }
-
 export function validateCatchForm(data) {
   const errors = {};
   if (!data.speciesKey) errors.species = "Vyber druh ryby.";
@@ -50,6 +51,7 @@ export function createCatchRecord(data, species, methods, existing = null, baitC
     locationName: data.locationName.trim(),
     waterNumber: numeric(data.waterNumber),
     gpsLocation: data.gpsLocation.trim(),
+    coordinates: normalizeCoordinates(data.coordinates) ?? parseCoordinateText(data.gpsLocation),
     waterDepthM: numeric(data.depthM),
     bottomType: data.bottomType || null,
     caughtAt,
@@ -85,7 +87,7 @@ export function catchToForm(record) {
     locationName: record.locationName ?? "", waterNumber: number(record.waterNumber),
     catchDate: `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`,
     catchTime: `${pad(date.getHours())}:${pad(date.getMinutes())}`,
-    gpsLocation: record.gpsLocation ?? "", depthM: number(record.waterDepthM),
+    gpsLocation: record.gpsLocation ?? "", coordinates: record.coordinates ?? null, depthM: number(record.waterDepthM),
     bottomType: record.bottomType ?? "", speciesKey: record.speciesKey,
     resultKey: record.result ?? "unspecified", fishingMethod: record.method?.key ?? "",
     photos: record.photos ?? [], baits: (record.baits ?? []).map((bait) => bait.key),

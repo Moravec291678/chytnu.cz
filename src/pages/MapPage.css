@@ -1,0 +1,16 @@
+.catch-map-page { padding: 20px 16px 32px; }
+.catch-map-header { margin-bottom: 16px; }
+.catch-map-header > a { color: var(--t2); font-size: 13px; text-decoration: none; }
+.catch-map-header > a:focus-visible { outline: 2px solid var(--bl); outline-offset: 2px; }
+.catch-map-header h1 { margin-top: 10px; font-size: 24px; }
+.catch-map-header p { max-width: 620px; margin-top: 5px; color: var(--t2); font-size: 13px; }
+.catch-map-canvas { width: 100%; min-height: 430px; overflow: hidden; border: 1px solid var(--bd); border-radius: 14px; background: var(--s2); }
+.catch-map-empty { padding: 22px 16px; border: 1px solid var(--bd); border-radius: 14px; background: var(--s1); }
+.catch-map-empty h2 { font-size: 16px; }
+.catch-map-empty p, .catch-map-note, .catch-map-count, .catch-map-error { margin-top: 8px; color: var(--t2); font-size: 12px; }
+.catch-map-error { padding: 12px; border: 1px solid var(--bd); border-radius: 10px; background: var(--s1); }
+.catch-map-popup { display: grid; gap: 4px; min-width: 155px; color: #17231a; }
+.catch-map-popup span { font-size: 12px; }
+.catch-map-popup button { justify-self: start; min-height: 34px; margin-top: 4px; padding: 0 8px; border: 1px solid #aec5b4; border-radius: 7px; background: #eff8f0; color: #245b34; font: inherit; font-weight: 700; cursor: pointer; }
+.catch-map-popup button:focus-visible { outline: 2px solid #3269c8; outline-offset: 2px; }
+@media (max-width: 520px) { .catch-map-canvas { min-height: 58vh; } }

@@ -25,6 +25,20 @@ service cloud.firestore {
       );
     }
 
+    function validCoordinates(value) {
+      return value == null || (
+        value is map
+        && value.keys().hasAll(['latitude', 'longitude'])
+        && value.keys().hasOnly(['latitude', 'longitude'])
+        && value.latitude is number
+        && value.latitude >= -90
+        && value.latitude <= 90
+        && value.longitude is number
+        && value.longitude >= -180
+        && value.longitude <= 180
+      );
+    }
+
     function validPhotoMetadata(value, userId, catchId) {
       return value is map
         && value.keys().hasAll(['id', 'name', 'type', 'size'])
@@ -86,6 +100,7 @@ service cloud.firestore {
         && data.locationName is string
         && optionalNumber(data.waterNumber, 99999999)
         && data.gpsLocation is string
+        && (!data.keys().hasAny(['coordinates']) || validCoordinates(data.coordinates))
         && optionalNumber(data.waterDepthM, 2000)
         && optionalString(data.bottomType)
         && (data.tripId == null || (
@@ -107,7 +122,7 @@ service cloud.firestore {
         && data.keys().hasOnly([
           'schemaVersion', 'id', 'ownerId', 'entityType', 'createdAt', 'updatedAt', 'caughtAt',
           'species', 'speciesKey', 'speciesLatin', 'weightKg', 'lengthCm', 'girthCm', 'fightMinutes',
-          'locationName', 'waterNumber', 'gpsLocation', 'waterDepthM', 'bottomType', 'tripId', 'method',
+          'locationName', 'waterNumber', 'gpsLocation', 'coordinates', 'waterDepthM', 'bottomType', 'tripId', 'method',
           'baits', 'result', 'photos', 'notes', 'isFavorite', 'deleted', 'deletedAt', 'serverRevision',
           'syncSequence', 'lastOperationId', 'clientLocalRevision', 'operationDigest', 'lastReceiptId', 'photoState'
         ]);

@@ -8,7 +8,7 @@ function offlineShell() {
     apply: 'build',
     generateBundle(_, bundle) {
       const generated = Object.values(bundle).map((item) => `/${item.fileName}`);
-      const files = ['/', '/index.html', '/favicon.svg', '/icons.svg', '/manifest.webmanifest', ...generated];
+      const files = ['/', '/index.html', '/favicon.svg', '/icons.svg', '/icon-192.png', '/icon-512.png', '/manifest.webmanifest', ...generated];
       const version = createHash('sha256').update(generated.sort().join('|')).digest('hex').slice(0, 16);
       const source = `const CACHE = ${JSON.stringify(`chytnucz-shell-${version}`)};
 const FILES = ${JSON.stringify(files)};
@@ -22,7 +22,7 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(fetch(request).then((response) => { const copy = response.clone(); caches.open(CACHE).then((cache) => cache.put('/index.html', copy)); return response; }).catch(() => caches.match('/index.html')));
     return;
   }
-  if (url.pathname.startsWith('/assets/') || ['/favicon.svg', '/icons.svg', '/manifest.webmanifest'].includes(url.pathname)) {
+  if (url.pathname.startsWith('/assets/') || ['/favicon.svg', '/icons.svg', '/icon-192.png', '/icon-512.png', '/manifest.webmanifest'].includes(url.pathname)) {
     event.respondWith(caches.match(request).then((cached) => cached || fetch(request)));
   }
 });`;

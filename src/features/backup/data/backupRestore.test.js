@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { LOCAL_BACKUP_FORMAT, LOCAL_BACKUP_VERSION } from "./backupFormat.js";
+import { createLocalBackupDocument } from "./backupFormat.js";
 import {
   parseLocalBackupJson,
   parseLocalBackupDocument,
@@ -24,7 +25,7 @@ function makeCatch(id = "catch-1", tripId = "trip-1") {
     schemaVersion: 1, id, createdAt: time, updatedAt: time, caughtAt: time,
     species: "Kapr obecný", speciesKey: "commonCarp", speciesLatin: "Cyprinus carpio",
     weightKg: null, lengthCm: 72, girthCm: null, fightMinutes: null, locationName: "Labe",
-    waterNumber: null, gpsLocation: "", waterDepthM: null, bottomType: null, tripId,
+    waterNumber: null, gpsLocation: "", coordinates: null, waterDepthM: null, bottomType: null, tripId,
     method: null, baits: [{ key: "corn", label: "Kukuřice", isCustom: false }], result: "released",
     photos: [], notes: "Ranní záběr", isFavorite: false, sync: { status: "local", revision: 1 },
   };
@@ -127,6 +128,20 @@ test("empty and related catch/trip backups validate and retain nullable measurem
   assert.equal(backup.catches[0].weightKg, null);
 });
 
+test("backup accepts bounded structured coordinates and rejects malformed values", () => {
+  const valid = makeBackup(makeDocument({ catches: [{
+    ...makeCatch(),
+    coordinates: { latitude: 50.087, longitude: 14.421 },
+  }] }));
+  assert.deepEqual(valid.catches[0].coordinates, { latitude: 50.087, longitude: 14.421 });
+  assert.throws(() => makeBackup(makeDocument({ catches: [{
+    ...makeCatch(), coordinates: { latitude: 91, longitude: 14.421 },
+  }] })), /neplatné souřadnice/);
+  assert.throws(() => makeBackup(makeDocument({ catches: [{
+    ...makeCatch(), coordinates: { latitude: 50, longitude: 14, precision: "exact" },
+  }] })), /neplatné souřadnice/);
+});
+
 test("a backup exported after cloud sync restores as safe ownerless local data", () => {
   const syncedTrip = { ...makeTrip(), ownerId: "remote-owner", sync: { status: "metadata-synced", revision: 4, serverRevision: 7 } };
   const syncedCatch = { ...makeCatch(), ownerId: "remote-owner", sync: { status: "metadata-synced", revision: 5, serverRevision: 9, photoStatus: "none" } };
@@ -190,6 +205,31 @@ test("same IDs with equal or different content are summarized separately", async
   const conflict = await summarizeLocalBackupRestore(changed, { catches: exact.catches, trips: exact.trips });
   assert.equal(conflict.conflictCount, 1);
   assert.equal(await recordsAreEqual(backup.catches[0], exact.catches[0]), true);
+});
+
+test("a freshly exported local catch with a photo can be merged back idempotently", async () => {
+  const photoData = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jCioAAAAASUVORK5CYII=";
+  const blob = new Blob([Uint8Array.from(atob(photoData), (character) => character.charCodeAt(0))], { type: "image/png" });
+  const sourceCatch = {
+    ...makeCatch(),
+    ownerId: null,
+    photos: [{ id: "photo-roundtrip", name: "kapr.png", type: "image/png", blob }],
+    sync: { status: "local", revision: 2, photoStatus: "local-only" },
+  };
+  const sourceTrip = { ...makeTrip(), ownerId: null };
+  const parsed = parseLocalBackupDocument(await createLocalBackupDocument({
+    catches: [sourceCatch], trips: [sourceTrip], createdAt: new Date(time),
+  }));
+
+  const summary = await summarizeLocalBackupRestore(parsed, { catches: [sourceCatch], trips: [sourceTrip] });
+  assert.equal(summary.unchangedCount, 2);
+  assert.equal(summary.conflictCount, 0);
+
+  const db = makeDatabase({ catches: [sourceCatch], trips: [sourceTrip] });
+  const result = await restoreLocalBackup(parsed, "merge", async () => db);
+  assert.equal(result.skipped, 2);
+  assert.equal(result.catches, 0);
+  assert.equal(result.trips, 0);
 });
 
 test("merge is idempotent and a different same-ID record aborts before writing", async () => {

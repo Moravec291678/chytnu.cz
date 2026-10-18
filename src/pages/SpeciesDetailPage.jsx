@@ -3,6 +3,7 @@ import { useCatches } from "../features/catches/context/useCatches";
 import Layout from "../shared/layout/Layout";
 import CatchCard from "../features/catches/components/CatchCard";
 import { Link } from "react-router-dom";
+import { selectSpeciesHighlight } from "../features/species/data/speciesSummary";
 import "./SpeciesDetailPage.css";
 
 function SpeciesDetailPage() {
@@ -11,15 +12,15 @@ function SpeciesDetailPage() {
   const selectedSpecies = state.catches.filter((item) => {
     return item.speciesKey === speciesKey;
   });
-  const biggest = selectedSpecies.filter((item) => Number.isFinite(item.weightKg)).reduce((a, b) => a.weightKg > b.weightKg ? a : b, selectedSpecies[0]);
+  const biggest = selectSpeciesHighlight(selectedSpecies);
   const navigate = useNavigate();
-  if (!biggest) return <Layout><div className="species-hero"><button className="species-hero-back" onClick={() => navigate(-1)}>←</button><h1>Druh zatím nemá úlovky</h1><Link to="/add">Přidat úlovek</Link></div></Layout>;
+  if (!biggest) return <Layout><div className="species-hero"><button type="button" className="species-hero-back" aria-label="Zpět" onClick={() => navigate(-1)}>←</button><h1>Druh zatím nemá úlovky</h1><Link to="/add">Přidat úlovek</Link></div></Layout>;
   return (
     <Layout>
       <div className="species-hero">
         <div className="species-hero-fish">🐟</div>
         <div className="species-hero-nav">
-          <button className="species-hero-back" onClick={() => navigate(-1)}>
+          <button type="button" className="species-hero-back" aria-label="Zpět" onClick={() => navigate(-1)}>
             ←
           </button>
         </div>
@@ -41,18 +42,18 @@ function SpeciesDetailPage() {
 
         <div className="species-measures">
           <div className="species-measure">
-            <span>{biggest.weightKg ?? "—"}</span>
-            <div className="species-measure-unit">kg</div>
+            <span>{Number.isFinite(biggest.weightKg) ? biggest.weightKg : "Neuvedeno"}</span>
+            {Number.isFinite(biggest.weightKg) && <div className="species-measure-unit">kg</div>}
             <div className="species-measure-label">Hmotnost</div>
           </div>
           <div className="species-measure">
-            <span>{biggest.lengthCm ?? "—"}</span>
-            <div className="species-measure-unit">cm</div>
+            <span>{Number.isFinite(biggest.lengthCm) ? biggest.lengthCm : "Neuvedeno"}</span>
+            {Number.isFinite(biggest.lengthCm) && <div className="species-measure-unit">cm</div>}
             <div className="species-measure-label">Délka</div>
           </div>
           <div className="species-measure">
-            <span>{biggest.fightMinutes ?? "—"}</span>
-            <div className="species-measure-unit">min</div>
+            <span>{Number.isFinite(biggest.fightMinutes) ? biggest.fightMinutes : "Neuvedeno"}</span>
+            {Number.isFinite(biggest.fightMinutes) && <div className="species-measure-unit">min</div>}
             <div className="species-measure-label">Boj</div>
           </div>
         </div>

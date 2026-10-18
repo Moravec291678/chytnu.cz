@@ -9,6 +9,7 @@ import {
   uploadBytes,
 } from "firebase/storage";
 import { firebaseAuth, getLocalFirebaseApp } from "../../auth/data/firebaseAuth.js";
+import { getBackendConfiguration } from "../../auth/data/backendConfig.js";
 import { SyncPortError } from "./syncPort.js";
 
 const EMULATOR_HOST = "127.0.0.1";
@@ -68,12 +69,12 @@ async function verifyStoredObject(target, photo) {
   return bytes;
 }
 
-function getStorageEmulator() {
+function getConfiguredStorage() {
   const app = getLocalFirebaseApp();
   globalThis[GLOBAL_CONNECTIONS] ??= new Set();
   const storage = getStorage(app);
   const key = `storage:${app.name}`;
-  if (!globalThis[GLOBAL_CONNECTIONS].has(key)) {
+  if (getBackendConfiguration().mode === "emulator" && !globalThis[GLOBAL_CONNECTIONS].has(key)) {
     connectStorageEmulator(storage, EMULATOR_HOST, EMULATOR_PORT);
     globalThis[GLOBAL_CONNECTIONS].add(key);
   }
@@ -81,7 +82,7 @@ function getStorageEmulator() {
 }
 
 export function createFirebasePhotoStorage({ storage: suppliedStorage, getCurrentUserId } = {}) {
-  const storage = suppliedStorage ?? getStorageEmulator();
+  const storage = suppliedStorage ?? getConfiguredStorage();
   const currentUserId = getCurrentUserId ?? (() => firebaseAuth.currentUserId());
 
   function requireOwner(ownerId) {

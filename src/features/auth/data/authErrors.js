@@ -8,6 +8,11 @@ const ERROR_MESSAGES = {
   "auth/too-many-requests": "Příliš mnoho pokusů. Chvíli počkej a zkus to znovu.",
   "auth/network-request-failed": "Emulátor účtů není dostupný. Spusť lokální Firebase emulátor a zkus to znovu.",
   "auth/emulator-config-required": "Účty jsou dostupné pouze při lokálním spuštění aplikace s Firebase emulátorem.",
+  "auth/backend-config-required": "Pro toto prostředí není bezpečně nastavený backend.",
+  "auth/provider-disabled": "Google přihlášení není v tomto prostředí zapnuté.",
+  "auth/popup-closed-by-user": "Přihlášení přes Google bylo zrušeno.",
+  "auth/popup-blocked": "Prohlížeč zablokoval přihlašovací okno. Povol vyskakovací okna a zkus to znovu.",
+  "auth/operation-not-supported-in-this-environment": "Google přihlášení tento prohlížeč nepodporuje. Použij běžný prohlížeč nebo přihlášení e-mailem.",
   "auth/operation-not-allowed": "Tento způsob přihlášení není v lokálním emulátoru povolen.",
 };
 
@@ -16,5 +21,5 @@ export function getAuthErrorMessage(error) {
 }
 
 export function isInvalidAuthConfiguration(error) {
-  return error?.code === "auth/emulator-config-required";
+  return error?.code === "auth/emulator-config-required" || error?.code === "auth/backend-config-required";
 }
