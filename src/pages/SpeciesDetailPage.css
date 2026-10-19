@@ -1,143 +1,247 @@
-/* ── HERO ── */
+.species-detail-page {
+  padding: 0 0 calc(20px + env(safe-area-inset-bottom));
+}
+
 .species-hero {
-  background: linear-gradient(150deg, #0b221a, #09192a);
-  position: relative;
-  overflow: hidden;
-  padding: 20px 20px 0;
-  flex-shrink: 0;
-}
-
-.species-hero-fish {
-  position: absolute;
-  right: 8px;
-  bottom: 60px;
-  font-size: 115px;
-  opacity: 0.15;
-  transform: scaleX(-1);
-  line-height: 1;
-}
-
-.species-hero-back {
-  width: 36px;
-  height: 36px;
-  border-radius: 11px;
-  background: rgba(0, 0, 0, 0.45);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-  color: var(--t2);
-  cursor: pointer;
-  margin-bottom: 16px;
-  text-decoration: none;
-}
-
-.species-latin {
-  font-size: 11px;
-  font-weight: 600;
-  color: rgba(46, 204, 113, 0.55);
-  font-style: italic;
-  margin-bottom: 2px;
-}
-
-.species-hero h1 {
-  font-size: 26px;
-  font-weight: 900;
-  color: var(--t1);
-  letter-spacing: -0.5px;
-  margin: 0 0 8px;
-}
-
-.species-hero .tags {
-  display: flex;
-  gap: 5px;
-  flex-wrap: wrap;
-  margin-bottom: 20px;
+  padding: 16px 20px 0;
+  background: var(--accent-green-soft);
 }
 
 .species-hero-nav {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16px;
-}
-
-.ib {
-  width: 36px;
-  height: 36px;
-  border-radius: 11px;
-  background: rgba(0, 0, 0, 0.45);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 16px;
-  cursor: pointer;
+  margin-bottom: 10px;
 }
 
 .species-hero-actions {
   display: flex;
-  gap: 7px;
+  gap: 8px;
+  margin-left: auto;
 }
 
-/* ── MĚŘENÍ STRIP ── */
+.species-hero-back {
+  display: inline-flex;
+  min-width: 44px;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 10px;
+  border: 1px solid rgb(var(--white-rgb) / 10%);
+  border-radius: 11px;
+  background: rgb(var(--black-rgb) / 22%);
+  color: var(--text-primary);
+  font-size: 17px;
+  text-decoration: none;
+}
+
+.species-hero-action {
+  display: inline-flex;
+  width: 44px;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgb(var(--white-rgb) / 10%);
+  border-radius: 11px;
+  background: rgb(var(--black-rgb) / 22%);
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.species-hero-action svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.species-hero-action-active {
+  border-color: rgb(var(--accent-orange-rgb) / 40%);
+  color: var(--accent-orange);
+}
+
+.species-hero-action:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.species-favorite-error {
+  margin: 0 0 8px;
+  color: var(--accent-red);
+  font-size: var(--font-size-xs);
+}
+
+.species-latin {
+  margin-bottom: 2px;
+  color: var(--accent-green);
+  font-size: 12px;
+  font-style: italic;
+  font-weight: 600;
+}
+
+.species-hero h1 {
+  margin-bottom: 9px;
+  color: var(--text-primary);
+  font-size: 29px;
+  font-weight: 900;
+  letter-spacing: -0.7px;
+  line-height: 1.1;
+}
+
+.species-mastery-link {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  margin: 0 0 8px;
+  color: var(--accent-green);
+  font-size: var(--font-size-xs);
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.species-hero .tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 12px;
+}
+
+.species-detail-badge {
+  display: inline-flex;
+  min-height: 25px;
+  align-items: center;
+  padding: 0 8px;
+  border-radius: 7px;
+  background: var(--accent-blue-soft);
+  color: var(--accent-blue);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.species-detail-badge-record {
+  background: var(--accent-orange-soft);
+  color: var(--accent-orange);
+}
+
+.species-detail-badge-positive {
+  background: var(--accent-green-soft);
+  color: var(--accent-green);
+}
+
+.species-detail-badge-danger {
+  background: var(--accent-red-soft);
+  color: var(--accent-red);
+}
+
 .species-measures {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  background: var(--s1);
-  border: 1px solid var(--bd);
-  border-radius: 14px;
-  overflow: hidden;
-  margin: 0 0 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0 -20px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-1);
 }
 
 .species-measure {
-  padding: 14px 10px;
+  display: flex;
+  min-width: 0;
+  min-height: 112px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 5px;
+  border-right: 1px solid var(--border);
   text-align: center;
-  border-right: 1px solid var(--bd);
 }
 
 .species-measure:last-child {
-  border-right: none;
+  border-right: 0;
 }
 
-.species-measure span {
-  display: block;
-  font-size: 26px;
+.species-measure > span {
+  overflow: hidden;
+  max-width: 100%;
+  color: var(--text-primary);
+  font-size: 27px;
   font-weight: 900;
-  color: var(--t1);
-  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .species-measure-unit {
+  color: var(--text-secondary);
   font-size: 11px;
-  color: var(--t2);
-  font-weight: 500;
-  margin-top: 1px;
 }
 
 .species-measure-label {
+  margin-top: 5px;
+  color: var(--text-muted);
   font-size: 9px;
   font-weight: 800;
-  color: var(--t3);
+  letter-spacing: 0.55px;
   text-transform: uppercase;
-  letter-spacing: 0.8px;
-  margin-top: 4px;
 }
 
-/* ── SEZNAM ÚLOVKŮ ── */
 .species-catches-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 20px 10px;
+  padding: 15px 20px 9px;
 }
 
 .species-catches-title {
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+}
+
+.species-add-link {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  margin-top: 10px;
+  padding: 0 13px;
+  border-radius: 10px;
+  background: var(--accent-green);
+  color: var(--text-on-accent);
   font-size: 12px;
   font-weight: 800;
-  color: var(--t2);
-  text-transform: uppercase;
-  letter-spacing: 1px;
+  text-decoration: none;
+}
+
+.species-detail-page > .loading-state,
+.species-detail-page > .species-detail-error,
+.species-detail-page > h1,
+.species-detail-page > p,
+.species-detail-page > .species-add-link,
+.species-detail-page > .species-hero-back {
+  margin-right: 20px;
+  margin-left: 20px;
+}
+
+.species-detail-error {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-1);
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.species-detail-page > h1 {
+  margin-top: 15px;
+  font-size: 21px;
+}
+
+.species-detail-page > p {
+  margin-top: 5px;
+  color: var(--text-secondary);
+  font-size: 12px;
 }

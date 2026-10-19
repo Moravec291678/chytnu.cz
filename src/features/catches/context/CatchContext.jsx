@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useReducer } from "react";
+import { useCallback, useEffect, useReducer, useRef } from "react";
 import { CatchContext } from "./catchContextValue";
 import { catchRepository } from "../data/catchRepository";
-import { useAuth } from "../../auth/context/authContextValue.js";
-import { isRecordVisible } from "../../auth/data/localDataScope.js";
+import { useDataScope } from "../../auth/context/dataScopeContextValue.js";
+import { getCatchRewardEventIds, progressionLedger } from "../../progression/data/progressionLedger.js";
 const initialState = {
   catches: [],
   sortBy: "vse",
@@ -16,6 +16,8 @@ function catchReducer(state, action) {
       return { ...state, catches: action.payload, loading: false, error: "" };
     case "SET_ERROR":
       return { ...state, error: action.payload, loading: false };
+    case "RESET_SCOPE":
+      return { ...initialState };
     case "ADD_CATCH":
       return {
         ...state,
@@ -54,41 +56,82 @@ function catchReducer(state, action) {
 }
 export function CatchProvider({ children }) {
   const [state, dispatch] = useReducer(catchReducer, initialState);
-  const { user } = useAuth();
+  const scope = useDataScope();
+  const activeScopeKey = useRef(null);
   const refresh = useCallback(async () => {
+    if (scope.status !== "ready") return;
+    const requestedScopeKey = scope.scopeKey;
     try {
-      const catches = (await catchRepository.list()).filter((record) => isRecordVisible(record, user?.uid));
+      const catches = await catchRepository.list(scope);
+      if (activeScopeKey.current !== requestedScopeKey) return;
       catches.sort((a, b) => new Date(b.caughtAt) - new Date(a.caughtAt));
       dispatch({ type: "LOAD_CATCHES", payload: catches });
     } catch (error) {
       dispatch({ type: "SET_ERROR", payload: error.message || "Úlovky se nepodařilo načíst." });
     }
-  }, [user?.uid]);
+  }, [scope]);
 
   useEffect(() => {
+    activeScopeKey.current = scope.status === "ready" ? scope.scopeKey : null;
+    dispatch({ type: "RESET_SCOPE" });
+    if (scope.status !== "ready") return undefined;
     refresh();
     window.addEventListener("chytnu:local-data-restored", refresh);
-    return () => window.removeEventListener("chytnu:local-data-restored", refresh);
-  }, [refresh]);
+    return () => {
+      window.removeEventListener("chytnu:local-data-restored", refresh);
+      if (activeScopeKey.current === scope.scopeKey) activeScopeKey.current = null;
+    };
+  }, [refresh, scope.status, scope.scopeKey]);
 
   const createCatch = useCallback(async (record) => {
-    const storedRecord = await catchRepository.put(record, { ownerId: user?.uid ?? null });
+    if (scope.status !== "ready") throw new Error("Místní profil se ještě načítá.");
+    const storedRecord = await catchRepository.put(record, scope);
+    const progression = await progressionLedger.reconcile(scope);
+    if (activeScopeKey.current !== scope.scopeKey) return;
     dispatch({ type: "ADD_CATCH", payload: storedRecord });
     window.dispatchEvent(new Event("chytnu:outbox-changed"));
-  }, [user?.uid]);
+    window.dispatchEvent(new Event("chytnu:progression-changed"));
+    return { record: storedRecord, progressionEventIds: getCatchRewardEventIds(progression.events, storedRecord.id) };
+  }, [scope]);
   const updateCatch = useCallback(async (record) => {
-    const storedRecord = await catchRepository.put(record, { ownerId: user?.uid ?? null });
+    if (scope.status !== "ready") throw new Error("Místní profil se ještě načítá.");
+    const storedRecord = await catchRepository.put(record, scope);
+    await progressionLedger.reconcileCatch(storedRecord, scope);
+    if (activeScopeKey.current !== scope.scopeKey) return;
     dispatch({ type: "UPDATE_CATCH", payload: storedRecord });
     window.dispatchEvent(new Event("chytnu:outbox-changed"));
-  }, [user?.uid]);
+    window.dispatchEvent(new Event("chytnu:progression-changed"));
+    return storedRecord;
+  }, [scope]);
+  const toggleFavorite = useCallback(async (id) => {
+    const record = state.catches.find((item) => item.id === id);
+    if (!record) throw new Error("Úlovek už není dostupný. Obnov deník a zkus to znovu.");
+    const storedRecord = await catchRepository.put({
+      ...record,
+      isFavorite: !record.isFavorite,
+      sync: {
+        ...(record.sync ?? {}),
+        status: "local",
+        revision: (record.sync?.revision ?? 0) + 1,
+      },
+    }, scope);
+    await progressionLedger.reconcileCatch(storedRecord, scope);
+    if (activeScopeKey.current !== scope.scopeKey) return storedRecord;
+    dispatch({ type: "UPDATE_CATCH", payload: storedRecord });
+    window.dispatchEvent(new Event("chytnu:outbox-changed"));
+    window.dispatchEvent(new Event("chytnu:progression-changed"));
+    return storedRecord;
+  }, [scope, state.catches]);
   const deleteCatch = useCallback(async (id) => {
-    await catchRepository.delete(id);
+    if (scope.status !== "ready") throw new Error("Místní profil se ještě načítá.");
+    await catchRepository.delete(id, scope);
+    if (activeScopeKey.current !== scope.scopeKey) return;
     dispatch({ type: "DELETE_CATCH", payload: id });
     window.dispatchEvent(new Event("chytnu:outbox-changed"));
-  }, []);
+  }, [scope]);
 
   return (
-    <CatchContext.Provider value={{ state, dispatch, refresh, createCatch, updateCatch, deleteCatch }}>
+    <CatchContext.Provider value={{ state, dispatch, refresh, createCatch, updateCatch, toggleFavorite, deleteCatch }}>
       {children}
     </CatchContext.Provider>
   );

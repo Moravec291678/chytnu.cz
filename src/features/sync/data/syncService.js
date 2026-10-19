@@ -1,6 +1,7 @@
 import { catchRepository, outboxRepository } from "../../catches/data/catchRepository.js";
 import { tripRepository } from "../../trips/data/tripRepository.js";
 import { applyRemotePage, readSyncCursor } from "./localSyncRepository.js";
+import { accountScopeKey } from "../../auth/data/localDataScope.js";
 
 const REPOSITORIES = { catch: catchRepository, trip: tripRepository };
 const PAGE_SIZE = 100;
@@ -30,6 +31,7 @@ export function createSyncService({ port, photoStorage = null, getCurrentOwnerId
   let inFlight = null;
 
   async function pull(ownerId) {
+    const scope = { ownerId, scopeKey: accountScopeKey(ownerId) };
     let cursor = await readSyncCursor(ownerId);
     let applied = 0;
     let conflicts = 0;
@@ -46,7 +48,7 @@ export function createSyncService({ port, photoStorage = null, getCurrentOwnerId
         if (!activeOwner(getCurrentOwnerId, ownerId)) return { applied, conflicts, stopped: true };
         let remote = await port.read({ ownerId, entityType: change.entityType, entityId: change.entityId });
         if (photoStorage && change.entityType === "catch" && remote && !remote.deleted) {
-          const localRecord = await catchRepository.get(change.entityId);
+          const localRecord = await catchRepository.get(change.entityId, scope).catch(() => undefined);
           const localPhotos = new Map((localRecord?.photos ?? []).filter((photo) => photo.blob).map((photo) => [photo.id, photo]));
           const photos = await Promise.all((remote.record.photos ?? []).map(async (photo) => {
             if (!photo.storagePath || !photo.sha256) return { ...photo, photoStatus: "metadata-only" };
@@ -84,6 +86,7 @@ export function createSyncService({ port, photoStorage = null, getCurrentOwnerId
   }
 
   async function push(ownerId, force = false) {
+    const scope = { ownerId, scopeKey: accountScopeKey(ownerId) };
     let sent = 0;
     let conflicts = 0;
     let transientError = "";
@@ -109,7 +112,7 @@ export function createSyncService({ port, photoStorage = null, getCurrentOwnerId
             await photoStorage.deleteUnreferenced({ ownerId, catchId: operation.entityId, keepPaths: [] });
           }
         } else {
-          let record = await repository.get(operation.entityId);
+          let record = await repository.get(operation.entityId, scope);
           if (!record || record.ownerId !== ownerId || record.sync?.revision !== operation.localRevision) continue;
           if (operation.entityType === "catch" && photoStorage) {
             const photos = await Promise.all((record.photos ?? []).map((photo) => photoStorage.describe({
@@ -138,7 +141,7 @@ export function createSyncService({ port, photoStorage = null, getCurrentOwnerId
               catchId: operation.entityId,
               keepPaths: photos.map((photo) => photo.storagePath).filter(Boolean),
             });
-            await repository.markPhotosSynced(operation.entityId, operation.localRevision, photos);
+            await repository.markPhotosSynced(operation.entityId, operation.localRevision, photos, scope);
           }
         }
         if (!activeOwner(getCurrentOwnerId, ownerId)) return { sent, conflicts, stopped: true, transientError };

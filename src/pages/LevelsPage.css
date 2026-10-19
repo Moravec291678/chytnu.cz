@@ -1,0 +1,139 @@
+.levels-page {
+  gap: var(--space-4);
+}
+
+.level-summary {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-1);
+}
+
+.level-rank-name {
+  color: var(--accent-green);
+  font-size: var(--font-size-xs);
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.level-summary-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.level-summary-heading h2 {
+  color: var(--text-primary);
+  font-size: var(--font-size-title);
+  font-weight: 900;
+}
+
+.level-summary-heading span,
+.level-summary > p,
+.level-progress-caption,
+.level-no-activity,
+.level-empty-xp {
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.level-summary > p {
+  font-weight: 700;
+}
+
+.level-progress-caption {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.level-section {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.level-section > h2 {
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.level-xp-list,
+.level-rank-list {
+  display: grid;
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-1);
+  list-style: none;
+}
+
+.level-xp-list li,
+.level-rank-row {
+  display: flex;
+  min-height: 50px;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3);
+}
+
+.level-xp-list li + li,
+.level-rank-row + .level-rank-row {
+  border-top: 1px solid var(--border);
+}
+
+.level-xp-list li span,
+.level-rank-row strong {
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  font-weight: 800;
+}
+
+.level-xp-list li strong,
+.level-rank-row--current > span {
+  color: var(--accent-green);
+  font-size: var(--font-size-sm);
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.level-rank-row > div {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.level-rank-row p {
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.level-rank-row--current {
+  background: var(--accent-green-soft);
+}
+
+.level-rank-row--earned {
+  background: var(--surface-2);
+}
+
+.level-no-activity,
+.level-empty-xp {
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+  line-height: 1.5;
+}
+
+@media (max-width: 360px) {
+  .level-progress-caption {
+    flex-direction: column;
+  }
+}

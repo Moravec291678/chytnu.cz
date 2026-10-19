@@ -1,21 +1,23 @@
 import "fake-indexeddb/auto";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { openLocalDatabase, catchRepository, outboxRepository, CONFLICT_STORE_NAME } from "../../catches/data/catchRepository.js";
+import { openLocalDatabase, getActiveGuestScopeKey, catchRepository, outboxRepository, CONFLICT_STORE_NAME } from "../../catches/data/catchRepository.js";
 import { tripRepository } from "../../trips/data/tripRepository.js";
 import { createInMemorySyncAdapter } from "./inMemorySyncAdapter.js";
 import { createSyncPort, SyncPortError } from "./syncPort.js";
 import { createSyncService } from "./syncService.js";
 import {
-  linkOwnerlessData,
+  linkGuestData,
   listSyncConflicts,
-  readOwnerlessSummary,
+  readGuestSummary,
   readSyncCursor,
   resolveSyncConflict,
 } from "./localSyncRepository.js";
 
 const DB_NAME = "chytnu-local";
 const stamp = "2026-10-17T08:00:00.000Z";
+const accountScope = (ownerId = "angler-a") => ({ scopeKey: `account:${ownerId}`, ownerId });
+const guestScope = async () => ({ scopeKey: await getActiveGuestScopeKey(), ownerId: null });
 
 function makeCatch(id, ownerId = null, overrides = {}) {
   return {
@@ -59,18 +61,19 @@ function makeService(adapter = createInMemorySyncAdapter(), options = {}) {
 
 test("new account-owned Trip and Catch sync while legacy ownerId:null rows stay local", async () => {
   await resetDatabase();
+  const guest = await guestScope();
   const { service, port } = makeService();
   await tripRepository.start({
     schemaVersion: 1, id: "trip-sync", title: "Ranní", locationName: "Labe", methodKey: null,
     createdAt: stamp, updatedAt: stamp, startedAt: stamp, endedAt: null,
     sync: { status: "local", revision: 1 },
-  }, { ownerId: "angler-a" });
+  }, accountScope());
   const photo = new Blob([new Uint8Array([1, 2, 3])], { type: "image/jpeg" });
   await catchRepository.put(makeCatch("catch-sync", "angler-a", {
     tripId: "trip-sync",
     photos: [{ id: "photo-1", name: "kapr.jpg", type: "image/jpeg", blob: photo }],
-  }), { ownerId: "angler-a" });
-  await catchRepository.put(makeCatch("legacy-local"));
+  }), accountScope());
+  await catchRepository.put(makeCatch("legacy-local"), guest);
 
   const result = await service.run("angler-a");
   assert.equal(result.status, "success");
@@ -80,7 +83,7 @@ test("new account-owned Trip and Catch sync while legacy ownerId:null rows stay 
   const remoteCatch = await port.read({ ownerId: "angler-a", entityType: "catch", entityId: "catch-sync" });
   assert.equal(remoteCatch.record.tripId, "trip-sync");
   assert.equal(remoteCatch.record.photos[0].blob, undefined);
-  const localCatch = await catchRepository.get("catch-sync");
+  const localCatch = await catchRepository.get("catch-sync", accountScope());
   assert.equal(localCatch.photos[0].blob.size, 3);
   assert.equal(localCatch.sync.status, "metadata-synced");
   assert.equal(localCatch.sync.photoStatus, "local-only");
@@ -90,9 +93,9 @@ test("new account-owned Trip and Catch sync while legacy ownerId:null rows stay 
 test("a coalesced local edit after server acceptance replays idempotently and advances revision", async () => {
   await resetDatabase();
   const { service, port } = makeService();
-  await catchRepository.put(makeCatch("coalesced"), { ownerId: "angler-a" });
+  await catchRepository.put(makeCatch("coalesced"), accountScope());
   const firstQueue = (await outboxRepository.list())[0];
-  const firstRecord = await catchRepository.get("coalesced");
+  const firstRecord = await catchRepository.get("coalesced", accountScope());
   const firstResult = await port.write({
     ownerId: "angler-a", entityType: "catch", record: firstRecord, expectedRevision: null,
     operationId: firstQueue.operationId, localRevision: firstQueue.localRevision,
@@ -100,14 +103,14 @@ test("a coalesced local edit after server acceptance replays idempotently and ad
   const edited = await catchRepository.put({
     ...firstRecord, notes: "úprava po síťovém zápisu", updatedAt: "2026-10-17T08:05:00.000Z",
     sync: { ...firstRecord.sync, revision: 2 },
-  }, { ownerId: "angler-a" });
+  }, accountScope());
   assert.equal((await outboxRepository.list())[0].operationId, firstQueue.operationId);
   const result = await service.run("angler-a");
   assert.equal(result.status, "success");
   const remote = await port.read({ ownerId: "angler-a", entityType: "catch", entityId: "coalesced" });
   assert.equal(remote.record.notes, "úprava po síťovém zápisu");
   assert.equal(remote.revision, firstResult.revision + 1);
-  assert.equal((await catchRepository.get(edited.id)).sync.serverRevision, remote.revision);
+  assert.equal((await catchRepository.get(edited.id, accountScope())).sync.serverRevision, remote.revision);
   assert.equal((await outboxRepository.list()).some((item) => item.ownerId === "angler-a"), false);
 });
 
@@ -120,7 +123,7 @@ test("pull persists remote data and its cursor; repeated sync is idempotent", as
     expectedRevision: null, operationId: "remote-operation-1", localRevision: 1,
   });
   await service.run("angler-a");
-  const local = await catchRepository.get("remote-catch");
+  const local = await catchRepository.get("remote-catch", accountScope());
   assert.equal(local.notes, "jiné zařízení");
   assert.equal(local.sync.serverRevision, write.revision);
   assert.equal((await outboxRepository.list()).length, 0);
@@ -133,9 +136,9 @@ test("pull persists remote data and its cursor; repeated sync is idempotent", as
 test("different concurrent versions are both preserved and the outbox remains blocked", async () => {
   await resetDatabase();
   const { service, port } = makeService();
-  const original = await catchRepository.put(makeCatch("conflict-catch", "angler-a"), { ownerId: "angler-a" });
+  const original = await catchRepository.put(makeCatch("conflict-catch", "angler-a"), accountScope());
   await service.run("angler-a");
-  await catchRepository.put({ ...original, notes: "lokální", sync: { ...original.sync, revision: 2 } }, { ownerId: "angler-a" });
+  await catchRepository.put({ ...original, notes: "lokální", sync: { ...original.sync, revision: 2 } }, accountScope());
   const remote = await port.read({ ownerId: "angler-a", entityType: "catch", entityId: "conflict-catch" });
   await port.write({
     ownerId: "angler-a", entityType: "catch",
@@ -145,7 +148,7 @@ test("different concurrent versions are both preserved and the outbox remains bl
 
   const result = await service.run("angler-a");
   assert.equal(result.conflicts, 1);
-  assert.equal((await catchRepository.get("conflict-catch")).notes, "lokální");
+  assert.equal((await catchRepository.get("conflict-catch", accountScope())).notes, "lokální");
   const queue = (await outboxRepository.list()).filter((item) => item.ownerId === "angler-a");
   assert.equal(queue.length, 1);
   assert.equal(queue[0].status, "conflict");
@@ -156,7 +159,8 @@ test("different concurrent versions are both preserved and the outbox remains bl
 
 test("ownerless operations are never sent as whichever account happens to sign in", async () => {
   await resetDatabase();
-  await catchRepository.put(makeCatch("ownerless"));
+  const guest = await guestScope();
+  await catchRepository.put(makeCatch("ownerless"), guest);
   const { service, port } = makeService();
   await service.run("angler-a");
   assert.equal(await port.read({ ownerId: "angler-a", entityType: "catch", entityId: "ownerless" }), null);
@@ -165,36 +169,37 @@ test("ownerless operations are never sent as whichever account happens to sign i
 
 test("ownerless journal is linked only by an explicit atomic action and keeps IDs, links, and Blob", async () => {
   await resetDatabase();
+  const guest = await guestScope();
   await tripRepository.start({
     schemaVersion: 1, id: "legacy-trip", title: "Starší výprava", locationName: "Labe", methodKey: null,
     createdAt: stamp, updatedAt: stamp, startedAt: stamp, endedAt: stamp,
     sync: { status: "local", revision: 1 },
-  });
+  }, guest);
   const blob = new Blob([new Uint8Array([0xff, 0xd8, 0xff, 1])], { type: "image/jpeg" });
   await catchRepository.put(makeCatch("legacy-catch", null, {
     tripId: "legacy-trip", photos: [{ id: "photo", name: "fish.jpg", type: "image/jpeg", blob }],
-  }));
-  assert.deepEqual(await readOwnerlessSummary(), { catches: 1, trips: 1, photos: 1 });
+  }), guest);
+  assert.deepEqual(await readGuestSummary(guest.scopeKey), { catches: 1, trips: 1, photos: 1 });
 
-  const result = await linkOwnerlessData("angler-a");
+  const result = await linkGuestData("angler-a", guest.scopeKey);
   assert.deepEqual(result, { catches: 1, trips: 1, photos: 1 });
-  assert.equal((await tripRepository.get("legacy-trip")).ownerId, "angler-a");
-  const linkedCatch = await catchRepository.get("legacy-catch");
+  assert.equal((await tripRepository.get("legacy-trip", accountScope())).ownerId, "angler-a");
+  const linkedCatch = await catchRepository.get("legacy-catch", accountScope());
   assert.equal(linkedCatch.ownerId, "angler-a");
   assert.equal(linkedCatch.tripId, "legacy-trip");
   assert.equal(linkedCatch.photos[0].blob.size, blob.size);
-  assert.deepEqual(await readOwnerlessSummary(), { catches: 0, trips: 0, photos: 0 });
+  assert.deepEqual(await readGuestSummary(guest.scopeKey), { catches: 0, trips: 0, photos: 0 });
   assert.deepEqual((await outboxRepository.list()).map((operation) => operation.ownerId), ["angler-a", "angler-a"]);
-  assert.deepEqual(await linkOwnerlessData("angler-a"), { catches: 0, trips: 0, photos: 0 });
+  assert.deepEqual(await linkGuestData("angler-a", guest.scopeKey), { catches: 0, trips: 0, photos: 0 });
 });
 
 test("user can resolve a concurrent Catch conflict with the remote or local version", async () => {
   await resetDatabase();
   const adapter = createInMemorySyncAdapter();
   const { service, port } = makeService(adapter);
-  const original = await catchRepository.put(makeCatch("resolve-catch", "angler-a"), { ownerId: "angler-a" });
+  const original = await catchRepository.put(makeCatch("resolve-catch", "angler-a"), accountScope());
   await service.run("angler-a");
-  await catchRepository.put({ ...original, notes: "místní", sync: { ...original.sync, revision: 2 } }, { ownerId: "angler-a" });
+  await catchRepository.put({ ...original, notes: "místní", sync: { ...original.sync, revision: 2 } }, accountScope());
   const remote = await port.read({ ownerId: "angler-a", entityType: "catch", entityId: original.id });
   await port.write({
     ownerId: "angler-a", entityType: "catch", record: { ...remote.record, notes: "vzdálená" },
@@ -204,11 +209,11 @@ test("user can resolve a concurrent Catch conflict with the remote or local vers
   let [conflict] = await listSyncConflicts("angler-a");
   assert.equal(conflict.remoteRecord.notes, "vzdálená");
   await resolveSyncConflict("angler-a", conflict.id, "remote");
-  assert.equal((await catchRepository.get(original.id)).notes, "vzdálená");
+  assert.equal((await catchRepository.get(original.id, accountScope())).notes, "vzdálená");
   assert.equal((await outboxRepository.list()).length, 0);
 
-  const current = await catchRepository.get(original.id);
-  await catchRepository.put({ ...current, notes: "místní vítěz", sync: { ...current.sync, revision: current.sync.revision + 1 } }, { ownerId: "angler-a" });
+  const current = await catchRepository.get(original.id, accountScope());
+  await catchRepository.put({ ...current, notes: "místní vítěz", sync: { ...current.sync, revision: current.sync.revision + 1 } }, accountScope());
   const secondRemote = await port.read({ ownerId: "angler-a", entityType: "catch", entityId: original.id });
   await port.write({
     ownerId: "angler-a", entityType: "catch", record: { ...secondRemote.record, notes: "jiná vzdálená" },
@@ -231,12 +236,12 @@ test("user can resolve a concurrent Trip conflict and complete the queue", async
     schemaVersion: 1, id: "resolve-trip", title: "Původní", locationName: "Labe", methodKey: null,
     createdAt: stamp, updatedAt: stamp, startedAt: stamp, endedAt: null,
     sync: { status: "local", revision: 1 },
-  }, { ownerId: "angler-a" });
+  }, accountScope());
   await service.run("angler-a");
   await tripRepository.put({
     ...original, title: "Místní výprava", updatedAt: "2026-10-17T09:00:00.000Z",
     sync: { ...original.sync, revision: 2 },
-  }, { ownerId: "angler-a" });
+  }, accountScope());
   const remote = await port.read({ ownerId: "angler-a", entityType: "trip", entityId: original.id });
   await port.write({
     ownerId: "angler-a", entityType: "trip",
@@ -276,7 +281,7 @@ test("unavailable server preserves outbox and a later retry sends it", async () 
       return base.write(...args);
     },
   };
-  await catchRepository.put(makeCatch("retry-catch", "angler-a"), { ownerId: "angler-a" });
+  await catchRepository.put(makeCatch("retry-catch", "angler-a"), accountScope());
   const first = makeService(adapter);
   const result = await first.service.run("angler-a");
   assert.equal(result.status, "error");

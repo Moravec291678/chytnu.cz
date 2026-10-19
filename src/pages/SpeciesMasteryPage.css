@@ -1,0 +1,164 @@
+.species-mastery-page {
+  gap: var(--space-4);
+}
+
+.mastery-summary {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+
+.mastery-stars {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.mastery-star {
+  color: var(--text-muted);
+  font-size: 32px;
+  line-height: 1;
+}
+
+.mastery-star--earned {
+  color: var(--accent-orange);
+}
+
+.mastery-summary > p {
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.mastery-undiscovered {
+  color: var(--text-primary);
+  font-size: var(--font-size-card);
+}
+
+.mastery-section {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.mastery-section > h2 {
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.mastery-milestones {
+  display: grid;
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-1);
+  list-style: none;
+}
+
+.mastery-milestone {
+  display: grid;
+  min-height: 72px;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+}
+
+.mastery-milestone + .mastery-milestone {
+  border-top: 1px solid var(--border);
+}
+
+.mastery-check {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text-on-accent);
+  font-size: 21px;
+  font-weight: 900;
+}
+
+.mastery-milestone--complete .mastery-check {
+  border-color: var(--accent-green);
+  background: var(--accent-green);
+}
+
+.mastery-milestone-content {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-2);
+}
+
+.mastery-milestone-content h3 {
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  font-weight: 800;
+}
+
+.mastery-milestone-content p {
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.mastery-progress {
+  height: 6px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--surface-3);
+}
+
+.mastery-progress > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent-green);
+}
+
+.mastery-milestone > strong {
+  color: var(--accent-green);
+  font-size: var(--font-size-sm);
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.mastery-title-card {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px solid var(--accent-orange);
+  border-radius: var(--radius-lg);
+  background: var(--accent-orange-soft);
+}
+
+.mastery-title-card > span {
+  color: var(--accent-orange);
+  font-size: var(--font-size-sm);
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.mastery-title-card h2 {
+  color: var(--text-primary);
+  font-size: var(--font-size-card);
+  font-weight: 900;
+}
+
+@media (max-width: 360px) {
+  .mastery-milestone {
+    grid-template-columns: 30px minmax(0, 1fr);
+  }
+
+  .mastery-check {
+    width: 28px;
+    height: 28px;
+  }
+
+  .mastery-milestone > strong {
+    grid-column: 2;
+  }
+}

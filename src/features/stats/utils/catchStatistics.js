@@ -1,4 +1,5 @@
 import { normalizeText } from "../../../shared/utils/helpers.js";
+import { isMeasuredCatchWeight } from "../../catches/data/catchWeight.js";
 
 function groupBy(items, getKey, getLabel) {
   const groups = new Map();
@@ -17,10 +18,64 @@ function validMeasurement(value) {
   return Number.isFinite(value) && value >= 0;
 }
 
+function mostCommon(values) {
+  const groups = new Map();
+  for (const value of values) {
+    if (!value?.key || !value.label) continue;
+    const current = groups.get(value.key) ?? { key: value.key, label: value.label, count: 0 };
+    current.count += 1;
+    groups.set(value.key, current);
+  }
+  const ranked = [...groups.values()].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, "cs-CZ"));
+  if (!ranked.length) return null;
+  const count = ranked[0].count;
+  return { labels: ranked.filter((item) => item.count === count).map((item) => item.label), count, sampleCount: values.length };
+}
+
+function averageMeasurement(records, getValue) {
+  const values = records.map(getValue).filter((value) => Number.isFinite(value));
+  if (!values.length) return null;
+  return { value: values.reduce((total, value) => total + value, 0) / values.length, sampleCount: values.length };
+}
+
+export function getCatchPatterns(catches) {
+  const timeSlots = [];
+  const locations = [];
+  const baits = [];
+  for (const record of catches) {
+    const timestamp = Date.parse(record.caughtAt);
+    if (Number.isFinite(timestamp)) {
+      const startHour = Math.floor(new Date(timestamp).getHours() / 3) * 3;
+      const endHour = (startHour + 3) % 24;
+      const label = `${String(startHour).padStart(2, "0")}–${String(endHour).padStart(2, "0")} h`;
+      timeSlots.push({ key: String(startHour), label });
+    }
+
+    const location = typeof record.locationName === "string" ? record.locationName.trim() : "";
+    if (location) locations.push({ key: normalizeText(location), label: location });
+    const seenBaits = new Set();
+    for (const bait of Array.isArray(record.baits) ? record.baits : []) {
+      const label = typeof bait.label === "string" ? bait.label.trim() : "";
+      const key = normalizeText(label);
+      if (!key || seenBaits.has(key)) continue;
+      seenBaits.add(key);
+      baits.push({ key, label });
+    }
+  }
+
+  return {
+    time: mostCommon(timeSlots),
+    location: mostCommon(locations),
+    bait: mostCommon(baits),
+    pressureHpa: averageMeasurement(catches, (record) => record.conditions?.pressureHpa),
+    waterTemperatureC: averageMeasurement(catches, (record) => record.conditions?.waterTempC ?? record.conditions?.waterTemperatureC),
+  };
+}
+
 export function getCatchStatistics(catches, trips = [], now = new Date()) {
   const species = groupBy(catches, (item) => normalizeText(item.speciesKey || item.species || ""), (item) => item.species || item.speciesKey || "");
   const methods = groupBy(catches, (item) => item.method?.key || "", (item) => item.method?.label || "");
-  const measuredWeight = catches.filter((item) => validMeasurement(item.weightKg));
+  const measuredWeight = catches.filter(isMeasuredCatchWeight);
   const measuredLength = catches.filter((item) => validMeasurement(item.lengthCm));
   const completedTrips = trips.filter((trip) => trip.endedAt && Number.isFinite(Date.parse(trip.endedAt)));
   const activeTrips = trips.filter((trip) => !trip.endedAt);

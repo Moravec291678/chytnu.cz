@@ -31,6 +31,7 @@ function serviceFor(adapter) {
 try {
   const { user } = await createUserWithEmailAndPassword(auth, email, password);
   const ownerId = user.uid;
+  const accountScope = { scopeKey: `account:${ownerId}`, ownerId };
   const firestoreAdapter = createFirestoreSyncAdapter({ db, getCurrentUserId: () => auth.currentUser?.uid ?? null });
   const firestoreService = serviceFor(firestoreAdapter);
   const stamp = new Date().toISOString();
@@ -41,7 +42,7 @@ try {
     schemaVersion: 1, id: tripId, title: "Testovací výprava", locationName: "Labe",
     methodKey: null, createdAt: stamp, updatedAt: stamp, startedAt: stamp, endedAt: null,
     sync: { status: "local", revision: 1 },
-  }, { ownerId });
+  }, accountScope);
   const photoBlob = new Blob([new Uint8Array([1, 2, 3])], { type: "image/jpeg" });
   await catchRepository.put({
     schemaVersion: 1, id: catchId, ownerId, createdAt: stamp, updatedAt: stamp, caughtAt: stamp,
@@ -51,7 +52,7 @@ try {
     waterDepthM: null, bottomType: null, tripId, method: null, baits: [], result: "released",
     photos: [{ id: "photo-1", name: "kapr.jpg", type: "image/jpeg", blob: photoBlob }],
     notes: "emulator integration fixture", isFavorite: false, sync: { status: "local", revision: 1 },
-  }, { ownerId });
+  }, accountScope);
 
   const first = await firestoreService.run(ownerId);
   assert.equal(first.status, "success", first.error);
@@ -66,7 +67,7 @@ try {
   assert.deepEqual(remoteCatch.data().photos, [{ id: "photo-1", name: "kapr.jpg", type: "image/jpeg", size: 3 }]);
   assert.equal(JSON.stringify(remoteCatch.data()).includes("blob"), false);
 
-  const local = await catchRepository.get(catchId);
+  const local = await catchRepository.get(catchId, accountScope);
   assert.equal(local.photos[0].blob.size, 3, "Firestore metadata sync must preserve local photo bytes");
   assert.equal(local.sync.photoStatus, "local-only");
   const replay = await firestoreAdapter.write({
@@ -89,15 +90,15 @@ try {
   });
   const pulled = await firestoreService.run(ownerId);
   assert.equal(pulled.status, "success", pulled.error);
-  assert.equal((await catchRepository.get(catchId)).notes, "změna z druhého zařízení");
-  assert.deepEqual((await catchRepository.get(catchId)).coordinates, { latitude: 50.087, longitude: 14.421 });
-  assert.equal((await catchRepository.get(catchId)).photos[0].blob.size, 3, "remote metadata update must preserve the local Blob");
+  assert.equal((await catchRepository.get(catchId, accountScope)).notes, "změna z druhého zařízení");
+  assert.deepEqual((await catchRepository.get(catchId, accountScope)).coordinates, { latitude: 50.087, longitude: 14.421 });
+  assert.equal((await catchRepository.get(catchId, accountScope)).photos[0].blob.size, 3, "remote metadata update must preserve the local Blob");
 
   const repeated = await firestoreService.run(ownerId);
   assert.equal(repeated.status, "success", repeated.error);
 
   // Exercise deletion as a durable tombstone, not a Firestore document delete.
-  await catchRepository.delete(catchId);
+  await catchRepository.delete(catchId, accountScope);
   const deleted = await firestoreService.run(ownerId);
   assert.equal(deleted.status, "success", deleted.error);
   const tombstone = await getDoc(doc(db, "users", ownerId, "catches", catchId));

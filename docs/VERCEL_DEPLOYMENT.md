@@ -1,6 +1,6 @@
 # Vercel deployment
 
-Skutečný deployment nebyl proveden. `vercel.json` nastavuje Vite build, výstup `dist`, SPA fallback pro přímé otevření rout a okamžitou revalidaci service workeru.
+Skutečný deployment nebyl proveden. `vercel.json` nastavuje Vite build, výstup `dist`, SPA fallback pro přímé otevření rout a okamžitou revalidaci service workeru. Odpovědi mají základní bezpečné hlavičky `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin` a Permissions Policy, která dovoluje GPS a kameru pouze vlastnímu originu a zakazuje mikrofon. CSP se bez online ověření Firebase, mapy a počasí nepřidává.
 
 | Prostředí | Backend mode | Firebase projekt | Build | Ověření |
 | --- | --- | --- | --- | --- |

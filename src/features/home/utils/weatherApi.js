@@ -24,7 +24,7 @@ export async function fetchWeatherData(lat, lng, { signal, now } = {}) {
 
   try {
     const response = await fetch(
-      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,wind_speed_10m,surface_pressure,cloud_cover&hourly=precipitation_probability&daily=sunrise,sunset&timezone=auto`,
+      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,wind_speed_10m,surface_pressure,cloud_cover&hourly=temperature_2m,wind_speed_10m,surface_pressure,cloud_cover,precipitation_probability&daily=sunrise,sunset&timezone=auto`,
       { signal: controller.signal },
     );
     if (!response.ok) {

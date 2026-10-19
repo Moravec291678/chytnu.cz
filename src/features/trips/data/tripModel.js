@@ -82,3 +82,27 @@ export function formatTripDuration(durationMs) {
   const minutes = totalMinutes % 60;
   return days ? `${days} d ${hours} h` : hours ? `${hours} h ${minutes} min` : `${minutes} min`;
 }
+
+export function getTripCatchRatePerHour(catchCount, durationMs) {
+  if (!Number.isSafeInteger(catchCount) || catchCount < 0 || !Number.isFinite(durationMs) || durationMs <= 0) {
+    return null;
+  }
+  return catchCount * 3_600_000 / durationMs;
+}
+
+export function formatTripCatchCount(count) {
+  const noun = count === 1 ? "úlovek" : count >= 2 && count <= 4 ? "úlovky" : "úlovků";
+  return `${count} ${noun}`;
+}
+
+export function getDistinctTripSpecies(catches) {
+  const speciesByKey = new Map();
+  for (const record of catches) {
+    if (typeof record.species !== "string" || !record.species.trim()) continue;
+    const speciesKey = typeof record.speciesKey === "string" && record.speciesKey.trim()
+      ? record.speciesKey.trim()
+      : record.species.trim().toLocaleLowerCase("cs-CZ");
+    if (!speciesByKey.has(speciesKey)) speciesByKey.set(speciesKey, record);
+  }
+  return [...speciesByKey.values()];
+}

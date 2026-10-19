@@ -67,7 +67,7 @@ export function getTimeOfDayScore(
 }
 
 // Version 1 is a transparent product heuristic, not an empirically validated fish-bite model.
-export const FISH_ACTIVITY_ALGORITHM_VERSION = "1";
+export const FISH_ACTIVITY_ALGORITHM_VERSION = "2";
 
 export function getUserLocation() {
   return new Promise((resolve, reject) => {
@@ -184,7 +184,17 @@ export function calculateFishActivity(weatherData, now = new Date()) {
     seasonScore * 0.03 +
     moonScore * 0.02;
 
-  const score = Math.round(total * 10);
+  const score = Math.round(total * 100);
+  const factors = [
+    { key: "pressure", label: "Atmosférický tlak", value: pressure, unit: "hPa", score: pressureScore, weight: 0.23 },
+    { key: "wind", label: "Rychlost větru", value: windSpeed, unit: "km/h", score: windScore, weight: 0.18 },
+    { key: "temperature", label: "Teplota vzduchu", value: temperature, unit: "°C", score: tempScore, weight: 0.22 },
+    { key: "cloudiness", label: "Oblačnost", value: cloudiness, unit: "%", score: cloudScore, weight: 0.12 },
+    { key: "rain", label: "Pravděpodobnost srážek", value: rainChance, unit: "%", score: rainScore, weight: 0.12 },
+    { key: "time", label: "Denní doba", value: now.toLocaleTimeString("cs-CZ", { hour: "2-digit", minute: "2-digit" }), unit: "", score: timeScore, weight: 0.08 },
+    { key: "season", label: "Roční období", value: now.toLocaleDateString("cs-CZ", { month: "long" }), unit: "", score: seasonScore, weight: 0.03 },
+    { key: "moon", label: "Fáze měsíce", value: getMoonPhase(now).label, unit: "", score: moonScore, weight: 0.02 },
+  ];
 
   const reasons = [];
 
@@ -215,14 +225,38 @@ export function calculateFishActivity(weatherData, now = new Date()) {
   return {
     score,
     reasons,
+    factors,
   };
 }
 
 export function getActivityLabel(score) {
-  if (score >= 8)
+  if (score >= 80)
     return { label: "Podmínky vycházejí příznivě", color: "green" };
-  if (score >= 6) return { label: "Podmínky vypadají příznivě", color: "yellow" };
-  if (score >= 4)
+  if (score >= 60) return { label: "Podmínky vypadají příznivě", color: "yellow" };
+  if (score >= 40)
     return { label: "Podmínky jsou smíšené", color: "orange" };
   return { label: "Podmínky vycházejí méně příznivě", color: "red" };
+}
+
+export function getPersonalCatchTimePattern(catches) {
+  const groups = new Map();
+  let sampleCount = 0;
+  for (const record of catches) {
+    const timestamp = Date.parse(record.caughtAt);
+    if (!Number.isFinite(timestamp)) continue;
+    const startHour = Math.floor(new Date(timestamp).getHours() / 3) * 3;
+    const endHour = (startHour + 3) % 24;
+    const label = `${String(startHour).padStart(2, "0")}–${String(endHour).padStart(2, "0")} h`;
+    groups.set(startHour, { label, count: (groups.get(startHour)?.count ?? 0) + 1 });
+    sampleCount += 1;
+  }
+
+  if (!sampleCount) return null;
+  const ranked = [...groups.entries()].sort((a, b) => b[1].count - a[1].count || a[0] - b[0]);
+  const count = ranked[0][1].count;
+  return {
+    labels: ranked.filter(([, group]) => group.count === count).map(([, group]) => group.label),
+    count,
+    sampleCount,
+  };
 }

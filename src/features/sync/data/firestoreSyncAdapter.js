@@ -16,6 +16,7 @@ import {
 import { firebaseAuth, getLocalFirebaseApp } from "../../auth/data/firebaseAuth.js";
 import { getBackendConfiguration } from "../../auth/data/backendConfig.js";
 import { SyncPortError } from "./syncPort.js";
+import { normalizeCatchPrivacy } from "../../privacy/data/privacyModel.js";
 
 const EMULATOR_HOST = "127.0.0.1";
 const EMULATOR_PORT = 8080;
@@ -59,6 +60,26 @@ function requireValue(value, fallback) {
   return value === undefined ? fallback : value;
 }
 
+const CONDITION_FIELDS = [
+  "airTempC",
+  "waterTempC",
+  "pressureHpa",
+  "windKmh",
+  "moonPhase",
+  "airTemperatureC",
+  "waterTemperatureC",
+  "weather",
+  "windDirection",
+  "pressureTrend",
+];
+
+function serializeConditions(conditions) {
+  if (conditions == null) return null;
+  return Object.fromEntries(
+    Object.entries(conditions).filter(([key, value]) => CONDITION_FIELDS.includes(key) && value !== undefined),
+  );
+}
+
 export function toRemoteRecord(entityType, record, ownerId) {
   if (!record || record.id === undefined || record.ownerId !== ownerId) {
     throw new SyncPortError("permission_denied", "Záznam nemá ověřeného vlastníka.");
@@ -87,15 +108,18 @@ export function toRemoteRecord(entityType, record, ownerId) {
     speciesKey: requireValue(record.speciesKey, ""),
     speciesLatin: requireValue(record.speciesLatin, null),
     weightKg: requireValue(record.weightKg, null),
+    weightSource: record.weightSource === "estimated" ? "estimated" : "manual",
     lengthCm: requireValue(record.lengthCm, null),
     girthCm: requireValue(record.girthCm, null),
     fightMinutes: requireValue(record.fightMinutes, null),
     locationName: requireValue(record.locationName, ""),
     waterNumber: requireValue(record.waterNumber, null),
+    waterId: requireValue(record.waterId, null),
     gpsLocation: requireValue(record.gpsLocation, ""),
     coordinates: requireValue(record.coordinates, null),
     waterDepthM: requireValue(record.waterDepthM, null),
     bottomType: requireValue(record.bottomType, null),
+    conditions: serializeConditions(record.conditions),
     tripId: requireValue(record.tripId, null),
     method: requireValue(record.method, null),
     baits: requireValue(record.baits, []),
@@ -110,6 +134,7 @@ export function toRemoteRecord(entityType, record, ownerId) {
     })),
     notes: requireValue(record.notes, ""),
     isFavorite: Boolean(record.isFavorite),
+    privacy: normalizeCatchPrivacy(record.privacy),
   };
 }
 

@@ -1,0 +1,92 @@
+.hotspots-page {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-5) 0 calc(var(--space-7) + env(safe-area-inset-bottom));
+}
+
+.hotspots-header {
+  margin: 0 var(--space-5);
+}
+
+.hotspots-header h1 {
+  color: var(--text-primary);
+  font-size: var(--font-size-display);
+  font-weight: 900;
+  letter-spacing: -0.8px;
+}
+
+.hotspots-header p {
+  color: var(--text-secondary);
+  font-size: var(--font-size-card);
+}
+
+.hotspots-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  overflow: hidden;
+  margin: 0 var(--space-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-1);
+}
+
+.hotspots-tabs button {
+  min-height: 58px;
+  border: 0;
+  background: transparent;
+  color: var(--text-disabled);
+  font-size: var(--font-size-card);
+  font-weight: 800;
+}
+
+.hotspots-tabs button[aria-selected="true"] {
+  background: var(--accent-green-soft);
+  color: var(--accent-green);
+}
+
+.hotspots-map {
+  display: grid;
+  min-height: 300px;
+  align-content: center;
+  gap: var(--space-2);
+  margin: 0 var(--space-5);
+  padding: var(--space-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+  text-align: center;
+}
+
+.hotspots-map p:first-child {
+  color: var(--text-primary);
+  font-size: var(--font-size-card);
+  font-weight: 800;
+}
+
+.hotspots-map p:last-child {
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.hotspots-ranking {
+  display: grid;
+  gap: var(--space-3);
+  margin: var(--space-3) var(--space-5) 0;
+}
+
+.hotspots-ranking h2 {
+  color: var(--text-secondary);
+  font-size: var(--font-size-card);
+  font-weight: 900;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.hotspots-ranking p {
+  padding: var(--space-4);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+}

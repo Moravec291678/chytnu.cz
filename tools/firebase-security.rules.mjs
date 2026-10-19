@@ -58,6 +58,10 @@ function makeCatch(id, ownerId, tripId = null) {
     photos: [],
     notes: "Soukromá poznámka",
     isFavorite: false,
+    privacy: {
+      visibility: "private", photoVisibility: "private", locationPrecision: "none",
+      privateSpot: true, nearbyEligible: false, heatmapEligible: false,
+    },
   };
 }
 

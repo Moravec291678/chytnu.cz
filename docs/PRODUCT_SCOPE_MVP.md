@@ -15,6 +15,10 @@
 
 Album, XP, levely, milníky a mapové body jsou odvozené z aktuálně viditelných Catch/Trip. Nevznikají pro ně duplicitní cloudové kolekce. Přesné souřadnice jsou soukromé a do mapy vstupují jen validní strukturované hodnoty nebo jednoznačně parsovatelný starší text.
 
+Domovský přehled (`/`) zobrazuje souhrny a poslední záznamy z místního deníku; úplný deník včetně vyhledávání a kombinovatelných filtrů je na `/journal`. Domov zobrazuje aktivní výpravu jen tehdy, pokud skutečně existuje. Sociální obsah, denní tipy a výzvy bez odpovídající funkce a zdrojových dat zůstávají skryté.
+
+Budoucí prvky bez funkčního zdroje dat mají vypnuté výchozí přepínače v `src/shared/config/featureFlags.js`; jejich zapnutí samo o sobě nesmí zobrazit ukázkový obsah.
+
 ## Mimo první MVP
 
 - feed, komentáře, reakce, přátelé, Crew, chat a veřejné profily;

@@ -11,12 +11,12 @@ import {
 import { connectFirestoreEmulator, doc, getDoc, getFirestore } from "firebase/firestore";
 import "fake-indexeddb/auto";
 import { connectStorageEmulator, getBytes, getStorage, listAll, ref } from "firebase/storage";
-import { catchRepository, outboxRepository } from "../src/features/catches/data/catchRepository.js";
+import { catchRepository, getActiveGuestScopeKey, outboxRepository } from "../src/features/catches/data/catchRepository.js";
 import { createFirebasePhotoStorage } from "../src/features/sync/data/firebasePhotoStorage.js";
 import { createFirestoreSyncAdapter } from "../src/features/sync/data/firestoreSyncAdapter.js";
 import { createSyncPort, SyncPortError } from "../src/features/sync/data/syncPort.js";
 import { createSyncService } from "../src/features/sync/data/syncService.js";
-import { linkOwnerlessData } from "../src/features/sync/data/localSyncRepository.js";
+import { linkGuestData } from "../src/features/sync/data/localSyncRepository.js";
 
 const projectId = "demo-chytnucz-local";
 const apps = [];
@@ -82,10 +82,11 @@ try {
     password,
   );
   const ownerId = credential.user.uid;
+  const accountScope = { scopeKey: `account:${ownerId}`, ownerId };
   const catchId = `catch-${crypto.randomUUID()}`;
   const imageBytes = new Uint8Array([0xff, 0xd8, 0xff, 0x10, 0x20, 0x30]);
   const blob = new Blob([imageBytes], { type: "image/jpeg" });
-  await catchRepository.put(makeCatch(catchId, ownerId, blob), { ownerId });
+  await catchRepository.put(makeCatch(catchId, ownerId, blob), accountScope);
 
   const realPhotoStorage = createFirebasePhotoStorage({
     storage: client.storage,
@@ -106,13 +107,13 @@ try {
   const interrupted = await firstDevice.run(ownerId);
   assert.equal(interrupted.status, "error", "failed upload must stay visible as a sync error");
   assert.equal((await outboxRepository.list()).length, 1, "failed photo must keep its Catch operation queued");
-  const queuedRecord = await catchRepository.get(catchId);
+  const queuedRecord = await catchRepository.get(catchId, accountScope);
   assert.equal(queuedRecord.photos[0].blob.size, imageBytes.byteLength, "failed upload must retain the IndexedDB Blob");
 
   const retried = await makeService(client, realPhotoStorage, () => Date.now() + 60_000).run(ownerId);
   assert.equal(retried.status, "success", retried.error);
   assert.equal((await outboxRepository.list()).length, 0, "successful retry must acknowledge the Catch operation");
-  const localAfterUpload = await catchRepository.get(catchId);
+  const localAfterUpload = await catchRepository.get(catchId, accountScope);
   assert.equal(localAfterUpload.sync.photoStatus, "synced");
   assert.equal(localAfterUpload.photos[0].blob.size, imageBytes.byteLength);
 
@@ -128,7 +129,7 @@ try {
   await resetLocalDatabase();
   const secondDevice = await makeService(client, realPhotoStorage).run(ownerId);
   assert.equal(secondDevice.status, "success", secondDevice.error);
-  const restored = await catchRepository.get(catchId);
+  const restored = await catchRepository.get(catchId, accountScope);
   assert.equal(restored.photos[0].photoStatus, "synced");
   assert.equal(restored.photos[0].blob.size, imageBytes.byteLength, "second device must restore the photo Blob locally");
   assert.deepEqual([...new Uint8Array(await restored.photos[0].blob.arrayBuffer())], [...imageBytes]);
@@ -140,7 +141,7 @@ try {
     updatedAt: new Date().toISOString(),
     photos: [{ id: "photo-2", name: "kapr-novy.jpg", type: "image/jpeg", blob: new Blob([replacementBytes], { type: "image/jpeg" }) }],
     sync: { ...restored.sync, revision: restored.sync.revision + 1 },
-  }, { ownerId });
+  }, accountScope);
   let failCleanup = true;
   const cleanupInterrupted = {
     ...realPhotoStorage,
@@ -155,7 +156,7 @@ try {
   const uploadCompletedButCleanupFailed = await makeService(client, cleanupInterrupted, () => Date.now() + 60_000).run(ownerId);
   assert.equal(uploadCompletedButCleanupFailed.status, "error");
   assert.equal((await outboxRepository.list()).length, 1, "post-upload cleanup failure must keep the operation queued");
-  assert.equal((await catchRepository.get(catchId)).sync.photoStatus, "local-only");
+  assert.equal((await catchRepository.get(catchId, accountScope)).sync.photoStatus, "local-only");
   const replaced = await makeService(client, realPhotoStorage, () => Date.now() + 60_000).run(ownerId);
   assert.equal(replaced.status, "success", replaced.error);
   const replacedRemote = await getDoc(doc(client.db, "users", ownerId, "catches", catchId));
@@ -164,13 +165,13 @@ try {
   assert.deepEqual([...new Uint8Array(await getBytes(ref(client.storage, replacementPath)))], [...replacementBytes]);
   await assert.rejects(getBytes(ref(client.storage, oldPath)), (error) => error.code === "storage/unauthorized");
 
-  const current = await catchRepository.get(catchId);
+  const current = await catchRepository.get(catchId, accountScope);
   await catchRepository.put({
     ...current,
     updatedAt: new Date().toISOString(),
     photos: [],
     sync: { ...current.sync, revision: current.sync.revision + 1 },
-  }, { ownerId });
+  }, accountScope);
   let failRemovalCleanup = true;
   const removalCleanupInterrupted = {
     ...realPhotoStorage,
@@ -191,25 +192,25 @@ try {
   assert.equal((await listAll(ref(client.storage, replacementPath.slice(0, replacementPath.lastIndexOf("/"))))).items.length, 0);
   await assert.rejects(getBytes(ref(client.storage, replacementPath)), (error) => error.code === "storage/unauthorized");
 
-  const afterRemoval = await catchRepository.get(catchId);
+  const afterRemoval = await catchRepository.get(catchId, accountScope);
   const finalBytes = new Uint8Array([0xff, 0xd8, 0xff, 0x70]);
   await catchRepository.put({
     ...afterRemoval,
     updatedAt: new Date().toISOString(),
     photos: [{ id: "photo-3", name: "kapr-final.jpg", type: "image/jpeg", blob: new Blob([finalBytes], { type: "image/jpeg" }) }],
     sync: { ...afterRemoval.sync, revision: afterRemoval.sync.revision + 1 },
-  }, { ownerId });
+  }, accountScope);
   const beforeDelete = await makeService(client, realPhotoStorage, () => Date.now() + 60_000).run(ownerId);
   assert.equal(beforeDelete.status, "success", beforeDelete.error);
-  const catchWithPhoto = await catchRepository.get(catchId);
+  const catchWithPhoto = await catchRepository.get(catchId, accountScope);
   const restoredPath = catchWithPhoto.photos[0].storagePath;
 
   await signOut(client.auth);
-  const offlineLocal = await catchRepository.get(catchId);
+  const offlineLocal = await catchRepository.get(catchId, accountScope);
   assert.equal(offlineLocal.photos[0].blob.size, finalBytes.byteLength, "sign-out must preserve the local photo Blob");
   await signInWithEmailAndPassword(client.auth, email, password);
   assert.equal(client.auth.currentUser.uid, ownerId);
-  await catchRepository.delete(catchId);
+  await catchRepository.delete(catchId, accountScope);
   let failDeleteCleanup = true;
   const deleteCleanupInterrupted = {
     ...realPhotoStorage,
@@ -234,16 +235,17 @@ try {
   await signOut(client.auth);
   const ownerlessId = `catch-ownerless-${crypto.randomUUID()}`;
   const ownerlessBlob = new Blob([new Uint8Array([0xff, 0xd8, 0xff, 0x7f])], { type: "image/jpeg" });
-  await catchRepository.put(makeCatch(ownerlessId, null, ownerlessBlob));
-  assert.equal((await catchRepository.get(ownerlessId)).photos[0].blob.size, ownerlessBlob.size);
+  const guestScope = { scopeKey: await getActiveGuestScopeKey(), ownerId: null };
+  await catchRepository.put(makeCatch(ownerlessId, null, ownerlessBlob), guestScope);
+  assert.equal((await catchRepository.get(ownerlessId, guestScope)).photos[0].blob.size, ownerlessBlob.size);
   await signInWithEmailAndPassword(client.auth, email, password);
   const afterOwnerless = await makeService(client, realPhotoStorage).run(ownerId);
   assert.equal(afterOwnerless.status, "success", afterOwnerless.error);
   assert.equal((await getDoc(doc(client.db, "users", ownerId, "catches", ownerlessId))).exists(), false);
   assert.equal((await outboxRepository.list()).some((item) => item.entityId === ownerlessId && item.ownerId === null), true);
-  assert.equal((await catchRepository.get(ownerlessId)).photos[0].blob.size, ownerlessBlob.size);
+  assert.equal((await catchRepository.get(ownerlessId, guestScope)).photos[0].blob.size, ownerlessBlob.size);
 
-  const linked = await linkOwnerlessData(ownerId);
+  const linked = await linkGuestData(ownerId, guestScope.scopeKey);
   assert.deepEqual(linked, { catches: 1, trips: 0, photos: 1 });
   const uploadedOwnerless = await makeService(client, realPhotoStorage, () => Date.now() + 60_000).run(ownerId);
   assert.equal(uploadedOwnerless.status, "success", uploadedOwnerless.error);
@@ -256,7 +258,7 @@ try {
   await resetLocalDatabase();
   const linkedSecondDevice = await makeService(client, realPhotoStorage).run(ownerId);
   assert.equal(linkedSecondDevice.status, "success", linkedSecondDevice.error);
-  const linkedRestored = await catchRepository.get(ownerlessId);
+  const linkedRestored = await catchRepository.get(ownerlessId, accountScope);
   assert.equal(linkedRestored.ownerId, ownerId);
   assert.deepEqual([...new Uint8Array(await linkedRestored.photos[0].blob.arrayBuffer())], [0xff, 0xd8, 0xff, 0x7f]);
   assert.deepEqual([...new Uint8Array(await getBytes(ref(client.storage, linkedPath)))], [0xff, 0xd8, 0xff, 0x7f]);

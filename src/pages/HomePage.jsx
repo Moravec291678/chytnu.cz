@@ -1,20 +1,43 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
+import { Link } from "react-router-dom";
 import Layout from "../shared/layout/Layout";
-import { DEFAULT_METHODS } from "../shared/constants/constants";
 import CatchCard from "../features/catches/components/CatchCard";
-import ProfileStatsBar from "../features/home/components/ProfileStatsBar";
 import FishActivity from "../features/home/components/FishActivity";
 import { useCatches } from "../features/catches/context/useCatches";
 import { useTrips } from "../features/trips/context/useTrips";
-import { filterAndSortCatches, hasActiveJournalFilters } from "../features/catches/utils/catchJournal";
-import { normalizeText } from "../shared/utils/helpers";
+import { getBiggestCatch } from "../features/home/utils/profileStats";
+import { getActiveTrip } from "../features/trips/data/tripModel";
+import { getMethodLabel } from "../shared/utils/getMethodLabel";
+import useLiveDuration from "../hooks/useLiveDuration";
+import { buildChallengeOverview } from "../features/progression/data/challenges";
+import { buildSeasonalChallenge } from "../features/progression/data/seasonalChallenge";
+import { buildHomeInsight } from "../features/home/utils/homeInsights";
+import { useProgression } from "../features/progression/context/progressionContextValue.js";
 import "./HomePage.css";
 
-const EMPTY_FILTERS = { search: "", speciesKey: "", dateFrom: "", dateTo: "", favoriteOnly: false, result: "", methodKey: "", tripId: "", sort: "newest" };
-const SORTS = [
-  ["newest", "Nejnovější"], ["oldest", "Nejstarší"], ["heaviest", "Nejtěžší"],
-  ["lightest", "Nejlehčí"], ["longest", "Nejdelší"], ["shortest", "Nejkratší"],
+const SEASONS = [
+  { key: "winter", label: "Zima", months: [11, 0, 1] },
+  { key: "spring", label: "Jaro", months: [2, 3, 4] },
+  { key: "summer", label: "Léto", months: [5, 6, 7] },
+  { key: "autumn", label: "Podzim", months: [8, 9, 10] },
 ];
+
+function getSeason(date) {
+  const month = date.getMonth();
+  const season = SEASONS.find((item) => item.months.includes(month));
+  const year = month === 11 ? date.getFullYear() + 1 : date.getFullYear();
+  return {
+    label: season.label,
+    year,
+    key: `${year}-${season.key}`,
+  };
+}
+
+function getSeasonKey(date) {
+  const season = SEASONS.find((item) => item.months.includes(date.getMonth()));
+  const year = date.getMonth() === 11 ? date.getFullYear() + 1 : date.getFullYear();
+  return `${year}-${season.key}`;
+}
 
 function pluralize(count, forms) {
   const remainder = count % 100;
@@ -25,65 +48,249 @@ function pluralize(count, forms) {
   return forms[2];
 }
 
+function formatWeight(weight) {
+  return new Intl.NumberFormat("cs-CZ", { maximumFractionDigits: 1 }).format(weight);
+}
+
+function ActiveTripSummary({ trip, catches }) {
+  const duration = useLiveDuration(trip.startedAt);
+  const tripCatches = catches.filter((item) => item.tripId === trip.id);
+  const today = new Date().toDateString();
+  const catchesToday = tripCatches.filter(
+    (item) => item.caughtAt && new Date(item.caughtAt).toDateString() === today,
+  ).length;
+
+  return (
+    <Link className="home-active-trip" to={`/trips/${trip.id}`}>
+      <span className="home-active-dot" aria-hidden="true" />
+      <span className="home-active-copy">
+        <strong>{trip.locationName || trip.title} · aktivní výprava</strong>
+        <span>{getMethodLabel(trip) || "Metoda neuvedena"} · {catchesToday} {pluralize(catchesToday, ["úlovek dnes", "úlovky dnes", "úlovků dnes"])}</span>
+      </span>
+      <time className="home-active-timer">{duration}</time>
+    </Link>
+  );
+}
+
+function SeasonalChallengeCard({ challenge }) {
+  return (
+    <section className="home-progress-card home-season-card" aria-labelledby="home-season-title">
+      <div className="home-progress-heading">
+        <span className="home-progress-kicker">Výzva sezóny · {challenge.season}</span>
+        <Link to="/challenges">Detaily <span aria-hidden="true">→</span></Link>
+      </div>
+      <h2 id="home-season-title">{challenge.title}</h2>
+      <p>
+        {challenge.description}
+        {challenge.season === "Podzim" && challenge.bestCatch && (
+          <> Tvůj nejlepší kapr:{" "}
+            {challenge.bestCatch.id
+              ? <Link to={`/catch/${challenge.bestCatch.id}`}>{formatWeight(challenge.bestCatch.weightKg)} kg</Link>
+              : <strong>{formatWeight(challenge.bestCatch.weightKg)} kg</strong>}
+            .
+          </>
+        )}
+      </p>
+      <div className="home-progress-meter" role="progressbar" aria-label={challenge.title} aria-valuemin="0" aria-valuemax={challenge.goal} aria-valuenow={challenge.progress}>
+        <span style={{ width: `${(challenge.progress / challenge.goal) * 100}%` }} />
+      </div>
+      <div className="home-progress-foot">
+        <span>{challenge.progressLabel} {pluralize(challenge.progress, ["úlovek", "úlovky", "úlovků"])}</span>
+        <strong>{challenge.completed ? `Splněno · +${challenge.xp} XP` : `Odměna ${challenge.xp} XP`}</strong>
+      </div>
+    </section>
+  );
+}
+
+function WeeklyProgressCard({ tasks, streak }) {
+  const completedCount = tasks.filter((task) => task.completed).length;
+  return (
+    <section className="home-progress-card home-week-card" aria-label="Týdenní pokrok">
+      <div className="home-progress-heading">
+        <span className="home-progress-kicker">Tento týden · {completedCount}/{tasks.length} splněno</span>
+        <Link to="/challenges">Všechny výzvy <span aria-hidden="true">→</span></Link>
+      </div>
+      <Link className="home-streak-summary" to="/streak">
+        <span>Série u vody</span>
+        <strong>{streak.weeks} {pluralize(streak.weeks, ["týden", "týdny", "týdnů"])}</strong>
+        <span className="home-streak-bars" role="img" aria-label={`Série má ${streak.weeks} ${pluralize(streak.weeks, ["týden", "týdny", "týdnů"])}, zobrazeno v osmi dílech`}>
+          {Array.from({ length: 8 }, (_, index) => (
+            <span className={index < Math.min(streak.weeks, 8) ? "home-streak-bar home-streak-bar--active" : "home-streak-bar"} key={index} aria-hidden="true" />
+          ))}
+        </span>
+        <span className="home-streak-arrow" aria-hidden="true">→</span>
+      </Link>
+      <ul className="home-week-tasks">
+        {tasks.map((task) => (
+          <li
+            key={task.id}
+            className={`home-week-task${task.completed ? " home-week-task--complete" : ""}${task.id.startsWith("weekly-") ? " home-week-task--progress" : ""}`}
+          >
+            <span aria-hidden="true">{task.completed ? "✓" : "○"}</span>
+            <span className="home-week-task-copy">
+              <span>{task.title}</span>
+              {task.id.startsWith("weekly-") && (
+                <span
+                  className="home-week-task-meter"
+                  role="progressbar"
+                  aria-label={task.title}
+                  aria-valuemin="0"
+                  aria-valuemax={task.goal}
+                  aria-valuenow={task.progress}
+                >
+                  <span style={{ width: `${(task.progress / task.goal) * 100}%` }} />
+                </span>
+              )}
+            </span>
+            <strong>{task.completed && task.id.startsWith("daily-") ? `+${task.xp} XP` : task.progressLabel}</strong>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function HomeInsightCard({ insight }) {
+  return (
+    <section className="home-insight-card" aria-labelledby="home-insight-title">
+      <span className="home-progress-kicker">{insight.source}</span>
+      <h2 id="home-insight-title">{insight.title}</h2>
+      <p>{insight.message}</p>
+    </section>
+  );
+}
+
 function HomePage() {
-  const { state } = useCatches();
-  const { state: tripState } = useTrips();
-  const [filters, setFilters] = useState(EMPTY_FILTERS);
-  const [filtersExpanded, setFiltersExpanded] = useState(false);
-  const species = useMemo(() => [...new Map(state.catches.map((item) => [item.speciesKey, { key: item.speciesKey, label: item.species }])).values()]
-    .sort((a, b) => normalizeText(a.label).localeCompare(normalizeText(b.label), "cs")), [state.catches]);
-  const results = useMemo(() => filterAndSortCatches(state.catches, filters, tripState.trips), [state.catches, filters, tripState.trips]);
-  const activeFilters = hasActiveJournalFilters(filters);
-  const activeFilterCount = [filters.speciesKey, filters.dateFrom, filters.dateTo, filters.favoriteOnly, filters.result, filters.methodKey, filters.tripId]
-    .filter(Boolean).length;
+  const { state: catchState, refresh: refreshCatches } = useCatches();
+  const { state: tripState, refresh: refreshTrips } = useTrips();
+  const ledger = useProgression();
+  const catches = catchState.catches;
+  const season = getSeason(new Date());
+  const seasonCatches = useMemo(() => catches.filter((item) => {
+    const caughtAt = Date.parse(item.caughtAt);
+    return Number.isFinite(caughtAt) && getSeasonKey(new Date(caughtAt)) === season.key;
+  }), [catches, season.key]);
+  const seasonSpeciesCount = useMemo(
+    () => new Set(seasonCatches.map((item) => item.speciesKey || item.species).filter(Boolean)).size,
+    [seasonCatches],
+  );
+  const recordCatch = useMemo(() => getBiggestCatch(catches), [catches]);
+  const recentCatches = useMemo(
+    () => [...catches].sort((left, right) => Date.parse(right.caughtAt) - Date.parse(left.caughtAt)).slice(0, 4),
+    [catches],
+  );
+  const activeTrip = getActiveTrip(tripState.trips);
+  const challenges = useMemo(() => {
+    const current = buildChallengeOverview(catches, tripState.trips);
+    const persist = (task) => ({ ...task, completed: task.completed || ledger.isChallengeCompleted(task.id, task.periodKey) });
+    return { daily: current.daily.map(persist), weekly: current.weekly.map(persist) };
+  }, [catches, tripState.trips, ledger]);
+  const seasonalChallenge = useMemo(() => {
+    const current = buildSeasonalChallenge(catches);
+    return { ...current, completed: current.completed || ledger.isChallengeCompleted(current.id, current.id.slice("season-".length)) };
+  }, [catches, ledger]);
+  const weeklyStreak = ledger.summary.streak;
+  const insight = useMemo(() => buildHomeInsight(catches), [catches]);
   const tripsById = useMemo(() => new Map(tripState.trips.map((trip) => [trip.id, trip.title])), [tripState.trips]);
-  const visibleCatches = results.map((item) => ({ ...item, tripTitle: tripsById.get(item.tripId) }));
-  const setFilter = (key, value) => setFilters((current) => ({ ...current, [key]: value }));
-  const resetFilters = () => setFilters(EMPTY_FILTERS);
 
-  return <Layout>
-    <header className="home-header">
-      <div className="home-header-top">
-        <div>
-          <h1>Deník úlovků</h1>
-          <p>{state.catches.length} {pluralize(state.catches.length, ["úlovek", "úlovky", "úlovků"])} · {species.length} {pluralize(species.length, ["druh", "druhy", "druhů"])}</p>
-        </div>
+  return (
+    <Layout>
+      <div className="home-dashboard">
+        <header className="dashboard-header">
+          <div>
+            <h1>ChytnuCz</h1>
+            <p>
+              {catchState.loading
+                ? `${season.label} ${season.year} · Načítám deník…`
+                : `${season.label} ${season.year} · ${seasonCatches.length} ${pluralize(seasonCatches.length, ["úlovek", "úlovky", "úlovků"])} · ${seasonSpeciesCount} ${pluralize(seasonSpeciesCount, ["druh", "druhy", "druhů"])}`}
+            </p>
+          </div>
+          <div className="dashboard-header-actions">
+            <Link className="dashboard-icon-button" to="/journal#catch-search" aria-label="Hledat v deníku">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8" /><path d="m16 16 5 5" /></svg>
+            </Link>
+            <Link className="dashboard-icon-button" to="/profile" aria-label="Otevřít profil">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5" /><path d="M4.5 21a7.5 7.5 0 0 1 15 0" /></svg>
+            </Link>
+          </div>
+        </header>
+
+        <FishActivity />
+
+        {!ledger.loading && !ledger.error && <Link className="home-progress-card home-xp-card" to="/levels" aria-label={`Úroveň ${ledger.summary.level}, ${ledger.summary.xp} XP, hodnost ${ledger.summary.rank.name}. Otevřít postup`}>
+          <div className="home-progress-heading"><span className="home-progress-kicker">Tvůj postup</span><span>Úrovně a XP →</span></div>
+          <h2>Úroveň {ledger.summary.level} · {ledger.summary.rank.name}</h2>
+          <p>{ledger.summary.xp} XP{ledger.summary.nextThreshold ? ` · další úroveň při ${ledger.summary.nextThreshold} XP` : " · nejvyšší úroveň"}</p>
+          <div className="home-progress-meter" role="progressbar" aria-label="Postup do další úrovně" aria-valuemin="0" aria-valuemax="100" aria-valuenow={ledger.summary.progressPercent}>
+            <span style={{ width: `${ledger.summary.progressPercent}%` }} />
+          </div>
+        </Link>}
+
+        {!catchState.loading && !tripState.loading && !ledger.loading && !catchState.error && !tripState.error && !ledger.error && (
+          <>
+            <SeasonalChallengeCard challenge={seasonalChallenge} />
+          <WeeklyProgressCard tasks={[challenges.daily[0], challenges.weekly[0]]} streak={weeklyStreak} />
+          </>
+        )}
+
+        {activeTrip && <ActiveTripSummary trip={activeTrip} catches={catches} />}
+        {!tripState.loading && !tripState.error && !activeTrip && (
+          <Link className="home-no-trip" to="/trips/new">
+            <span>
+              <strong>Žádná aktivní výprava</strong>
+              <span>Zahájit novou výpravu</span>
+            </span>
+            <span aria-hidden="true">→</span>
+          </Link>
+        )}
+
+        {(catchState.error || tripState.error || ledger.error) && (
+          <section className="dashboard-error" role="alert">
+            <p>{[catchState.error, tripState.error, ledger.error].filter(Boolean).join(" ")}</p>
+            {catchState.error && <button type="button" onClick={refreshCatches}>Načíst úlovky znovu</button>}
+            {tripState.error && <button type="button" onClick={refreshTrips}>Načíst výpravy znovu</button>}
+          </section>
+        )}
+
+        <section className="dashboard-recent" aria-labelledby="dashboard-recent-title">
+          <div className="dashboard-section-heading">
+            <h2 id="dashboard-recent-title">Poslední úlovky</h2>
+            <Link to="/journal">Vše <span aria-hidden="true">→</span></Link>
+          </div>
+          <nav className="dashboard-view-tabs" aria-label="Zobrazení úlovků">
+            <Link className="dashboard-view-tab dashboard-view-tab--active" to="/journal" aria-current="true">Seznam</Link>
+            <Link className="dashboard-view-tab" to="/journal/map">Mapa</Link>
+            <Link className="dashboard-view-tab" to="/journal/calendar">Kalendář</Link>
+          </nav>
+
+          {catchState.loading ? (
+            <div className="dashboard-loading" role="status" aria-label="Načítám místní deník">
+              <span /><span /><span />
+            </div>
+          ) : catchState.error ? (
+            <div className="dashboard-empty" role="alert">
+              <strong>Úlovky se nepodařilo načíst</strong>
+              <p>Po načtení bude možné zobrazit aktuální záznamy.</p>
+              <button type="button" onClick={refreshCatches}>Zkusit znovu</button>
+            </div>
+          ) : catches.length === 0 ? (
+            <div className="dashboard-empty">
+              <strong>Zatím tu nic není</strong>
+              <p>Zapiš první úlovek. Záznam zůstane uložený v tvém deníku.</p>
+              <Link to="/add">Zapsat první úlovek</Link>
+            </div>
+          ) : recentCatches.map((item) => (
+            <CatchCard
+              key={item.id}
+              catchedFish={{ ...item, tripTitle: tripsById.get(item.tripId) }}
+              isPersonalRecord={item.id === recordCatch?.id}
+            />
+          ))}
+        </section>
+        {!catchState.loading && !catchState.error && <HomeInsightCard insight={insight} />}
       </div>
-      <div className="journal-controls">
-        <label className="journal-search-label" htmlFor="catch-search">Hledat v deníku</label>
-        <input id="catch-search" className="journal-control" type="search" placeholder="Druh, lokalita, metoda, nástraha…" value={filters.search} onChange={(event) => setFilter("search", event.target.value)} />
-        <div className="journal-filter-actions">
-          <button className="journal-filter-toggle" type="button" aria-expanded={filtersExpanded} aria-controls="journal-filter-panel" onClick={() => setFiltersExpanded((expanded) => !expanded)}>
-            <span>Filtry</span>
-            {activeFilterCount > 0 && <span className="journal-filter-count" aria-label={`${activeFilterCount} aktivní filtry`}>{activeFilterCount}</span>}
-            <span aria-hidden="true">{filtersExpanded ? "⌃" : "⌄"}</span>
-          </button>
-          {activeFilters && <button className="journal-reset-button" type="button" onClick={resetFilters}>Vymazat</button>}
-        </div>
-        {filtersExpanded && <div id="journal-filter-panel" className="journal-filter-panel">
-        <div className="journal-filter-grid">
-          <label>Druh<select className="journal-control" value={filters.speciesKey} onChange={(event) => setFilter("speciesKey", event.target.value)}><option value="">Všechny druhy</option>{species.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}</select></label>
-          <label>Řazení<select className="journal-control" value={filters.sort} onChange={(event) => setFilter("sort", event.target.value)}>{SORTS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-          <label>Od<input className="journal-control" aria-label="Datum od" type="date" value={filters.dateFrom} onChange={(event) => setFilter("dateFrom", event.target.value)} /></label>
-          <label>Do<input className="journal-control" aria-label="Datum do" type="date" value={filters.dateTo} onChange={(event) => setFilter("dateTo", event.target.value)} /></label>
-          <label>Výsledek<select className="journal-control" value={filters.result} onChange={(event) => setFilter("result", event.target.value)}><option value="">Jakýkoli</option><option value="released">Puštěno</option><option value="kept">Ponecháno</option><option value="unspecified">Neuvedeno</option></select></label>
-          <label>Metoda<select className="journal-control" value={filters.methodKey} onChange={(event) => setFilter("methodKey", event.target.value)}><option value="">Všechny metody</option>{DEFAULT_METHODS.map((method) => <option key={method.key} value={method.key}>{method.label}</option>)}</select></label>
-          <label>Výprava<select className="journal-control" value={filters.tripId} onChange={(event) => setFilter("tripId", event.target.value)}><option value="">Všechny výpravy</option>{tripState.trips.map((trip) => <option key={trip.id} value={trip.id}>{trip.title}</option>)}</select></label>
-        </div>
-        <label className="journal-favorite-filter"><input type="checkbox" checked={filters.favoriteOnly} onChange={(event) => setFilter("favoriteOnly", event.target.checked)} /> Jen oblíbené</label>
-        </div>}
-      </div>
-    </header>
-
-    {!activeFilters && <><FishActivity /><ProfileStatsBar /></>}
-
-    <h2 className="section-title">{activeFilters ? `Výsledky · ${results.length}` : "Všechny úlovky"}</h2>
-    {state.loading ? <div className="empty-search"><p>Načítám místní deník…</p></div>
-      : state.error ? <div className="empty-search" role="alert"><p>{state.error}</p><button type="button" onClick={() => window.location.reload()}>Zkusit znovu</button></div>
-        : state.catches.length === 0 ? <div className="empty-search"><p>Zatím tu nejsou žádné úlovky. První přidáš tlačítkem + dole.</p></div>
-          : visibleCatches.length === 0 ? <div className="empty-search"><p>Žádný úlovek neodpovídá zvolenému hledání a filtrům.</p><button type="button" onClick={resetFilters}>Vymazat filtry</button></div>
-            : visibleCatches.map((item) => <CatchCard key={item.id} catchedFish={item} />)}
-  </Layout>;
+    </Layout>
+  );
 }
 
 export default HomePage;

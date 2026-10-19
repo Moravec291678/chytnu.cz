@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { formatCatchWeight, isMeasuredCatchWeight } from "../features/catches/data/catchWeight.js";
 import Layout from "../shared/layout/Layout";
 import { useAuth } from "../features/auth/context/authContextValue.js";
+import { useDataScope } from "../features/auth/context/dataScopeContextValue.js";
 import { useSync } from "../features/sync/context/syncContextValue.js";
 import { getLocalBackupFileName, serializeLocalBackupJson } from "../features/backup/data/backupFormat.js";
 import { readLocalBackupSnapshot } from "../features/backup/data/localBackupRepository.js";
@@ -12,16 +14,22 @@ import {
   summarizeLocalBackupRestore,
 } from "../features/backup/data/backupRestore.js";
 import {
-  linkOwnerlessData,
+  linkGuestData,
   listSyncConflicts,
-  readOwnerlessSummary,
+  readGuestSummary,
   resolveSyncConflict,
 } from "../features/sync/data/localSyncRepository.js";
+import { getActiveGuestScopeKey } from "../features/catches/data/catchRepository.js";
 import { validateAuthForm } from "../features/auth/data/authFormValidation.js";
 import ConfirmDialog from "../shared/components/ConfirmDialog";
 import { useCatches } from "../features/catches/context/useCatches";
 import { useTrips } from "../features/trips/context/useTrips";
-import { calculateProgression } from "../features/progression/data/progression";
+import { useProgression } from "../features/progression/context/progressionContextValue.js";
+import { getBiggestCatch } from "../features/home/utils/profileStats";
+import CatchCard from "../features/catches/components/CatchCard";
+import { buildSpeciesAlbum } from "../features/species/data/speciesAlbum";
+import { DEFAULT_SPECIES } from "../shared/constants/constants";
+import { readTrophySelection, saveTrophySelection } from "../features/species/data/trophySelection.js";
 import "./ProfilePage.css";
 
 function formatCount(count, one, few, many) {
@@ -47,18 +55,45 @@ function ProfilePage() {
   const [authFormError, setAuthFormError] = useState("");
   const [ownerless, setOwnerless] = useState({ catches: 0, trips: 0, photos: 0 });
   const [conflicts, setConflicts] = useState([]);
+  const [accountDataError, setAccountDataError] = useState("");
   const [dataActionBusy, setDataActionBusy] = useState(false);
   const [confirmingLink, setConfirmingLink] = useState(false);
   const [confirmingReplace, setConfirmingReplace] = useState(false);
+  const [trophySelection, setTrophySelection] = useState({ scopeKey: null, ids: [] });
+  const [trophyError, setTrophyError] = useState("");
   const [pendingConflict, setPendingConflict] = useState(null);
   const authActionRef = useRef(false);
   const dataActionRef = useRef(false);
   const backupActionRef = useRef(false);
   const auth = useAuth();
+  const dataScope = useDataScope();
   const sync = useSync();
   const { state: catchState } = useCatches();
   const { state: tripState } = useTrips();
-  const progression = calculateProgression(catchState.catches, tripState.trips);
+  const { summary: progression } = useProgression();
+  const recordCatch = getBiggestCatch(catchState.catches);
+  const trophyCatches = useMemo(
+    () => [...catchState.catches].sort((left, right) => {
+      const weightDelta = (isMeasuredCatchWeight(right) ? right.weightKg : -1) - (isMeasuredCatchWeight(left) ? left.weightKg : -1);
+      if (weightDelta) return weightDelta;
+      const lengthDelta = (Number.isFinite(right.lengthCm) ? right.lengthCm : -1) - (Number.isFinite(left.lengthCm) ? left.lengthCm : -1);
+      return lengthDelta || Date.parse(right.caughtAt) - Date.parse(left.caughtAt);
+    }),
+    [catchState.catches],
+  );
+  const trophySelectionLoaded = dataScope.status === "ready";
+  const savedTrophyIds = trophySelection.scopeKey === dataScope.scopeKey
+    ? trophySelection.ids
+    : (readTrophySelection(dataScope.scopeKey) ?? trophyCatches.slice(0, 5).map((item) => item.id));
+  const selectedTrophyIds = savedTrophyIds.filter((id) => trophyCatches.some((item) => item.id === id));
+  const speciesPreview = useMemo(
+    () => buildSpeciesAlbum(catchState.catches, DEFAULT_SPECIES).filter((item) => item.discovered).slice(0, 4),
+    [catchState.catches],
+  );
+  const profileIdentity = auth.user?.displayName || auth.user?.email || "Místní deník";
+  const avatarInitial = auth.user
+    ? profileIdentity.trim().charAt(0).toLocaleUpperCase("cs-CZ")
+    : "🎣";
   const accountEnvironment = auth.mode === "emulator"
     ? "Účet v této vývojové verzi používá pouze lokální Firebase emulátor."
     : auth.mode === "staging"
@@ -68,24 +103,35 @@ function ProfilePage() {
         : "Účet pro toto prostředí zatím není nastavený.";
 
   const refreshAccountData = useCallback(async () => {
-    const [localSummary, accountConflicts] = await Promise.all([
-      readOwnerlessSummary(),
-      auth.user ? listSyncConflicts(auth.user.uid) : Promise.resolve([]),
-    ]);
-    setOwnerless(localSummary);
-    setConflicts(accountConflicts);
+    try {
+      const guestScopeKey = await getActiveGuestScopeKey();
+      const [localSummary, accountConflicts] = await Promise.all([
+        readGuestSummary(guestScopeKey),
+        auth.user ? listSyncConflicts(auth.user.uid) : Promise.resolve([]),
+      ]);
+      setOwnerless(localSummary);
+      setConflicts(accountConflicts);
+      setAccountDataError("");
+    } catch (readError) {
+      const message = readError?.message || "Stav místních dat a konfliktů se nepodařilo načíst.";
+      setAccountDataError(message);
+      throw readError;
+    }
   }, [auth.user]);
 
   useEffect(() => {
     let active = true;
-    Promise.all([
-      readOwnerlessSummary(),
+    getActiveGuestScopeKey().then((guestScopeKey) => Promise.all([
+      readGuestSummary(guestScopeKey),
       auth.user ? listSyncConflicts(auth.user.uid) : Promise.resolve([]),
-    ]).then(([localSummary, accountConflicts]) => {
+    ])).then(([localSummary, accountConflicts]) => {
       if (!active) return;
       setOwnerless(localSummary);
       setConflicts(accountConflicts);
-    }).catch(() => {});
+      setAccountDataError("");
+    }).catch((readError) => {
+      if (active) setAccountDataError(readError?.message || "Stav místních dat a konfliktů se nepodařilo načíst.");
+    });
     return () => { active = false; };
   }, [auth.user, sync.conflicts, sync.pending]);
 
@@ -101,7 +147,8 @@ function ProfilePage() {
     setDataActionBusy(true);
     setError("");
     try {
-      const result = await linkOwnerlessData(auth.user.uid);
+      const guestScopeKey = await getActiveGuestScopeKey();
+      const result = await linkGuestData(auth.user.uid, guestScopeKey);
       window.dispatchEvent(new Event("chytnu:local-data-restored"));
       window.dispatchEvent(new Event("chytnu:outbox-changed"));
       setMessage(`K účtu bylo bezpečně propojeno ${result.catches} úlovků, ${result.trips} výprav a ${result.photos} fotografií. Místní data zůstala zachována.`);
@@ -162,7 +209,8 @@ function ProfilePage() {
     setError("");
 
     try {
-      const snapshot = await readLocalBackupSnapshot();
+      if (dataScope.status !== "ready") throw new Error("Aktivní profil ještě není připravený.");
+      const snapshot = await readLocalBackupSnapshot(dataScope);
       const json = await serializeLocalBackupJson(snapshot);
       const file = new Blob([json], { type: "application/json;charset=utf-8" });
       const url = URL.createObjectURL(file);
@@ -200,7 +248,8 @@ function ProfilePage() {
     setReading(true);
     try {
       const parsed = parseLocalBackupJson(await file.text());
-      const current = await readLocalBackupSnapshot();
+      const guestScopeKey = await getActiveGuestScopeKey();
+      const current = await readLocalBackupSnapshot({ scopeKey: guestScopeKey, ownerId: null });
       const nextSummary = await summarizeLocalBackupRestore(parsed, current);
       setBackup(parsed);
       setSummary(nextSummary);
@@ -234,7 +283,8 @@ function ProfilePage() {
     setError("");
     setMessage("");
     try {
-      const result = await restoreLocalBackup(backup, mode);
+      const guestScopeKey = await getActiveGuestScopeKey();
+      const result = await restoreLocalBackup(backup, mode, { scopeKey: guestScopeKey, ownerId: null });
       window.dispatchEvent(new CustomEvent("chytnu:local-data-restored"));
       setBackup(null);
       setSummary(null);
@@ -253,8 +303,72 @@ function ProfilePage() {
     <div className="profile-page">
       <header className="profile-header">
         <h1>Profil</h1>
-        <p>Ochrana a přenos tvého místního deníku.</p>
+        <p>Tvůj rybářský příběh a postup.</p>
       </header>
+
+      <section className="profile-identity" aria-label="Aktuální profil">
+        <span className="profile-avatar" aria-hidden="true">{avatarInitial}</span>
+        <div><strong>{profileIdentity}</strong><span>{progression.rank.name} · {progression.rank.title}</span></div>
+        <span className="profile-level-badge">Úroveň {progression.level}</span>
+      </section>
+
+      <section className="profile-level-card" aria-label="Rybářský postup">
+        <div><strong>Level {progression.level}</strong><span>{progression.xp} XP{progression.nextThreshold ? ` · další při ${progression.nextThreshold} XP` : ""}</span></div>
+        <div className="profile-progress-bar" role="progressbar" aria-label="Postup do dalšího levelu" aria-valuemin="0" aria-valuemax="100" aria-valuenow={progression.progressPercent}><span style={{ width: `${progression.progressPercent}%` }} /></div>
+      </section>
+
+      <section className="profile-stat-grid" aria-label="Souhrn profilu">
+        <div><strong>{catchState.loading ? "—" : catchState.catches.length}</strong><span>ÚLOVKY</span></div>
+        <div><strong>{catchState.loading ? "—" : progression.speciesCount}</strong><span>DRUHY</span></div>
+        <div className="profile-record-stat"><strong>{recordCatch ? `${recordCatch.weightKg.toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} kg` : "—"}</strong><span>REKORD</span></div>
+        <div><strong>{tripState.loading ? "—" : tripState.trips.length}</strong><span>VÝPRAVY</span></div>
+      </section>
+
+      <nav className="profile-quick-links" aria-label="Osobní přehledy">
+        <Link className="profile-stats-link" to="/stats"><span><strong>Statistiky</strong><small>Analýza úlovků a výprav</small></span><b aria-hidden="true">→</b></Link>
+        <Link className="profile-secondary-link" to="/insights">Osobní přehledy <span aria-hidden="true">→</span></Link>
+        <Link className="profile-secondary-link" to="/season-story">Příběh sezóny <span aria-hidden="true">→</span></Link>
+        <Link className="profile-secondary-link" to="/year-summary">Roční souhrn <span aria-hidden="true">→</span></Link>
+        <Link className="profile-secondary-link" to="/settings">Nastavení <span aria-hidden="true">→</span></Link>
+        <Link className="profile-secondary-link" to="/album">Druhové album <span aria-hidden="true">→</span></Link>
+        <Link className="profile-secondary-link" to="/map">Soukromá mapa <span aria-hidden="true">→</span></Link>
+        <Link className="profile-secondary-link" to="/privacy">Soukromí <span aria-hidden="true">→</span></Link>
+        <Link className="profile-secondary-link" to="/levels">Úrovně a XP <span aria-hidden="true">→</span></Link>
+        <Link className="profile-secondary-link" to="/achievements">Achievementy <span aria-hidden="true">→</span></Link>
+        <Link className="profile-secondary-link" to="/challenges">Osobní výzvy <span aria-hidden="true">→</span></Link>
+        <Link className="profile-secondary-link" to="/streak">Týdenní série <span aria-hidden="true">→</span></Link>
+      </nav>
+
+      <section className="profile-trophy" aria-labelledby="profile-trophy-title">
+        <div className="profile-trophy-heading">
+          <h2 id="profile-trophy-title">Trofejní úlovky</h2>
+          <Link to="/journal">Deník →</Link>
+        </div>
+        {catchState.loading || !trophySelectionLoaded ? <p className="loading-state" role="status">Načítám úlovky…</p>
+            : trophyCatches.length
+            ? <>
+              <p>Vyber až 5 trofejí. Výběr je uložený pro tento profil.</p>
+              {trophyCatches.filter((item) => selectedTrophyIds.includes(item.id)).map((item) => <CatchCard key={item.id} catchedFish={item} isPersonalRecord={item.id === recordCatch?.id} />)}
+              <details><summary>Upravit výběr trofejí</summary>
+                {trophyCatches.map((item) => <label key={item.id} style={{ display: "flex", alignItems: "center", gap: ".5rem", margin: ".45rem 0" }}>
+                  <input type="checkbox" checked={selectedTrophyIds.includes(item.id)} onChange={(event) => {
+                    const next = event.target.checked ? [...selectedTrophyIds, item.id] : selectedTrophyIds.filter((id) => id !== item.id);
+                    if (next.length > 5) { setTrophyError("Do trofejní vitríny lze vybrat nejvýše 5 úlovků."); return; }
+                    try { setTrophySelection({ scopeKey: dataScope.scopeKey, ids: saveTrophySelection(dataScope.scopeKey, next) }); setTrophyError(""); }
+                    catch (selectionError) { setTrophyError(selectionError.message); }
+                  }} />{item.species || "Ryba"} · {Number.isFinite(item.weightKg) ? `${formatCatchWeight(item)} kg` : Number.isFinite(item.lengthCm) ? `${item.lengthCm} cm` : "bez měření"}
+                </label>)}
+              </details>
+              {trophyError && <p role="alert">{trophyError}</p>}
+            </>
+            : <p className="profile-trophy-empty">Trofejní úlovky se zobrazí po uložení prvního záznamu.</p>}
+      </section>
+
+      <section className="profile-album-preview" aria-labelledby="profile-album-title">
+        <div className="profile-trophy-heading"><h2 id="profile-album-title">Objevené druhy</h2><Link to="/album">{progression.speciesCount} druhů →</Link></div>
+        {speciesPreview.length ? <div className="profile-album-grid">{speciesPreview.map((species) => <Link to={`/species/${species.key}`} key={species.key}><span aria-hidden="true">🐟</span><strong>{species.label}</strong></Link>)}</div>
+          : <p className="profile-trophy-empty">Album se začne plnit po zapsání prvního úlovku.</p>}
+      </section>
 
       <section className="profile-panel" aria-labelledby="local-backup-title">
         <h2 id="local-backup-title">Místní data</h2>
@@ -302,10 +416,9 @@ function ProfilePage() {
       </section>
 
       <section className="profile-panel profile-progress" aria-labelledby="progress-title">
-        <div className="profile-progress-heading"><div><h2 id="progress-title">Rybářský postup</h2><p>Vychází přímo z aktuálních záznamů v deníku.</p></div><strong>Level {progression.level}</strong></div>
+        <div className="profile-progress-heading"><div><h2 id="progress-title">Rybářský postup</h2><p>Vychází z trvale uložených odměn v deníku.</p></div><strong>Level {progression.level}</strong></div>
         <div className="profile-progress-bar" role="progressbar" aria-label="Postup do dalšího levelu" aria-valuemin="0" aria-valuemax="100" aria-valuenow={progression.progressPercent}><span style={{ width: `${progression.progressPercent}%` }} /></div>
         <p>{progression.xp} XP{progression.nextThreshold ? ` · další level při ${progression.nextThreshold} XP` : " · dosažen nejvyšší level MVP"}</p>
-        <div className="profile-progress-links"><Link to="/album">Druhové album · {formatCount(progression.speciesCount, "druh", "druhy", "druhů")}</Link><Link to="/map">Soukromá mapa úlovků</Link></div>
         <h3>Milníky · {progression.completedAchievementCount}/{progression.achievements.length}</h3>
         <ul className="profile-achievements">{progression.achievements.map((achievement) => <li className={achievement.isCompleted ? "is-complete" : ""} key={achievement.id}><span aria-hidden="true">{achievement.isCompleted ? "✓" : "○"}</span><div><strong>{achievement.name}</strong><small>{achievement.description}</small></div></li>)}</ul>
       </section>
@@ -313,7 +426,8 @@ function ProfilePage() {
       <section className="profile-panel profile-account" aria-labelledby="account-title">
         <h2 id="account-title">Uživatelský účet</h2>
         <p>{accountEnvironment} Přihlášení nemění místní úlovky ani výpravy.</p>
-        {auth.status === "loading" && <p role="status">Ověřuji stav účtu…</p>}
+        {accountDataError && <p className="profile-error" role="alert">{accountDataError}</p>}
+        {auth.status === "loading" && <p className="loading-state" role="status">Ověřuji stav účtu…</p>}
         {auth.status === "unavailable" && <p className="profile-error" role="alert">Přihlášení je dostupné pouze při lokálním spuštění aplikace s emulátorem.</p>}
         {auth.status === "error" && <p className="profile-error" role="alert">{auth.error}</p>}
 

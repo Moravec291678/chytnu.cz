@@ -1,0 +1,269 @@
+.journal-calendar {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-5) var(--space-4) calc(var(--space-7) + env(safe-area-inset-bottom));
+}
+
+.journal-calendar-header {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.journal-calendar-header > a {
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.journal-calendar-header h1 {
+  color: var(--text-primary);
+  font-size: var(--font-size-title);
+  font-weight: 900;
+}
+
+.journal-calendar-header p {
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.journal-calendar .journal-tabs {
+  margin-bottom: 0;
+}
+
+.journal-calendar-view-toggle {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+}
+
+.journal-calendar-view-toggle button {
+  min-height: 46px;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.journal-calendar-view-toggle button[aria-pressed="true"] {
+  background: var(--accent-green-soft);
+  color: var(--accent-green);
+}
+
+.journal-calendar-panel {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.journal-calendar-year,
+.journal-calendar-empty,
+.journal-calendar-error {
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+}
+
+.journal-calendar-month {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 44px;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.journal-calendar-month h2 {
+  color: var(--text-primary);
+  font-size: var(--font-size-card);
+  text-align: center;
+  text-transform: capitalize;
+}
+
+.journal-calendar-month button {
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-primary);
+  font-size: 24px;
+}
+
+.journal-calendar-year-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.journal-calendar-year-month {
+  display: grid;
+  min-width: 0;
+  min-height: 68px;
+  align-content: center;
+  justify-items: center;
+  gap: 5px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-secondary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.journal-calendar-year-month.is-selected {
+  border-color: var(--accent-green);
+  background: var(--accent-green-soft);
+  color: var(--accent-green);
+}
+
+.journal-calendar-year-month strong {
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  text-transform: capitalize;
+}
+
+.journal-calendar-year-month > span:not(.journal-calendar-year-markers) {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.journal-calendar-year-markers {
+  display: flex;
+  min-height: 5px;
+  gap: 3px;
+}
+
+.journal-calendar-year-markers i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+}
+
+.journal-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 3px;
+}
+
+.journal-calendar-weekday {
+  display: grid;
+  min-height: 32px;
+  place-items: center;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.journal-calendar-blank {
+  min-height: 48px;
+  aspect-ratio: 1 / 1;
+}
+
+.journal-calendar-day {
+  display: flex;
+  min-width: 0;
+  min-height: 48px;
+  aspect-ratio: 1 / 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-1);
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: 800;
+}
+
+.journal-calendar-day.is-selected {
+  border-color: var(--accent-green);
+  background: var(--accent-green-soft);
+  color: var(--text-primary);
+}
+
+.journal-calendar-day.has-record > span:first-child {
+  color: var(--accent-orange);
+}
+
+.journal-calendar-markers {
+  display: flex;
+  min-height: 5px;
+  gap: 3px;
+}
+
+.journal-calendar-markers i,
+.journal-calendar-legend i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+}
+
+.marker-catch {
+  background: var(--accent-green);
+}
+
+.marker-trip {
+  background: var(--accent-blue);
+}
+
+.marker-record {
+  background: var(--accent-orange);
+}
+
+.journal-calendar-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.journal-calendar-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-secondary);
+  font-size: 10px;
+}
+
+.journal-calendar-day-details {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.journal-calendar-day-details > h2 {
+  margin: var(--space-2) 0 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  text-transform: capitalize;
+}
+
+.journal-calendar-empty p,
+.journal-calendar-error p {
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.journal-calendar-empty a,
+.journal-calendar-error button {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  margin-top: var(--space-2);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-primary);
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  text-decoration: none;
+}

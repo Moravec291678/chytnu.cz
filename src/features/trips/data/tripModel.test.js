@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createTripRecord, endTripRecord, formatTripDuration, getActiveTrip, getTripDurationMs, tripToForm, updateTripRecord } from "./tripModel.js";
+import { createTripRecord, endTripRecord, formatTripCatchCount, formatTripDuration, getActiveTrip, getDistinctTripSpecies, getTripCatchRatePerHour, getTripDurationMs, tripToForm, updateTripRecord } from "./tripModel.js";
 
 test("trip records store stable local metadata and optional fields", () => {
   const now = new Date("2026-10-16T12:30:00.000Z");
@@ -49,4 +49,29 @@ test("trip defaults title, ends durably, and elapsed duration uses stored timest
   assert.equal(ended.sync.revision, trip.sync.revision + 1);
   assert.equal(getTripDurationMs(ended), 9_300_000);
   assert.equal(formatTripDuration(9_300_000), "2 h 35 min");
+});
+
+test("trip catch rate uses actual catches and elapsed time", () => {
+  assert.equal(getTripCatchRatePerHour(2, 10_800_000), 2 / 3);
+  assert.equal(getTripCatchRatePerHour(0, 3_600_000), 0);
+  assert.equal(getTripCatchRatePerHour(1, 0), null);
+  assert.equal(getTripCatchRatePerHour(-1, 3_600_000), null);
+  assert.equal(getTripCatchRatePerHour(1.5, 3_600_000), null);
+});
+
+test("catch totals use correct Czech plural forms", () => {
+  assert.equal(formatTripCatchCount(1), "1 úlovek");
+  assert.equal(formatTripCatchCount(3), "3 úlovky");
+  assert.equal(formatTripCatchCount(7), "7 úlovků");
+  assert.equal(formatTripCatchCount(12), "12 úlovků");
+});
+
+test("trip species are deduplicated by key, with a name fallback for legacy catches", () => {
+  const catches = [
+    { species: "Kapr obecný", speciesKey: "carp" },
+    { species: "Kapr", speciesKey: "carp" },
+    { species: "Štika" },
+    { species: "", speciesKey: "ignored" },
+  ];
+  assert.deepEqual(getDistinctTripSpecies(catches), [catches[0], catches[2]]);
 });

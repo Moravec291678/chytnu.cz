@@ -14,6 +14,30 @@ service cloud.firestore {
       return value == null || (value is number && value >= 0 && value <= maximum);
     }
 
+    function optionalRange(value, minimum, maximum) {
+      return value == null || (value is number && value >= minimum && value <= maximum);
+    }
+
+    function validConditions(value) {
+      return value == null || (
+        value is map
+        && value.keys().hasOnly([
+          'airTempC', 'waterTempC', 'pressureHpa', 'windKmh', 'moonPhase',
+          'airTemperatureC', 'waterTemperatureC', 'weather', 'windDirection', 'pressureTrend'
+        ])
+        && optionalRange(value.get('airTempC', null), -60, 60)
+        && optionalRange(value.get('waterTempC', null), -10, 60)
+        && optionalRange(value.get('pressureHpa', null), 300, 1200)
+        && optionalRange(value.get('windKmh', null), 0, 300)
+        && optionalString(value.get('moonPhase', null))
+        && optionalRange(value.get('airTemperatureC', null), -60, 60)
+        && optionalRange(value.get('waterTemperatureC', null), -10, 60)
+        && optionalString(value.get('weather', null))
+        && optionalString(value.get('windDirection', null))
+        && optionalString(value.get('pressureTrend', null))
+      );
+    }
+
     function validMethod(value) {
       return value == null || (
         value is map
@@ -37,6 +61,23 @@ service cloud.firestore {
         && value.longitude >= -180
         && value.longitude <= 180
       );
+    }
+
+    function validCatchPrivacy(value) {
+      return value is map
+        && value.keys().hasAll(['visibility', 'photoVisibility', 'locationPrecision', 'privateSpot', 'nearbyEligible', 'heatmapEligible'])
+        && value.keys().hasOnly(['visibility', 'photoVisibility', 'locationPrecision', 'privateSpot', 'nearbyEligible', 'heatmapEligible'])
+        && value.visibility in ['private', 'public']
+        && value.photoVisibility in ['private', 'public']
+        && value.locationPrecision in ['none', 'approximate', 'exact']
+        && value.privateSpot is bool
+        && value.nearbyEligible is bool
+        && value.heatmapEligible is bool
+        && (!value.privateSpot || (
+          value.locationPrecision == 'none'
+          && value.nearbyEligible == false
+          && value.heatmapEligible == false
+        ));
     }
 
     function validPhotoMetadata(value, userId, catchId) {
@@ -103,6 +144,7 @@ service cloud.firestore {
         && (!data.keys().hasAny(['coordinates']) || validCoordinates(data.coordinates))
         && optionalNumber(data.waterDepthM, 2000)
         && optionalString(data.bottomType)
+        && (!data.keys().hasAny(['conditions']) || validConditions(data.conditions))
         && (data.tripId == null || (
           data.tripId is string
           && exists(/databases/$(database)/documents/users/$(userId)/trips/$(data.tripId))
@@ -117,13 +159,14 @@ service cloud.firestore {
         && (data.photos.size() == 0 || validPhotoMetadata(data.photos[0], userId, catchId))
         && data.notes is string
         && data.isFavorite is bool
+        && validCatchPrivacy(data.privacy)
         && data.createdAt is string
         && data.updatedAt is string
         && data.keys().hasOnly([
           'schemaVersion', 'id', 'ownerId', 'entityType', 'createdAt', 'updatedAt', 'caughtAt',
           'species', 'speciesKey', 'speciesLatin', 'weightKg', 'lengthCm', 'girthCm', 'fightMinutes',
-          'locationName', 'waterNumber', 'gpsLocation', 'coordinates', 'waterDepthM', 'bottomType', 'tripId', 'method',
-          'baits', 'result', 'photos', 'notes', 'isFavorite', 'deleted', 'deletedAt', 'serverRevision',
+          'locationName', 'waterNumber', 'gpsLocation', 'coordinates', 'waterDepthM', 'bottomType', 'conditions', 'tripId', 'method',
+          'baits', 'result', 'photos', 'notes', 'isFavorite', 'privacy', 'deleted', 'deletedAt', 'serverRevision',
           'syncSequence', 'lastOperationId', 'clientLocalRevision', 'operationDigest', 'lastReceiptId', 'photoState'
         ]);
     }

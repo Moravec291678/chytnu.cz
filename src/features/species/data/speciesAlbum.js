@@ -1,6 +1,12 @@
+import { normalizeText } from "../../../shared/utils/helpers.js";
+import { isMeasuredCatchWeight } from "../../catches/data/catchWeight.js";
+
 function measuredMaximum(records, field) {
-  const values = records.map((record) => record[field]).filter((value) => Number.isFinite(value));
-  return values.length ? Math.max(...values) : null;
+  return records.reduce((maximum, record) => {
+      if (field === "weightKg" && !isMeasuredCatchWeight(record)) return maximum;
+      const value = record[field];
+    return Number.isFinite(value) && (!maximum || value > maximum[field]) ? record : maximum;
+  }, null);
 }
 
 export function buildSpeciesAlbum(catches, catalog) {
@@ -19,10 +25,89 @@ export function buildSpeciesAlbum(catches, catalog) {
       ...species,
       discovered: records.length > 0,
       catchCount: records.length,
-      bestWeightKg: measuredMaximum(records, "weightKg"),
-      bestLengthCm: measuredMaximum(records, "lengthCm"),
+      bestWeightCatch: measuredMaximum(records, "weightKg"),
+      bestLengthCatch: measuredMaximum(records, "lengthCm"),
+      bestWeightKg: measuredMaximum(records, "weightKg")?.weightKg ?? null,
+      bestLengthCm: measuredMaximum(records, "lengthCm")?.lengthCm ?? null,
       firstCaughtAt: timestamps.length ? new Date(timestamps[0]).toISOString() : null,
       lastCaughtAt: timestamps.length ? new Date(timestamps.at(-1)).toISOString() : null,
     };
   });
+}
+
+const SEASONS = [
+  { key: "winter", name: "Zima", months: [11, 0, 1] },
+  { key: "spring", name: "Jaro", months: [2, 3, 4] },
+  { key: "summer", name: "Léto", months: [5, 6, 7] },
+  { key: "autumn", name: "Podzim", months: [8, 9, 10] },
+];
+
+function dateParts(value) {
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return null;
+  const date = new Date(timestamp);
+  return { timestamp, year: date.getFullYear(), month: date.getMonth() };
+}
+
+function getSeason(month) {
+  return SEASONS.find((season) => season.months.includes(month));
+}
+
+export function buildLocationCollections(catches, trips) {
+  const locations = new Map();
+  const addRecord = (record, type) => {
+    const name = typeof record.locationName === "string" ? record.locationName.trim() : "";
+    if (!name) return;
+    const key = normalizeText(name);
+    const location = locations.get(key) ?? { key, name, catchCount: 0, tripCount: 0, latestTimestamp: 0 };
+    const date = dateParts(type === "catch" ? record.caughtAt : record.startedAt);
+    if (type === "catch") location.catchCount += 1;
+    else location.tripCount += 1;
+    location.latestTimestamp = Math.max(location.latestTimestamp, date?.timestamp ?? 0);
+    locations.set(key, location);
+  };
+
+  catches.forEach((record) => addRecord(record, "catch"));
+  trips.forEach((record) => addRecord(record, "trip"));
+  return [...locations.values()].sort((a, b) => b.latestTimestamp - a.latestTimestamp || a.name.localeCompare(b.name, "cs-CZ"));
+}
+
+export function buildSeasonCollections(catches, trips, year = new Date().getFullYear()) {
+  const collections = new Map();
+  const addRecord = (record, type) => {
+    const date = dateParts(type === "catch" ? record.caughtAt : record.startedAt);
+    if (!date || date.year !== year) return;
+    const season = getSeason(date.month);
+    const collection = collections.get(season.key) ?? {
+      ...season,
+      year,
+      catchCount: 0,
+      tripCount: 0,
+      latestTimestamp: 0,
+    };
+    if (type === "catch") collection.catchCount += 1;
+    else collection.tripCount += 1;
+    collection.latestTimestamp = Math.max(collection.latestTimestamp, date.timestamp);
+    collections.set(season.key, collection);
+  };
+
+  catches.forEach((record) => addRecord(record, "catch"));
+  trips.forEach((record) => addRecord(record, "trip"));
+  return [...collections.values()].sort((a, b) => b.latestTimestamp - a.latestTimestamp);
+}
+
+export function buildTrophyRecords(catches, catalog, limit = 5) {
+  const speciesByKey = new Map(catalog.map((species) => [species.key, species]));
+  return catches
+    .filter((record) => isMeasuredCatchWeight(record))
+    .map((record) => {
+      const species = speciesByKey.get(record.speciesKey);
+      return {
+        speciesKey: record.speciesKey,
+        speciesName: species?.label || record.species || "Druh neuveden",
+        catch: record,
+      };
+    })
+    .sort((a, b) => b.catch.weightKg - a.catch.weightKg)
+    .slice(0, limit);
 }

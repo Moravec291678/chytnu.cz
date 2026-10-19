@@ -1,3 +1,5 @@
+import { isMeasuredCatchWeight } from "../../catches/data/catchWeight.js";
+
 export function getTopMethod(catches) {
   const groupMethods = catches.reduce((acc, item) => {
     if (!item.method?.key) return acc;
@@ -61,7 +63,7 @@ export function getTopRevier(catches) {
 }
 
 export function getBiggestCatch(catches) {
-  return catches.filter((item) => Number.isFinite(item.weightKg))
+  return catches.filter(isMeasuredCatchWeight)
     .reduce((max, item) => !max || item.weightKg > max.weightKg ? item : max, null);
 }
 
@@ -79,3 +81,5 @@ export function getAvailableProfileStats(catches) {
 
   return stats;
 }
+
+

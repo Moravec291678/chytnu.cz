@@ -6,19 +6,25 @@ import App from "./app/App.jsx";
 import { CatchProvider } from "./features/catches/context/CatchContext.jsx";
 import { TripProvider } from "./features/trips/context/TripContext.jsx";
 import { AuthProvider } from "./features/auth/context/AuthContext.jsx";
+import { DataScopeProvider } from "./features/auth/context/DataScopeContext.jsx";
 import { SyncProvider } from "./features/sync/context/SyncContext.jsx";
+import { ProgressionProvider } from "./features/progression/context/ProgressionContext.jsx";
 
 createRoot(document.getElementById("root")).render(
   <StrictMode>
     <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <AuthProvider>
-        <SyncProvider>
-          <CatchProvider>
-            <TripProvider>
-              <App />
-            </TripProvider>
-          </CatchProvider>
-        </SyncProvider>
+        <DataScopeProvider>
+          <SyncProvider>
+            <CatchProvider>
+              <TripProvider>
+                <ProgressionProvider>
+                  <App />
+                </ProgressionProvider>
+              </TripProvider>
+            </CatchProvider>
+          </SyncProvider>
+        </DataScopeProvider>
       </AuthProvider>
     </BrowserRouter>
   </StrictMode>,

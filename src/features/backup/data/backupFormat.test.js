@@ -81,3 +81,16 @@ test("serialized backup is readable JSON with its format and records", async () 
   assert.equal(parsed.records.catches[0].id, "catch-json");
   assert.equal(parsed.records.trips[0].id, "trip-json");
 });
+
+test("current backups include scoped privacy and progression data without changing legacy documents", async () => {
+  const privacySettings = { profileVisibility: "private", scopeKey: "guest:source" };
+  const progressionEvents = [{ id: "event-1", reasonKey: "catch.created:catch-1", xp: 10 }];
+  const backup = await createLocalBackupDocument({
+    catches: [], trips: [], privacySettings, progressionEvents, createdAt,
+  });
+  assert.deepEqual(backup.records.privacySettings, privacySettings);
+  assert.deepEqual(backup.records.progressionEvents, progressionEvents);
+  assert.deepEqual((await createLocalBackupDocument({ catches: [], trips: [], createdAt })).records, {
+    catches: [], trips: [],
+  });
+});
