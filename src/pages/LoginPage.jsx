@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../features/auth/context/authContextValue.js";
 import { validateAuthForm } from "../features/auth/data/authFormValidation.js";
 import { confirmGuestAccess } from "../features/auth/data/guestAccess.js";
+import { resolveAuthenticatedRedirect } from "../app/routeAccess.js";
 import "./LoginPage.css";
 
 const FORM_COPY = {
@@ -24,6 +25,11 @@ export default function LoginPage() {
   const [formError, setFormError] = useState("");
   const [message, setMessage] = useState("");
   const [guestDialog, setGuestDialog] = useState(false);
+
+  useEffect(() => {
+    const destination = resolveAuthenticatedRedirect({ status: auth.status, user: auth.user });
+    if (destination) navigate(destination, { replace: true });
+  }, [auth.status, auth.user, navigate]);
 
   const changeMode = (nextMode) => {
     setMode(nextMode); setPassword(""); setConfirmPassword(""); setFormError(""); setMessage(""); auth.clearError();
