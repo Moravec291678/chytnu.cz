@@ -1,20 +1,61 @@
 import "fake-indexeddb/auto";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { completeOnboarding, isOnboardingComplete, readPreferences, savePreferences } from "./preferences.js";
+import {
+  completeOnboarding,
+  DEFAULT_NOTIFICATION_PREFERENCES,
+  isOnboardingComplete,
+  readPreferences,
+  savePreferences,
+} from "./preferences.js";
 import { hasLegacyProfileData, hasScopedRecords } from "./legacyProfile.js";
 import { CATCH_STORE_NAME, openLocalDatabase } from "../../catches/data/catchRepository.js";
 import { waterRepository } from "../../waters/data/waterRepository.js";
 
 function memoryStorage() { const values = new Map(); return { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) }; }
 
-test("preferences persist settings and merge notification toggles across reads", () => {
+test("all notification preferences persist across reload and stay isolated by profile", () => {
   const storage = memoryStorage();
-  savePreferences({ detailMode: "detailed", notifications: { weather: true } }, storage);
-  const loaded = readPreferences(storage);
+  const selected = {
+    morningFishActivity: false,
+    tomorrowGreatConditions: true,
+    friendActivity: true,
+    streaksAndChallenges: false,
+    friendLegendaryCatch: true,
+  };
+  savePreferences({ detailMode: "detailed", notifications: selected }, storage, "guest-a");
+  const loaded = readPreferences(storage, "guest-a");
   assert.equal(loaded.detailMode, "detailed");
-  assert.equal(loaded.notifications.weather, true);
-  assert.equal(loaded.notifications.streak, true);
+  assert.deepEqual(loaded.notifications, selected);
+  assert.deepEqual(readPreferences(storage, "guest-b").notifications, DEFAULT_NOTIFICATION_PREFERENCES);
+});
+
+test("legacy notification choices migrate to the current preference names", () => {
+  const storage = memoryStorage();
+  storage.setItem("chytnu:preferences:v1:guest-legacy", JSON.stringify({
+    notifications: { fishActivity: false, weather: true, challenges: false },
+  }));
+
+  assert.deepEqual(readPreferences(storage, "guest-legacy").notifications, {
+    morningFishActivity: false,
+    tomorrowGreatConditions: true,
+    friendActivity: false,
+    streaksAndChallenges: false,
+    friendLegendaryCatch: false,
+  });
+});
+
+test("entry mode persists independently per profile and uses the legacy value only as a fallback", () => {
+  const storage = memoryStorage();
+  savePreferences({ detailMode: "detailed" }, storage);
+  assert.equal(readPreferences(storage, "guest-new").detailMode, "detailed");
+
+  savePreferences({ detailMode: "simple" }, storage, "guest-a");
+  savePreferences({ detailMode: "detailed" }, storage, "account-b");
+
+  assert.equal(readPreferences(storage, "guest-a").detailMode, "simple");
+  assert.equal(readPreferences(storage, "account-b").detailMode, "detailed");
+  assert.equal(readPreferences(storage, "guest-new").detailMode, "detailed");
 });
 
 test("onboarding completion persists independently per data scope and malformed storage falls back", () => {

@@ -38,7 +38,6 @@ const ACHIEVEMENT_DEFINITIONS = [
   { id: "marathon-trip", name: "Maratonec", description: "Dokonči výpravu trvající alespoň osm hodin.", category: "Skryté", xp: 75, hidden: true, completed: ({ trips }) => trips.some(isMarathonTrip) },
 ];
 
-export const ACHIEVEMENTS = Object.freeze(ACHIEVEMENT_DEFINITIONS);
 const ACHIEVEMENT_TRACKS = Object.freeze({
   "first-catch": { goal: 1, current: ({ catches }) => catches.length },
   "first-kilo": { goal: 1, unit: "kg", current: ({ maxCatchWeight }) => maxCatchWeight },
@@ -59,6 +58,13 @@ const ACHIEVEMENT_TRACKS = Object.freeze({
   "twelve-week-streak": { goal: 12, current: ({ weeklyStreak }) => weeklyStreak },
   "fifty-two-week-streak": { goal: 52, current: ({ weeklyStreak }) => weeklyStreak },
 });
+export const ACHIEVEMENTS = Object.freeze(ACHIEVEMENT_DEFINITIONS.map((item) => Object.freeze({
+  ...item,
+  title: item.name,
+  rule: item.description,
+  target: ACHIEVEMENT_TRACKS[item.id]?.goal ?? 1,
+  hidden: item.hidden === true,
+})));
 export const MASTERY_LEVELS = Object.freeze([
   { level: 1, catches: 1, xp: 50, title: "První úlovek" },
   { level: 2, catches: 5, xp: 30, title: "Znalec druhu" },

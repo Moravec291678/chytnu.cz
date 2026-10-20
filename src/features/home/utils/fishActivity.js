@@ -251,7 +251,7 @@ export function getPersonalCatchTimePattern(catches) {
     sampleCount += 1;
   }
 
-  if (!sampleCount) return null;
+  if (sampleCount < 3) return null;
   const ranked = [...groups.entries()].sort((a, b) => b[1].count - a[1].count || a[0] - b[0]);
   const count = ranked[0][1].count;
   return {

@@ -35,6 +35,20 @@ function requestPromise(request) {
   });
 }
 
+export const WATER_CHAT_MAX_LENGTH = 500;
+
+function normalizeStoredMessage(record) {
+  if (!record) return null;
+  return {
+    id: record.id,
+    waterId: record.waterId,
+    scopeKey: record.scopeKey,
+    author: String(record.author || record.authorName || "Místní profil").trim(),
+    text: String(record.text || ""),
+    createdAt: record.createdAt || record.timestamp || null,
+  };
+}
+
 export const waterRepository = {
   async list(scope = {}) {
     const db = await openWatersDatabase();
@@ -108,33 +122,54 @@ export const waterRepository = {
       const messages = await requestPromise(store.index("waterId").getAll(waterId));
       const scopeKey = scope?.scopeKey || "guest";
       return (messages || [])
-        .filter((message) => message.scopeKey === scopeKey || (!message.scopeKey && scopeKey === "guest"))
-        .sort((a, b) => (a.timestamp || "").localeCompare(b.timestamp || ""));
+        .filter((message) => message.scopeKey === scopeKey)
+        .map(normalizeStoredMessage)
+        .sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""));
     } finally {
       db.close();
     }
   },
 
-  async addMessage({ waterId, text, authorName = "Já", scope = {} }) {
+  async addMessage({ waterId, text, author = "Místní profil", scope = {} }) {
+    if (!waterId || !String(waterId).trim()) throw new Error("Zpráva musí patřit ke konkrétnímu revíru.");
     const trimmed = (text || "").trim();
     if (!trimmed) throw new Error("Zpráva nesmí být prázdná.");
-    if (trimmed.length > 500) throw new Error("Zpráva může mít maximálně 500 znaků.");
+    if (trimmed.length > WATER_CHAT_MAX_LENGTH) throw new Error(`Zpráva může mít maximálně ${WATER_CHAT_MAX_LENGTH} znaků.`);
+    const authorName = String(author || "").trim() || "Místní profil";
     const db = await openWatersDatabase();
-    try {
-      const transaction = db.transaction(CHAT_STORE_NAME, "readwrite");
-      const store = transaction.objectStore(CHAT_STORE_NAME);
-      const message = {
-        id: crypto.randomUUID(),
-        waterId,
-        text: trimmed,
-        authorName,
-        timestamp: new Date().toISOString(),
-        scopeKey: scope?.scopeKey || "guest",
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction([STORE_NAME, CHAT_STORE_NAME], "readwrite");
+      const waterStore = transaction.objectStore(STORE_NAME);
+      const chatStore = transaction.objectStore(CHAT_STORE_NAME);
+      const scopeKey = scope?.scopeKey || "guest";
+      let message = null;
+      let failure = null;
+      const lookup = waterStore.get(waterId);
+
+      lookup.onsuccess = () => {
+        const water = lookup.result;
+        if (!water || water.scopeKey !== scopeKey) {
+          failure = new Error("Revír není v aktivním profilu dostupný.");
+          transaction.abort();
+          return;
+        }
+        message = {
+          id: crypto.randomUUID(),
+          waterId,
+          scopeKey,
+          author: authorName,
+          text: trimmed,
+          createdAt: new Date().toISOString(),
+        };
+        chatStore.add(message);
       };
-      await requestPromise(store.add(message));
-      return message;
-    } finally {
-      db.close();
-    }
+      lookup.onerror = () => {
+        failure = lookup.error;
+        transaction.abort();
+      };
+      transaction.oncomplete = () => { db.close(); resolve(message); };
+      transaction.onerror = () => { db.close(); reject(failure ?? transaction.error ?? new Error("Zprávu se nepodařilo uložit.")); };
+      transaction.onabort = () => { db.close(); reject(failure ?? transaction.error ?? new Error("Uložení zprávy bylo přerušeno.")); };
+    });
   },
 };

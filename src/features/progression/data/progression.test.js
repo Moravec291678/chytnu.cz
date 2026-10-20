@@ -73,6 +73,16 @@ test("levels use deterministic increasing thresholds through level 100 and expos
 
 test("every achievement has a stable unique ID and positive and negative behavior", () => {
   assert.equal(new Set(ACHIEVEMENTS.map((item) => item.id)).size, ACHIEVEMENTS.length);
+  for (const achievement of ACHIEVEMENTS) {
+    assert.equal(typeof achievement.id, "string");
+    assert.equal(typeof achievement.category, "string");
+    assert.equal(typeof achievement.title, "string");
+    assert.equal(typeof achievement.rule, "string");
+    assert.equal(typeof achievement.target, "number");
+    assert.ok(achievement.target > 0);
+    assert.ok(achievement.xp > 0);
+    assert.equal(typeof achievement.hidden, "boolean");
+  }
   const negative = calculateProgression([], []).achievements;
   assert.ok(negative.every((item) => !item.isCompleted));
   const positive = calculateProgression(Array.from({ length: 10 }, (_, index) => makeCatch(String(index), {
@@ -86,6 +96,23 @@ test("every achievement has a stable unique ID and positive and negative behavio
   }
   assert.equal(positive.find((item) => item.id === "night-catch").isCompleted, true);
   assert.equal(positive.find((item) => item.id === "marathon-trip").isCompleted, true);
+});
+
+test("Water exploration counts only stable Water IDs and exposes real progress", () => {
+  const stableWaters = Array.from({ length: 5 }, (_, index) => makeCatch(`water-${index}`, {
+    waterId: `water-id-${index}`,
+    locationName: `Revír ${index}`,
+  }));
+  const completed = calculateProgression(stableWaters).achievements.find((item) => item.id === "five-waters");
+  const freeTextOnly = calculateProgression(Array.from({ length: 8 }, (_, index) => makeCatch(`text-${index}`, {
+    locationName: `Volný text ${index}`,
+  }))).achievements.find((item) => item.id === "five-waters");
+
+  assert.equal(completed.progress, 5);
+  assert.equal(completed.target, 5);
+  assert.equal(completed.isCompleted, true);
+  assert.equal(freeTextOnly.progress, 0);
+  assert.equal(freeTextOnly.isCompleted, false);
 });
 
 test("achievement boundaries do not unlock early", () => {

@@ -239,6 +239,12 @@
   font-weight: 800;
 }
 
+.achievement-content p {
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: 1.4;
+}
+
 .achievement-progress {
   height: 6px;
   overflow: hidden;

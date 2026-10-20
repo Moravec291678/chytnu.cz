@@ -38,6 +38,23 @@ service cloud.firestore {
       );
     }
 
+    function validConditionSources(value) {
+      return value == null || (
+        value is map
+        && value.keys().hasOnly(['airTempC', 'waterTempC', 'pressureHpa', 'windKmh', 'moonPhase'])
+        && optionalString(value.get('airTempC', null))
+        && (value.get('airTempC', null) == null || value.airTempC in ['auto', 'manual'])
+        && optionalString(value.get('waterTempC', null))
+        && (value.get('waterTempC', null) == null || value.waterTempC in ['auto', 'manual'])
+        && optionalString(value.get('pressureHpa', null))
+        && (value.get('pressureHpa', null) == null || value.pressureHpa in ['auto', 'manual'])
+        && optionalString(value.get('windKmh', null))
+        && (value.get('windKmh', null) == null || value.windKmh in ['auto', 'manual'])
+        && optionalString(value.get('moonPhase', null))
+        && (value.get('moonPhase', null) == null || value.moonPhase in ['auto', 'manual'])
+      );
+    }
+
     function validMethod(value) {
       return value == null || (
         value is map
@@ -145,6 +162,7 @@ service cloud.firestore {
         && optionalNumber(data.waterDepthM, 2000)
         && optionalString(data.bottomType)
         && (!data.keys().hasAny(['conditions']) || validConditions(data.conditions))
+        && (!data.keys().hasAny(['conditionSources']) || validConditionSources(data.conditionSources))
         && (data.tripId == null || (
           data.tripId is string
           && exists(/databases/$(database)/documents/users/$(userId)/trips/$(data.tripId))
@@ -165,7 +183,7 @@ service cloud.firestore {
         && data.keys().hasOnly([
           'schemaVersion', 'id', 'ownerId', 'entityType', 'createdAt', 'updatedAt', 'caughtAt',
           'species', 'speciesKey', 'speciesLatin', 'weightKg', 'lengthCm', 'girthCm', 'fightMinutes',
-          'locationName', 'waterNumber', 'gpsLocation', 'coordinates', 'waterDepthM', 'bottomType', 'conditions', 'tripId', 'method',
+          'locationName', 'waterNumber', 'gpsLocation', 'coordinates', 'waterDepthM', 'bottomType', 'conditions', 'conditionSources', 'tripId', 'method',
           'baits', 'result', 'photos', 'notes', 'isFavorite', 'privacy', 'deleted', 'deletedAt', 'serverRevision',
           'syncSequence', 'lastOperationId', 'clientLocalRevision', 'operationDigest', 'lastReceiptId', 'photoState'
         ]);

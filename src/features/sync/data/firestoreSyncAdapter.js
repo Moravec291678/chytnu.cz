@@ -72,12 +72,18 @@ const CONDITION_FIELDS = [
   "windDirection",
   "pressureTrend",
 ];
+const CONDITION_SOURCE_FIELDS = ["airTempC", "waterTempC", "pressureHpa", "windKmh", "moonPhase"];
 
 function serializeConditions(conditions) {
   if (conditions == null) return null;
   return Object.fromEntries(
     Object.entries(conditions).filter(([key, value]) => CONDITION_FIELDS.includes(key) && value !== undefined),
   );
+}
+
+function serializeConditionSources(sources) {
+  if (sources == null) return null;
+  return Object.fromEntries(Object.entries(sources).filter(([field, source]) => CONDITION_SOURCE_FIELDS.includes(field) && ["auto", "manual"].includes(source)));
 }
 
 export function toRemoteRecord(entityType, record, ownerId) {
@@ -120,6 +126,7 @@ export function toRemoteRecord(entityType, record, ownerId) {
     waterDepthM: requireValue(record.waterDepthM, null),
     bottomType: requireValue(record.bottomType, null),
     conditions: serializeConditions(record.conditions),
+    conditionSources: serializeConditionSources(record.conditionSources),
     tripId: requireValue(record.tripId, null),
     method: requireValue(record.method, null),
     baits: requireValue(record.baits, []),

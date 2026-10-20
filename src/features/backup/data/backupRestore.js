@@ -9,6 +9,7 @@ export const MAX_BACKUP_FILE_BYTES = 100 * 1024 * 1024;
 const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
 const ALLOWED_PHOTO_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const ALLOWED_SYNC_STATUSES = new Set(["local", "metadata-synced"]);
+const CONDITION_SOURCE_FIELDS = new Set(["airTempC", "waterTempC", "pressureHpa", "windKmh", "moonPhase"]);
 const STORES = ["catches", "trips", OUTBOX_STORE_NAME, PRIVACY_STORE_NAME, PROGRESSION_EVENT_STORE_NAME];
 
 function fail(message) {
@@ -98,6 +99,11 @@ function decodeCatch(record, tripIds) {
     requireOptionalNumber(record[key], `${key} úlovku ${record.id}`);
   }
   if (record.weightSource !== undefined && !["manual", "estimated"].includes(record.weightSource)) fail(`Úlovek ${record.id} obsahuje neplatný zdroj hmotnosti.`);
+  if (record.conditionSources !== undefined) {
+    if (!isRecord(record.conditionSources) || Object.entries(record.conditionSources).some(([field, source]) => !CONDITION_SOURCE_FIELDS.has(field) || !["auto", "manual"].includes(source))) {
+      fail(`Úlovek ${record.id} obsahuje neplatný zdroj podmínek.`);
+    }
+  }
   for (const key of ["locationName", "gpsLocation", "notes", "result"]) {
     if (typeof record[key] !== "string") fail(`Záloha obsahuje neplatné pole ${key} úlovku ${record.id}.`);
   }

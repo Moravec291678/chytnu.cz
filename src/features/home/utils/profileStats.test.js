@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { getAvailableProfileStats, getReleasedPercentage } from "./profileStats.js";
+import { getAvailableProfileStats, getBestWater, getReleasedPercentage } from "./profileStats.js";
 
 test("release percentage uses only records with a known outcome", () => {
   assert.equal(getReleasedPercentage([{ result: "released" }, { result: "kept" }, { result: "unspecified" }]), 50);
@@ -29,4 +29,23 @@ test("profile summary shows only measured or explicitly recorded statistics", ()
     ["location", "1×"],
     ["released", "0%"],
   ]);
+});
+
+test("best Water is derived only from catches linked to a stable Water ID", () => {
+  const best = getBestWater([
+    { id: "a", waterId: "lipno", locationName: "Starý název" },
+    { id: "b", waterId: "lipno", locationName: "Starý název" },
+    { id: "c", locationName: "Volný text bez Water ID" },
+    { id: "d", waterId: "other", locationName: "Řeka" },
+  ], [{ id: "lipno", name: "Lipno" }]);
+
+  assert.deepEqual({ id: best.id, name: best.name, catchCount: best.catchCount, water: best.water.name }, {
+    id: "lipno", name: "Lipno", catchCount: 2, water: "Lipno",
+  });
+});
+
+test("best Water is absent when there is no linked, named catch", () => {
+  assert.equal(getBestWater([{ locationName: "Labe" }], []), null);
+  assert.equal(getBestWater([{ waterId: "missing" }], []), null);
+  assert.equal(getBestWater([{ waterId: "deleted", locationName: "Smazaný revír" }], []), null);
 });

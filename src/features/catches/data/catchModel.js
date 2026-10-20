@@ -2,6 +2,32 @@ import { normalizeCoordinates, parseCoordinateText } from "./coordinates.js";
 import { normalizeCatchPrivacy } from "../../privacy/data/privacyModel.js";
 import { estimateFishWeight, formatEstimatedWeight } from "./lengthWeightRelationships.js";
 
+const CONDITION_SOURCE_FIELDS = ["airTempC", "waterTempC", "pressureHpa", "windKmh", "moonPhase"];
+
+function normalizeConditionSources(sources, conditions) {
+  return Object.fromEntries(CONDITION_SOURCE_FIELDS.flatMap((field) => {
+    const present = conditions[field] !== undefined && conditions[field] !== null && conditions[field] !== "";
+    const source = sources?.[field];
+    if (!present && source !== "manual") return [];
+    return [[field, present && source === "auto" ? "auto" : "manual"]];
+  }));
+}
+
+export function updateCatchFormField(data, field, value) {
+  const next = { ...data, [field]: value };
+  if (field === "weightKg") {
+    next.weightSource = String(value).trim() ? "manual" : "estimated";
+    if (!String(value).trim()) {
+      const estimate = estimateFishWeight(data.speciesKey, data.lengthCm);
+      next.weightKg = estimate === null ? "" : formatEstimatedWeight(estimate);
+    }
+  } else if ((field === "lengthCm" || field === "speciesKey") && data.weightSource === "estimated") {
+    const estimate = estimateFishWeight(next.speciesKey, next.lengthCm);
+    next.weightKg = estimate === null ? "" : formatEstimatedWeight(estimate);
+  }
+  return next;
+}
+
 export function parseOptionalNumber(value, label, errors, { min = 0, max = Number.MAX_SAFE_INTEGER } = {}) {
   if (value === null || value === undefined || String(value).trim() === "") return null;
   const normalized = String(value).trim().replace(",", ".");
@@ -49,6 +75,7 @@ export function createCatchRecord(data, species, methods, existing = null, baitC
   for (const [key, value] of Object.entries(conditions)) {
     if (value === null || value === undefined || value === "") delete conditions[key];
   }
+  const conditionSources = normalizeConditionSources(data.conditionSources ?? existing?.conditionSources, conditions);
   const now = new Date().toISOString();
   const caughtAt = new Date(`${data.catchDate}T${data.catchTime || "12:00"}`).toISOString();
   const method = methods.find((item) => item.key === data.fishingMethod);
@@ -79,6 +106,7 @@ export function createCatchRecord(data, species, methods, existing = null, baitC
     waterDepthM: numeric(data.depthM),
     bottomType: data.bottomType || null,
     conditions: Object.keys(conditions).length ? conditions : null,
+    conditionSources,
     caughtAt,
     tripId: data.tripId || null,
     method: method ? { key: method.key, label: method.label, isCustom: false } : existingMethod,
@@ -109,6 +137,13 @@ export function catchToForm(record) {
   const number = (value) => value ?? "";
   const shouldEstimate = record.weightSource === "estimated" || !Number.isFinite(record.weightKg);
   const estimate = shouldEstimate ? estimateFishWeight(record.speciesKey, record.lengthCm) : null;
+  const conditions = {
+    airTempC: record.conditions?.airTempC ?? record.conditions?.airTemperatureC ?? "",
+    waterTempC: record.conditions?.waterTempC ?? record.conditions?.waterTemperatureC ?? "",
+    pressureHpa: record.conditions?.pressureHpa ?? "",
+    windKmh: record.conditions?.windKmh ?? "",
+    moonPhase: record.conditions?.moonPhase ?? "",
+  };
   return {
     weightKg: shouldEstimate && estimate !== null ? formatEstimatedWeight(estimate) : number(record.weightKg), lengthCm: number(record.lengthCm),
     weightSource: shouldEstimate ? "estimated" : "manual",
@@ -119,13 +154,8 @@ export function catchToForm(record) {
     gpsLocation: record.gpsLocation ?? "", coordinates: record.coordinates ?? null, depthM: number(record.waterDepthM),
     bottomType: record.bottomType ?? "", speciesKey: record.speciesKey,
     resultKey: record.result ?? "unspecified", fishingMethod: record.method?.key ?? "",
-    conditions: {
-      airTempC: record.conditions?.airTempC ?? record.conditions?.airTemperatureC ?? "",
-      waterTempC: record.conditions?.waterTempC ?? record.conditions?.waterTemperatureC ?? "",
-      pressureHpa: record.conditions?.pressureHpa ?? "",
-      windKmh: record.conditions?.windKmh ?? "",
-      moonPhase: record.conditions?.moonPhase ?? "",
-    },
+    conditions,
+    conditionSources: normalizeConditionSources(record.conditionSources, conditions),
     photos: record.photos ?? [], baits: (record.baits ?? []).map((bait) => bait.key),
     notes: record.notes ?? "", isFavorite: Boolean(record.isFavorite), tripId: record.tripId ?? "",
     privacy: normalizeCatchPrivacy(record.privacy),

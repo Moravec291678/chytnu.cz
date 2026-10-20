@@ -65,6 +65,30 @@ test("reload, direct reward lookup, edit, and deletion never grant the same rewa
   assert.equal(deletedSummary.mastery.find((item) => item.speciesKey === "carp").level, 1);
 });
 
+test("weight achievements stay unlocked after the qualifying Catch is edited below the threshold or deleted", async () => {
+  const scope = await reset();
+  const stored = await catchRepository.put(record("weight-record", { weightKg: 10, weightSource: "manual" }), scope);
+  await progressionLedger.reconcile(scope);
+
+  const edited = await catchRepository.put({
+    ...stored,
+    weightKg: 0.5,
+    sync: { ...stored.sync, revision: 2 },
+  }, scope);
+  await progressionLedger.reconcile(scope);
+  let events = await progressionLedger.list(scope);
+  let summary = buildLedgerProgressionSummary(events, [edited], []);
+  assert.equal(summary.achievements.find((item) => item.id === "first-kilo").isCompleted, true);
+  assert.equal(summary.achievements.find((item) => item.id === "trophy-catch").isCompleted, true);
+
+  await catchRepository.delete(edited.id, scope);
+  events = await progressionLedger.list(scope);
+  summary = buildLedgerProgressionSummary(events, [], []);
+  assert.equal(summary.achievements.find((item) => item.id === "first-kilo").isCompleted, true);
+  assert.equal(summary.achievements.find((item) => item.id === "trophy-catch").isCompleted, true);
+  assert.equal(events.filter((event) => event.reasonKey === "achievement.unlocked:trophy-catch").length, 1);
+});
+
 test("GPS with a moon phase alone does not earn the GPS and weather catch tier", async () => {
   const scope = await reset();
   const stored = await catchRepository.put(record("moon-only", {

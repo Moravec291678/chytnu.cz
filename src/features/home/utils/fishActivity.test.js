@@ -92,6 +92,10 @@ test("activity labels use the reference 0-to-100 score scale", () => {
 });
 
 test("personal activity time pattern derives only valid catch timestamps", () => {
+  assert.equal(getPersonalCatchTimePattern([
+    { caughtAt: "2026-10-16T06:15:00" },
+    { caughtAt: "2026-10-16T08:45:00" },
+  ]), null);
   assert.deepEqual(getPersonalCatchTimePattern([
     { caughtAt: "2026-10-16T06:15:00" },
     { caughtAt: "2026-10-16T08:45:00" },

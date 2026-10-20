@@ -37,6 +37,24 @@ test("backup preserves catch fields, trip records, and their stable relationship
   assert.deepEqual(trip, originalTrip);
 });
 
+test("condition provenance survives backup serialization and restore parsing", async () => {
+  const catchRecord = {
+    id: "catch-weather-source", schemaVersion: 1, speciesKey: "commonCarp", species: "Kapr obecný",
+    speciesLatin: "Cyprinus carpio", weightKg: null, weightSource: "estimated", lengthCm: null, girthCm: null, fightMinutes: null,
+    locationName: "", waterId: null, waterNumber: null, gpsLocation: "", coordinates: null, waterDepthM: null, bottomType: null,
+    caughtAt: "2026-10-16T06:00:00.000Z", createdAt: createdAt.toISOString(), updatedAt: createdAt.toISOString(),
+    conditions: { airTempC: 11, pressureHpa: 1016 },
+    conditionSources: { airTempC: "auto", pressureHpa: "manual" },
+    tripId: null, method: null, baits: [], result: "unspecified", notes: "", isFavorite: false,
+    sync: { status: "local", revision: 1 }, photos: [],
+  };
+  const backup = await createLocalBackupDocument({ catches: [catchRecord], trips: [], createdAt });
+  assert.deepEqual(backup.records.catches[0].conditionSources, catchRecord.conditionSources);
+  const { parseLocalBackupDocument } = await import("./backupRestore.js");
+  const restored = parseLocalBackupDocument(backup);
+  assert.deepEqual(restored.catches[0].conditionSources, catchRecord.conditionSources);
+});
+
 test("backup encodes photo Blob bytes and leaves the source record untouched", async () => {
   const blob = new Blob(["foto"], { type: "image/jpeg" });
   const catchRecord = {

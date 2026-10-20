@@ -42,3 +42,14 @@ test("species detail tolerates catches without measured values", () => {
   assert.equal(detail.biggestCatch, null);
   assert.equal(detail.longestCatch, null);
 });
+
+test("invalid catch dates sort after chronological records without affecting species isolation", () => {
+  const older = makeCatch("older", "commonCarp", "2025-01-01", 2, 50);
+  const undated = makeCatch("undated", "commonCarp", "not-a-date", null, null);
+  const otherSpecies = makeCatch("pike", "pike", "2025-03-01", 20, 80);
+  const detail = getSpeciesDetail([undated, otherSpecies, older], "commonCarp");
+
+  assert.deepEqual(detail.catches.map(({ id }) => id), ["older", "undated"]);
+  assert.equal(detail.biggestCatch, older);
+  assert.equal(detail.longestCatch, older);
+});

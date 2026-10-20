@@ -54,3 +54,13 @@ export function getCatchRecognition(catchRecord, catches) {
       && !others.some((record) => normalizeText(record.locationName ?? "") === normalizedLocation),
   };
 }
+
+export function isNewLengthRecord(catchRecord, catches) {
+  if (!Number.isFinite(catchRecord?.lengthCm)) return false;
+  const previousLengths = (catches || [])
+    .filter((record) => record.id !== catchRecord.id
+      && (catchRecord.speciesKey ? record.speciesKey === catchRecord.speciesKey : record.species === catchRecord.species)
+      && Number.isFinite(record.lengthCm))
+    .map((record) => record.lengthCm);
+  return previousLengths.length === 0 || catchRecord.lengthCm > Math.max(...previousLengths);
+}

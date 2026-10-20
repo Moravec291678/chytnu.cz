@@ -4,7 +4,6 @@ import Layout from "../shared/layout/Layout";
 import { useDataScope } from "../features/auth/context/dataScopeContextValue.js";
 import { createWaterRecord, validateWaterForm, WATER_TYPES } from "../features/waters/data/waterModel.js";
 import { waterRepository } from "../features/waters/data/waterRepository.js";
-import { progressionLedger } from "../features/progression/data/progressionLedger.js";
 import "./WaterCreatePage.css";
 
 const COMMON_FISH = ["Kapr", "Štika", "Candát", "Lín", "Okoun", "Pstruh", "Sumec", "Amur"];
@@ -52,6 +51,7 @@ function WaterCreatePage() {
     const validationErrors = validateWaterForm(formData);
     if (Object.keys(validationErrors).length > 0) {
       setErrors(validationErrors);
+      setSubmitError("Zkontroluj označená pole.");
       return;
     }
 
@@ -59,9 +59,7 @@ function WaterCreatePage() {
     setSubmitError("");
     try {
       const record = createWaterRecord({ ...formData, id: pendingWaterId.current }, scope);
-      const stored = await waterRepository.put(record, scope);
-      await progressionLedger.awardWater(stored, scope);
-      window.dispatchEvent(new Event("chytnu:progression-changed"));
+      await waterRepository.put(record, scope);
       navigate(`/waters/${record.id}`);
     } catch (err) {
       setSubmitError(err?.message || "Revír se nepodařilo uložit. Pokud už byl záznam uložen, můžeš akci bezpečně zkusit znovu.");
@@ -78,7 +76,7 @@ function WaterCreatePage() {
           <p>Ulož si vlastní revír do svého deníku</p>
         </header>
 
-        <form className="water-create-form" onSubmit={handleSubmit}>
+        <form id="water-create-form" className="water-create-form" onSubmit={handleSubmit}>
           <label>
             Název revíru *
             <input
@@ -88,7 +86,7 @@ function WaterCreatePage() {
               onChange={(e) => updateField("name", e.target.value)}
               aria-invalid={Boolean(errors.name)}
             />
-            {errors.name && <span className="field-error" style={{ color: "var(--accent-red)", fontSize: "13px" }}>{errors.name}</span>}
+            {errors.name && <span className="water-create-error">{errors.name}</span>}
           </label>
 
           <label>
@@ -98,7 +96,9 @@ function WaterCreatePage() {
               placeholder="Např. 401 018"
               value={formData.waterNumber}
               onChange={(e) => updateField("waterNumber", e.target.value)}
+              aria-invalid={Boolean(errors.waterNumber)}
             />
+            {errors.waterNumber && <span className="water-create-error">{errors.waterNumber}</span>}
           </label>
 
           <div className="water-create-group">
@@ -116,20 +116,31 @@ function WaterCreatePage() {
                 </button>
               ))}
             </div>
+            {errors.type && <span className="water-create-error">{errors.type}</span>}
           </div>
 
           <label>
-            Lokalita / Oblast
+            Poloha / oblast
             <input
               type="text"
               placeholder="Např. Jihočeský kraj, České Budějovice"
               value={formData.area}
               onChange={(e) => updateField("area", e.target.value)}
+              aria-invalid={Boolean(errors.area)}
             />
+            {errors.area && <span className="water-create-error">{errors.area}</span>}
           </label>
 
+          <section className="water-create-location" aria-labelledby="water-location-title">
+            <div>
+              <strong id="water-location-title">Označit na mapě</strong>
+              <p>Výběr bodu na mapě zatím není připojený. Uloží se pouze textová poloha výše.</p>
+            </div>
+            <button type="button" disabled>Mapa není dostupná</button>
+          </section>
+
           <div className="water-create-group">
-            <span>Hlavní druhy ryb</span>
+            <span>Druhy ryb</span>
             <div className="water-create-chips" role="group" aria-label="Druhy ryb">
               {COMMON_FISH.map((fish) => {
                 const isSelected = formData.targetFish.includes(fish);
@@ -146,6 +157,7 @@ function WaterCreatePage() {
                 );
               })}
             </div>
+            {errors.targetFish && <span className="water-create-error">{errors.targetFish}</span>}
           </div>
 
           <label>
@@ -154,18 +166,22 @@ function WaterCreatePage() {
               placeholder="Pravidla, tipy k lovu, parkování nebo přístup k vodě..."
               value={formData.notes}
               onChange={(e) => updateField("notes", e.target.value)}
+              aria-invalid={Boolean(errors.notes)}
             />
+            {errors.notes && <span className="water-create-error">{errors.notes}</span>}
           </label>
 
-          {submitError && <p role="alert" style={{ color: "var(--accent-red)", fontSize: "14px" }}>{submitError}</p>}
+          {submitError && <p className="water-create-submit-error" role="alert">{submitError}</p>}
         </form>
 
-        <p className="water-create-note">Revír bude uložen lokálně v tvém zařízení. Přesné GPS soukromých míst se nikdy veřejně nesdílí.</p>
+        <p className="water-create-note">
+          Revír se uloží lokálně se stavem „čeká na schválení“. Veřejná moderace zatím není připojená a za lokální uložení se neuděluje XP.
+        </p>
         <Link className="water-create-back" to="/waters">Zpět na revíry</Link>
 
         <div className="water-create-submit">
-          <button type="button" onClick={handleSubmit} disabled={saving || scope.status !== "ready"}>
-            {saving ? "Ukládám…" : "Uložit revír"}
+          <button type="submit" form="water-create-form" disabled={saving || scope.status !== "ready"}>
+            {saving ? "Ukládám…" : "Uložit jako čekající"}
           </button>
         </div>
       </div>

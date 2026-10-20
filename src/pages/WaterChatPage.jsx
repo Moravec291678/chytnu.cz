@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { useAuth } from "../features/auth/context/authContextValue.js";
 import { useDataScope } from "../features/auth/context/dataScopeContextValue.js";
-import { waterRepository } from "../features/waters/data/waterRepository.js";
+import { WATER_CHAT_MAX_LENGTH, waterRepository } from "../features/waters/data/waterRepository.js";
 import "./WaterChatPage.css";
 
 function formatMessageTime(iso) {
@@ -21,17 +22,20 @@ function formatMessageTime(iso) {
 function WaterChatPage() {
   const { waterId } = useParams();
   const scope = useDataScope();
+  const auth = useAuth();
 
   const [water, setWater] = useState(null);
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState("");
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [loadError, setLoadError] = useState("");
+  const [composerError, setComposerError] = useState("");
 
   const loadData = useCallback(async () => {
+    if (scope.status !== "ready") return;
     setLoading(true);
-    setError("");
+    setLoadError("");
     try {
       const [waterData, msgData] = await Promise.all([
         waterRepository.get(waterId, scope),
@@ -39,9 +43,9 @@ function WaterChatPage() {
       ]);
       setWater(waterData);
       setMessages(waterData ? msgData : []);
-      if (!waterData) setError("Požadovaný revír v tomto místním profilu neexistuje.");
+      if (!waterData) setLoadError("Požadovaný revír v tomto místním profilu neexistuje.");
     } catch (err) {
-      setError(err?.message || "Nepodařilo se načíst zprávy.");
+      setLoadError(err?.message || "Nepodařilo se načíst zprávy.");
     } finally {
       setLoading(false);
     }
@@ -54,26 +58,30 @@ function WaterChatPage() {
   const handleSend = async (e) => {
     if (e) e.preventDefault();
     const trimmed = inputText.trim();
-    if (!trimmed || sending || loading || !water) return;
+    if (sending || loading || !water) return;
+    if (!trimmed) {
+      setComposerError("Zpráva nesmí být prázdná.");
+      return;
+    }
 
-    if (trimmed.length > 500) {
-      setError("Zpráva může mít maximálně 500 znaků.");
+    if (trimmed.length > WATER_CHAT_MAX_LENGTH) {
+      setComposerError(`Zpráva může mít maximálně ${WATER_CHAT_MAX_LENGTH} znaků.`);
       return;
     }
 
     setSending(true);
-    setError("");
+    setComposerError("");
     try {
       const newMsg = await waterRepository.addMessage({
         waterId,
         text: trimmed,
-        authorName: "Já",
+        author: auth.user?.displayName?.trim() || (auth.user ? "Můj profil" : "Místní profil"),
         scope,
       });
       setMessages((prev) => [...prev, newMsg]);
       setInputText("");
     } catch (err) {
-      setError(err?.message || "Zprávu se nepodařilo odeslat.");
+      setComposerError(err?.message || "Zprávu se nepodařilo uložit.");
     } finally {
       setSending(false);
     }
@@ -84,12 +92,17 @@ function WaterChatPage() {
       <header className="water-chat-header">
         <Link to={`/waters/${waterId}`} aria-label="Zpět na detail revíru">←</Link>
         <div>
-          <h1>Chat: {water?.name || "Revír"}</h1>
-          <p>Místní poznámky k revíru</p>
+          <h1>{water?.name || "Chat revíru"}</h1>
+          <p><span className="water-chat-presence-dot" aria-hidden="true" />Jen tvoje místní zprávy</p>
         </div>
       </header>
 
-      {error && <p role="alert" style={{ color: "var(--accent-red)", fontSize: "14px" }}>{error}</p>}
+      <aside className="water-chat-backend-state" aria-label="Stav přítomnosti">
+        <span>BACKEND_REQUIRED</span>
+        <p>Online presence a zprávy ostatních rybářů nejsou bez vzdáleného backendu dostupné.</p>
+      </aside>
+
+      {loadError && <p className="water-chat-error" role="alert">{loadError}</p>}
 
       {loading ? <p role="status">Načítám místní zprávy…</p> : !water ? (
         <section className="water-chat-empty"><h2>Revír není dostupný</h2><Link to="/waters">Zpět na revíry</Link></section>
@@ -102,9 +115,9 @@ function WaterChatPage() {
         <div className="water-chat-messages" role="log" aria-label="Zprávy revíru">
           {messages.map((msg) => (
             <article key={msg.id} className="water-chat-bubble">
-              <span className="water-chat-bubble-author">{msg.authorName}</span>
+              <span className="water-chat-bubble-author">{msg.author}</span>
               <p className="water-chat-bubble-text">{msg.text}</p>
-              <span className="water-chat-bubble-time">{formatMessageTime(msg.timestamp)}</span>
+              <span className="water-chat-bubble-time">{formatMessageTime(msg.createdAt)}</span>
             </article>
           ))}
         </div>
@@ -115,16 +128,18 @@ function WaterChatPage() {
           <input
             type="text"
             aria-label="Napsat zprávu"
-            placeholder="Napiš zprávu k revíru (max 500 znaků)…"
+            placeholder={`Místní zpráva (max ${WATER_CHAT_MAX_LENGTH} znaků)…`}
             value={inputText}
-            maxLength={500}
-            onChange={(e) => setInputText(e.target.value)}
+            maxLength={WATER_CHAT_MAX_LENGTH}
+            onChange={(e) => { setInputText(e.target.value); if (composerError) setComposerError(""); }}
             disabled={sending || loading || !water}
+            aria-describedby={composerError ? "water-chat-composer-error" : undefined}
           />
         </label>
         <button type="submit" disabled={sending || loading || !water || !inputText.trim()} aria-label="Odeslat zprávu">
           {sending ? "…" : "→"}
         </button>
+        {composerError && <p id="water-chat-composer-error" className="water-chat-composer-error" role="alert">{composerError}</p>}
       </form>
     </main>
   );

@@ -49,6 +49,8 @@ try {
     species: "Kapr", speciesKey: "carp", speciesLatin: null, weightKg: null, lengthCm: null,
     girthCm: null, fightMinutes: null, locationName: "Labe", waterNumber: null, gpsLocation: "50.087, 14.421",
     coordinates: { latitude: 50.087, longitude: 14.421 },
+    conditions: { airTempC: 11, moonPhase: "full" },
+    conditionSources: { airTempC: "auto", moonPhase: "auto" },
     waterDepthM: null, bottomType: null, tripId, method: null, baits: [], result: "released",
     photos: [{ id: "photo-1", name: "kapr.jpg", type: "image/jpeg", blob: photoBlob }],
     notes: "emulator integration fixture", isFavorite: false, sync: { status: "local", revision: 1 },
@@ -64,6 +66,8 @@ try {
   assert.equal(remoteTrip.data().title, "Testovací výprava");
   assert.equal(remoteCatch.data().tripId, tripId);
   assert.deepEqual(remoteCatch.data().coordinates, { latitude: 50.087, longitude: 14.421 });
+  assert.deepEqual(remoteCatch.data().conditions, { airTempC: 11, moonPhase: "full" });
+  assert.deepEqual(remoteCatch.data().conditionSources, { airTempC: "auto", moonPhase: "auto" });
   assert.deepEqual(remoteCatch.data().photos, [{ id: "photo-1", name: "kapr.jpg", type: "image/jpeg", size: 3 }]);
   assert.equal(JSON.stringify(remoteCatch.data()).includes("blob"), false);
 
@@ -82,6 +86,13 @@ try {
     expectedRevision: remoteCatch.data().serverRevision,
     operationId: `invalid-coordinates-${crypto.randomUUID()}`, localRevision: 2,
   }), /nepodařilo|oprávnění|permission/i, "out-of-range coordinates must be rejected by Firestore rules");
+
+  await assert.rejects(() => firestoreAdapter.write({
+    ownerId, entityType: "catch", entityId: catchId,
+    record: { ...local, conditionSources: { airTempC: "fabricated" } },
+    expectedRevision: remoteCatch.data().serverRevision,
+    operationId: `invalid-condition-source-${crypto.randomUUID()}`, localRevision: 2,
+  }), /nepodařilo|oprávnění|permission/i, "invalid automatic/manual condition provenance must be rejected by Firestore rules");
 
   await firestoreAdapter.write({
     ownerId, entityType: "catch", entityId: catchId,

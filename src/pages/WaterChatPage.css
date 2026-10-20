@@ -36,7 +36,45 @@
 }
 
 .water-chat-header p {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.water-chat-presence-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.water-chat-backend-state {
+  display: grid;
+  gap: 3px;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+}
+
+.water-chat-backend-state span {
+  color: var(--accent-orange);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.water-chat-backend-state p {
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: 1.4;
+}
+
+.water-chat-error {
+  color: var(--accent-red);
   font-size: var(--font-size-sm);
 }
 
@@ -104,6 +142,12 @@
 .water-chat-composer button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
+}
+
+.water-chat-composer-error {
+  grid-column: 1 / -1;
+  color: var(--accent-red);
+  font-size: var(--font-size-sm);
 }
 
 .water-chat-messages {

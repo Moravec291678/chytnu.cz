@@ -4,7 +4,7 @@ import Layout from "../shared/layout/Layout";
 import { useCatches } from "../features/catches/context/useCatches";
 import { useTrips } from "../features/trips/context/useTrips";
 import { formatBottomType } from "../features/catches/data/catchFormatting";
-import { getCatchRecognition } from "../features/catches/data/catchDetail.js";
+import { getCatchRecognition, isNewLengthRecord } from "../features/catches/data/catchDetail.js";
 import { buildPrivateCatchMarkers } from "../features/map/data/catchMap";
 import { MOON_PHASE_EMOJI } from "../shared/constants/moonPhaseEmoji.js";
 import { DEFAULT_SPECIES } from "../shared/constants/constants.js";
@@ -14,12 +14,12 @@ import ConfirmDialog from "../shared/components/ConfirmDialog";
 import "./AddCatchPage.css";
 
 function formatDate(value) {
-  if (!value || !Number.isFinite(Date.parse(value))) return "Datum neuvedeno";
+  if (!value || !Number.isFinite(Date.parse(value))) return null;
   return new Intl.DateTimeFormat("cs-CZ", { dateStyle: "long", timeStyle: "short" }).format(new Date(value));
 }
 
 function valueLabel(value, unit) {
-  return value === null || value === undefined || value === "" ? null : `${value} ${unit}`;
+  return value === null || value === undefined || value === "" || !Number.isFinite(Number(value)) ? null : `${value} ${unit}`;
 }
 
 function formatNumber(value, maximumFractionDigits = 1) {
@@ -32,7 +32,9 @@ function getConditionFacts(conditions) {
     ["Vzduch", valueLabel(values.airTempC ?? values.airTemperatureC, "°C")],
     ["Voda", valueLabel(values.waterTempC ?? values.waterTemperatureC, "°C")],
     ["Tlak", valueLabel(values.pressureHpa, "hPa")],
-    ["Vítr", values.windKmh === undefined ? null : `${values.windDirection ? `${values.windDirection} ` : ""}${formatNumber(values.windKmh)} km/h`],
+    ["Vítr", values.windKmh === null || values.windKmh === undefined || values.windKmh === "" || !Number.isFinite(Number(values.windKmh))
+      ? null
+      : `${values.windDirection ? `${values.windDirection} ` : ""}${formatNumber(Number(values.windKmh))} km/h`],
     ["Počasí", values.weather],
     ["Fáze měsíce", MOON_PHASE_EMOJI[values.moonPhase] ?? values.moonPhase],
   ];
@@ -47,6 +49,7 @@ function CatchDetailPage() {
   const { state: tripState } = useTrips();
   const item = state.catches.find((record) => record.id === id);
   const trip = tripState.trips.find((record) => record.id === item?.tripId);
+  const catchDateLabel = item ? formatDate(item.caughtAt) : null;
   const [photos, setPhotos] = useState([]);
   const [error, setError] = useState("");
   const [deleting, setDeleting] = useState(false);
@@ -80,6 +83,7 @@ function CatchDetailPage() {
       setDeleting(false);
     }
   };
+  const handleBack = () => navigate(location.key === "default" ? "/journal" : -1);
   const closeDeleteDialog = useCallback(() => setConfirmingDelete(false), []);
   const handleToggleFavorite = async () => {
     if (savingFavoriteRef.current) return;
@@ -104,12 +108,12 @@ function CatchDetailPage() {
     ["Revír", item.locationName],
     ["Uložený revír", item.waterId ? <Link to={`/waters/${item.waterId}`}>Otevřít detail revíru →</Link> : null],
     ["Číslo revíru", item.waterNumber],
-    ["Datum a čas", formatDate(item.caughtAt)],
+    ["Datum a čas", catchDateLabel],
     ["Hloubka", item.waterDepthM === null || item.waterDepthM === undefined
       ? null
       : `${formatNumber(item.waterDepthM)} m${formatBottomType(item.bottomType) ? ` · ${formatBottomType(item.bottomType).toLocaleLowerCase("cs-CZ")}` : ""}`],
     ["Obvod", valueLabel(item.girthCm, "cm")],
-    ["Výprava", trip?.title],
+    ["Výprava", trip ? <Link to={`/trips/${trip.id}`}>{trip.title} →</Link> : null],
   ].filter(([, value]) => value !== null && value !== undefined && value !== "");
   const methodFacts = [
     ["Metoda", item.method?.label],
@@ -121,11 +125,7 @@ function CatchDetailPage() {
   const recognition = getCatchRecognition(item, state.catches);
   const isPersonalBest = recognition.personalBest;
   const isSpeciesRecord = recognition.speciesRecord;
-  const otherLengths = state.catches.filter((record) => record.id !== item.id
-    && (item.speciesKey ? record.speciesKey === item.speciesKey : record.species === item.species)
-    && Number.isFinite(record.lengthCm));
-  const isLengthRecord = Number.isFinite(item.lengthCm)
-    && (otherLengths.length === 0 || item.lengthCm >= Math.max(...otherLengths.map((record) => record.lengthCm)));
+  const isLengthRecord = isNewLengthRecord(item, state.catches);
   const hasMapLocation = buildPrivateCatchMarkers([item]).length > 0;
   const rarity = getCatchRarity(item, DEFAULT_SPECIES);
 
@@ -133,7 +133,7 @@ function CatchDetailPage() {
     <div className="add-catch-page catch-detail-page">
       <section className="catch-detail-hero">
         <header className="catch-detail-toolbar">
-          <Link to="/journal" aria-label="Zpět do deníku">←</Link>
+          <button className="catch-detail-back" type="button" onClick={handleBack} aria-label="Zpět">←</button>
           <div>
             <button
               className={item.isFavorite ? "catch-detail-icon-button catch-detail-favorite catch-detail-favorite--active" : "catch-detail-icon-button catch-detail-favorite"}
@@ -160,7 +160,7 @@ function CatchDetailPage() {
         ) : (
           <h1>{item.species}</h1>
         )}
-        <p className="catch-detail-date">{formatDate(item.caughtAt)}</p>
+        {catchDateLabel && <p className="catch-detail-date">{catchDateLabel}</p>}
         <div className="catch-detail-badges">
           {rarity && <span className={`catch-detail-badge catch-detail-badge-rarity catch-detail-badge-rarity--${rarity.key}`}>{rarity.label}</span>}
           {isPersonalBest && <span className="catch-detail-badge catch-detail-badge-record">Osobní rekord</span>}

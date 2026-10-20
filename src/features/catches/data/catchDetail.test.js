@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { getCatchRecognition } from "./catchDetail.js";
+import { getCatchRecognition, isNewLengthRecord } from "./catchDetail.js";
 
 const catchRecord = (id, extra = {}) => ({
   id,
@@ -53,4 +53,12 @@ test("only strictly larger later catches break an existing best; equal weights r
   assert.equal(recognition.personalBestDelta, 0);
   assert.equal(recognition.speciesRecord, true);
   assert.equal(recognition.newLocation, false);
+});
+
+test("length badges are shown only for an actual new length record", () => {
+  const current = catchRecord("current", { lengthCm: 75 });
+  assert.equal(isNewLengthRecord(current, [current]), true);
+  assert.equal(isNewLengthRecord(current, [current, catchRecord("shorter", { lengthCm: 74 })]), true);
+  assert.equal(isNewLengthRecord(current, [current, catchRecord("tie", { lengthCm: 75 })]), false);
+  assert.equal(isNewLengthRecord({ ...current, lengthCm: null }, [current]), false);
 });

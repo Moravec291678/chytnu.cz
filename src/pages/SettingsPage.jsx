@@ -1,19 +1,193 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import Layout from "../shared/layout/Layout";
+import ConfirmDialog from "../shared/components/ConfirmDialog";
 import { readPreferences, savePreferences } from "../features/preferences/data/preferences.js";
+import { useDataScope } from "../features/auth/context/dataScopeContextValue.js";
+import { useAuth } from "../features/auth/context/authContextValue.js";
+import { getLocalBackupFileName, serializeLocalBackupJson } from "../features/backup/data/backupFormat.js";
+import { readLocalBackupSnapshot } from "../features/backup/data/localBackupRepository.js";
+import { deleteLocalScopeData } from "../features/settings/data/localDataDeletion.js";
+import "./SettingsPage.css";
+
+const FEEDBACK_URL = "https://github.com/Moravec291678/chytnu.cz/issues/new";
 
 export default function SettingsPage() {
-  const [preferences, setPreferences] = useState(readPreferences);
-  const [fishActivity, setFishActivity] = useState(() => { try { return localStorage.getItem("fishActivityEnabled") === "true"; } catch { return false; } });
+  const navigate = useNavigate();
+  const scope = useDataScope();
+  const auth = useAuth();
+  const [preferenceOverride, setPreferenceOverride] = useState({ scopeKey: null, value: null });
+  const preferences = preferenceOverride.value && preferenceOverride.scopeKey === scope.scopeKey
+    ? preferenceOverride.value
+    : readPreferences(globalThis.localStorage, scope.scopeKey);
+  const [fishActivity, setFishActivity] = useState(() => {
+    try { return localStorage.getItem("fishActivityEnabled") === "true"; } catch { return false; }
+  });
+  const [exporting, setExporting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const update = (patch) => { try { setPreferences(savePreferences(patch)); setError(""); } catch (saveError) { setError(saveError.message); } };
-  return <Layout><section className="add-catch-section">
-    <Link to="/profile">← Profil</Link><h1>Nastavení</h1><p>Volby se ukládají pouze v tomto prohlížeči.</p>
-    <label>Výchozí režim zápisu<select value={preferences.detailMode} onChange={(event) => update({ detailMode: event.target.value })}><option value="simple">Rychlý zápis</option><option value="detailed">Podrobný zápis</option></select></label>
-    <label style={{ display: "flex", gap: ".75rem", alignItems: "center", margin: ".8rem 0" }}><input type="checkbox" checked={fishActivity} onChange={(event) => { try { localStorage.setItem("fishActivityEnabled", String(event.target.checked)); setFishActivity(event.target.checked); window.dispatchEvent(new Event("chytnu:fish-activity-preference")); setError(""); } catch (saveError) { setError(saveError.message || "Preferenci se nepodařilo uložit."); } }} />Povolit rybí aktivitu na domovské stránce</label>
-    <p><Link to="/privacy">Soukromí a viditelnost →</Link></p><p><Link to="/notifications">Preference upozornění →</Link></p>
-    <p>Zálohu a obnovu místního deníku najdeš na stránce <Link to="/profile">Profil</Link>.</p>
-    {error && <p role="alert">{error}</p>}
-  </section></Layout>;
+
+  const update = (patch) => {
+    if (scope.status !== "ready") return;
+    try {
+      setPreferenceOverride({
+        scopeKey: scope.scopeKey,
+        value: savePreferences(patch, globalThis.localStorage, scope.scopeKey),
+      });
+      setError("");
+    } catch (saveError) {
+      setError(saveError.message);
+    }
+  };
+
+  const updateFishActivity = (enabled) => {
+    try {
+      localStorage.setItem("fishActivityEnabled", String(enabled));
+      setFishActivity(enabled);
+      window.dispatchEvent(new Event("chytnu:fish-activity-preference"));
+      setError("");
+    } catch (saveError) {
+      setError(saveError.message || "Preferenci se nepodařilo uložit.");
+    }
+  };
+
+  const exportJournal = async () => {
+    if (scope.status !== "ready" || exporting) return;
+    setExporting(true);
+    setMessage("");
+    setError("");
+    try {
+      const json = await serializeLocalBackupJson(await readLocalBackupSnapshot(scope));
+      const url = URL.createObjectURL(new Blob([json], { type: "application/json;charset=utf-8" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = getLocalBackupFileName();
+      document.body.append(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setMessage("Úplná JSON záloha deníku byla předána prohlížeči ke stažení.");
+    } catch (exportError) {
+      setError(exportError?.message || "Zálohu se nepodařilo vytvořit.");
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const deleteLocalData = async () => {
+    if (scope.status !== "ready" || deleting) return;
+    setDeleting(true);
+    setError("");
+    try {
+      await deleteLocalScopeData(scope);
+      window.dispatchEvent(new Event("chytnu:local-data-restored"));
+      window.dispatchEvent(new Event("chytnu:progression-changed"));
+      setConfirmingDelete(false);
+      navigate("/onboarding", { replace: true });
+    } catch (deleteError) {
+      setError(deleteError?.message || "Místní data se nepodařilo smazat.");
+      setConfirmingDelete(false);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const accountSummary = auth.status === "loading"
+    ? "Ověřuji stav účtu…"
+    : auth.user?.email
+      ? auth.user.email
+      : auth.user
+        ? "Přihlášený účet"
+        : "Místní profil bez přihlášení";
+
+  return <Layout>
+    <main className="settings-page">
+      <header className="settings-header">
+        <Link to="/profile">← Profil</Link>
+        <h1>Nastavení</h1>
+        <p>Předvolby se ukládají pro právě aktivní profil.</p>
+      </header>
+
+      <section className="settings-card" aria-labelledby="settings-account-title">
+        <h2 id="settings-account-title">Účet</h2>
+        <strong>{accountSummary}</strong>
+        {auth.status === "unavailable" && <p>Účet není v tomto prostředí nakonfigurovaný. Místní deník funguje dál.</p>}
+        <Link className="settings-link" to="/profile">Správa účtu <span aria-hidden="true">→</span></Link>
+      </section>
+
+      <section className="settings-card" aria-labelledby="settings-display-title">
+        <h2 id="settings-display-title">Zobrazení zápisu</h2>
+        <label className="settings-field">Výchozí režim
+          <select value={preferences.detailMode} disabled={scope.status !== "ready"} onChange={(event) => update({ detailMode: event.target.value })}>
+            <option value="simple">Rychlý zápis</option>
+            <option value="detailed">Podrobný zápis</option>
+          </select>
+        </label>
+        <p>Volba se projeví při příštím otevření Nového úlovku.</p>
+      </section>
+
+      <section className="settings-card" aria-labelledby="settings-units-title">
+        <h2 id="settings-units-title">Jednotky</h2>
+        <strong>Metrické · kg, cm, °C</strong>
+        <p>Přepínání jednotek tato verze nepodporuje, proto zde není nefunkční přepínač.</p>
+      </section>
+
+      <section className="settings-card" aria-labelledby="settings-home-title">
+        <h2 id="settings-home-title">Domovská stránka</h2>
+        <label className="settings-toggle">
+          <input type="checkbox" checked={fishActivity} onChange={(event) => updateFishActivity(event.target.checked)} />
+          <span>Povolit rybí aktivitu</span>
+        </label>
+      </section>
+
+      <section className="settings-card" aria-labelledby="settings-export-title">
+        <h2 id="settings-export-title">Export deníku</h2>
+        <p>Stáhne úplnou lokální zálohu úlovků, výprav, soukromí a postupu ve formátu JSON. CSV ani PDF tato akce netvrdí.</p>
+        <button className="settings-primary-button" type="button" onClick={exportJournal} disabled={scope.status !== "ready" || exporting || deleting}>
+          {exporting ? "Připravuji zálohu…" : "Stáhnout JSON zálohu"}
+        </button>
+        <Link className="settings-link" to="/profile">Obnova ze zálohy <span aria-hidden="true">→</span></Link>
+      </section>
+
+      <section className="settings-card" aria-labelledby="settings-more-title">
+        <h2 id="settings-more-title">Soukromí a upozornění</h2>
+        <Link className="settings-link" to="/privacy">Soukromí a viditelnost <span aria-hidden="true">→</span></Link>
+        <Link className="settings-link" to="/notifications">Preference upozornění <span aria-hidden="true">→</span></Link>
+      </section>
+
+      <section className="settings-card" aria-labelledby="settings-feedback-title">
+        <h2 id="settings-feedback-title">Zpětná vazba</h2>
+        <p>Chybu nebo návrh můžeš předat přímo do issue trackeru projektu.</p>
+        <a className="settings-link" href={FEEDBACK_URL} target="_blank" rel="noreferrer">Otevřít nový GitHub issue <span aria-hidden="true">↗</span></a>
+      </section>
+
+      <section className="settings-card settings-danger" aria-labelledby="settings-delete-title">
+        <h2 id="settings-delete-title">Smazat účet nebo data</h2>
+        <p>Smazání místních dat odstraní z tohoto zařízení pouze data aktivního profilu. Ostatní profily zůstanou zachované.</p>
+        {auth.user && <p>Cloudový účet a vzdálená data tato akce nemaže. Jejich úplné odstranění vyžaduje podporu produkčního backendu.</p>}
+        <button type="button" onClick={() => setConfirmingDelete(true)} disabled={scope.status !== "ready" || exporting || deleting}>
+          Smazat místní data tohoto profilu
+        </button>
+      </section>
+
+      {message && <p className="settings-message" role="status">{message}</p>}
+      {error && <p className="settings-error" role="alert">{error}</p>}
+      {confirmingDelete && <ConfirmDialog
+        titleId="settings-delete-confirm-title"
+        descriptionId="settings-delete-confirm-description"
+        title="Smazat místní data profilu?"
+        description={auth.user
+          ? "Úlovky, výpravy, revíry, postup a předvolby tohoto profilu budou odstraněny z tohoto zařízení. Cloudový účet ani vzdálená data se nesmažou."
+          : "Úlovky, výpravy, revíry, postup a předvolby tohoto místního profilu budou trvale odstraněny z tohoto zařízení."}
+        busy={deleting}
+        confirmLabel="Smazat místní data"
+        busyLabel="Mažu…"
+        confirmClassName="settings-delete-confirm"
+        onCancel={() => setConfirmingDelete(false)}
+        onConfirm={deleteLocalData}
+      />}
+    </main>
+  </Layout>;
 }

@@ -57,10 +57,11 @@ export default function AchievementsPage() {
                 <article className={`achievement-row${item.isCompleted ? " achievement-row--complete" : ""}`} key={item.id}>
                   <span className="achievement-check" aria-hidden="true">{item.isCompleted ? "✓" : ""}</span>
                   <div className="achievement-content">
-                    <h2>{item.name}</h2>
+                    <h2>{item.title}</h2>
+                    <p>{item.rule}</p>
                     {!item.isCompleted && item.progress !== undefined && (
-                      <div className="achievement-progress" role="progressbar" aria-label={item.name} aria-valuemin="0" aria-valuemax={item.goal} aria-valuenow={item.progress}>
-                        <span style={{ width: `${Math.min(100, (item.progress / item.goal) * 100)}%` }} />
+                      <div className="achievement-progress" role="progressbar" aria-label={item.title} aria-valuemin="0" aria-valuemax={item.target} aria-valuenow={item.progress}>
+                        <span style={{ width: `${Math.min(100, (item.progress / item.target) * 100)}%` }} />
                       </div>
                     )}
                   </div>
@@ -68,7 +69,7 @@ export default function AchievementsPage() {
                     {item.isCompleted
                       ? `+${item.xp} XP`
                       : item.progress !== undefined
-                        ? `${new Intl.NumberFormat("cs-CZ", { maximumFractionDigits: 1 }).format(item.progress)} / ${item.goal}${item.progressUnit ? ` ${item.progressUnit}` : ""}`
+                        ? `${new Intl.NumberFormat("cs-CZ", { maximumFractionDigits: 1 }).format(item.progress)} / ${item.target}${item.progressUnit ? ` ${item.progressUnit}` : ""}`
                         : "Zamčeno"}
                   </strong>
                 </article>

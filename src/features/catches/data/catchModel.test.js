@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { catchToForm, createCatchRecord, validateCatchForm } from "./catchModel.js";
+import { catchToForm, createCatchRecord, updateCatchFormField, validateCatchForm } from "./catchModel.js";
 import { getBiggestCatch } from "../../home/utils/profileStats.js";
 import { estimateFishWeight } from "./lengthWeightRelationships.js";
 
@@ -47,7 +47,24 @@ test("manual weather conditions validate, persist, and round-trip without fillin
     windKmh: 9.5,
     moonPhase: "waxingCrescent",
   });
+  assert.deepEqual(record.conditionSources, {
+    airTempC: "manual", waterTempC: "manual", pressureHpa: "manual", windKmh: "manual", moonPhase: "manual",
+  });
+  assert.deepEqual(catchToForm(record).conditionSources, record.conditionSources);
   assert.ok(validateCatchForm({ ...form, conditions: { ...form.conditions, windKmh: "-1" } })["Rychlost větru"]);
+});
+
+test("automatic condition provenance round-trips and legacy values default to manual", () => {
+  const record = createCatchRecord({ ...minimalForm, conditions: { ...minimalForm.conditions, airTempC: 10, moonPhase: "full" }, conditionSources: { airTempC: "auto", moonPhase: "auto" } }, { key: "carp", label: "Kapr" }, []);
+  assert.deepEqual(record.conditionSources, { airTempC: "auto", moonPhase: "auto" });
+  assert.deepEqual(catchToForm(record).conditionSources, { airTempC: "auto", moonPhase: "auto" });
+
+  const legacy = catchToForm({ speciesKey: "commonCarp", caughtAt: "2026-10-16T12:00:00.000Z", conditions: { airTempC: 10 } });
+  assert.deepEqual(legacy.conditionSources, { airTempC: "manual" });
+
+  const deliberatelyBlank = createCatchRecord({ ...minimalForm, conditionSources: { airTempC: "manual" } }, { key: "carp", label: "Kapr" }, []);
+  assert.equal(deliberatelyBlank.conditions, null);
+  assert.deepEqual(catchToForm(deliberatelyBlank).conditionSources, { airTempC: "manual" });
 });
 
 test("record has stable local-first metadata and preserves optional nulls", () => {
@@ -148,4 +165,30 @@ test("estimated weight round-trips as an estimate while manual weight stays auth
   const manualForm = catchToForm({ speciesKey: "commonCarp", weightKg: 4.2, weightSource: "manual", lengthCm, caughtAt: "2026-10-19T12:00:00.000Z" });
   assert.equal(manualForm.weightSource, "manual");
   assert.equal(manualForm.weightKg, 4.2);
+});
+
+test("species deselection clears estimated weight but preserves a manual weight", () => {
+  const estimated = { speciesKey: "commonCarp", lengthCm: "68", weightSource: "estimated", weightKg: "3,80" };
+  const clearedEstimate = updateCatchFormField(estimated, "speciesKey", "");
+  assert.equal(clearedEstimate.speciesKey, "");
+  assert.equal(clearedEstimate.weightKg, "");
+  assert.equal(clearedEstimate.weightSource, "estimated");
+  assert.equal(estimated.lengthCm, "68");
+
+  const manual = updateCatchFormField({ ...estimated, weightSource: "manual", weightKg: "4,25" }, "speciesKey", "");
+  assert.equal(manual.speciesKey, "");
+  assert.equal(manual.weightKg, "4,25");
+  assert.equal(manual.weightSource, "manual");
+});
+
+test("estimated weights update with species and length, while manual weight is never overwritten", () => {
+  const initial = { speciesKey: "commonCarp", lengthCm: "60", weightSource: "estimated", weightKg: "" };
+  const initialWeight = updateCatchFormField(initial, "lengthCm", "60");
+  assert.equal(initialWeight.weightKg, estimateFishWeight("commonCarp", "60").toLocaleString("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+  const changedSpecies = updateCatchFormField(initialWeight, "speciesKey", "northernPike");
+  assert.equal(changedSpecies.weightKg, estimateFishWeight("northernPike", "60").toLocaleString("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+  const changedLength = updateCatchFormField(changedSpecies, "lengthCm", "70");
+  assert.equal(changedLength.weightKg, estimateFishWeight("northernPike", "70").toLocaleString("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+  const manual = updateCatchFormField({ ...changedLength, weightSource: "manual", weightKg: "9,7" }, "lengthCm", "80");
+  assert.equal(manual.weightKg, "9,7");
 });

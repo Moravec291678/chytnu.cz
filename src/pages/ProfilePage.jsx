@@ -25,11 +25,15 @@ import ConfirmDialog from "../shared/components/ConfirmDialog";
 import { useCatches } from "../features/catches/context/useCatches";
 import { useTrips } from "../features/trips/context/useTrips";
 import { useProgression } from "../features/progression/context/progressionContextValue.js";
-import { getBiggestCatch } from "../features/home/utils/profileStats";
+import { getBestWater, getBiggestCatch } from "../features/home/utils/profileStats";
 import CatchCard from "../features/catches/components/CatchCard";
 import { buildSpeciesAlbum } from "../features/species/data/speciesAlbum";
 import { DEFAULT_SPECIES } from "../shared/constants/constants";
 import { readTrophySelection, saveTrophySelection } from "../features/species/data/trophySelection.js";
+import { readPreferences, savePreferences } from "../features/preferences/data/preferences.js";
+import { DEFAULT_PRIVACY_SETTINGS } from "../features/privacy/data/privacyModel.js";
+import { privacyRepository } from "../features/privacy/data/privacyRepository.js";
+import { waterRepository } from "../features/waters/data/waterRepository.js";
 import "./ProfilePage.css";
 
 function formatCount(count, one, few, many) {
@@ -61,6 +65,11 @@ function ProfilePage() {
   const [confirmingReplace, setConfirmingReplace] = useState(false);
   const [trophySelection, setTrophySelection] = useState({ scopeKey: null, ids: [] });
   const [trophyError, setTrophyError] = useState("");
+  const [waters, setWaters] = useState({ scopeKey: null, records: [] });
+  const [privacyData, setPrivacyData] = useState({ scopeKey: null, settings: DEFAULT_PRIVACY_SETTINGS, loading: true, error: "" });
+  const [privacySaving, setPrivacySaving] = useState(false);
+  const [preferenceOverride, setPreferenceOverride] = useState({ scopeKey: null, value: null });
+  const [preferenceError, setPreferenceError] = useState("");
   const [pendingConflict, setPendingConflict] = useState(null);
   const authActionRef = useRef(false);
   const dataActionRef = useRef(false);
@@ -71,7 +80,15 @@ function ProfilePage() {
   const { state: catchState } = useCatches();
   const { state: tripState } = useTrips();
   const { summary: progression } = useProgression();
+  const { status: scopeStatus, scopeKey, ownerId } = dataScope;
+  const privacyLoading = dataScope.status !== "ready" || privacyData.scopeKey !== dataScope.scopeKey || privacyData.loading;
+  const privacySettings = privacyData.scopeKey === dataScope.scopeKey ? privacyData.settings : DEFAULT_PRIVACY_SETTINGS;
+  const privacyError = privacyData.scopeKey === dataScope.scopeKey ? privacyData.error : "";
+  const preferences = preferenceOverride.value && preferenceOverride.scopeKey === dataScope.scopeKey
+    ? preferenceOverride.value
+    : readPreferences(globalThis.localStorage, dataScope.scopeKey);
   const recordCatch = getBiggestCatch(catchState.catches);
+  const bestWater = getBestWater(catchState.catches, waters.scopeKey === dataScope.scopeKey ? waters.records : []);
   const trophyCatches = useMemo(
     () => [...catchState.catches].sort((left, right) => {
       const weightDelta = (isMeasuredCatchWeight(right) ? right.weightKg : -1) - (isMeasuredCatchWeight(left) ? left.weightKg : -1);
@@ -90,7 +107,7 @@ function ProfilePage() {
     () => buildSpeciesAlbum(catchState.catches, DEFAULT_SPECIES).filter((item) => item.discovered).slice(0, 4),
     [catchState.catches],
   );
-  const profileIdentity = auth.user?.displayName || auth.user?.email || "Místní deník";
+  const profileIdentity = auth.user?.displayName?.trim() || (auth.user ? "Můj profil" : "Místní deník");
   const avatarInitial = auth.user
     ? profileIdentity.trim().charAt(0).toLocaleUpperCase("cs-CZ")
     : "🎣";
@@ -101,6 +118,60 @@ function ProfilePage() {
       : auth.mode === "production"
         ? "Účet je připojený k produkčnímu prostředí."
         : "Účet pro toto prostředí zatím není nastavený.";
+
+  useEffect(() => {
+    let active = true;
+    if (scopeStatus !== "ready") return () => { active = false; };
+    const scope = { scopeKey, ownerId };
+    privacyRepository.get(scope).then((settings) => {
+      if (active) setPrivacyData({ scopeKey: scope.scopeKey, settings, loading: false, error: "" });
+    }).catch((loadError) => {
+      if (active) setPrivacyData({ scopeKey: scope.scopeKey, settings: DEFAULT_PRIVACY_SETTINGS, loading: false, error: loadError?.message || "Nastavení soukromí se nepodařilo načíst." });
+    });
+    return () => { active = false; };
+  }, [scopeStatus, scopeKey, ownerId]);
+
+  useEffect(() => {
+    let active = true;
+    if (scopeStatus !== "ready") return () => { active = false; };
+    const scope = { scopeKey, ownerId };
+    waterRepository.list(scope).then((records) => {
+      if (active) setWaters({ scopeKey: scope.scopeKey, records });
+    }).catch(() => {
+      if (active) setWaters({ scopeKey: scope.scopeKey, records: [] });
+    });
+    return () => { active = false; };
+  }, [scopeStatus, scopeKey, ownerId]);
+
+  const updateProfileVisibility = async (isPublic) => {
+    if (dataScope.status !== "ready" || privacySaving) return;
+    setPrivacySaving(true);
+    setPrivacyData((current) => ({ ...current, error: "" }));
+    try {
+      const saved = await privacyRepository.put({
+        ...privacySettings,
+        profileVisibility: isPublic ? "public" : "private",
+      }, dataScope);
+      setPrivacyData({ scopeKey: dataScope.scopeKey, settings: saved, loading: false, error: "" });
+    } catch (saveError) {
+      setPrivacyData((current) => ({ ...current, error: saveError?.message || "Viditelnost profilu se nepodařilo uložit." }));
+    } finally {
+      setPrivacySaving(false);
+    }
+  };
+
+  const updateDetailMode = (detailMode) => {
+    if (dataScope.status !== "ready") return;
+    try {
+      setPreferenceOverride({
+        scopeKey: dataScope.scopeKey,
+        value: savePreferences({ detailMode }, globalThis.localStorage, dataScope.scopeKey),
+      });
+      setPreferenceError("");
+    } catch (saveError) {
+      setPreferenceError(saveError?.message || "Režim zápisu se nepodařilo uložit.");
+    }
+  };
 
   const refreshAccountData = useCallback(async () => {
     try {
@@ -309,6 +380,7 @@ function ProfilePage() {
       <section className="profile-identity" aria-label="Aktuální profil">
         <span className="profile-avatar" aria-hidden="true">{avatarInitial}</span>
         <div><strong>{profileIdentity}</strong><span>{progression.rank.name} · {progression.rank.title}</span></div>
+        <span className="profile-status-badge">{privacyLoading ? "Načítám" : privacySettings.profileVisibility === "public" ? "Veřejný" : "Soukromý"}</span>
         <span className="profile-level-badge">Úroveň {progression.level}</span>
       </section>
 
@@ -322,6 +394,9 @@ function ProfilePage() {
         <div><strong>{catchState.loading ? "—" : progression.speciesCount}</strong><span>DRUHY</span></div>
         <div className="profile-record-stat"><strong>{recordCatch ? `${recordCatch.weightKg.toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} kg` : "—"}</strong><span>REKORD</span></div>
         <div><strong>{tripState.loading ? "—" : tripState.trips.length}</strong><span>VÝPRAVY</span></div>
+        <div><strong>{progression.streak.weeks}</strong><span>TÝDENNÍ SÉRIE</span></div>
+        {bestWater?.water ? <Link className="profile-stat-water" to={`/waters/${bestWater.id}`}><strong>{bestWater.name}</strong><span>NEJLEPŠÍ REVÍR · {bestWater.catchCount} ÚLOVKŮ</span></Link>
+          : <div><strong>{bestWater?.name || "—"}</strong><span>NEJLEPŠÍ REVÍR{bestWater ? ` · ${bestWater.catchCount} ÚLOVKŮ` : ""}</span></div>}
       </section>
 
       <nav className="profile-quick-links" aria-label="Osobní přehledy">
@@ -330,6 +405,7 @@ function ProfilePage() {
         <Link className="profile-secondary-link" to="/season-story">Příběh sezóny <span aria-hidden="true">→</span></Link>
         <Link className="profile-secondary-link" to="/year-summary">Roční souhrn <span aria-hidden="true">→</span></Link>
         <Link className="profile-secondary-link" to="/settings">Nastavení <span aria-hidden="true">→</span></Link>
+        <Link className="profile-secondary-link" to="/notifications">Upozornění <span aria-hidden="true">→</span></Link>
         <Link className="profile-secondary-link" to="/album">Druhové album <span aria-hidden="true">→</span></Link>
         <Link className="profile-secondary-link" to="/map">Soukromá mapa <span aria-hidden="true">→</span></Link>
         <Link className="profile-secondary-link" to="/privacy">Soukromí <span aria-hidden="true">→</span></Link>
@@ -338,6 +414,26 @@ function ProfilePage() {
         <Link className="profile-secondary-link" to="/challenges">Osobní výzvy <span aria-hidden="true">→</span></Link>
         <Link className="profile-secondary-link" to="/streak">Týdenní série <span aria-hidden="true">→</span></Link>
       </nav>
+
+      <section className="profile-panel profile-preferences" aria-labelledby="profile-preferences-title">
+        <h2 id="profile-preferences-title">Předvolby profilu</h2>
+        <label className="profile-restore-mode">Výchozí režim zápisu
+          <select value={preferences.detailMode} onChange={(event) => updateDetailMode(event.target.value)}>
+            <option value="simple">Rychlý zápis</option>
+            <option value="detailed">Podrobný zápis</option>
+          </select>
+        </label>
+        <p>Volba se uloží a použije jako výchozí při přidávání úlovku.</p>
+        {preferenceError && <p className="profile-error" role="alert">{preferenceError}</p>}
+        <label className="privacy-checkbox-row profile-public-toggle">
+          <input type="checkbox" checked={privacySettings.profileVisibility === "public"} onChange={(event) => updateProfileVisibility(event.target.checked)} disabled={privacyLoading || privacySaving || dataScope.status !== "ready"} />
+          <span>Veřejný profil</span>
+        </label>
+        {privacyLoading && <p className="loading-state" role="status">Načítám soukromí profilu…</p>}
+        {privacySaving && <p role="status">Ukládám viditelnost profilu…</p>}
+        {privacyError && <p className="profile-error" role="alert">{privacyError}</p>}
+        <Link className="profile-secondary-link" to="/privacy">Další nastavení soukromí <span aria-hidden="true">→</span></Link>
+      </section>
 
       <section className="profile-trophy" aria-labelledby="profile-trophy-title">
         <div className="profile-trophy-heading">

@@ -9,8 +9,15 @@ test("privacy defaults are private and exact location requires location sharing"
   });
   assert.deepEqual(normalizePrivacySettings({ showExactLocation: true }), {
     profileVisibility: "private", defaultCatchVisibility: "private", defaultPhotoVisibility: "private",
-    defaultLocationPrecision: "none", privateSpotDefault: true, nearbyOptIn: false, heatmapOptIn: false,
+    defaultLocationPrecision: "none", privateSpotDefault: true, nearbyOptIn: false,
+    nearbyLocationPrecision: "approximate", heatmapOptIn: false,
   });
+});
+
+test("nearby precision never normalizes to exact public coordinates", () => {
+  assert.equal(normalizePrivacySettings({ nearbyLocationPrecision: "none" }).nearbyLocationPrecision, "none");
+  assert.equal(normalizePrivacySettings({ nearbyLocationPrecision: "approximate" }).nearbyLocationPrecision, "approximate");
+  assert.equal(normalizePrivacySettings({ nearbyLocationPrecision: "exact" }).nearbyLocationPrecision, "approximate");
 });
 
 test("public projection exposes only an explicit allowlist", () => {

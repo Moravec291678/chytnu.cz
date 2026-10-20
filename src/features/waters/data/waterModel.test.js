@@ -20,6 +20,32 @@ test("water model creates valid records with default values", () => {
   assert.equal(water.isFavorite, false);
 });
 
+test("new local Water keeps a stable ID, pending moderation and selected species", () => {
+  const id = crypto.randomUUID();
+  const water = createWaterRecord({
+    id,
+    name: "  Lom u lesa  ",
+    type: "Lom",
+    area: "Berounsko",
+    targetFish: ["Kapr", "Štika", "Kapr"],
+    moderationStatus: "verified",
+  }, { scopeKey: "guest-add-water" });
+
+  assert.equal(water.id, id);
+  assert.equal(water.scopeKey, "guest-add-water");
+  assert.equal(water.name, "Lom u lesa");
+  assert.deepEqual(water.targetFish, ["Kapr", "Štika"]);
+  assert.equal(water.moderationStatus, "pending");
+  assert.equal(water.coordinates, null);
+});
+
+test("water form validates bounded text and the four supported water types", () => {
+  assert.equal(validateWaterForm({ name: "Vltava", type: "Moře" }).type, "Vyber platný druh vody.");
+  assert.ok(validateWaterForm({ name: "x".repeat(121) }).name);
+  assert.ok(validateWaterForm({ name: "Vltava", area: "x".repeat(161) }).area);
+  assert.deepEqual(validateWaterForm({ name: "Vltava", type: "Řeka", targetFish: ["Kapr"] }), {});
+});
+
 test("water filtering by search, type, and favorite", () => {
   const waters = [
     createWaterRecord({ name: "Vltava 6", type: "Řeka", isFavorite: true }),
@@ -32,9 +58,9 @@ test("water filtering by search, type, and favorite", () => {
   assert.equal(filterWaters(waters, { type: "Přehrada" }).length, 1);
 });
 
-test("water repository stores, retrieves, lists and toggles waters and messages in IndexedDB", async () => {
+test("water repository stores, reloads, lists and opens a local pending Water with species", async () => {
   const scope = { scopeKey: "test-scope" };
-  const water = createWaterRecord({ name: "Labe 24", waterNumber: "411050" }, scope);
+  const water = createWaterRecord({ name: "Labe 24", waterNumber: "411050", targetFish: ["Candát", "Sumec"] }, scope);
   await waterRepository.put(water, scope);
 
   const list = await waterRepository.list(scope);
@@ -43,9 +69,11 @@ test("water repository stores, retrieves, lists and toggles waters and messages 
 
   const single = await waterRepository.get(water.id, scope);
   assert.equal(single.id, water.id);
+  assert.equal(single.moderationStatus, "pending");
+  assert.deepEqual(single.targetFish, ["Candát", "Sumec"]);
 
   // Water chat
-  const msg = await waterRepository.addMessage({ waterId: water.id, text: "Dnes berou kapři na feeder", authorName: "Rybář", scope });
+  const msg = await waterRepository.addMessage({ waterId: water.id, text: "Dnes berou kapři na feeder", author: "Místní profil", scope });
   assert.equal(msg.text, "Dnes berou kapři na feeder");
 
   const messages = await waterRepository.listMessages(water.id, scope);

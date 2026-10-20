@@ -113,6 +113,16 @@ test("catch create, edit, and delete commit an ordered coalesced operation and r
   assert.equal(await catchRepository.get("catch-1", scope), undefined);
 });
 
+test("favorite state is persisted and restored from the local journal", async () => {
+  await deleteDatabase();
+  const scope = await guestScope();
+  const original = await catchRepository.put(makeCatch("favorite-catch"), scope);
+  await catchRepository.put({ ...original, isFavorite: true, sync: { ...original.sync, revision: original.sync.revision + 1 } }, scope);
+
+  const reloaded = await catchRepository.list(scope);
+  assert.equal(reloaded.find((record) => record.id === "favorite-catch")?.isFavorite, true);
+});
+
 test("trip start, end, and deletion produce upsert and tombstone operations", async () => {
   await deleteDatabase();
   let scope = await guestScope();

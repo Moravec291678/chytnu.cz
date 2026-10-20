@@ -1,26 +1,70 @@
 const KEY = "chytnu:preferences:v1";
+export const DEFAULT_NOTIFICATION_PREFERENCES = Object.freeze({
+  morningFishActivity: true,
+  tomorrowGreatConditions: false,
+  friendActivity: false,
+  streaksAndChallenges: true,
+  friendLegendaryCatch: false,
+});
+
 export const DEFAULT_PREFERENCES = Object.freeze({
   detailMode: "simple",
-  notifications: Object.freeze({ fishActivity: true, challenges: true, streak: true, weeklySummary: true, weather: false }),
+  notifications: DEFAULT_NOTIFICATION_PREFERENCES,
   onboardingComplete: false,
 });
 
-export function readPreferences(storage = globalThis.localStorage) {
+function preferenceKey(scopeKey) {
+  return scopeKey ? `${KEY}:${scopeKey}` : KEY;
+}
+
+function booleanOrFallback(value, fallback) {
+  return typeof value === "boolean" ? value : fallback;
+}
+
+function normalizeNotificationPreferences(saved = {}) {
+  const legacyStreaksAndChallenges = typeof saved.challenges === "boolean"
+    ? saved.challenges
+    : saved.streak;
+
+  return {
+    morningFishActivity: booleanOrFallback(
+      saved.morningFishActivity,
+      booleanOrFallback(saved.fishActivity, DEFAULT_NOTIFICATION_PREFERENCES.morningFishActivity),
+    ),
+    tomorrowGreatConditions: booleanOrFallback(
+      saved.tomorrowGreatConditions,
+      booleanOrFallback(saved.weather, DEFAULT_NOTIFICATION_PREFERENCES.tomorrowGreatConditions),
+    ),
+    friendActivity: booleanOrFallback(saved.friendActivity, DEFAULT_NOTIFICATION_PREFERENCES.friendActivity),
+    streaksAndChallenges: booleanOrFallback(
+      saved.streaksAndChallenges,
+      booleanOrFallback(legacyStreaksAndChallenges, DEFAULT_NOTIFICATION_PREFERENCES.streaksAndChallenges),
+    ),
+    friendLegendaryCatch: booleanOrFallback(
+      saved.friendLegendaryCatch,
+      DEFAULT_NOTIFICATION_PREFERENCES.friendLegendaryCatch,
+    ),
+  };
+}
+
+export function readPreferences(storage = globalThis.localStorage, scopeKey = null) {
   try {
-    const saved = JSON.parse(storage?.getItem(KEY) || "null");
+    const scopedValue = storage?.getItem(preferenceKey(scopeKey));
+    const rawValue = scopeKey && scopedValue === null ? storage?.getItem(KEY) : scopedValue;
+    const saved = JSON.parse(rawValue || "null");
     return {
       ...DEFAULT_PREFERENCES,
       ...(saved && typeof saved === "object" ? saved : {}),
-      notifications: { ...DEFAULT_PREFERENCES.notifications, ...(saved?.notifications || {}) },
+      notifications: normalizeNotificationPreferences(saved?.notifications),
     };
   } catch { return { ...DEFAULT_PREFERENCES, notifications: { ...DEFAULT_PREFERENCES.notifications } }; }
 }
 
-export function savePreferences(patch, storage = globalThis.localStorage) {
-  const current = readPreferences(storage);
+export function savePreferences(patch, storage = globalThis.localStorage, scopeKey = null) {
+  const current = readPreferences(storage, scopeKey);
   const next = { ...current, ...patch };
   if (patch.notifications) next.notifications = { ...current.notifications, ...patch.notifications };
-  try { storage?.setItem(KEY, JSON.stringify(next)); }
+  try { storage?.setItem(preferenceKey(scopeKey), JSON.stringify(next)); }
   catch (error) { throw new Error(`Nastavení se nepodařilo uložit: ${error?.message || "úložiště není dostupné"}`, { cause: error }); }
   return next;
 }

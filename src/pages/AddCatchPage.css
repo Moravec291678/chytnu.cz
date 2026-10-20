@@ -187,10 +187,20 @@
 }
 
 .weight-estimate-note {
+  min-height: 27px;
   color: var(--text-secondary);
   font-size: 11px;
   line-height: 1.2;
 }
+
+.catch-weather-status {
+  margin: 0 12px 10px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.catch-weather-status-error { color: var(--text-secondary); }
 
 .input-group-full {
   grid-column: 1 / -1;
@@ -380,6 +390,20 @@
   overscroll-behavior: contain;
 }
 
+.quick-species-management {
+  display: grid;
+  gap: 7px;
+}
+
+.species-management-heading {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+
 .species-items-full {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   max-height: 360px;
@@ -548,6 +572,26 @@
   white-space: nowrap;
 }
 
+.selected-species-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.selected-species-remove {
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 8px 4px;
+}
+
+.selected-species-remove:hover,
+.selected-species-remove:focus-visible { color: var(--text-primary); }
+
 .result-buttons {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -629,6 +673,43 @@
   accent-color: var(--accent-green);
 }
 
+.bait-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(145px, 100%), 1fr));
+  gap: 7px;
+  margin: 12px;
+}
+
+.bait-chip {
+  display: flex;
+  min-width: 0;
+  min-height: 44px;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.bait-chip-active {
+  border-color: rgb(var(--accent-green-rgb) / 48%);
+  background: var(--accent-green-soft);
+  color: var(--accent-green);
+}
+
+.bait-chip input {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  margin: 0;
+  accent-color: var(--accent-green);
+}
+
 .fishing-methods-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -686,6 +767,34 @@
   line-height: 1.4;
 }
 
+.water-suggestion {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  margin-top: 8px;
+  padding: 9px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-1);
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.water-suggestion > span { min-width: 0; flex: 1 1 100%; overflow-wrap: anywhere; }
+.water-suggestion button {
+  min-height: 40px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 700;
+}
+.water-suggestion button:first-of-type { color: var(--accent-green); }
+
 .catch-form-error {
   padding: 10px 12px;
   border: 1px solid var(--accent-red);
@@ -736,6 +845,7 @@
 }
 
 .catch-detail-toolbar > a:first-child,
+.catch-detail-toolbar > button.catch-detail-back,
 .catch-detail-toolbar > div a,
 .catch-detail-toolbar > div button {
   display: inline-flex;

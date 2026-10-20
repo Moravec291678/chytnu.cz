@@ -39,6 +39,7 @@ const WaterCreatePage = lazy(() => import("../pages/WaterCreatePage"));
 const HotspotsPage = lazy(() => import("../pages/HotspotsPage"));
 const WaterChatPage = lazy(() => import("../pages/WaterChatPage"));
 const CommunityPage = lazy(() => import("../pages/CommunityPage"));
+const CommunityCatchDetailPage = lazy(() => import("../pages/CommunityCatchDetailPage"));
 const CommunityReportPage = lazy(() => import("../pages/CommunityReportPage"));
 const NearbyPage = lazy(() => import("../pages/NearbyPage"));
 const CrewPage = lazy(() => import("../pages/CrewPage"));
@@ -135,6 +136,7 @@ function App() {
         <Route path="/waters/:waterId/chat" element={<PageSuspense><WaterChatPage /></PageSuspense>} />
         <Route path="/hotspots" element={<PageSuspense><HotspotsPage /></PageSuspense>} />
         <Route path="/community" element={<PageSuspense><CommunityPage /></PageSuspense>} />
+        <Route path="/community/catch/:catchId" element={<PageSuspense><CommunityCatchDetailPage /></PageSuspense>} />
         <Route path="/community/:postId/report" element={<PageSuspense><CommunityReportPage /></PageSuspense>} />
         <Route path="/nearby" element={<PageSuspense><NearbyPage /></PageSuspense>} />
         <Route path="/crew" element={<PageSuspense><CrewPage /></PageSuspense>} />

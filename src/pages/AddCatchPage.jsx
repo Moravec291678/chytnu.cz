@@ -9,14 +9,16 @@ import {
 import Layout from "../shared/layout/Layout";
 import "./AddCatchPage.css";
 import { useCatches } from "../features/catches/context/useCatches";
-import { catchToForm, createCatchRecord, validateCatchForm } from "../features/catches/data/catchModel";
+import { catchToForm, createCatchRecord, updateCatchFormField, validateCatchForm } from "../features/catches/data/catchModel";
 import { useTrips } from "../features/trips/context/useTrips";
-import { formatCoordinates } from "../features/catches/data/coordinates";
+import { formatCoordinates, parseCoordinateText } from "../features/catches/data/coordinates";
 import { normalizeCatchPrivacy } from "../features/privacy/data/privacyModel";
 import { readPreferences } from "../features/preferences/data/preferences.js";
 import { useDataScope } from "../features/auth/context/dataScopeContextValue.js";
 import { waterRepository } from "../features/waters/data/waterRepository.js";
-import { estimateFishWeight, formatEstimatedWeight } from "../features/catches/data/lengthWeightRelationships.js";
+import { findNearestSavedWater } from "../features/waters/data/nearbyWaterMatch.js";
+import { fetchCatchWeather, replaceAutomaticConditions } from "../shared/data/catchWeather.js";
+import { calculateMoonPhase } from "../shared/utils/moonPhase.js";
 import {
   filterSpeciesCatalog,
   getPrimarySpeciesCategoryKey,
@@ -63,16 +65,29 @@ async function optimizePhoto(file) {
   }
 }
 
+function SpeciesManagementRow({ species, selected, pinned, onSelect, onTogglePin }) {
+  return <div className={selected ? "species-picker-row species-picker-row-selected" : "species-picker-row"}>
+    <button className="species-picker-select" type="button" aria-pressed={selected} onClick={onSelect}>
+      <span className="species-item-label">{species.label}</span>
+      {species.latinName && <span className="species-picker-latin">{species.latinName}</span>}
+    </button>
+    <button className={pinned ? "species-pin-button species-pin-button-active" : "species-pin-button"} type="button" aria-pressed={pinned} aria-label={pinned ? `Odebrat ${species.label} z rychlého výběru` : `Přidat ${species.label} do rychlého výběru`} onClick={onTogglePin}>
+      {pinned ? "★ Odepnout" : "☆ Připnout"}
+    </button>
+  </div>;
+}
+
 function AddCatchPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { state, createCatch, updateCatch } = useCatches();
   const { state: tripState } = useTrips();
   const scope = useDataScope();
+  const preferenceAppliedScopeRef = useRef(null);
   const [availableWaters, setAvailableWaters] = useState([]);
   const [watersError, setWatersError] = useState("");
   const existingCatch = id ? state.catches.find((item) => item.id === id) : null;
-  const [displayFull, setDisplayFull] = useState(() => readPreferences().detailMode === "detailed");
+  const [displayFull, setDisplayFull] = useState(() => readPreferences(globalThis.localStorage, scope.scopeKey).detailMode === "detailed");
   useEffect(() => {
     if (scope.status !== "ready") return undefined;
     let active = true;
@@ -81,13 +96,15 @@ function AddCatchPage() {
     return () => { active = false; };
   }, [scope]);
   const [photoProcessing, setPhotoProcessing] = useState(false);
-  const [showSpeciesPicker, setShowSpeciesPicker] = useState(() => readPreferences().detailMode === "detailed");
+  const [showSpeciesPicker, setShowSpeciesPicker] = useState(() => readPreferences(globalThis.localStorage, scope.scopeKey).detailMode === "detailed");
   const [selectedSpeciesCategoryKey, setSelectedSpeciesCategoryKey] = useState("");
   const [quickSpeciesOverride, setQuickSpeciesOverride] = useState(null);
   const quickSpeciesIds = quickSpeciesOverride?.scopeKey === scope.scopeKey
     ? quickSpeciesOverride.ids
     : readQuickSpeciesIds(scope.scopeKey);
   const [quickSpeciesError, setQuickSpeciesError] = useState("");
+  const [waterSuggestionDismissed, setWaterSuggestionDismissed] = useState(false);
+  const [manualWaterChoice, setManualWaterChoice] = useState(Boolean(existingCatch?.waterId || existingCatch?.locationName));
   const fileInputRef = useRef(null);
   const photoUrlsRef = useRef(new Set());
   useEffect(() => {
@@ -175,6 +192,7 @@ function AddCatchPage() {
     resultKey: displayFull ? "unspecified" : "released",
 
     conditions: { airTempC: "", waterTempC: "", pressureHpa: "", windKmh: "", moonPhase: "" },
+    conditionSources: {},
     fishingMethod: "",
     photos: [],
     baits: [], notes: "", isFavorite: false, tripId: "",
@@ -184,8 +202,30 @@ function AddCatchPage() {
   const [saving, setSaving] = useState(false);
   const [gpsLoading, setGpsLoading] = useState(false);
   const [gpsMessage, setGpsMessage] = useState("");
+  const [weatherStatus, setWeatherStatus] = useState({ state: "idle", message: "" });
+  const manualConditionFieldsRef = useRef(new Set());
+  const automaticConditionsRef = useRef({});
   const savingRef = useRef(false);
   const [loadedId, setLoadedId] = useState("");
+
+  useEffect(() => {
+    if (id || scope.status !== "ready" || preferenceAppliedScopeRef.current === scope.scopeKey) return;
+    preferenceAppliedScopeRef.current = scope.scopeKey;
+    const detailed = readPreferences(globalThis.localStorage, scope.scopeKey).detailMode === "detailed";
+    queueMicrotask(() => {
+      setDisplayFull(detailed);
+      setShowSpeciesPicker(detailed);
+      setCatchData((current) => ({
+        ...current,
+        resultKey: detailed && current.resultKey === "released" ? "unspecified" : !detailed && current.resultKey === "unspecified" ? "released" : current.resultKey,
+      }));
+    });
+  }, [id, scope.scopeKey, scope.status]);
+
+  useEffect(() => {
+    manualConditionFieldsRef.current = new Set();
+    automaticConditionsRef.current = {};
+  }, [id]);
 
   useEffect(() => {
     if (!id || !existingCatch || loadedId === id) return;
@@ -200,7 +240,13 @@ function AddCatchPage() {
     let active = true;
     Promise.resolve().then(() => {
       if (!active) return;
+      manualConditionFieldsRef.current = new Set(Object.entries(values.conditionSources ?? {}).filter(([, source]) => source === "manual").map(([field]) => field));
+      for (const [field, value] of Object.entries(values.conditions ?? {})) {
+        if (value !== "" && value !== null && value !== undefined && values.conditionSources?.[field] !== "auto") manualConditionFieldsRef.current.add(field);
+      }
+      automaticConditionsRef.current = Object.fromEntries(Object.entries(values.conditions ?? {}).filter(([field, value]) => value !== "" && value !== null && value !== undefined && values.conditionSources?.[field] === "auto"));
       setCatchData(values);
+      setManualWaterChoice(Boolean(values.waterId || values.locationName));
       setDisplayFull(true);
       setShowSpeciesPicker(true);
       setSelectedSpeciesCategoryKey(getPrimarySpeciesCategoryKey(DEFAULT_SPECIES.find((species) => species.key === values.speciesKey)));
@@ -208,6 +254,62 @@ function AddCatchPage() {
     });
     return () => { active = false; };
   }, [existingCatch, id, loadedId]);
+
+  useEffect(() => {
+    if (!displayFull) return undefined;
+    const controller = new AbortController();
+    let timer;
+    const coordinates = catchData.coordinates;
+    const nextMoon = calculateMoonPhase(catchData.catchDate, catchData.catchTime);
+    const automatic = nextMoon ? { moonPhase: nextMoon } : {};
+    setCatchData((previous) => {
+      const conditions = replaceAutomaticConditions(
+        previous.conditions,
+        automaticConditionsRef.current,
+        automatic,
+        manualConditionFieldsRef.current,
+      );
+      const conditionSources = { ...(previous.conditionSources ?? {}) };
+      for (const [field, value] of Object.entries(automaticConditionsRef.current)) {
+        if (conditions[field] !== value && !manualConditionFieldsRef.current.has(field)) delete conditionSources[field];
+      }
+      for (const [field, value] of Object.entries(automatic)) {
+        if (!manualConditionFieldsRef.current.has(field) && conditions[field] === value) conditionSources[field] = "auto";
+      }
+      automaticConditionsRef.current = Object.fromEntries(
+        Object.entries(automatic).filter(([field, value]) => !manualConditionFieldsRef.current.has(field) && conditions[field] === value),
+      );
+      return { ...previous, conditions, conditionSources };
+    });
+
+    if (!coordinates || !Number.isFinite(coordinates.latitude) || !Number.isFinite(coordinates.longitude)) {
+      setWeatherStatus({ state: "idle", message: "" });
+      return () => controller.abort();
+    }
+
+    setWeatherStatus({ state: "loading", message: "Načítám počasí pro místo a čas úlovku…" });
+    timer = setTimeout(async () => {
+      try {
+        const values = await fetchCatchWeather(coordinates.latitude, coordinates.longitude, catchData.catchDate, catchData.catchTime, { signal: controller.signal });
+        setCatchData((previous) => {
+          const conditions = replaceAutomaticConditions(previous.conditions, {}, values, manualConditionFieldsRef.current);
+          const conditionSources = { ...(previous.conditionSources ?? {}) };
+          automaticConditionsRef.current = {
+            ...automaticConditionsRef.current,
+            ...Object.fromEntries(Object.entries(values).filter(([field, value]) => !manualConditionFieldsRef.current.has(field) && conditions[field] === value)),
+          };
+          for (const [field, value] of Object.entries(values)) {
+            if (!manualConditionFieldsRef.current.has(field) && conditions[field] === value) conditionSources[field] = "auto";
+          }
+          return { ...previous, conditions, conditionSources };
+        });
+        setWeatherStatus({ state: "loaded", message: "Dostupné počasí bylo doplněno; ruční hodnoty zůstávají beze změny." });
+      } catch (error) {
+        if (!controller.signal.aborted) setWeatherStatus({ state: "error", message: error.message || "Počasí pro tento čas není dostupné. Úlovek lze uložit i bez něj." });
+      }
+    }, 500);
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [catchData.coordinates, catchData.coordinates?.latitude, catchData.coordinates?.longitude, catchData.catchDate, catchData.catchTime, displayFull]);
 
   const handleSave = async () => {
     if (savingRef.current) return;
@@ -247,6 +349,12 @@ function AddCatchPage() {
   );
   const [speciesSearch, setSpeciesSearch] = useState("");
   const filteredSpecies = filterSpeciesCatalog(DEFAULT_SPECIES, speciesSearch);
+  const filteredPinnedSpecies = quickSpeciesIds
+    .map((speciesId) => filteredSpecies.find((species) => species.key === speciesId))
+    .filter(Boolean);
+  const filteredUnpinnedSpecies = filteredSpecies.filter((species) => !quickSpeciesIds.includes(species.key));
+  const nearestWater = findNearestSavedWater(catchData.coordinates, availableWaters);
+  const waterSuggestion = !catchData.waterId && !manualWaterChoice && !waterSuggestionDismissed ? nearestWater : null;
   const selectedSpeciesCategory = getSpeciesCategory(selectedSpeciesCategoryKey);
   const categorySpecies = selectedSpeciesCategoryKey
     ? getSpeciesForCategory(selectedSpeciesCategoryKey, filteredSpecies)
@@ -254,20 +362,7 @@ function AddCatchPage() {
 
   const updateCatchData = (field, value) => {
     setFormError("");
-    setCatchData((prev) => {
-      const next = { ...prev, [field]: value };
-      if (field === "weightKg") {
-        next.weightSource = String(value).trim() ? "manual" : "estimated";
-        if (!String(value).trim()) {
-          const estimate = estimateFishWeight(prev.speciesKey, prev.lengthCm);
-          next.weightKg = estimate === null ? "" : formatEstimatedWeight(estimate);
-        }
-      } else if ((field === "lengthCm" || field === "speciesKey") && prev.weightSource === "estimated") {
-        const estimate = estimateFishWeight(next.speciesKey, next.lengthCm);
-        next.weightKg = estimate === null ? "" : formatEstimatedWeight(estimate);
-      }
-      return next;
-    });
+    setCatchData((previous) => updateCatchFormField(previous, field, value));
   };
 
   const togglePinnedSpecies = (speciesId) => {
@@ -292,16 +387,35 @@ function AddCatchPage() {
 
   const updateConditions = (field, value) => {
     setFormError("");
+    manualConditionFieldsRef.current.add(field);
     setCatchData((previous) => ({
       ...previous,
       conditions: { ...(previous.conditions ?? {}), [field]: value },
+      conditionSources: { ...(previous.conditionSources ?? {}), [field]: "manual" },
     }));
+  };
+
+  const removeSelectedSpecies = () => {
+    updateCatchData("speciesKey", "");
+    setSelectedSpeciesCategoryKey("");
+    setSpeciesSearch("");
+    setShowSpeciesPicker(true);
+  };
+
+  const applyWaterSuggestion = () => {
+    if (!waterSuggestion) return;
+    setManualWaterChoice(true);
+    updateCatchData("waterId", waterSuggestion.water.id);
+    updateCatchData("locationName", waterSuggestion.water.name);
+    updateCatchData("waterNumber", String(waterSuggestion.water.waterNumber || "").replace(/\D/g, ""));
+    setWaterSuggestionDismissed(true);
   };
 
   const updateGpsLocation = (value, coordinates = null) => {
     setFormError("");
     setGpsMessage("");
-    setCatchData((previous) => ({ ...previous, gpsLocation: value, coordinates }));
+    const parsedCoordinates = coordinates ?? parseCoordinateText(value);
+    setCatchData((previous) => ({ ...previous, gpsLocation: value, coordinates: parsedCoordinates }));
   };
 
   const useCurrentLocation = () => {
@@ -417,9 +531,14 @@ function AddCatchPage() {
                 </span>
                 {selectedSpecies.latinName && <span className="selected-species-latin">{selectedSpecies.latinName}</span>}
               </div>
-              <button className="selected-species-button" type="button" onClick={() => { setShowSpeciesPicker(true); setSpeciesSearch(""); if (displayFull && !selectedSpeciesCategoryKey) setSelectedSpeciesCategoryKey(getPrimarySpeciesCategoryKey(selectedSpecies)); }}>
-                ✏️ Změnit
-              </button>
+              <div className="selected-species-actions">
+                <button className="selected-species-button" type="button" onClick={() => { setShowSpeciesPicker(true); setSpeciesSearch(""); if (displayFull && !selectedSpeciesCategoryKey) setSelectedSpeciesCategoryKey(getPrimarySpeciesCategoryKey(selectedSpecies)); }}>
+                  ✏️ Změnit
+                </button>
+                <button className="selected-species-remove" type="button" onClick={removeSelectedSpecies} aria-label={`Odebrat druh ${selectedSpecies.label}`}>
+                  × Odebrat
+                </button>
+              </div>
             </div>
           ) : displayFull ? (
             <p className="species-picker-hint">Vyber druh z kompletního katalogu.</p>
@@ -506,24 +625,19 @@ function AddCatchPage() {
             {filteredSpecies.length === 0 ? (
               <div className="species-empty"><span className="species-empty-icon">🐟</span><p className="species-empty-title">Žádná ryba nebyla nalezena</p><p className="species-empty-text">Zkus jiný název nebo vymaž hledání.</p></div>
             ) : (
-              <div className="species-items" aria-label="Katalog druhů ryb">
-                {filteredSpecies.map((species) => {
-                  const pinned = quickSpeciesIds.includes(species.key);
-                  return <div className={species.key === catchData.speciesKey ? "species-picker-row species-picker-row-selected" : "species-picker-row"} key={species.key}>
-                    <button
-                      className="species-picker-select"
-                      type="button"
-                      aria-pressed={species.key === catchData.speciesKey}
-                      onClick={() => { updateCatchData("speciesKey", species.key); setSpeciesSearch(""); setQuickSpeciesError(""); if (!displayFull) setShowSpeciesPicker(false); }}
-                    >
-                      <span className="species-item-label">{species.label}</span>
-                      {species.latinName && <span className="species-picker-latin">{species.latinName}</span>}
-                    </button>
-                    {!displayFull && <button className={pinned ? "species-pin-button species-pin-button-active" : "species-pin-button"} type="button" aria-pressed={pinned} aria-label={pinned ? `Odebrat ${species.label} z rychlého výběru` : `Přidat ${species.label} do rychlého výběru`} onClick={() => togglePinnedSpecies(species.key)}>
-                      {pinned ? "★ Připnuto" : "☆ Připnout"}
-                    </button>}
-                  </div>;
-                })}
+              <div className="quick-species-management">
+                {filteredPinnedSpecies.length > 0 && <>
+                  <h3 className="species-management-heading">Připnuté</h3>
+                  <div className="species-items" aria-label="Připnuté druhy ryb">
+                    {filteredPinnedSpecies.map((species) => <SpeciesManagementRow key={species.key} species={species} selected={species.key === catchData.speciesKey} pinned onSelect={() => { updateCatchData("speciesKey", species.key); setSpeciesSearch(""); setQuickSpeciesError(""); setShowSpeciesPicker(false); }} onTogglePin={() => togglePinnedSpecies(species.key)} />)}
+                  </div>
+                </>}
+                {filteredUnpinnedSpecies.length > 0 && <>
+                  <h3 className="species-management-heading">Všechny druhy</h3>
+                  <div className="species-items" aria-label="Všechny druhy ryb">
+                    {filteredUnpinnedSpecies.map((species) => <SpeciesManagementRow key={species.key} species={species} selected={species.key === catchData.speciesKey} pinned={false} onSelect={() => { updateCatchData("speciesKey", species.key); setSpeciesSearch(""); setQuickSpeciesError(""); setShowSpeciesPicker(false); }} onTogglePin={() => togglePinnedSpecies(species.key)} />)}
+                  </div>
+                </>}
               </div>
             )}
             <p className="species-preference-count">Rychlý výběr: {quickSpeciesIds.length}/{MAX_QUICK_SPECIES}</p>
@@ -558,7 +672,8 @@ function AddCatchPage() {
               />
               {catchData.weightSource === "estimated" && String(catchData.weightKg).trim() !== ""
                 && Number.isFinite(Number(String(catchData.weightKg).replace(",", ".")))
-                && <span className="weight-estimate-note">Odhad podle délky a druhu</span>}
+                ? <span className="weight-estimate-note">Odhad podle délky a druhu</span>
+                : <span className="weight-estimate-note" aria-hidden="true">&nbsp;</span>}
             </label>
 
             <label className="input-group">
@@ -576,6 +691,7 @@ function AddCatchPage() {
                   updateCatchData("lengthCm", value);
                 }}
               />
+              <span className="weight-estimate-note" aria-hidden="true">&nbsp;</span>
             </label>
 
             {displayFull && (
@@ -626,12 +742,14 @@ function AddCatchPage() {
               <span>Uložený revír</span>
               <select aria-label="Vybrat uložený revír" value={catchData.waterId || ""} onChange={(event) => {
                 const water = availableWaters.find((item) => item.id === event.target.value);
+                setManualWaterChoice(true);
                 updateCatchData("waterId", water?.id || "");
                 if (water) {
                   updateCatchData("locationName", water.name);
                   const numericWaterNumber = String(water.waterNumber || "").replace(/\D/g, "");
                   updateCatchData("waterNumber", numericWaterNumber || "");
                 }
+                setWaterSuggestionDismissed(true);
               }}>
                 <option value="">Bez uloženého revíru / vlastní lokalita</option>
                 {catchData.waterId && !availableWaters.some((item) => item.id === catchData.waterId) && <option value={catchData.waterId}>Dříve vybraný revír (nedostupný)</option>}
@@ -647,7 +765,7 @@ function AddCatchPage() {
                 type="text"
                 placeholder="Např. Lipno - sever"
                 value={catchData.locationName}
-                onChange={(e) => { updateCatchData("locationName", e.target.value); updateCatchData("waterId", ""); }}
+                onChange={(e) => { setManualWaterChoice(true); setWaterSuggestionDismissed(true); updateCatchData("locationName", e.target.value); updateCatchData("waterId", ""); }}
               />
             </label>
 
@@ -664,6 +782,7 @@ function AddCatchPage() {
                   onChange={(e) => {
                     const value = e.target.value;
 
+                    setManualWaterChoice(true);
                     updateCatchData("waterNumber", value);
                   }}
                 />
@@ -700,6 +819,7 @@ function AddCatchPage() {
                     onChange={(e) => updateGpsLocation(e.target.value)}
                   />
                   <span className="gps-actions"><button type="button" className="photo-action-button" onClick={useCurrentLocation} disabled={gpsLoading}>{gpsLoading ? "Zjišťuji polohu…" : "Použít aktuální polohu"}</button>{catchData.gpsLocation && <button type="button" className="photo-action-button" onClick={() => updateGpsLocation("")}>Odstranit GPS</button>}</span>
+                  {waterSuggestion && <div className="water-suggestion" role="status"><span>Nejbližší uložený revír: <strong>{waterSuggestion.water.name}</strong>{waterSuggestion.water.waterNumber ? ` · ${waterSuggestion.water.waterNumber}` : ""} ({waterSuggestion.distanceMeters} m). Návrh podle GPS může být nepřesný.</span><button type="button" onClick={applyWaterSuggestion}>Použít</button><button type="button" aria-label="Skrýt návrh revíru" onClick={() => setWaterSuggestionDismissed(true)}>×</button></div>}
                   {gpsMessage && <small className="gps-message" role="status">{gpsMessage}</small>}
                 </label>
 
@@ -779,7 +899,7 @@ function AddCatchPage() {
 
             <section className="add-catch-section">
               <h2>Nástrahy</h2>
-              {DEFAULT_BAITS.map((bait) => <label key={bait.key} className="favorite-checkbox"><input type="checkbox" checked={catchData.baits.includes(bait.key)} onChange={(event) => updateCatchData("baits", event.target.checked ? [...catchData.baits, bait.key] : catchData.baits.filter((key) => key !== bait.key))} />{bait.label}</label>)}
+              <div className="bait-options">{DEFAULT_BAITS.map((bait) => <label key={bait.key} className={catchData.baits.includes(bait.key) ? "bait-chip bait-chip-active" : "bait-chip"}><input type="checkbox" checked={catchData.baits.includes(bait.key)} onChange={(event) => updateCatchData("baits", event.target.checked ? [...catchData.baits, bait.key] : catchData.baits.filter((key) => key !== bait.key))} />{bait.label}</label>)}</div>
             </section>
 
           </>
@@ -799,6 +919,7 @@ function AddCatchPage() {
 
         {displayFull && <section className="add-catch-section">
           <h2>Podmínky</h2>
+          {weatherStatus.message && <p className={`catch-weather-status catch-weather-status-${weatherStatus.state}`} role="status">{weatherStatus.message}</p>}
           <div className="measurements-grid conditions-grid">
             <label className="input-group">
               <span>Vzduch (°C)</span>

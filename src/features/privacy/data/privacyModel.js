@@ -8,6 +8,7 @@ export const DEFAULT_PRIVACY_SETTINGS = Object.freeze({
   defaultLocationPrecision: LOCATION_PRECISION.NONE,
   privateSpotDefault: true,
   nearbyOptIn: false,
+  nearbyLocationPrecision: LOCATION_PRECISION.APPROXIMATE,
   heatmapOptIn: false,
 });
 
@@ -48,6 +49,9 @@ export function normalizePrivacySettings(value) {
     defaultLocationPrecision: privateSpotDefault ? LOCATION_PRECISION.NONE : requestedPrecision,
     privateSpotDefault,
     nearbyOptIn: value?.nearbyOptIn === true,
+    nearbyLocationPrecision: value?.nearbyLocationPrecision === LOCATION_PRECISION.NONE
+      ? LOCATION_PRECISION.NONE
+      : LOCATION_PRECISION.APPROXIMATE,
     heatmapOptIn: value?.heatmapOptIn === true,
   };
 }
