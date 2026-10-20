@@ -8,6 +8,7 @@ import { DEFAULT_SPECIES } from "../shared/constants/speciesCatalog.js";
 import { waterRepository } from "../features/waters/data/waterRepository.js";
 import { progressionLedger } from "../features/progression/data/progressionLedger.js";
 import { getEntitlementState } from "../features/entitlements/data/entitlementAccess.js";
+import { normalizePhotoFrame, photoFrameStyle } from "../features/catches/data/photoFraming.js";
 import "./ProgressionPages.css";
 
 function imageDimensions(image) {
@@ -33,10 +34,10 @@ async function decodePhoto(blob) {
   }
 }
 
-function drawCover(context, image, x, y, width, height, positionX = 0.5, positionY = 0.44) {
+function drawCover(context, image, x, y, width, height, positionX = 0.5, positionY = 0.44, zoom = 1) {
   const { width: imageWidth, height: imageHeight } = imageDimensions(image);
   if (!imageWidth || !imageHeight) throw new Error("Fotografie nemá platné rozměry.");
-  const scale = Math.max(width / imageWidth, height / imageHeight);
+  const scale = Math.max(width / imageWidth, height / imageHeight) * zoom;
   const sourceWidth = width / scale;
   const sourceHeight = height / scale;
   const sourceX = (imageWidth - sourceWidth) * positionX;
@@ -92,7 +93,7 @@ function formatDate(value) {
   return value ? new Intl.DateTimeFormat("cs-CZ", { dateStyle: "long" }).format(new Date(value)) : "";
 }
 
-async function renderShareCard(data, photoBlob = null) {
+async function renderShareCard(data, photoBlob = null, photoFrame = {}) {
   const canvas = document.createElement("canvas");
   canvas.width = 1080;
   canvas.height = 1800;
@@ -178,14 +179,15 @@ async function renderShareCard(data, photoBlob = null) {
     details.forEach((line, index) => context.fillText(fitText(context, line, 920), 540, 1090 + index * 58));
 
     if (photo) {
-      const thumbX = 360;
-      const thumbY = 1270;
-      const thumbW = 360;
-      const thumbH = 230;
+      const thumbX = 150;
+      const thumbY = 1240;
+      const thumbW = 780;
+      const thumbH = 440;
       context.save();
       roundedRectPath(context, thumbX, thumbY, thumbW, thumbH, 26);
       context.clip();
-      drawCover(context, photo, thumbX, thumbY, thumbW, thumbH, 0.5, 0.42);
+      const frame = normalizePhotoFrame(photoFrame);
+      drawCover(context, photo, thumbX, thumbY, thumbW, thumbH, frame.focalX, frame.focalY, frame.zoom);
       context.restore();
       context.strokeStyle = "rgba(255,255,255,.82)";
       context.lineWidth = 5;
@@ -308,7 +310,7 @@ export default function CatchSharePage() {
     setError("");
     setMessage("");
     try {
-      const blob = await renderShareCard(shareData, displayedPhoto?.blob);
+      const blob = await renderShareCard(shareData, displayedPhoto?.blob, displayedPhoto);
       downloadBlob(blob, getCatchShareFileName(shareData));
       setMessage("Obrázková karta se stáhla. Obsahuje pouze údaje povolené ke sdílení.");
     } catch (exportError) {
@@ -324,7 +326,7 @@ export default function CatchSharePage() {
     setError("");
     setMessage("");
     try {
-      const blob = await renderShareCard(shareData, displayedPhoto?.blob);
+      const blob = await renderShareCard(shareData, displayedPhoto?.blob, displayedPhoto);
       const file = new File([blob], getCatchShareFileName(shareData), { type: "image/png" });
       const canShareImage = typeof navigator.share === "function"
         && typeof navigator.canShare === "function"
@@ -371,7 +373,7 @@ export default function CatchSharePage() {
       <h2>{shareData.species}{shareData.lengthCm !== null ? ` · ${shareData.lengthCm.toLocaleString("cs-CZ")} cm` : ""}</h2>
       {shareData.waterName && <p className="catch-share-water">{shareData.waterName}</p>}
       {shareData.caughtAt && <p>{formatDate(shareData.caughtAt)}</p>}
-      {displayedPhoto && <img className="catch-share-thumbnail" src={displayedPhoto.url} alt="Náhled stejné fotografie úlovku" />}
+      {displayedPhoto && <span className="catch-share-thumbnail"><img src={displayedPhoto.url} style={photoFrameStyle(displayedPhoto)} alt="Náhled stejné fotografie úlovku" /></span>}
       <span className="catch-share-brand">CHYTNUCZ</span>
     </section>
     {photoBroken && <p className="catch-share-photo-note" role="status">Fotografii se nepodařilo načíst. Karta bude mít tmavé značkové pozadí.</p>}

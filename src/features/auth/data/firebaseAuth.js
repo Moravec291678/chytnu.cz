@@ -93,8 +93,9 @@ export const firebaseAuth = {
     }
     return { user: credential.user, verificationEmailSent };
   },
-  async signIn(email, password) {
+  async signIn(email, password, { remember = true } = {}) {
     const auth = await getAuthInstance();
+    await firebaseAuthApi.setPersistence(auth, remember ? firebaseAuthApi.browserLocalPersistence : firebaseAuthApi.browserSessionPersistence);
     const credential = await firebaseAuthApi.signInWithEmailAndPassword(auth, email.trim(), password);
     return credential.user;
   },

@@ -91,7 +91,7 @@ service cloud.firestore {
 
     function validPhotoMetadata(value, userId, catchId) {
       return value is map
-        && value.keys().hasOnly(['id', 'name', 'type', 'size', 'storagePath', 'sha256'])
+        && value.keys().hasOnly(['id', 'name', 'type', 'size', 'storagePath', 'sha256', 'focalX', 'focalY', 'zoom'])
         && value.id is string
         && value.name is string
         && value.type in ['image/jpeg', 'image/png', 'image/webp']
@@ -134,7 +134,8 @@ service cloud.firestore {
     }
 
     function validCatchContent(data, userId, catchId) {
-      return data.schemaVersion == 1
+      return data.deleted == false
+        && data.schemaVersion == 1
         && data.entityType == 'catch'
         && data.id == catchId
         && data.ownerId == userId
@@ -183,7 +184,8 @@ service cloud.firestore {
     }
 
     function validTripContent(data, userId, tripId) {
-      return data.keys().hasOnly([
+      return data.deleted == false
+        && data.keys().hasOnly([
           'schemaVersion', 'id', 'ownerId', 'entityType', 'title', 'locationName', 'methodKey',
           'createdAt', 'updatedAt', 'startedAt', 'endedAt', 'deleted', 'deletedAt',
           'serverRevision', 'syncSequence', 'lastOperationId', 'clientLocalRevision',
@@ -203,7 +205,8 @@ service cloud.firestore {
     }
 
     function validWaterContent(data, userId, waterId) {
-      return data.keys().hasOnly([
+      return data.deleted == false
+        && data.keys().hasOnly([
           'schemaVersion', 'id', 'ownerId', 'entityType', 'name', 'waterNumber', 'type', 'area',
           'coordinates', 'notes', 'targetFish', 'isFavorite', 'moderationStatus', 'createdAt', 'updatedAt',
           'deleted', 'deletedAt', 'serverRevision', 'syncSequence', 'lastOperationId', 'clientLocalRevision',
@@ -246,49 +249,79 @@ service cloud.firestore {
     match /users/{userId}/catches/{catchId} {
       allow get, list: if signedInAs(userId);
       allow create: if validSyncWrite(userId, 'catch', catchId, request.resource.data)
-        && request.resource.data.serverRevision == 1
-        && (validCatchContent(request.resource.data, userId, catchId)
-          || validTombstone(request.resource.data, userId, 'catch', catchId));
+        && request.resource.data.deleted == false
+        && validCatchContent(request.resource.data, userId, catchId)
+        && request.resource.data.serverRevision == 1;
+      allow create: if validSyncWrite(userId, 'catch', catchId, request.resource.data)
+        && request.resource.data.deleted == true
+        && validTombstone(request.resource.data, userId, 'catch', catchId)
+        && request.resource.data.serverRevision == 1;
       allow update: if resource.data.deleted == false
         && validSyncWrite(userId, 'catch', catchId, request.resource.data)
-        && (validCatchContent(request.resource.data, userId, catchId)
-          || validTombstone(request.resource.data, userId, 'catch', catchId))
+        && request.resource.data.deleted == false
+        && validCatchContent(request.resource.data, userId, catchId)
         && request.resource.data.serverRevision == resource.data.serverRevision + 1
         && request.resource.data.ownerId == resource.data.ownerId
         && request.resource.data.createdAt == resource.data.createdAt;
+      allow update: if resource.data.deleted == false
+        && validSyncWrite(userId, 'catch', catchId, request.resource.data)
+        && request.resource.data.deleted == true
+        && validTombstone(request.resource.data, userId, 'catch', catchId)
+        && request.resource.data.serverRevision == resource.data.serverRevision + 1
+        && request.resource.data.ownerId == resource.data.ownerId;
       allow delete: if false;
     }
 
     match /users/{userId}/trips/{tripId} {
       allow get, list: if signedInAs(userId);
       allow create: if validSyncWrite(userId, 'trip', tripId, request.resource.data)
-        && request.resource.data.serverRevision == 1
-        && (validTripContent(request.resource.data, userId, tripId)
-          || validTombstone(request.resource.data, userId, 'trip', tripId));
+        && request.resource.data.deleted == false
+        && validTripContent(request.resource.data, userId, tripId)
+        && request.resource.data.serverRevision == 1;
+      allow create: if validSyncWrite(userId, 'trip', tripId, request.resource.data)
+        && request.resource.data.deleted == true
+        && validTombstone(request.resource.data, userId, 'trip', tripId)
+        && request.resource.data.serverRevision == 1;
       allow update: if resource.data.deleted == false
         && validSyncWrite(userId, 'trip', tripId, request.resource.data)
-        && (validTripContent(request.resource.data, userId, tripId)
-          || validTombstone(request.resource.data, userId, 'trip', tripId))
+        && request.resource.data.deleted == false
+        && validTripContent(request.resource.data, userId, tripId)
         && request.resource.data.serverRevision == resource.data.serverRevision + 1
         && request.resource.data.ownerId == resource.data.ownerId
         && request.resource.data.createdAt == resource.data.createdAt
         && request.resource.data.startedAt == resource.data.startedAt;
+      allow update: if resource.data.deleted == false
+        && validSyncWrite(userId, 'trip', tripId, request.resource.data)
+        && request.resource.data.deleted == true
+        && validTombstone(request.resource.data, userId, 'trip', tripId)
+        && request.resource.data.serverRevision == resource.data.serverRevision + 1
+        && request.resource.data.ownerId == resource.data.ownerId;
       allow delete: if false;
     }
 
     match /users/{userId}/waters/{waterId} {
       allow get, list: if signedInAs(userId);
       allow create: if validSyncWrite(userId, 'water', waterId, request.resource.data)
-        && request.resource.data.serverRevision == 1
-        && (validWaterContent(request.resource.data, userId, waterId)
-          || validTombstone(request.resource.data, userId, 'water', waterId));
+        && request.resource.data.deleted == false
+        && validWaterContent(request.resource.data, userId, waterId)
+        && request.resource.data.serverRevision == 1;
+      allow create: if validSyncWrite(userId, 'water', waterId, request.resource.data)
+        && request.resource.data.deleted == true
+        && validTombstone(request.resource.data, userId, 'water', waterId)
+        && request.resource.data.serverRevision == 1;
       allow update: if resource.data.deleted == false
         && validSyncWrite(userId, 'water', waterId, request.resource.data)
-        && (validWaterContent(request.resource.data, userId, waterId)
-          || validTombstone(request.resource.data, userId, 'water', waterId))
+        && request.resource.data.deleted == false
+        && validWaterContent(request.resource.data, userId, waterId)
         && request.resource.data.serverRevision == resource.data.serverRevision + 1
         && request.resource.data.ownerId == resource.data.ownerId
         && request.resource.data.createdAt == resource.data.createdAt;
+      allow update: if resource.data.deleted == false
+        && validSyncWrite(userId, 'water', waterId, request.resource.data)
+        && request.resource.data.deleted == true
+        && validTombstone(request.resource.data, userId, 'water', waterId)
+        && request.resource.data.serverRevision == resource.data.serverRevision + 1
+        && request.resource.data.ownerId == resource.data.ownerId;
       allow delete: if false;
     }
 

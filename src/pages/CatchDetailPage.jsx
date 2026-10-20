@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useLocation } from "react-router-dom";
 import Layout from "../shared/layout/Layout";
 import { useCatches } from "../features/catches/context/useCatches";
+import { photoFrameStyle } from "../features/catches/data/photoFraming.js";
 import { useTrips } from "../features/trips/context/useTrips";
 import { formatBottomType } from "../features/catches/data/catchFormatting";
 import { getCatchRecognition, isNewLengthRecord } from "../features/catches/data/catchDetail.js";
@@ -175,7 +176,7 @@ function CatchDetailPage() {
       {error && <p role="alert" className="catch-form-error">{error}</p>}
       {tripState.error && item.tripId && <p role="alert" className="catch-form-error">Přiřazenou výpravu se nepodařilo načíst: {tripState.error}</p>}
       {tripState.loading && item.tripId && <p role="status">Načítám přiřazenou výpravu…</p>}
-      {photos.map((photo) => <figure className="photo-preview-item" key={photo.id}><img src={photo.url} alt={`Fotografie úlovku – ${item.species}`} /></figure>)}
+      {photos.map((photo) => <figure className="photo-preview-item" key={photo.id}><img src={photo.url} style={photoFrameStyle(photo)} alt={`Fotografie úlovku – ${item.species}`} /></figure>)}
       <section className="catch-detail-measures" aria-label="Míry úlovku">
         <div><strong>{Number.isFinite(item.weightKg) ? formatCatchWeight(item) : "—"}</strong><span>kg</span><small>{item.weightSource === "estimated" ? "ODHAD HMOTNOSTI" : "HMOTNOST"}</small>{isPersonalBest && <em>{recognition.personalBestDelta > 0 ? `+${formatNumber(recognition.personalBestDelta, 2)} kg rekord` : "Osobní rekord"}</em>}</div>
         <div><strong>{Number.isFinite(item.lengthCm) ? formatNumber(item.lengthCm) : "—"}</strong><span>cm</span><small>DÉLKA</small>{isLengthRecord && <em>Nový rekord</em>}</div>

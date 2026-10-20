@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import {
   AddCatchPage,
   CatchDetailPage,
@@ -23,6 +23,18 @@ import { useDataScope } from "../features/auth/context/dataScopeContextValue.js"
 import { useCatches } from "../features/catches/context/useCatches.js";
 import { useTrips } from "../features/trips/context/useTrips.js";
 import { resolveHomeEntry } from "./homeEntry.js";
+import SplashScreen from "./SplashScreen.jsx";
+import { isGuestAccessConfirmed } from "../features/auth/data/guestAccess.js";
+import { useAuth } from "../features/auth/context/authContextValue.js";
+import { canAccessProtectedRoute } from "./routeAccess.js";
+
+function RouteAccessGuard() {
+  const auth = useAuth();
+  const location = useLocation();
+  const publicRoute = location.pathname === "/login" || location.pathname === "/";
+  if (publicRoute || canAccessProtectedRoute({ user: auth.user, guestActive: isGuestAccessConfirmed() })) return null;
+  return <Navigate to="/login" replace />;
+}
 
 const MapPage = lazy(() => import("../pages/MapPage"));
 const CalendarPage = lazy(() => import("../pages/JournalCalendarPage"));
@@ -63,6 +75,7 @@ function NotFoundPage() {
 }
 
 function HomeRoute() {
+  const auth = useAuth();
   const scope = useDataScope();
   const { state: catchState } = useCatches();
   const { state: tripState } = useTrips();
@@ -98,14 +111,22 @@ function HomeRoute() {
     legacyCheckComplete: legacyCheck.scopeKey === scope.scopeKey,
     legacyDataFound: legacyCheck.result,
   });
-  if (entry === "home") return <HomePage />;
-  if (entry === "onboarding") return <Navigate to="/onboarding" replace />;
+  if (entry === "home") {
+    const hasGuestChoice = isGuestAccessConfirmed();
+    if (!auth.user && !hasGuestChoice && legacyCheck.scopeKey === scope.scopeKey) {
+      return <Navigate to="/login" replace />;
+    }
+    return <HomePage />;
+  }
   return <Layout><p className="loading-state" role="status">Načítám místní profil…</p></Layout>;
 }
 
 function App() {
+  const auth = useAuth();
+  if (auth.status === "loading") return <SplashScreen />;
   return (
     <>
+      <RouteAccessGuard />
       <Routes>
         <Route path="/" element={<HomeRoute />} />
         <Route path="/login" element={<PageSuspense><LoginPage /></PageSuspense>} />

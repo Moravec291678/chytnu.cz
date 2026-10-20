@@ -153,6 +153,9 @@ export function toRemoteRecord(entityType, record, ownerId) {
       size: photo.blob?.size ?? photo.size ?? 0,
       ...(photo.storagePath ? { storagePath: photo.storagePath } : {}),
       ...(photo.sha256 ? { sha256: photo.sha256 } : {}),
+      ...(Number.isFinite(photo.focalX) ? { focalX: photo.focalX } : {}),
+      ...(Number.isFinite(photo.focalY) ? { focalY: photo.focalY } : {}),
+      ...(Number.isFinite(photo.zoom) ? { zoom: photo.zoom } : {}),
     })),
     notes: requireValue(record.notes, ""),
     isFavorite: Boolean(record.isFavorite),
@@ -347,7 +350,7 @@ export function createFirestoreSyncAdapter({ now = () => new Date().toISOString(
           const revision = (currentRevision ?? 0) + 1;
           const sequence = (stateSnapshot.exists() ? stateSnapshot.data().cursor : 0) + 1;
           const tombstone = {
-            ...(current ?? minimalTombstone(entityType, ownerId, entityId, now())),
+            ...minimalTombstone(entityType, ownerId, entityId, now()),
             ownerId,
             id: entityId,
             entityType,
@@ -359,6 +362,7 @@ export function createFirestoreSyncAdapter({ now = () => new Date().toISOString(
             clientLocalRevision: localRevision,
             operationDigest: requestDigest,
             lastReceiptId: receipt.id,
+            photoState: "none",
           };
           const receiptDocument = {
             ownerId, receiptId: receipt.id, operationId, entityType, entityId,

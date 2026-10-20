@@ -34,6 +34,8 @@ import {
   saveQuickSpeciesIds,
   toggleQuickSpecies,
 } from "../features/preferences/data/quickSpeciesPreferences.js";
+import PhotoFrameEditor from "../features/catches/components/PhotoFrameEditor.jsx";
+import { photoFrameStyle } from "../features/catches/data/photoFraming.js";
 
 const MOON_PHASES = [
   ["new", "Nov"],
@@ -102,6 +104,7 @@ function AddCatchPage() {
     return () => { active = false; };
   }, [scope]);
   const [photoProcessing, setPhotoProcessing] = useState(false);
+  const [photoEditorOpen, setPhotoEditorOpen] = useState(false);
   const [showSpeciesPicker, setShowSpeciesPicker] = useState(() => readPreferences(globalThis.localStorage, scope.scopeKey).detailMode === "detailed");
   const [selectedSpeciesCategoryKey, setSelectedSpeciesCategoryKey] = useState("");
   const [quickSpeciesOverride, setQuickSpeciesOverride] = useState(null);
@@ -505,6 +508,11 @@ function AddCatchPage() {
     updateCatchData("photos", photos);
   };
 
+  const savePhotoFrame = (frame) => {
+    setPhotos(catchData.photos.map((item) => item === photo ? { ...item, ...frame } : item));
+    setPhotoEditorOpen(false);
+  };
+
   if (id && !state.loading && !existingCatch) {
     return <Layout><section className="add-catch-section"><h1>Úlovek nenalezen</h1><p>Tento úlovek mohl být smazán nebo není v místním deníku dostupný.</p><Link to="/journal">Zpět do deníku</Link></section></Layout>;
   }
@@ -559,7 +567,7 @@ function AddCatchPage() {
           {photo ? (
             <>
               <div className="photo-preview-item">
-                {photo.previewUrl ? <img src={photo.previewUrl} alt="Fotka úlovku" /> : <p>Fotografie je dostupná po dokončení synchronizace.</p>}
+                {photo.previewUrl ? <img src={photo.previewUrl} alt="Fotka úlovku" style={photoFrameStyle(photo)} /> : <p>Fotografie je dostupná po dokončení synchronizace.</p>}
               </div>
 
               <div className="photo-actions">
@@ -573,6 +581,9 @@ function AddCatchPage() {
                 >
                   ✏️ Změnit
                 </button>
+                {photo.previewUrl && <button type="button" className="photo-action-button" onClick={() => setPhotoEditorOpen(true)}>
+                  Upravit výřez
+                </button>}
               </div>
             </>
           ) : (
@@ -582,6 +593,7 @@ function AddCatchPage() {
             </button>
           )}
         </section>
+        {photoEditorOpen && photo?.previewUrl && <PhotoFrameEditor photo={photo} onSave={savePhotoFrame} onCancel={() => setPhotoEditorOpen(false)} />}
         <section className="add-catch-section">
           <h2>Druh ryby *</h2>
 

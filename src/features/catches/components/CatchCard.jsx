@@ -6,10 +6,11 @@ import {
   formatFightDuration,
 } from "../../../shared/utils/formatters";
 import { formatCatchWeight } from "../data/catchWeight.js";
+import { photoFrameStyle } from "../data/photoFraming.js";
 
 import "./CatchCard.css";
 
-function CatchPhoto({ blob, species }) {
+function CatchPhoto({ blob, species, photo }) {
   const [photoUrl, setPhotoUrl] = useState("");
   useEffect(() => {
     if (!blob) return undefined;
@@ -18,7 +19,7 @@ function CatchPhoto({ blob, species }) {
     Promise.resolve().then(() => { if (active) setPhotoUrl(url); });
     return () => { active = false; URL.revokeObjectURL(url); };
   }, [blob]);
-  return photoUrl ? <img className="catch-card-photo" src={photoUrl} alt={`Úlovek – ${species}`} /> : <div className="catch-card-icon" aria-hidden="true">🐟</div>;
+  return photoUrl ? <img className="catch-card-photo" src={photoUrl} alt={`Úlovek – ${species}`} style={photoFrameStyle(photo)} /> : <div className="catch-card-icon" aria-hidden="true">🐟</div>;
 }
 
 export function FishMark({ speciesKey = "" }) {
@@ -43,7 +44,7 @@ function CatchCard({ catchedFish, isPersonalRecord = false }) {
     <Link to={`/catch/${catchedFish.id}`} className={`catch-card-link${isPersonalRecord ? " catch-card-link-record" : ""}`}>
       <article className={`catch-card${isPersonalRecord ? " catch-card-record" : ""}`}>
         <div className="catch-card-main">
-          {catchedFish.photos?.[0]?.blob ? <CatchPhoto blob={catchedFish.photos[0].blob} species={catchedFish.species} /> : <FishMark speciesKey={catchedFish.speciesKey} />}
+          {catchedFish.photos?.[0]?.blob ? <CatchPhoto blob={catchedFish.photos[0].blob} species={catchedFish.species} photo={catchedFish.photos[0]} /> : <FishMark speciesKey={catchedFish.speciesKey} />}
 
           <div className="catch-card-info">
             <h2>{catchedFish.species}</h2>

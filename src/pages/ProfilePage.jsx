@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { formatCatchWeight, isMeasuredCatchWeight } from "../features/catches/data/catchWeight.js";
 import Layout from "../shared/layout/Layout";
 import { useAuth } from "../features/auth/context/authContextValue.js";
@@ -21,6 +21,7 @@ import {
 } from "../features/sync/data/localSyncRepository.js";
 import { getActiveGuestScopeKey } from "../features/catches/data/catchRepository.js";
 import { validateAuthForm } from "../features/auth/data/authFormValidation.js";
+import { clearGuestAccess, isGuestAccessConfirmed } from "../features/auth/data/guestAccess.js";
 import ConfirmDialog from "../shared/components/ConfirmDialog";
 import { useCatches } from "../features/catches/context/useCatches";
 import { useTrips } from "../features/trips/context/useTrips";
@@ -43,6 +44,7 @@ function formatCount(count, one, few, many) {
 }
 
 function ProfilePage() {
+  const navigate = useNavigate();
   const location = useLocation();
   const fileInput = useRef(null);
   const trophyEditorRef = useRef(null);
@@ -279,6 +281,17 @@ function ProfilePage() {
       authActionRef.current = false;
       setAuthBusy(false);
     }
+  };
+
+  const logOutAndReturnToWelcome = () => runAuthAction(async () => {
+    await auth.logOut();
+    clearGuestAccess();
+    navigate("/login", { replace: true });
+  }, "Byl jsi odhlášen. Místní deník zůstal uložený v tomto prohlížeči.");
+
+  const exitGuestMode = () => {
+    clearGuestAccess();
+    navigate("/login", { replace: true });
   };
 
   const exportBackup = async () => {
@@ -554,7 +567,7 @@ function ProfilePage() {
             className="profile-backup-button"
             type="button"
             disabled={authBusy}
-            onClick={() => runAuthAction(auth.logOut, "Byl jsi odhlášen. Místní deník zůstal uložený v tomto prohlížeči.")}
+            onClick={logOutAndReturnToWelcome}
           >{authBusy ? "Odhlašuji…" : "Odhlásit se"}</button>
           {ownerless.catches + ownerless.trips > 0 && <div className="profile-restore-preview">
             <p><strong>Místní deník bez účtu</strong></p>
@@ -564,6 +577,9 @@ function ProfilePage() {
               {dataActionBusy ? "Propojuji…" : "Propojit místní deník s účtem"}
             </button>
           </div>}
+        </div> : isGuestAccessConfirmed() ? <div className="profile-account-form">
+          <p>Prohlížíš deník jako host. Místní data zůstanou v tomto zařízení.</p>
+          <button className="profile-backup-button" type="button" onClick={exitGuestMode}>Přihlásit se / opustit režim hosta</button>
         </div> : auth.status !== "loading" && auth.status !== "unavailable" && <form className="profile-account-form" noValidate onSubmit={(event) => {
           event.preventDefault();
           const validationError = validateAuthForm({ email, password });

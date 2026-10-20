@@ -1,6 +1,7 @@
 import { normalizeCoordinates, parseCoordinateText } from "./coordinates.js";
 import { normalizeCatchPrivacy } from "../../privacy/data/privacyModel.js";
 import { estimateFishWeight, formatEstimatedWeight } from "./lengthWeightRelationships.js";
+import { hasCustomPhotoFrame, normalizePhotoFrame } from "./photoFraming.js";
 
 const CONDITION_SOURCE_FIELDS = ["airTempC", "waterTempC", "pressureHpa", "windKmh", "moonPhase"];
 
@@ -117,8 +118,10 @@ export function createCatchRecord(data, species, methods, existing = null, baitC
       const file = storedPhoto.file;
       delete storedPhoto.previewUrl;
       delete storedPhoto.file;
+      const frame = hasCustomPhotoFrame(photo) ? normalizePhotoFrame(photo) : {};
       return {
         ...storedPhoto,
+        ...frame,
         id: photo.id ?? crypto.randomUUID(),
         blob: photo.blob ?? file,
         name: photo.name ?? file?.name ?? "fotografie",

@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { resolveHomeEntry } from "./homeEntry.js";
 
-test("a ready empty guest profile enters onboarding without requiring an account", () => {
+test("a ready empty guest profile enters Home without mandatory onboarding", () => {
   assert.equal(resolveHomeEntry({
     scopeReady: true,
     dataLoaded: true,
@@ -11,7 +11,7 @@ test("a ready empty guest profile enters onboarding without requiring an account
     hasLegacyRecords: false,
     legacyCheckComplete: true,
     legacyDataFound: false,
-  }), "onboarding");
+  }), "home");
 });
 
 test("completed onboarding and legacy local data both keep direct Home access", () => {

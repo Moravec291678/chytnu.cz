@@ -9,6 +9,6 @@ export function resolveHomeEntry({
 }) {
   if (scopeReady && onboardingComplete) return "home";
   if (hasReadError || hasLegacyRecords || (scopeReady && legacyCheckComplete && legacyDataFound)) return "home";
-  if (scopeReady && dataLoaded && legacyCheckComplete && legacyDataFound === false) return "onboarding";
+  if (scopeReady && dataLoaded && legacyCheckComplete && legacyDataFound === false) return "home";
   return "loading";
 }

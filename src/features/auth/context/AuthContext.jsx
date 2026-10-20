@@ -31,7 +31,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   const register = useCallback((email, password) => run(() => firebaseAuth.register(email, password)), [run]);
-  const signIn = useCallback((email, password) => run(() => firebaseAuth.signIn(email, password)), [run]);
+  const signIn = useCallback((email, password, options) => run(() => firebaseAuth.signIn(email, password, options)), [run]);
   const signInWithGoogle = useCallback(() => run(() => firebaseAuth.signInWithGoogle()), [run]);
   const resetPassword = useCallback((email) => run(() => firebaseAuth.resetPassword(email)), [run]);
   const resendVerification = useCallback((currentUser) => run(() => firebaseAuth.resendVerification(currentUser)), [run]);
