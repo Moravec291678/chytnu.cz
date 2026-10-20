@@ -10,6 +10,8 @@ test("auth errors map to clear Czech messages without exposing internals", () =>
   assert.match(getAuthErrorMessage({ code: "auth/network-request-failed" }), /Přihlašovací služba není dostupná/);
   assert.match(getAuthErrorMessage({ code: "auth/unauthorized-domain" }), /této adresy není povolené/);
   assert.match(getAuthErrorMessage({ code: "auth/invalid-api-key" }), /není správně nastavená/);
+  assert.match(getAuthErrorMessage({ code: "auth/internal-error" }), /Google přihlášení/);
+  assert.match(getAuthErrorMessage({ code: "auth/web-storage-unsupported" }), /bezpečné přihlášení/);
 });
 
 test("only non-local auth configuration errors are reported as unavailable", () => {

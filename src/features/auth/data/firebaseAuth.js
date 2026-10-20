@@ -105,8 +105,17 @@ export const firebaseAuth = {
       throw Object.assign(new Error("Google přihlášení není v tomto prostředí zapnuté."), { code: "auth/provider-disabled" });
     }
     const auth = await getAuthInstance();
-    const credential = await firebaseAuthApi.signInWithPopup(auth, new firebaseAuthApi.GoogleAuthProvider());
-    return credential.user;
+    const provider = new firebaseAuthApi.GoogleAuthProvider();
+    try {
+      const credential = await firebaseAuthApi.signInWithPopup(auth, provider);
+      return credential.user;
+    } catch (error) {
+      if (["auth/popup-blocked", "auth/cancelled-popup-request"].includes(error?.code)) {
+        await firebaseAuthApi.signInWithRedirect(auth, provider);
+        return null;
+      }
+      throw error;
+    }
   },
   async signOut() {
     const auth = await getAuthInstance();
