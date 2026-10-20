@@ -1,6 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { calculateFishActivity, getUserLocation } from "./fishActivity.js";
+import {
+  calculateFishActivity,
+  getActivityLabel,
+  getPersonalCatchTimePattern,
+  getUserLocation,
+} from "./fishActivity.js";
 import { clearWeatherCache, fetchWeatherData, getWeatherConditions } from "./weatherApi.js";
 
 test("weather snapshot combines the current hour with complete provider data", () => {
@@ -72,8 +77,32 @@ test("geolocation denial is preserved as a permission error", async () => {
 test("activity heuristic is deterministic for the same weather and timestamp", () => {
   const conditions = { temperature: -5, windSpeed: 40, pressure: 1000, cloudiness: 0, rainChance: 0 };
   const date = new Date(2026, 0, 16, 2);
-  assert.equal(calculateFishActivity(conditions, date).score, 3);
-  assert.deepEqual(calculateFishActivity(conditions, date), calculateFishActivity(conditions, date));
+  const activity = calculateFishActivity(conditions, date);
+  assert.equal(activity.score, 27);
+  assert.equal(activity.factors.length, 8);
+  assert.equal(activity.factors.reduce((total, factor) => total + factor.weight, 0), 1);
+  assert.deepEqual(calculateFishActivity(conditions, date), activity);
+});
+
+test("activity labels use the reference 0-to-100 score scale", () => {
+  assert.deepEqual(getActivityLabel(80), { label: "Podmínky vycházejí příznivě", color: "green" });
+  assert.deepEqual(getActivityLabel(60), { label: "Podmínky vypadají příznivě", color: "yellow" });
+  assert.deepEqual(getActivityLabel(40), { label: "Podmínky jsou smíšené", color: "orange" });
+  assert.deepEqual(getActivityLabel(39), { label: "Podmínky vycházejí méně příznivě", color: "red" });
+});
+
+test("personal activity time pattern derives only valid catch timestamps", () => {
+  assert.equal(getPersonalCatchTimePattern([
+    { caughtAt: "2026-10-16T06:15:00" },
+    { caughtAt: "2026-10-16T08:45:00" },
+  ]), null);
+  assert.deepEqual(getPersonalCatchTimePattern([
+    { caughtAt: "2026-10-16T06:15:00" },
+    { caughtAt: "2026-10-16T08:45:00" },
+    { caughtAt: "2026-10-16T15:00:00" },
+    { caughtAt: "invalid" },
+  ]), { labels: ["06–09 h"], count: 2, sampleCount: 3 });
+  assert.equal(getPersonalCatchTimePattern([]), null);
 });
 
 test("weather request reports HTTP failures as unavailable data", async () => {
@@ -92,8 +121,10 @@ test("weather response is cached in memory briefly and expires", async () => {
   clearWeatherCache();
   const originalFetch = globalThis.fetch;
   let calls = 0;
-  globalThis.fetch = async () => {
+  let requestedUrl = "";
+  globalThis.fetch = async (url) => {
     calls += 1;
+    requestedUrl = url;
     return {
       ok: true,
       json: async () => ({
@@ -113,6 +144,7 @@ test("weather response is cached in memory briefly and expires", async () => {
     assert.equal(second.cached, true);
     assert.equal(expired.cached, false);
     assert.equal(calls, 2);
+    assert.match(requestedUrl, /hourly=temperature_2m,wind_speed_10m,surface_pressure,cloud_cover,precipitation_probability/);
   } finally {
     globalThis.fetch = originalFetch;
     clearWeatherCache();

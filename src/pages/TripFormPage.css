@@ -1,22 +1,164 @@
-.trip-form-page { padding: 24px 16px 120px; }
-.trip-back-link { color: var(--bl); text-decoration: none; font-weight: 700; font-size: 14px; }
-.trip-form-page header { margin: 24px 0; }
-.trip-form-page header h1 { font-size: 30px; line-height: 1.1; margin: 5px 0; }
-.trip-form-page header p { color: var(--t2); font-size: 14px; }
-.trip-form-page form { display: grid; gap: 16px; }
-.trip-form-page form label { display: grid; gap: 7px; color: var(--t2); font-size: 13px; font-weight: 700; }
-.trip-form-page input, .trip-form-page select { width: 100%; border: 1px solid var(--bd); border-radius: 10px; background: var(--s1); color: var(--t1); padding: 12px; }
-.trip-form-notice, .trip-form-error { margin: 12px 0; color: var(--re); font-size: 14px; }
-.trip-status-active { color: var(--gr) !important; font-weight: 700; }
-.trip-status-complete { color: var(--t3) !important; font-weight: 700; }
-.trip-detail-summary { display: grid; gap: 1px; overflow: hidden; border: 1px solid var(--bd); border-radius: 14px; background: var(--bd); }
-.trip-detail-summary div { display: grid; gap: 5px; padding: 12px; background: var(--s1); }
-.trip-detail-summary span { color: var(--t3); font-size: 11px; text-transform: uppercase; font-weight: 700; }
-.trip-detail-summary strong { font-size: 14px; color: var(--t1); }
-.trip-end-button { width: 100%; margin-top: 16px; padding: 13px; border-radius: 10px; border: 1px solid rgba(232,85,85,.4); background: var(--re-bg); color: var(--re); font-size: 14px; font-weight: 800; }
-.trip-delete-section { margin-top: 16px; color: var(--t3); font-size: 12px; line-height: 1.5; }
-.trip-delete-button { border: 1px solid rgba(232,85,85,.4); border-radius: 9px; padding: 10px 12px; background: var(--re-bg); color: var(--re); font-size: 13px; font-weight: 700; }
-.trip-edit-link { display: block; margin-top: 12px; width: 100%; padding: 12px; border: 1px solid var(--bd); border-radius: 10px; color: var(--t1); text-align: center; text-decoration: none; font-size: 14px; font-weight: 700; background: var(--s1); }
-.trip-form-page .section-title { padding: 0; margin-top: 26px; }
-.trips-add-btn { color: var(--gr); text-decoration: none; font-size: 24px; }
-.trips-empty-history { color: var(--t3); font-size: 13px; }
+.trip-form-page {
+  display: grid;
+  gap: 13px;
+  padding: 18px 20px calc(26px + env(safe-area-inset-bottom));
+}
+
+.trip-back-link {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-self: start;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.trip-form-page > header {
+  margin: 0 0 3px;
+}
+
+.trip-form-page header h1 {
+  margin: 3px 0;
+  color: var(--text-primary);
+  font-size: 30px;
+  font-weight: 900;
+  letter-spacing: -0.7px;
+  line-height: 1.1;
+}
+
+.trip-form-page header p {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.trip-form-page form {
+  display: grid;
+  gap: 12px;
+}
+
+.trip-form-page form label {
+  display: grid;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.trip-form-page input,
+.trip-form-page select {
+  width: 100%;
+  min-height: 44px;
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-1);
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.trip-form-notice,
+.trip-form-error {
+  color: var(--accent-red);
+  font-size: 12px;
+}
+
+.trip-form-page .trip-form-error button {
+  min-height: 36px;
+  margin-left: 5px;
+  padding: 0 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-primary);
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+}
+
+.trip-status-active {
+  color: var(--accent-green) !important;
+  font-weight: 800;
+}
+
+.trip-status-complete {
+  color: var(--text-secondary) !important;
+  font-weight: 800;
+}
+
+.trip-detail-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  background: var(--border);
+}
+
+.trip-detail-summary div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  padding: 11px;
+  background: var(--surface-1);
+}
+
+.trip-detail-summary span {
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+
+.trip-detail-summary strong {
+  color: var(--text-primary);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.trip-end-button,
+.trip-delete-button {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 12px;
+  border: 1px solid var(--accent-red);
+  border-radius: 10px;
+  background: var(--accent-red-soft);
+  color: var(--accent-red);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.trip-end-button {
+  width: 100%;
+}
+
+.trip-delete-section {
+  display: grid;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.trip-edit-link {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-1);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.trip-form-page .section-title {
+  margin: 12px 0 -3px;
+}

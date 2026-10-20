@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { initializeApp, deleteApp } from "firebase/app";
 import { browserLocalPersistence, connectAuthEmulator, createUserWithEmailAndPassword, GoogleAuthProvider, initializeAuth, onAuthStateChanged, sendEmailVerification, sendPasswordResetEmail, signInWithCredential, signInWithEmailAndPassword, signOut } from "firebase/auth";
 import "fake-indexeddb/auto";
-import { catchRepository, outboxRepository } from "../src/features/catches/data/catchRepository.js";
+import { catchRepository, getActiveGuestScopeKey, outboxRepository } from "../src/features/catches/data/catchRepository.js";
 import { createCatchRecord } from "../src/features/catches/data/catchModel.js";
 import { tripRepository } from "../src/features/trips/data/tripRepository.js";
 
@@ -13,11 +13,12 @@ const appName = `auth-test-${crypto.randomUUID()}`;
 let app = initializeApp({ apiKey: "demo-api-key", authDomain: "localhost", projectId }, appName);
 let auth = initializeAuth(app, { persistence: browserLocalPersistence });
 connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
+const localScope = { scopeKey: await getActiveGuestScopeKey(), ownerId: null };
 
 async function snapshotLocalData() {
   return {
-    catches: await catchRepository.list(),
-    trips: await tripRepository.list(),
+    catches: await catchRepository.list(localScope),
+    trips: await tripRepository.list(localScope),
     outbox: await outboxRepository.list(),
   };
 }
@@ -43,7 +44,7 @@ try {
     isFavorite: false,
     resultKey: "released",
   }, { key: "carp", label: "Kapr" }, []);
-  await catchRepository.put(localCatch);
+  await catchRepository.put(localCatch, localScope);
   const beforeAuth = await snapshotLocalData();
 
   const created = await createUserWithEmailAndPassword(auth, email, password);

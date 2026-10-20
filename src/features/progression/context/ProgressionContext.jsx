@@ -1,0 +1,68 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useDataScope } from "../../auth/context/dataScopeContextValue.js";
+import { useCatches } from "../../catches/context/useCatches.js";
+import { useTrips } from "../../trips/context/useTrips.js";
+import { buildCatchRewardFromLedger, buildLedgerProgressionSummary, progressionLedger } from "../data/progressionLedger.js";
+import { ProgressionContext } from "./progressionContextValue.js";
+
+export function ProgressionProvider({ children }) {
+  const scope = useDataScope();
+  const { state: catchState } = useCatches();
+  const { state: tripState } = useTrips();
+  const [events, setEvents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const activeScopeKey = useRef(null);
+
+  const refresh = useCallback(async () => {
+    if (scope.status !== "ready" || catchState.loading || tripState.loading) return;
+    const requestedScopeKey = scope.scopeKey;
+    setLoading(true);
+    try {
+      const result = await progressionLedger.reconcile(scope);
+      if (activeScopeKey.current !== requestedScopeKey) return;
+      setEvents(result.events);
+      setError("");
+    } catch (refreshError) {
+      if (activeScopeKey.current !== requestedScopeKey) return;
+      setError(refreshError?.message || "Rybářský postup se nepodařilo načíst.");
+    } finally {
+      if (activeScopeKey.current === requestedScopeKey) setLoading(false);
+    }
+  }, [catchState.loading, scope, tripState.loading]);
+
+  useEffect(() => {
+    activeScopeKey.current = scope.status === "ready" ? scope.scopeKey : null;
+    Promise.resolve().then(() => {
+      if (activeScopeKey.current !== scope.scopeKey) return;
+      setEvents([]);
+      setLoading(true);
+      setError("");
+    });
+    if (scope.status !== "ready") return undefined;
+    queueMicrotask(refresh);
+    window.addEventListener("chytnu:progression-changed", refresh);
+    window.addEventListener("chytnu:local-data-restored", refresh);
+    return () => {
+      window.removeEventListener("chytnu:progression-changed", refresh);
+      window.removeEventListener("chytnu:local-data-restored", refresh);
+      if (activeScopeKey.current === scope.scopeKey) activeScopeKey.current = null;
+    };
+  }, [refresh, scope.status, scope.scopeKey]);
+
+  const summary = useMemo(
+    () => buildLedgerProgressionSummary(events, catchState.catches, tripState.trips),
+    [events, catchState.catches, tripState.trips],
+  );
+  const rewardForCatch = useCallback(
+    (catchId, eventIds) => buildCatchRewardFromLedger(events, catchId, summary, eventIds),
+    [events, summary],
+  );
+  const isChallengeCompleted = useCallback((challengeId, periodKey) => events.some((event) => (
+    event.type === "challenge.completed" && event.reasonKey === `challenge.completed:${challengeId}:${periodKey}`
+  )), [events]);
+  const value = useMemo(() => ({
+    events, summary, loading, error, refresh, rewardForCatch, isChallengeCompleted,
+  }), [events, summary, loading, error, refresh, rewardForCatch, isChallengeCompleted]);
+  return <ProgressionContext.Provider value={value}>{children}</ProgressionContext.Provider>;
+}

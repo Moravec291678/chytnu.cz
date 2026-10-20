@@ -1,0 +1,191 @@
+.water-chat-page {
+  display: grid;
+  width: min(100%, 487px);
+  min-height: 100vh;
+  min-height: 100dvh;
+  grid-template-rows: auto auto 1fr;
+  gap: var(--space-4);
+  margin: 0 auto;
+  padding: var(--space-5) var(--space-5) calc(100px + env(safe-area-inset-bottom));
+}
+
+.water-chat-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.water-chat-header > a {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  flex: 0 0 48px;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+  color: var(--text-secondary);
+  font-size: 24px;
+  text-decoration: none;
+}
+
+.water-chat-header h1 {
+  color: var(--text-primary);
+  font-size: var(--font-size-title);
+  font-weight: 900;
+}
+
+.water-chat-header p {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.water-chat-presence-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.water-chat-backend-state {
+  display: grid;
+  gap: 3px;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+}
+
+.water-chat-backend-state span {
+  color: var(--accent-orange);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.water-chat-backend-state p {
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: 1.4;
+}
+
+.water-chat-error {
+  color: var(--accent-red);
+  font-size: var(--font-size-sm);
+}
+
+.water-chat-empty {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+}
+
+.water-chat-empty h2 {
+  color: var(--text-primary);
+  font-size: var(--font-size-card);
+}
+
+.water-chat-empty p {
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.water-chat-composer {
+  position: fixed;
+  z-index: 1101;
+  bottom: 0;
+  left: 50%;
+  display: grid;
+  width: min(100%, 487px);
+  grid-template-columns: 1fr 64px;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5) calc(var(--space-5) + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  background: linear-gradient(transparent, var(--app-bg) 25%);
+}
+
+.water-chat-input input {
+  width: 100%;
+  min-height: 60px;
+  padding: 0 var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  color: var(--text-primary);
+  font-size: var(--font-size-card);
+}
+
+.water-chat-input input::placeholder {
+  color: var(--text-muted);
+}
+
+.water-chat-composer button {
+  width: 64px;
+  height: 60px;
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: var(--accent-green);
+  color: var(--text-on-accent);
+  font-size: 28px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.water-chat-composer button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.water-chat-composer-error {
+  grid-column: 1 / -1;
+  color: var(--accent-red);
+  font-size: var(--font-size-sm);
+}
+
+.water-chat-messages {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  overflow-y: auto;
+  padding-bottom: var(--space-3);
+}
+
+.water-chat-bubble {
+  max-width: 85%;
+  align-self: flex-end;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg) var(--radius-lg) var(--radius-xs) var(--radius-lg);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.water-chat-bubble-author {
+  font-size: var(--font-size-xs);
+  font-weight: 800;
+  color: var(--accent-green);
+}
+
+.water-chat-bubble-text {
+  font-size: var(--font-size-card);
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.water-chat-bubble-time {
+  font-size: 11px;
+  color: var(--text-muted);
+  align-self: flex-end;
+}
+

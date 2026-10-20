@@ -1,11 +1,16 @@
-import { openLocalDatabase, OUTBOX_STORE_NAME, queueOutboxOperation } from "../../catches/data/catchRepository.js";
+import {
+  openLocalDatabase, OUTBOX_STORE_NAME, PRIVACY_STORE_NAME, PROGRESSION_EVENT_STORE_NAME, queueOutboxOperation,
+} from "../../catches/data/catchRepository.js";
+import { isGuestScope, recordScopeKey } from "../../auth/data/localDataScope.js";
+import { normalizePrivacySettings } from "../../privacy/data/privacyModel.js";
 import { LOCAL_BACKUP_FORMAT, LOCAL_BACKUP_VERSION } from "./backupFormat.js";
 
 export const MAX_BACKUP_FILE_BYTES = 100 * 1024 * 1024;
 const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
 const ALLOWED_PHOTO_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const ALLOWED_SYNC_STATUSES = new Set(["local", "metadata-synced"]);
-const STORES = ["catches", "trips", OUTBOX_STORE_NAME];
+const CONDITION_SOURCE_FIELDS = new Set(["airTempC", "waterTempC", "pressureHpa", "windKmh", "moonPhase"]);
+const STORES = ["catches", "trips", OUTBOX_STORE_NAME, PRIVACY_STORE_NAME, PROGRESSION_EVENT_STORE_NAME];
 
 function fail(message) {
   throw new Error(message);
@@ -93,8 +98,17 @@ function decodeCatch(record, tripIds) {
   for (const key of ["weightKg", "lengthCm", "girthCm", "fightMinutes", "waterNumber", "waterDepthM"]) {
     requireOptionalNumber(record[key], `${key} úlovku ${record.id}`);
   }
+  if (record.weightSource !== undefined && !["manual", "estimated"].includes(record.weightSource)) fail(`Úlovek ${record.id} obsahuje neplatný zdroj hmotnosti.`);
+  if (record.conditionSources !== undefined) {
+    if (!isRecord(record.conditionSources) || Object.entries(record.conditionSources).some(([field, source]) => !CONDITION_SOURCE_FIELDS.has(field) || !["auto", "manual"].includes(source))) {
+      fail(`Úlovek ${record.id} obsahuje neplatný zdroj podmínek.`);
+    }
+  }
   for (const key of ["locationName", "gpsLocation", "notes", "result"]) {
     if (typeof record[key] !== "string") fail(`Záloha obsahuje neplatné pole ${key} úlovku ${record.id}.`);
+  }
+  if (record.waterId !== undefined && record.waterId !== null && typeof record.waterId !== "string") {
+    fail(`Úlovek ${record.id} obsahuje neplatné ID revíru.`);
   }
   if (record.tripId !== null && (typeof record.tripId !== "string" || !tripIds.has(record.tripId))) {
     fail(`Úlovek ${record.id} odkazuje na výpravu, která v záloze není.`);
@@ -150,6 +164,26 @@ function requireUniqueIds(records, label) {
   return ids;
 }
 
+function decodeProgressionEvent(record) {
+  if (!isRecord(record)) fail("Záloha obsahuje neplatnou událost postupu.");
+  requireString(record.reasonKey, "důvod události postupu");
+  requireString(record.type, "typ události postupu");
+  requireString(record.sourceEntityType, "zdroj události postupu");
+  requireString(record.sourceEntityId, "ID zdroje události postupu");
+  requireTimestamp(record.occurredAt, "occurredAt události postupu");
+  requireTimestamp(record.createdAt, "createdAt události postupu");
+  if (!Number.isSafeInteger(record.xp) || record.xp < 0 || record.xp > 100000) fail("Záloha obsahuje neplatnou hodnotu XP.");
+  if (!Number.isSafeInteger(record.definitionVersion) || record.definitionVersion < 1) fail("Záloha obsahuje neplatnou verzi události postupu.");
+  if (record.periodKey !== null && typeof record.periodKey !== "string") fail("Záloha obsahuje neplatné období události postupu.");
+  return {
+    type: record.type, reasonKey: record.reasonKey, xp: record.xp,
+    sourceEntityType: record.sourceEntityType, sourceEntityId: record.sourceEntityId,
+    definitionVersion: record.definitionVersion, periodKey: record.periodKey,
+    occurredAt: record.occurredAt, createdAt: record.createdAt,
+    sync: { status: "local", revision: Math.max(1, record.sync?.revision ?? 1) },
+  };
+}
+
 export function parseLocalBackupDocument(document) {
   if (!isRecord(document) || document.format !== LOCAL_BACKUP_FORMAT) fail("Soubor není záloha ChytnuCz.");
   if (document.formatVersion !== LOCAL_BACKUP_VERSION) fail(`Verze zálohy ${document.formatVersion ?? "neznámá"} není podporována.`);
@@ -162,7 +196,25 @@ export function parseLocalBackupDocument(document) {
   const catches = document.records.catches.map((record) => decodeCatch(record, tripIds));
   requireUniqueIds(catches, "úlovků");
   if (trips.filter((trip) => !trip.endedAt).length > 1) fail("Záloha obsahuje více než jednu aktivní výpravu.");
-  return { format: document.format, formatVersion: document.formatVersion, createdAt: document.createdAt, catches, trips };
+  const hasPrivacySettings = Object.hasOwn(document.records, "privacySettings");
+  const hasProgressionEvents = Object.hasOwn(document.records, "progressionEvents");
+  if (hasPrivacySettings && document.records.privacySettings !== null && !isRecord(document.records.privacySettings)) {
+    fail("Záloha obsahuje neplatné nastavení soukromí.");
+  }
+  if (hasProgressionEvents && !Array.isArray(document.records.progressionEvents)) {
+    fail("Záloha obsahuje neplatný seznam událostí postupu.");
+  }
+  const privacySettings = hasPrivacySettings && document.records.privacySettings
+    ? normalizePrivacySettings(document.records.privacySettings)
+    : hasPrivacySettings ? null : undefined;
+  const progressionEvents = hasProgressionEvents
+    ? document.records.progressionEvents.map(decodeProgressionEvent)
+    : undefined;
+  if (progressionEvents) requireUniqueIds(progressionEvents.map((event) => ({ id: event.reasonKey })), "událostí postupu");
+  return {
+    format: document.format, formatVersion: document.formatVersion, createdAt: document.createdAt,
+    catches, trips, privacySettings, progressionEvents,
+  };
 }
 
 export function parseLocalBackupJson(text) {
@@ -242,8 +294,10 @@ function readAll(store) {
   });
 }
 
-export async function restoreLocalBackup(backup, mode, openDatabase = openLocalDatabase) {
+export async function restoreLocalBackup(backup, mode, options, openDatabase = openLocalDatabase) {
   if (mode !== "merge" && mode !== "replace") fail("Vyber způsob obnovení zálohy.");
+  const scopeKey = options?.scopeKey;
+  if (!isGuestScope(scopeKey) || options?.ownerId) fail("Zálohu lze obnovit pouze do místního profilu.");
   const db = await openDatabase();
   return new Promise((resolve, reject) => {
     let transaction;
@@ -262,42 +316,81 @@ export async function restoreLocalBackup(backup, mode, openDatabase = openLocalD
       transaction = db.transaction(STORES, "readwrite");
       const catchStore = transaction.objectStore("catches");
       const tripStore = transaction.objectStore("trips");
-      Promise.all([readAll(catchStore), readAll(tripStore)]).then(([existingCatches, existingTrips]) => {
+      const privacyStore = transaction.objectStore(PRIVACY_STORE_NAME);
+      const progressionStore = transaction.objectStore(PROGRESSION_EVENT_STORE_NAME);
+      Promise.all([readAll(catchStore), readAll(tripStore), readAll(privacyStore), readAll(progressionStore)]).then(([
+        existingCatches, existingTrips, existingPrivacy, existingProgression,
+      ]) => {
         if (settled) return;
         try {
-          let catchesToWrite = backup.catches;
-          let tripsToWrite = backup.trips;
+          const scopedBackupCatches = backup.catches.map((record) => ({ ...record, ownerId: null, scopeKey }));
+          const scopedBackupTrips = backup.trips.map((record) => ({ ...record, ownerId: null, scopeKey }));
+          const scopedExistingCatches = existingCatches.filter((record) => recordScopeKey(record) === scopeKey);
+          const scopedExistingTrips = existingTrips.filter((record) => recordScopeKey(record) === scopeKey);
+          const scopedExistingPrivacy = existingPrivacy.find((record) => record.scopeKey === scopeKey) ?? null;
+          const scopedExistingProgression = existingProgression.filter((record) => record.scopeKey === scopeKey);
+          const incomingPrivacy = backup.privacySettings === undefined ? undefined : backup.privacySettings
+            ? { ...normalizePrivacySettings(backup.privacySettings), scopeKey, ownerId: null, updatedAt: new Date().toISOString() }
+            : null;
+          const incomingProgression = backup.progressionEvents === undefined ? undefined : backup.progressionEvents.map((event) => ({
+            ...event, id: `${scopeKey}|${event.reasonKey}`, scopeKey, ownerId: null,
+            sync: { status: "local", revision: Math.max(1, event.sync?.revision ?? 1) },
+          }));
+          let catchesToWrite = scopedBackupCatches;
+          let tripsToWrite = scopedBackupTrips;
           let catchesToDelete = [];
           let tripsToDelete = [];
-          const catchMap = new Map(existingCatches.map((record) => [record.id, record]));
-          const tripMap = new Map(existingTrips.map((record) => [record.id, record]));
+          const catchMap = new Map(scopedExistingCatches.map((record) => [record.id, record]));
+          const tripMap = new Map(scopedExistingTrips.map((record) => [record.id, record]));
           if (mode === "merge") {
             const conflicts = [];
             catchesToWrite = [];
             tripsToWrite = [];
-            for (const record of backup.catches) {
+            for (const record of scopedBackupCatches) {
               const existing = catchMap.get(record.id);
               if (!existing) catchesToWrite.push(record);
               else if (!recordsMatchWithinTransaction(record, existing, "catch")) conflicts.push(`úlovek ${record.id}`);
               else skippedCount += 1;
             }
-            for (const record of backup.trips) {
+            for (const record of scopedBackupTrips) {
               const existing = tripMap.get(record.id);
               if (!existing) tripsToWrite.push(record);
               else if (!recordsMatchWithinTransaction(record, existing, "trip")) conflicts.push(`výprava ${record.id}`);
               else skippedCount += 1;
             }
             if (conflicts.length) fail(`Sloučení zastaveno: stejná ID mají odlišný obsah (${conflicts.slice(0, 3).join(", ")}${conflicts.length > 3 ? "…" : ""}). Zvol nahrazení jen tehdy, pokud chceš celý místní deník nahradit zálohou.`);
-            const finalTrips = [...existingTrips, ...tripsToWrite];
+            if (incomingPrivacy && scopedExistingPrivacy
+              && JSON.stringify(normalizePrivacySettings(incomingPrivacy)) !== JSON.stringify(normalizePrivacySettings(scopedExistingPrivacy))) {
+              fail("Sloučení zastaveno: záloha obsahuje jiné nastavení soukromí.");
+            }
+            if (incomingProgression) {
+              const existingEvents = new Map(scopedExistingProgression.map((event) => [event.id, event]));
+              for (const event of incomingProgression) {
+                const existing = existingEvents.get(event.id);
+                if (!existing) continue;
+                const comparable = (value) => {
+                  const copy = { ...value };
+                  delete copy.id;
+                  delete copy.scopeKey;
+                  delete copy.ownerId;
+                  delete copy.sync;
+                  return copy;
+                };
+                if (JSON.stringify(comparable(existing)) !== JSON.stringify(comparable(event))) {
+                  fail(`Sloučení zastaveno: událost postupu ${event.reasonKey} má odlišný obsah.`);
+                }
+              }
+            }
+            const finalTrips = [...scopedExistingTrips, ...tripsToWrite];
             if (finalTrips.filter((trip) => !trip.endedAt).length > 1) fail("Sloučení by vytvořilo více aktivních výprav. Místní data zůstala beze změny.");
             importedCatchCount = catchesToWrite.length;
             importedTripCount = tripsToWrite.length;
           } else {
-            const backupCatchIds = new Set(backup.catches.map((record) => record.id));
-            const backupTripIds = new Set(backup.trips.map((record) => record.id));
-            catchesToDelete = existingCatches.filter((record) => !backupCatchIds.has(record.id));
-            tripsToDelete = existingTrips.filter((record) => !backupTripIds.has(record.id));
-            catchesToWrite = backup.catches.filter((record) => {
+            const backupCatchIds = new Set(scopedBackupCatches.map((record) => record.id));
+            const backupTripIds = new Set(scopedBackupTrips.map((record) => record.id));
+            catchesToDelete = scopedExistingCatches.filter((record) => !backupCatchIds.has(record.id));
+            tripsToDelete = scopedExistingTrips.filter((record) => !backupTripIds.has(record.id));
+            catchesToWrite = scopedBackupCatches.filter((record) => {
               const existing = catchMap.get(record.id);
               if (existing && recordsMatchWithinTransaction(record, existing, "catch")) {
                 skippedCount += 1;
@@ -305,13 +398,24 @@ export async function restoreLocalBackup(backup, mode, openDatabase = openLocalD
               }
               return true;
             });
-            tripsToWrite = backup.trips.filter((record) => {
+            tripsToWrite = scopedBackupTrips.filter((record) => {
               const existing = tripMap.get(record.id);
               if (existing && recordsMatchWithinTransaction(record, existing, "trip")) {
                 skippedCount += 1;
                 return false;
               }
               return true;
+            });
+          }
+          if (mode === "replace") {
+            if (incomingPrivacy !== undefined) privacyStore.delete(scopeKey);
+            if (incomingProgression !== undefined) scopedExistingProgression.forEach((event) => progressionStore.delete(event.id));
+          }
+          if (incomingPrivacy) privacyStore.put(incomingPrivacy);
+          if (incomingProgression) {
+            const existingEvents = new Map(scopedExistingProgression.map((event) => [event.id, event]));
+            incomingProgression.forEach((event) => {
+              if (!existingEvents.has(event.id) || mode === "replace") progressionStore.put(event);
             });
           }
           // A local backup restore must never delete cloud data as a side
@@ -322,7 +426,7 @@ export async function restoreLocalBackup(backup, mode, openDatabase = openLocalD
           const removePendingFor = (entityType, entityId) => {
             const request = outboxStore.getAll();
             request.onsuccess = () => request.result
-              .filter((operation) => operation.entityType === entityType && operation.entityId === entityId)
+              .filter((operation) => operation.scopeKey === scopeKey && operation.entityType === entityType && operation.entityId === entityId)
               .forEach((operation) => outboxStore.delete(operation.sequence));
             request.onerror = () => transaction.abort();
           };
@@ -333,6 +437,7 @@ export async function restoreLocalBackup(backup, mode, openDatabase = openLocalD
             queueOutboxOperation(transaction, {
               entityType: "trip", entityId: record.id, operation: "upsert",
               localRevision: record.sync?.revision ?? 1,
+              scopeKey,
             }, (revision) => tripStore.put({ ...record, sync: { ...(record.sync ?? {}), status: "local", revision } }));
           });
           catchesToWrite.forEach((record) => {
@@ -340,6 +445,7 @@ export async function restoreLocalBackup(backup, mode, openDatabase = openLocalD
             queueOutboxOperation(transaction, {
               entityType: "catch", entityId: record.id, operation: "upsert",
               localRevision: record.sync?.revision ?? 1,
+              scopeKey,
             }, (revision) => catchStore.put({ ...record, sync: { ...(record.sync ?? {}), status: "local", revision } }));
           });
         } catch (error) {

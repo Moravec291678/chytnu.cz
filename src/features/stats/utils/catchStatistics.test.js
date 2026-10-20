@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { getCatchStatistics } from "./catchStatistics.js";
+import { getCatchPatterns, getCatchStatistics } from "./catchStatistics.js";
 import { getCatchOutcomeStats } from "../../home/utils/profileStats.js";
 
 test("empty journal contains no invented measurements and still returns a six-month window", () => {
@@ -52,4 +52,31 @@ test("monthly counts recalculate after a catch is edited or removed", () => {
   assert.equal(afterEdit.monthlyCatchCounts.at(-1).count, 0);
   assert.equal(afterEdit.monthlyCatchCounts.at(-2).count, 1);
   assert.equal(getCatchStatistics([], [], now).catchCount, 0);
+});
+
+test("catch patterns describe recorded conditions, count ties, and skip missing values", () => {
+  const patterns = getCatchPatterns([
+    {
+      caughtAt: "2026-10-02T06:30:00",
+      locationName: "Labe",
+      baits: [{ label: "Boilie" }, { label: "Boilie" }],
+      conditions: { pressureHpa: 1010, waterTempC: 12 },
+    },
+    {
+      caughtAt: "2026-10-03T08:30:00",
+      locationName: " LÁBE ",
+      baits: [{ label: "Kukuřice" }],
+      conditions: { pressureHpa: 1020, waterTemperatureC: 14 },
+    },
+    { caughtAt: "invalid", conditions: {} },
+  ]);
+
+  assert.deepEqual(patterns.time, { labels: ["06–09 h"], count: 2, sampleCount: 2 });
+  assert.deepEqual(patterns.location, { labels: ["Labe"], count: 2, sampleCount: 2 });
+  assert.deepEqual(patterns.bait, { labels: ["Boilie", "Kukuřice"], count: 1, sampleCount: 2 });
+  assert.deepEqual(patterns.pressureHpa, { value: 1015, sampleCount: 2 });
+  assert.deepEqual(patterns.waterTemperatureC, { value: 13, sampleCount: 2 });
+  assert.deepEqual(getCatchPatterns([]), {
+    time: null, location: null, bait: null, pressureHpa: null, waterTemperatureC: null,
+  });
 });

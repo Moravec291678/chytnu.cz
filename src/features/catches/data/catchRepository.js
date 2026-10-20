@@ -1,13 +1,30 @@
+import {
+  accountScopeKey,
+  createGuestScopeKey,
+  isAccountScope,
+  isGuestScope,
+  recordScopeKey,
+  validateDataScope,
+} from "../../auth/data/localDataScope.js";
+
 const DATABASE_NAME = "chytnu-local";
-const DATABASE_VERSION = 4;
-const CATCH_STORE_NAME = "catches";
-const TRIP_STORE_NAME = "trips";
+export const DATABASE_VERSION = 5;
+export const CATCH_STORE_NAME = "catches";
+export const TRIP_STORE_NAME = "trips";
 export const OUTBOX_STORE_NAME = "outbox";
 export const CONFLICT_STORE_NAME = "syncConflicts";
 export const SYNC_STATE_STORE_NAME = "syncState";
+export const LOCAL_PROFILE_STORE_NAME = "localProfiles";
+export const APP_META_STORE_NAME = "appMeta";
+export const PRIVACY_STORE_NAME = "privacySettings";
+export const PROGRESSION_EVENT_STORE_NAME = "progressionEvents";
+export const ACTIVE_GUEST_SCOPE_KEY = "activeGuestScope";
 
-export function outboxEntityKey(ownerId, entityType, entityId) {
-  return JSON.stringify([ownerId ?? null, entityType, entityId]);
+export function outboxEntityKey(scopeOrOwnerId, entityType, entityId) {
+  const scopeKey = isGuestScope(scopeOrOwnerId) || isAccountScope(scopeOrOwnerId)
+    ? scopeOrOwnerId
+    : scopeOrOwnerId ? accountScopeKey(scopeOrOwnerId) : null;
+  return JSON.stringify([scopeKey, entityType, entityId]);
 }
 
 function createOperationId() {
@@ -22,11 +39,14 @@ export function queueOutboxOperation(transaction, {
   operation,
   localRevision,
   ownerId = null,
+  scopeKey = ownerId ? accountScopeKey(ownerId) : null,
   baseServerRevision = null,
   now = new Date().toISOString(),
 }, onQueued = () => {}) {
   const store = transaction.objectStore(OUTBOX_STORE_NAME);
-  const key = outboxEntityKey(ownerId, entityType, entityId);
+  if (!scopeKey) throw new Error("Synchronizační operace nemá datový scope.");
+  validateDataScope({ scopeKey, ownerId });
+  const key = outboxEntityKey(scopeKey, entityType, entityId);
   const request = store.index("entityKey").get(key);
   request.onerror = () => {
     try { transaction.abort(); } catch { /* transaction has already finished */ }
@@ -42,6 +62,7 @@ export function queueOutboxOperation(transaction, {
         ...(existing ?? {}),
         operationId: existing?.operationId ?? createOperationId(),
         ownerId,
+        scopeKey,
         entityType,
         entityId,
         entityKey: key,
@@ -74,13 +95,25 @@ export function openLocalDatabase() {
     const request = indexedDB.open(DATABASE_NAME, DATABASE_VERSION);
     request.onupgradeneeded = () => {
       const db = request.result;
-      if (!db.objectStoreNames.contains(CATCH_STORE_NAME)) db.createObjectStore(CATCH_STORE_NAME, { keyPath: "id" });
-      if (!db.objectStoreNames.contains(TRIP_STORE_NAME)) db.createObjectStore(TRIP_STORE_NAME, { keyPath: "id" });
+      const transaction = request.transaction;
+      const guestScopeKey = createGuestScopeKey();
+      const catches = db.objectStoreNames.contains(CATCH_STORE_NAME)
+        ? transaction.objectStore(CATCH_STORE_NAME)
+        : db.createObjectStore(CATCH_STORE_NAME, { keyPath: "id" });
+      const trips = db.objectStoreNames.contains(TRIP_STORE_NAME)
+        ? transaction.objectStore(TRIP_STORE_NAME)
+        : db.createObjectStore(TRIP_STORE_NAME, { keyPath: "id" });
+      if (!catches.indexNames.contains("scopeKey")) catches.createIndex("scopeKey", "scopeKey", { unique: false });
+      if (!trips.indexNames.contains("scopeKey")) trips.createIndex("scopeKey", "scopeKey", { unique: false });
       if (!db.objectStoreNames.contains(OUTBOX_STORE_NAME)) {
         const outbox = db.createObjectStore(OUTBOX_STORE_NAME, { keyPath: "sequence", autoIncrement: true });
         outbox.createIndex("entityKey", "entityKey", { unique: true });
         outbox.createIndex("operationId", "operationId", { unique: true });
         outbox.createIndex("status", "status", { unique: false });
+        outbox.createIndex("scopeKey", "scopeKey", { unique: false });
+      } else {
+        const outbox = transaction.objectStore(OUTBOX_STORE_NAME);
+        if (!outbox.indexNames.contains("scopeKey")) outbox.createIndex("scopeKey", "scopeKey", { unique: false });
       }
       if (!db.objectStoreNames.contains(CONFLICT_STORE_NAME)) {
         const conflicts = db.createObjectStore(CONFLICT_STORE_NAME, { keyPath: "id" });
@@ -90,10 +123,105 @@ export function openLocalDatabase() {
       if (!db.objectStoreNames.contains(SYNC_STATE_STORE_NAME)) {
         db.createObjectStore(SYNC_STATE_STORE_NAME, { keyPath: "ownerId" });
       }
+      const profiles = db.objectStoreNames.contains(LOCAL_PROFILE_STORE_NAME)
+        ? transaction.objectStore(LOCAL_PROFILE_STORE_NAME)
+        : db.createObjectStore(LOCAL_PROFILE_STORE_NAME, { keyPath: "id" });
+      if (!profiles.indexNames.contains("kind")) profiles.createIndex("kind", "kind", { unique: false });
+      const appMeta = db.objectStoreNames.contains(APP_META_STORE_NAME)
+        ? transaction.objectStore(APP_META_STORE_NAME)
+        : db.createObjectStore(APP_META_STORE_NAME, { keyPath: "key" });
+      const privacy = db.objectStoreNames.contains(PRIVACY_STORE_NAME)
+        ? transaction.objectStore(PRIVACY_STORE_NAME)
+        : db.createObjectStore(PRIVACY_STORE_NAME, { keyPath: "scopeKey" });
+      if (!privacy.indexNames.contains("ownerId")) privacy.createIndex("ownerId", "ownerId", { unique: false });
+      const progression = db.objectStoreNames.contains(PROGRESSION_EVENT_STORE_NAME)
+        ? transaction.objectStore(PROGRESSION_EVENT_STORE_NAME)
+        : db.createObjectStore(PROGRESSION_EVENT_STORE_NAME, { keyPath: "id" });
+      for (const [name, keyPath] of [
+        ["scopeKey", "scopeKey"],
+        ["type", "type"],
+        ["sourceKey", "sourceKey"],
+        ["periodKey", "periodKey"],
+        ["syncStatus", "sync.status"],
+      ]) {
+        if (!progression.indexNames.contains(name)) progression.createIndex(name, keyPath, { unique: false });
+      }
+
+      const createdAt = new Date().toISOString();
+      profiles.put({ id: guestScopeKey, kind: "guest", createdAt, updatedAt: createdAt });
+      appMeta.put({ key: ACTIVE_GUEST_SCOPE_KEY, scopeKey: guestScopeKey });
+
+      const migrateStore = (store) => {
+        const cursorRequest = store.openCursor();
+        cursorRequest.onsuccess = () => {
+          const cursor = cursorRequest.result;
+          if (!cursor) return;
+          const record = cursor.value;
+          const scopeKey = record.ownerId ? accountScopeKey(record.ownerId) : guestScopeKey;
+          cursor.update({ ...record, scopeKey });
+          cursor.continue();
+        };
+      };
+      migrateStore(catches);
+      migrateStore(trips);
+      const outbox = transaction.objectStore(OUTBOX_STORE_NAME);
+      const outboxCursor = outbox.openCursor();
+      outboxCursor.onsuccess = () => {
+        const cursor = outboxCursor.result;
+        if (!cursor) return;
+        const operation = cursor.value;
+        const scopeKey = operation.ownerId ? accountScopeKey(operation.ownerId) : guestScopeKey;
+        cursor.update({
+          ...operation,
+          scopeKey,
+          entityKey: outboxEntityKey(scopeKey, operation.entityType, operation.entityId),
+        });
+        cursor.continue();
+      };
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error ?? new Error("Databázi úlovků se nepodařilo otevřít."));
   });
+}
+
+function requestValue(request) {
+  return new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+export async function getActiveGuestScopeKey() {
+  const db = await openLocalDatabase();
+  try {
+    const transaction = db.transaction(APP_META_STORE_NAME, "readonly");
+    const value = await requestValue(transaction.objectStore(APP_META_STORE_NAME).get(ACTIVE_GUEST_SCOPE_KEY));
+    if (!isGuestScope(value?.scopeKey)) throw new Error("Místní profil není dostupný.");
+    return value.scopeKey;
+  } finally {
+    db.close();
+  }
+}
+
+function requireRepositoryScope(options = {}) {
+  return validateDataScope({ scopeKey: options.scopeKey, ownerId: options.ownerId ?? null });
+}
+
+async function listScopedRecords(storeName, scopeKey) {
+  const db = await openLocalDatabase();
+  try {
+    const transaction = db.transaction(storeName, "readonly");
+    return await requestValue(transaction.objectStore(storeName).index("scopeKey").getAll(scopeKey));
+  } finally {
+    db.close();
+  }
+}
+
+async function getScopedRecord(storeName, id, scopeKey) {
+  const record = await runStoreOperation(storeName, "get", "readonly", id);
+  if (!record) return undefined;
+  if (recordScopeKey(record) !== scopeKey) throw new Error("Záznam nepatří do aktivního profilu.");
+  return record;
 }
 
 export async function runStoreOperation(storeName, operation, mode, record) {
@@ -112,9 +240,16 @@ export async function runStoreOperation(storeName, operation, mode, record) {
 }
 
 export const catchRepository = {
-  list: () => runStoreOperation(CATCH_STORE_NAME, "list", "readonly"),
-  get: (id) => runStoreOperation(CATCH_STORE_NAME, "get", "readonly", id),
-  put: async (record, { ownerId = null } = {}) => {
+  list: (options) => {
+    const { scopeKey } = requireRepositoryScope(options);
+    return listScopedRecords(CATCH_STORE_NAME, scopeKey);
+  },
+  get: (id, options) => {
+    const { scopeKey } = requireRepositoryScope(options);
+    return getScopedRecord(CATCH_STORE_NAME, id, scopeKey);
+  },
+  put: async (record, options) => {
+    const requestedScope = requireRepositoryScope(options);
     const db = await openLocalDatabase();
     return new Promise((resolve, reject) => {
       const transaction = db.transaction([CATCH_STORE_NAME, TRIP_STORE_NAME, OUTBOX_STORE_NAME], "readwrite");
@@ -124,17 +259,22 @@ export const catchRepository = {
       const existingRequest = catchStore.get(record.id);
       existingRequest.onsuccess = () => {
         const existing = existingRequest.result;
-        // A record's owner is immutable here: only a newly created row may
-        // receive the UID supplied by the authenticated application context.
-        const effectiveOwnerId = existing ? (existing.ownerId ?? null) : (ownerId || null);
+        if (existing && recordScopeKey(existing) !== requestedScope.scopeKey) {
+          failure = new Error("Úlovek nepatří do aktivního profilu.");
+          transaction.abort();
+          return;
+        }
+        const effectiveOwnerId = existing ? (existing.ownerId ?? null) : requestedScope.ownerId;
+        const effectiveScopeKey = existing ? recordScopeKey(existing) : requestedScope.scopeKey;
         const queueWrite = () => {
-          storedRecord = { ...record, ownerId: effectiveOwnerId };
+          storedRecord = { ...record, ownerId: effectiveOwnerId, scopeKey: effectiveScopeKey };
           queueOutboxOperation(transaction, {
             entityType: "catch",
             entityId: record.id,
             operation: "upsert",
             localRevision: record.sync?.revision ?? 1,
             ownerId: effectiveOwnerId,
+            scopeKey: effectiveScopeKey,
             baseServerRevision: existing?.sync?.serverRevision ?? record.sync?.serverRevision ?? null,
           }, (revision) => {
             storedRecord = {
@@ -168,8 +308,8 @@ export const catchRepository = {
           }
           // A newly account-owned catch cannot silently bind an older local
           // trip. It remains local until the explicit migration stage.
-          if ((trip.ownerId ?? null) !== effectiveOwnerId) {
-            failure = new Error("Tento úlovek odkazuje na místní výpravu, která není propojena s tímto účtem.");
+          if (recordScopeKey(trip) !== effectiveScopeKey) {
+            failure = new Error("Tento úlovek odkazuje na výpravu jiného profilu.");
             transaction.abort();
             return;
           }
@@ -183,7 +323,8 @@ export const catchRepository = {
       transaction.onabort = () => { db.close(); reject(failure ?? transaction.error ?? new Error("Změna byla přerušena.")); };
     });
   },
-  delete: async (id) => {
+  delete: async (id, options) => {
+    const requestedScope = requireRepositoryScope(options);
     const db = await openLocalDatabase();
     return new Promise((resolve, reject) => {
       const transaction = db.transaction([CATCH_STORE_NAME, OUTBOX_STORE_NAME], "readwrite");
@@ -193,12 +334,18 @@ export const catchRepository = {
       request.onsuccess = () => {
         const existing = request.result;
         if (!existing) return;
+        if (recordScopeKey(existing) !== requestedScope.scopeKey) {
+          failure = new Error("Úlovek nepatří do aktivního profilu.");
+          transaction.abort();
+          return;
+        }
         queueOutboxOperation(transaction, {
           entityType: "catch",
           entityId: id,
           operation: "delete",
           localRevision: (existing.sync?.revision ?? 0) + 1,
           ownerId: existing.ownerId ?? null,
+          scopeKey: recordScopeKey(existing),
           baseServerRevision: existing.sync?.serverRevision ?? null,
         }, () => store.delete(id));
       };
@@ -208,7 +355,8 @@ export const catchRepository = {
       transaction.onabort = () => { db.close(); reject(failure ?? transaction.error ?? new Error("Mazání úlovku bylo přerušeno.")); };
     });
   },
-  markPhotosSynced: async (id, expectedRevision, remotePhotos) => {
+  markPhotosSynced: async (id, expectedRevision, remotePhotos, options) => {
+    const requestedScope = requireRepositoryScope(options);
     const db = await openLocalDatabase();
     return new Promise((resolve, reject) => {
       const transaction = db.transaction(CATCH_STORE_NAME, "readwrite");
@@ -217,7 +365,7 @@ export const catchRepository = {
       let updated = false;
       request.onsuccess = () => {
         const record = request.result;
-        if (!record || record.sync?.revision !== expectedRevision) return;
+        if (!record || recordScopeKey(record) !== requestedScope.scopeKey || record.sync?.revision !== expectedRevision) return;
         const byId = new Map(remotePhotos.map((photo) => [photo.id, photo]));
         const photos = (record.photos ?? []).map((photo) => {
           const remote = byId.get(photo.id);
@@ -303,7 +451,7 @@ export const outboxRepository = {
           const entityRequest = entityStore.get(operation.entityId);
           entityRequest.onsuccess = () => {
             const record = entityRequest.result;
-            if (!record || record.sync?.revision !== expectedLocalRevision) return;
+            if (!record || recordScopeKey(record) !== operation.scopeKey || record.sync?.revision !== expectedLocalRevision) return;
             const photosPending = operation.entityType === "catch"
               && (record.photos ?? []).some((photo) => photo.blob && (!photo.storagePath || !photo.sha256));
             entityStore.put({

@@ -9,9 +9,10 @@ import "./TripFormPage.css";
 function TripEditPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { state, updateTrip } = useTrips();
+  const { state, updateTrip, refresh } = useTrips();
   const trip = state.trips.find((item) => item.id === id);
-  if (state.loading) return <Layout><div className="trip-form-page"><p>Načítám výpravu…</p></div></Layout>;
+  if (state.loading) return <Layout><div className="trip-form-page"><p className="loading-state" role="status">Načítám výpravu…</p></div></Layout>;
+  if (state.error) return <Layout><div className="trip-form-page"><p className="trip-form-error" role="alert">{state.error}</p><button type="button" onClick={refresh}>Zkusit znovu</button></div></Layout>;
   if (!trip) return <Layout><div className="trip-form-page"><h1>Výprava nenalezena</h1><Link to="/trips">Zpět na výpravy</Link></div></Layout>;
   return <TripEditForm key={trip.id} trip={trip} updateTrip={updateTrip} navigate={navigate} />;
 }

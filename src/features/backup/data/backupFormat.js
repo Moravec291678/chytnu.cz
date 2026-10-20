@@ -45,19 +45,22 @@ async function serializeCatch(record) {
   };
 }
 
-export async function createLocalBackupDocument({ catches, trips, createdAt = new Date() }) {
+export async function createLocalBackupDocument({ catches, trips, privacySettings, progressionEvents, createdAt = new Date() }) {
   if (!Array.isArray(catches) || !Array.isArray(trips)) {
     throw new Error("Místní úlovky a výpravy se nepodařilo načíst jako úplné záznamy.");
   }
 
+  const records = {
+    catches: await Promise.all(catches.map(serializeCatch)),
+    trips: trips.map((trip) => ({ ...trip })),
+  };
+  if (privacySettings !== undefined) records.privacySettings = privacySettings ? { ...privacySettings } : null;
+  if (progressionEvents !== undefined) records.progressionEvents = progressionEvents.map((event) => ({ ...event }));
   return {
     format: LOCAL_BACKUP_FORMAT,
     formatVersion: LOCAL_BACKUP_VERSION,
     createdAt: createdAt.toISOString(),
-    records: {
-      catches: await Promise.all(catches.map(serializeCatch)),
-      trips: trips.map((trip) => ({ ...trip })),
-    },
+    records,
   };
 }
 

@@ -1,11 +1,42 @@
-import { openLocalDatabase, OUTBOX_STORE_NAME, queueOutboxOperation, runStoreOperation } from "../../catches/data/catchRepository.js";
+import {
+  openLocalDatabase,
+  OUTBOX_STORE_NAME,
+  queueOutboxOperation,
+  runStoreOperation,
+} from "../../catches/data/catchRepository.js";
+import { recordScopeKey, validateDataScope } from "../../auth/data/localDataScope.js";
 
 const STORE_NAME = "trips";
 
+function requireScope(options = {}) {
+  return validateDataScope({ scopeKey: options.scopeKey, ownerId: options.ownerId ?? null });
+}
+
+async function requestValue(request) {
+  return new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
 export const tripRepository = {
-  list: () => runStoreOperation(STORE_NAME, "list", "readonly"),
-  get: (id) => runStoreOperation(STORE_NAME, "get", "readonly", id),
-  put: async (trip, { ownerId = null } = {}) => {
+  list: async (options) => {
+    const { scopeKey } = requireScope(options);
+    const db = await openLocalDatabase();
+    try {
+      const transaction = db.transaction(STORE_NAME, "readonly");
+      return await requestValue(transaction.objectStore(STORE_NAME).index("scopeKey").getAll(scopeKey));
+    } finally { db.close(); }
+  },
+  get: async (id, options) => {
+    const { scopeKey } = requireScope(options);
+    const trip = await runStoreOperation(STORE_NAME, "get", "readonly", id);
+    if (!trip) return undefined;
+    if (recordScopeKey(trip) !== scopeKey) throw new Error("Výprava nepatří do aktivního profilu.");
+    return trip;
+  },
+  put: async (trip, options) => {
+    const requestedScope = requireScope(options);
     const db = await openLocalDatabase();
     return new Promise((resolve, reject) => {
       const transaction = db.transaction([STORE_NAME, OUTBOX_STORE_NAME], "readwrite");
@@ -14,18 +45,25 @@ export const tripRepository = {
       const request = store.get(trip.id);
       request.onsuccess = () => {
         const existing = request.result;
-        const effectiveOwnerId = existing ? (existing.ownerId ?? null) : (ownerId || null);
+        if (existing && recordScopeKey(existing) !== requestedScope.scopeKey) {
+          transaction.abort();
+          return;
+        }
+        const effectiveOwnerId = existing ? (existing.ownerId ?? null) : requestedScope.ownerId;
+        const effectiveScopeKey = existing ? recordScopeKey(existing) : requestedScope.scopeKey;
         queueOutboxOperation(transaction, {
           entityType: "trip",
           entityId: trip.id,
           operation: "upsert",
           localRevision: trip.sync?.revision ?? 1,
           ownerId: effectiveOwnerId,
+          scopeKey: effectiveScopeKey,
           baseServerRevision: existing?.sync?.serverRevision ?? trip.sync?.serverRevision ?? null,
         }, (revision) => {
           storedTrip = {
             ...trip,
             ownerId: effectiveOwnerId,
+            scopeKey: effectiveScopeKey,
             sync: {
               ...(trip.sync ?? {}),
               status: "local",
@@ -42,7 +80,8 @@ export const tripRepository = {
       transaction.onabort = () => { db.close(); reject(transaction.error ?? new Error("Uložení výpravy bylo přerušeno.")); };
     });
   },
-  delete: async (id) => {
+  delete: async (id, options) => {
+    const requestedScope = requireScope(options);
     const db = await openLocalDatabase();
     return new Promise((resolve, reject) => {
       const transaction = db.transaction([STORE_NAME, "catches", OUTBOX_STORE_NAME], "readwrite");
@@ -50,7 +89,7 @@ export const tripRepository = {
       const request = transaction.objectStore("catches").getAll();
       let failure;
       request.onsuccess = () => {
-        if (request.result.some((item) => item.tripId === id)) {
+        if (request.result.some((item) => item.tripId === id && recordScopeKey(item) === requestedScope.scopeKey)) {
           failure = new Error("Výprava obsahuje úlovky a nelze ji smazat.");
           transaction.abort();
           return;
@@ -58,12 +97,18 @@ export const tripRepository = {
         const tripRequest = tripStore.get(id);
         tripRequest.onsuccess = () => {
           if (!tripRequest.result) return;
+          if (recordScopeKey(tripRequest.result) !== requestedScope.scopeKey) {
+            failure = new Error("Výprava nepatří do aktivního profilu.");
+            transaction.abort();
+            return;
+          }
           queueOutboxOperation(transaction, {
             entityType: "trip",
             entityId: id,
             operation: "delete",
             localRevision: (tripRequest.result.sync?.revision ?? 0) + 1,
             ownerId: tripRequest.result.ownerId ?? null,
+            scopeKey: recordScopeKey(tripRequest.result),
             baseServerRevision: tripRequest.result.sync?.serverRevision ?? null,
           }, () => tripStore.delete(id));
         };
@@ -75,7 +120,8 @@ export const tripRepository = {
       transaction.onabort = () => { db.close(); reject(failure ?? transaction.error ?? new Error("Mazání výpravy bylo přerušeno.")); };
     });
   },
-  start: async (trip, { ownerId = null } = {}) => {
+  start: async (trip, options) => {
+    const requestedScope = requireScope(options);
     const db = await openLocalDatabase();
     return new Promise((resolve, reject) => {
       const transaction = db.transaction([STORE_NAME, OUTBOX_STORE_NAME], "readwrite");
@@ -84,7 +130,7 @@ export const tripRepository = {
       let failure;
       let storedTrip = trip;
       request.onsuccess = () => {
-        if (request.result.some((item) => !item.endedAt && (item.ownerId ?? null) === (ownerId ?? null))) {
+        if (request.result.some((item) => !item.endedAt && recordScopeKey(item) === requestedScope.scopeKey)) {
           failure = new Error("Nejprve ukonči aktivní výpravu.");
           transaction.abort();
           return;
@@ -94,10 +140,16 @@ export const tripRepository = {
           entityId: trip.id,
           operation: "upsert",
           localRevision: trip.sync?.revision ?? 1,
-          ownerId,
+          ownerId: requestedScope.ownerId,
+          scopeKey: requestedScope.scopeKey,
           baseServerRevision: trip.sync?.serverRevision ?? null,
         }, (revision) => {
-          storedTrip = { ...trip, ownerId: ownerId || null, sync: { ...(trip.sync ?? {}), status: "local", revision } };
+          storedTrip = {
+            ...trip,
+            ownerId: requestedScope.ownerId,
+            scopeKey: requestedScope.scopeKey,
+            sync: { ...(trip.sync ?? {}), status: "local", revision },
+          };
           store.add(storedTrip);
         });
       };

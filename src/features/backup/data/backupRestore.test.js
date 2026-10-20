@@ -11,12 +11,13 @@ import {
 } from "./backupRestore.js";
 
 const time = "2026-10-16T12:00:00.000Z";
+const guestOptions = { scopeKey: "guest:test-backup", ownerId: null };
 
 function makeTrip(id = "trip-1") {
   return {
     schemaVersion: 1, id, title: "Ranní výprava", locationName: "Labe", methodKey: null,
     createdAt: time, updatedAt: time, startedAt: time, endedAt: "2026-10-16T15:00:00.000Z",
-    sync: { status: "local", revision: 1 },
+    scopeKey: guestOptions.scopeKey, sync: { status: "local", revision: 1 },
   };
 }
 
@@ -27,12 +28,16 @@ function makeCatch(id = "catch-1", tripId = "trip-1") {
     weightKg: null, lengthCm: 72, girthCm: null, fightMinutes: null, locationName: "Labe",
     waterNumber: null, gpsLocation: "", coordinates: null, waterDepthM: null, bottomType: null, tripId,
     method: null, baits: [{ key: "corn", label: "Kukuřice", isCustom: false }], result: "released",
-    photos: [], notes: "Ranní záběr", isFavorite: false, sync: { status: "local", revision: 1 },
+    photos: [], notes: "Ranní záběr", isFavorite: false, scopeKey: guestOptions.scopeKey,
+    sync: { status: "local", revision: 1 },
   };
 }
 
-function makeDocument({ catches = [makeCatch()], trips = [makeTrip()] } = {}) {
-  return { format: LOCAL_BACKUP_FORMAT, formatVersion: LOCAL_BACKUP_VERSION, createdAt: time, records: { catches, trips } };
+function makeDocument({ catches = [makeCatch()], trips = [makeTrip()], privacySettings, progressionEvents } = {}) {
+  const records = { catches, trips };
+  if (privacySettings !== undefined) records.privacySettings = privacySettings;
+  if (progressionEvents !== undefined) records.progressionEvents = progressionEvents;
+  return { format: LOCAL_BACKUP_FORMAT, formatVersion: LOCAL_BACKUP_VERSION, createdAt: time, records };
 }
 
 function makeBackup(document = makeDocument()) {
@@ -40,8 +45,9 @@ function makeBackup(document = makeDocument()) {
 }
 
 function makeDatabase(initial = { catches: [], trips: [] }, { failWrites = false } = {}) {
-  const initialStores = { catches: [], trips: [], outbox: [], ...initial };
-  const committed = Object.fromEntries(Object.entries(initialStores).map(([store, rows]) => [store, new Map(rows.map((row) => [store === "outbox" ? row.sequence : row.id, structuredClone(row)]))]));
+  const initialStores = { catches: [], trips: [], outbox: [], privacySettings: [], progressionEvents: [], ...initial };
+  const keyFor = (store, row) => store === "outbox" ? row.sequence : store === "privacySettings" ? row.scopeKey : row.id;
+  const committed = Object.fromEntries(Object.entries(initialStores).map(([store, rows]) => [store, new Map(rows.map((row) => [keyFor(store, row), structuredClone(row)]))]));
   let nextSequence = 0;
   const db = {
     close() {},
@@ -92,11 +98,11 @@ function makeDatabase(initial = { catches: [], trips: [] }, { failWrites = false
             clear() { return scheduleWrite(() => working[name].clear()); },
             put(row) { return scheduleWrite(() => {
               if (name === "outbox" && row.sequence === undefined) row.sequence = ++nextSequence;
-              working[name].set(name === "outbox" ? row.sequence : row.id, structuredClone(row));
+              working[name].set(keyFor(name, row), structuredClone(row));
             }); },
             add(row) { return scheduleWrite(() => {
               if (name === "outbox" && row.sequence === undefined) row.sequence = ++nextSequence;
-              working[name].set(name === "outbox" ? row.sequence : row.id, structuredClone(row));
+              working[name].set(keyFor(name, row), structuredClone(row));
             }); },
             delete(id) { return scheduleWrite(() => working[name].delete(id)); },
           };
@@ -158,13 +164,35 @@ test("multiple catches and trips retain their IDs and exact trip links after res
   const backup = makeBackup(makeDocument({ catches: [makeCatch(), secondCatch], trips: [makeTrip(), secondTrip] }));
   const db = makeDatabase();
 
-  await restoreLocalBackup(backup, "merge", async () => db);
+  await restoreLocalBackup(backup, "merge", guestOptions, async () => db);
 
   const stored = db.snapshot();
   assert.deepEqual(stored.catches.map((record) => [record.id, record.tripId]), [["catch-1", "trip-1"], ["catch-2", "trip-2"]]);
   assert.deepEqual(stored.trips.map((record) => record.id), ["trip-1", "trip-2"]);
   assert.deepEqual(stored.outbox.map((operation) => operation.entityType), ["trip", "trip", "catch", "catch"]);
   assert.ok(stored.outbox.every((operation) => operation.operation === "upsert"));
+});
+
+test("privacy and immutable progression events restore transactionally into the selected guest scope", async () => {
+  const privacySettings = {
+    profileVisibility: "private", defaultCatchVisibility: "private", defaultPhotoVisibility: "private",
+    defaultLocationPrecision: "none", privateSpotDefault: true, nearbyOptIn: false, heatmapOptIn: false,
+  };
+  const progressionEvents = [{
+    id: "guest:old|catch.created:catch-1", scopeKey: "guest:old", ownerId: null,
+    type: "catch.created", reasonKey: "catch.created:catch-1", xp: 10,
+    sourceEntityType: "catch", sourceEntityId: "catch-1", definitionVersion: 1,
+    periodKey: null, occurredAt: time, createdAt: time, sync: { status: "local", revision: 1 },
+  }];
+  const backup = makeBackup(makeDocument({ privacySettings, progressionEvents }));
+  const db = makeDatabase();
+
+  await restoreLocalBackup(backup, "replace", guestOptions, async () => db);
+
+  const snapshot = db.snapshot();
+  assert.equal(snapshot.privacySettings[0].scopeKey, guestOptions.scopeKey);
+  assert.equal(snapshot.progressionEvents[0].id, `${guestOptions.scopeKey}|catch.created:catch-1`);
+  assert.equal(snapshot.progressionEvents[0].xp, 10);
 });
 
 test("invalid JSON, unsupported versions, duplicate IDs, and missing trip links are rejected", () => {
@@ -226,7 +254,7 @@ test("a freshly exported local catch with a photo can be merged back idempotentl
   assert.equal(summary.conflictCount, 0);
 
   const db = makeDatabase({ catches: [sourceCatch], trips: [sourceTrip] });
-  const result = await restoreLocalBackup(parsed, "merge", async () => db);
+  const result = await restoreLocalBackup(parsed, "merge", guestOptions, async () => db);
   assert.equal(result.skipped, 2);
   assert.equal(result.catches, 0);
   assert.equal(result.trips, 0);
@@ -235,14 +263,14 @@ test("a freshly exported local catch with a photo can be merged back idempotentl
 test("merge is idempotent and a different same-ID record aborts before writing", async () => {
   const db = makeDatabase();
   const backup = makeBackup();
-  await restoreLocalBackup(backup, "merge", async () => db);
-  await restoreLocalBackup(backup, "merge", async () => db);
+  await restoreLocalBackup(backup, "merge", guestOptions, async () => db);
+  await restoreLocalBackup(backup, "merge", guestOptions, async () => db);
   assert.equal(db.snapshot().catches.length, 1);
   assert.equal(db.snapshot().trips.length, 1);
 
   const before = db.snapshot();
   const changed = makeBackup(makeDocument({ catches: [{ ...makeCatch(), notes: "konflikt" }], trips: [makeTrip()] }));
-  await assert.rejects(restoreLocalBackup(changed, "merge", async () => db), /Sloučení zastaveno/);
+  await assert.rejects(restoreLocalBackup(changed, "merge", guestOptions, async () => db), /Sloučení zastaveno/);
   assert.deepEqual(db.snapshot(), before);
 });
 
@@ -251,7 +279,7 @@ test("replacing with an empty backup removes only local data and never schedules
   oldCatch.tripId = null;
   const db = makeDatabase({ catches: [oldCatch], trips: [makeTrip("old-trip")] });
 
-  await restoreLocalBackup(makeBackup(makeDocument({ catches: [], trips: [] })), "replace", async () => db);
+  await restoreLocalBackup(makeBackup(makeDocument({ catches: [], trips: [] })), "replace", guestOptions, async () => db);
 
   const snapshot = db.snapshot();
   assert.deepEqual(snapshot.catches, []);
@@ -276,10 +304,12 @@ test("replace writes catches and trips together; a database failure preserves bo
   const oldTrip = makeTrip("old-trip");
   const db = makeDatabase({ catches: [oldCatch], trips: [oldTrip] });
   const failingDb = makeDatabase({ catches: [oldCatch], trips: [oldTrip] }, { failWrites: true });
-  await assert.rejects(restoreLocalBackup(makeBackup(), "replace", async () => failingDb), /přerušena|nepodařilo/);
-  assert.deepEqual(failingDb.snapshot(), { catches: [oldCatch], trips: [oldTrip], outbox: [] });
+  await assert.rejects(restoreLocalBackup(makeBackup(), "replace", guestOptions, async () => failingDb), /přerušena|nepodařilo/);
+  assert.deepEqual(failingDb.snapshot(), {
+    catches: [oldCatch], trips: [oldTrip], outbox: [], privacySettings: [], progressionEvents: [],
+  });
   assert.equal(db.snapshot().catches[0].id, "old-catch");
-  await restoreLocalBackup(makeBackup(), "replace", async () => db);
+  await restoreLocalBackup(makeBackup(), "replace", guestOptions, async () => db);
   assert.deepEqual(db.snapshot().catches.map((row) => row.id), ["catch-1"]);
   assert.deepEqual(db.snapshot().trips.map((row) => row.id), ["trip-1"]);
 });

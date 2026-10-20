@@ -12,6 +12,10 @@ test("Vercel config builds Vite into dist and preserves SPA routes", async () =>
   assert.deepEqual(config.rewrites, [{ source: "/(.*)", destination: "/index.html" }]);
   assert.ok(config.headers.some((entry) => entry.source === "/sw.js"
     && entry.headers.some((header) => header.key === "Cache-Control" && header.value.includes("max-age=0"))));
+  const baselineHeaders = config.headers.find((entry) => entry.source === "/(.*)")?.headers ?? [];
+  assert.ok(baselineHeaders.some((header) => header.key === "X-Content-Type-Options" && header.value === "nosniff"));
+  assert.ok(baselineHeaders.some((header) => header.key === "Referrer-Policy" && header.value === "strict-origin-when-cross-origin"));
+  assert.ok(baselineHeaders.some((header) => header.key === "Permissions-Policy" && header.value.includes("geolocation=(self)")));
 });
 
 test("environment example declares public client variables without server credentials", async () => {

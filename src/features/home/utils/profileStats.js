@@ -1,3 +1,5 @@
+import { isMeasuredCatchWeight } from "../../catches/data/catchWeight.js";
+
 export function getTopMethod(catches) {
   const groupMethods = catches.reduce((acc, item) => {
     if (!item.method?.key) return acc;
@@ -61,8 +63,25 @@ export function getTopRevier(catches) {
 }
 
 export function getBiggestCatch(catches) {
-  return catches.filter((item) => Number.isFinite(item.weightKg))
+  return catches.filter(isMeasuredCatchWeight)
     .reduce((max, item) => !max || item.weightKg > max.weightKg ? item : max, null);
+}
+
+export function getBestWater(catches, waters = []) {
+  const waterById = new Map(waters.filter((water) => water?.id).map((water) => [water.id, water]));
+  const totals = new Map();
+  for (const record of catches) {
+    if (typeof record?.waterId !== "string" || !record.waterId.trim()) continue;
+    const water = waterById.get(record.waterId);
+    const name = water?.name?.trim();
+    if (!name) continue;
+    const current = totals.get(record.waterId) ?? { id: record.waterId, name, catchCount: 0, water };
+    current.catchCount += 1;
+    if (water?.name) current.name = water.name;
+    current.water = water;
+    totals.set(record.waterId, current);
+  }
+  return [...totals.values()].sort((left, right) => right.catchCount - left.catchCount || left.name.localeCompare(right.name, "cs-CZ"))[0] ?? null;
 }
 
 export function getAvailableProfileStats(catches) {
@@ -79,3 +98,5 @@ export function getAvailableProfileStats(catches) {
 
   return stats;
 }
+
+

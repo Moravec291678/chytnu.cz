@@ -1,97 +1,114 @@
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-  -webkit-tap-highlight-color: transparent;
-}
-
 .layout {
-  max-width: 480px;
-  margin: 0 auto;
+  width: 100%;
+  max-width: 487px;
   min-height: 100vh;
+  margin: 0 auto;
   position: relative;
-  background: var(--bg);
+  background: var(--app-bg);
+  isolation: isolate;
 }
 
 .layout-main {
-  padding-bottom: 82px;
+  min-height: 100vh;
+  padding-bottom: calc(100px + env(safe-area-inset-bottom));
 }
 
-/* ── BOTTOM NAV ── */
 .bottom-nav {
   position: fixed;
+  z-index: 100;
   bottom: 0;
   left: 50%;
-  transform: translateX(-50%);
-  width: 100%;
-  max-width: 480px;
-  height: 82px;
-  background: var(--s1);
-  border-top: 1px solid var(--bd);
   display: flex;
-  align-items: flex-start;
-  padding-top: 20px;
-  z-index: 100;
+  width: 100%;
+  max-width: 487px;
+  min-height: calc(90px + env(safe-area-inset-bottom));
+  align-items: center;
+  justify-content: space-around;
+  padding: 7px 6px calc(7px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  border-top: 1px solid var(--border);
+  background: var(--surface-1);
 }
 
-/* Nav položky */
 .nav-item {
-  flex: 1;
   display: flex;
+  min-width: 0;
+  min-height: 48px;
+  flex: 1 1 0;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
+  justify-content: center;
+  gap: 4px;
+  padding: 3px 2px;
+  color: var(--text-secondary);
   text-decoration: none;
-  padding: 4px;
 }
 
 .nav-icon {
-  font-size: 21px;
-  line-height: 1;
+  display: flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+}
+
+.nav-icon svg {
+  width: 22px;
+  height: 22px;
 }
 
 .nav-label {
-  font-size: 10px;
+  color: inherit;
+  font-size: 9px;
   font-weight: 700;
-  color: var(--t3);
+  letter-spacing: 0.45px;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  white-space: nowrap;
 }
 
-.nav-item:hover .nav-label {
-  color: var(--gr);
+.nav-item:hover,
+.nav-item-active {
+  color: var(--accent-green);
 }
 
-.nav-item-active .nav-label {
-  color: var(--gr);
+.nav-fab {
+  display: flex;
+  width: 64px;
+  height: 64px;
+  flex: 0 0 64px;
+  align-items: center;
+  justify-content: center;
+  border: 4px solid var(--app-bg);
+  border-radius: 50%;
+  background: var(--accent-green);
+  box-shadow: 0 4px 18px rgb(var(--accent-green-rgb) / 22%);
+  color: var(--text-on-accent);
+  font-size: 34px;
+  font-weight: 600;
+  line-height: 1;
+  text-decoration: none;
+  transition: transform var(--motion-fast);
+}
+
+.nav-fab:hover {
+  transform: scale(1.05);
 }
 
 .nav-item:focus-visible,
 .nav-fab:focus-visible {
-  outline: 2px solid var(--bl);
+  outline: 2px solid var(--accent-blue);
   outline-offset: 2px;
 }
 
-/* FAB — prostřední + tlačítko */
-.nav-fab {
-  width: 54px;
-  height: 54px;
-  border-radius: 50%;
-  background: var(--gr);
-  color: #000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 26px;
-  font-weight: 900;
-  text-decoration: none;
-  box-shadow: 0 4px 24px rgba(46, 204, 113, 0.45);
-  border: 3px solid var(--bg);
-  margin-top: -14px;
-  flex-shrink: 0;
-  transition: transform 0.12s;
-}
+@media (max-width: 360px) {
+  .nav-label {
+    font-size: 8px;
+    letter-spacing: 0.2px;
+  }
 
-.nav-fab:hover {
-  transform: scale(1.08);
+  .nav-fab {
+    width: 56px;
+    height: 56px;
+    flex-basis: 56px;
+  }
 }

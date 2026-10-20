@@ -1,0 +1,148 @@
+.settings-page {
+  display: grid;
+  width: min(100%, 487px);
+  gap: 12px;
+  padding: 18px 20px calc(24px + env(safe-area-inset-bottom));
+}
+
+.settings-header {
+  display: grid;
+  gap: 5px;
+}
+
+.settings-header > a,
+.settings-link {
+  color: var(--accent-green);
+  font-size: 12px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.settings-header h1 {
+  color: var(--text-primary);
+  font-size: 30px;
+  font-weight: 900;
+  letter-spacing: -0.7px;
+}
+
+.settings-header p,
+.settings-card p {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.settings-card {
+  display: grid;
+  min-width: 0;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-1);
+}
+
+.settings-card h2 {
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.settings-card > strong {
+  overflow-wrap: anywhere;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.settings-field {
+  display: grid;
+  gap: 7px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.settings-field select {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 11px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--text-primary);
+}
+
+.settings-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.settings-toggle input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--accent-green);
+}
+
+.settings-link {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+
+.settings-primary-button,
+.settings-danger button,
+.settings-delete-confirm {
+  min-height: 44px;
+  padding: 0 13px;
+  border: 0;
+  border-radius: 10px;
+  font-weight: 900;
+}
+
+.settings-primary-button {
+  background: var(--accent-green);
+  color: var(--text-on-accent);
+}
+
+.settings-primary-button:disabled,
+.settings-danger button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.settings-danger {
+  border-color: color-mix(in srgb, var(--accent-red) 50%, var(--border));
+}
+
+.settings-danger button,
+.settings-delete-confirm {
+  background: var(--accent-red);
+  color: #fff;
+}
+
+.settings-message,
+.settings-error {
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 12px;
+}
+
+.settings-message {
+  background: var(--accent-green-soft);
+  color: var(--accent-green);
+}
+
+.settings-error {
+  background: rgb(120 32 32 / 20%);
+  color: var(--accent-red);
+}

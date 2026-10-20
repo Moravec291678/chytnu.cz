@@ -4,8 +4,11 @@ import {
   OUTBOX_STORE_NAME,
   outboxEntityKey,
   queueOutboxOperation,
+  PRIVACY_STORE_NAME,
+  PROGRESSION_EVENT_STORE_NAME,
   SYNC_STATE_STORE_NAME,
 } from "../../catches/data/catchRepository.js";
+import { accountScopeKey, isGuestScope, recordScopeKey } from "../../auth/data/localDataScope.js";
 
 const STORES = { catch: "catches", trip: "trips" };
 
@@ -64,7 +67,8 @@ function transactionDone(transaction, db, fallback) {
   });
 }
 
-export async function readOwnerlessSummary() {
+export async function readGuestSummary(guestScopeKey) {
+  if (!isGuestScope(guestScopeKey)) throw new Error("Místní profil není platný.");
   const db = await openLocalDatabase();
   try {
     const transaction = db.transaction(["catches", "trips"], "readonly");
@@ -72,8 +76,8 @@ export async function readOwnerlessSummary() {
       requestResult(transaction.objectStore("catches").getAll()),
       requestResult(transaction.objectStore("trips").getAll()),
     ]);
-    const localCatches = catches.filter((record) => !record.ownerId);
-    const localTrips = trips.filter((record) => !record.ownerId);
+    const localCatches = catches.filter((record) => recordScopeKey(record) === guestScopeKey);
+    const localTrips = trips.filter((record) => recordScopeKey(record) === guestScopeKey);
     return {
       catches: localCatches.length,
       trips: localTrips.length,
@@ -82,51 +86,65 @@ export async function readOwnerlessSummary() {
   } finally { db.close(); }
 }
 
-export async function linkOwnerlessData(ownerId) {
+export async function linkGuestData(ownerId, guestScopeKey) {
   if (typeof ownerId !== "string" || !ownerId) throw new Error("Pro propojení deníku je nutný přihlášený účet.");
+  if (!isGuestScope(guestScopeKey)) throw new Error("Místní profil není platný.");
+  const accountScope = accountScopeKey(ownerId);
   const db = await openLocalDatabase();
-  const transaction = db.transaction(["catches", "trips", OUTBOX_STORE_NAME], "readwrite");
+  const transaction = db.transaction(["catches", "trips", OUTBOX_STORE_NAME, PRIVACY_STORE_NAME, PROGRESSION_EVENT_STORE_NAME], "readwrite");
   const catchStore = transaction.objectStore("catches");
   const tripStore = transaction.objectStore("trips");
   const outbox = transaction.objectStore(OUTBOX_STORE_NAME);
+  const privacyStore = transaction.objectStore(PRIVACY_STORE_NAME);
+  const progressionStore = transaction.objectStore(PROGRESSION_EVENT_STORE_NAME);
   const result = { catches: 0, trips: 0, photos: 0 };
   let failure;
-  const requests = [catchStore.getAll(), tripStore.getAll(), outbox.getAll()];
+  const requests = [catchStore.getAll(), tripStore.getAll(), outbox.getAll(), privacyStore.get(guestScopeKey), progressionStore.index("scopeKey").getAll(guestScopeKey)];
   let loaded = 0;
   const process = () => {
     loaded += 1;
     if (loaded !== requests.length) return;
     try {
-      const [allCatches, allTrips, allOperations] = requests.map((request) => request.result);
-      const ownerlessTrips = allTrips.filter((record) => !record.ownerId);
-      const ownerlessCatches = allCatches.filter((record) => !record.ownerId);
+      const [allCatches, allTrips, allOperations, guestPrivacy, guestProgression] = requests.map((request) => request.result);
+      const ownerlessTrips = allTrips.filter((record) => recordScopeKey(record) === guestScopeKey);
+      const ownerlessCatches = allCatches.filter((record) => recordScopeKey(record) === guestScopeKey);
       const tripsById = new Map(allTrips.map((record) => [record.id, record]));
       for (const record of ownerlessCatches) {
         const linkedTrip = record.tripId ? tripsById.get(record.tripId) : null;
-        if (record.tripId && (!linkedTrip || (linkedTrip.ownerId && linkedTrip.ownerId !== ownerId))) {
+        if (record.tripId && (!linkedTrip || recordScopeKey(linkedTrip) !== guestScopeKey)) {
           throw new Error(`Úlovek ${record.species || record.id} odkazuje na výpravu jiného účtu. Propojení bylo zastaveno.`);
         }
       }
+      for (const event of guestProgression) {
+        const nextId = `${accountScope}|${event.reasonKey}`;
+        progressionStore.delete(event.id);
+        progressionStore.put({ ...event, id: nextId, scopeKey: accountScope, ownerId, sync: { status: "local", revision: 1 } });
+      }
+      if (guestPrivacy) {
+        privacyStore.put({ ...guestPrivacy, scopeKey: accountScope, ownerId, updatedAt: new Date().toISOString() });
+      }
       const linkedIds = new Set([
-        ...ownerlessTrips.map((record) => outboxEntityKey(null, "trip", record.id)),
-        ...ownerlessCatches.map((record) => outboxEntityKey(null, "catch", record.id)),
+        ...ownerlessTrips.map((record) => outboxEntityKey(guestScopeKey, "trip", record.id)),
+        ...ownerlessCatches.map((record) => outboxEntityKey(guestScopeKey, "catch", record.id)),
       ]);
       allOperations.filter((operation) => linkedIds.has(operation.entityKey)).forEach((operation) => outbox.delete(operation.sequence));
       for (const record of ownerlessTrips) {
         queueOutboxOperation(transaction, {
           entityType: "trip", entityId: record.id, operation: "upsert", ownerId,
+          scopeKey: accountScope,
           localRevision: Math.max(1, record.sync?.revision ?? 1), baseServerRevision: null,
         }, (revision) => tripStore.put({
-          ...record, ownerId,
+          ...record, ownerId, scopeKey: accountScope,
           sync: { ...(record.sync ?? {}), status: "local", revision, serverRevision: undefined },
         }));
       }
       for (const record of ownerlessCatches) {
         queueOutboxOperation(transaction, {
           entityType: "catch", entityId: record.id, operation: "upsert", ownerId,
+          scopeKey: accountScope,
           localRevision: Math.max(1, record.sync?.revision ?? 1), baseServerRevision: null,
         }, (revision) => catchStore.put({
-          ...record, ownerId,
+          ...record, ownerId, scopeKey: accountScope,
           sync: {
             ...(record.sync ?? {}), status: "local", revision, serverRevision: undefined,
             photoStatus: (record.photos ?? []).some((photo) => photo.blob) ? "local-only" : "none",
@@ -189,7 +207,7 @@ export async function resolveSyncConflict(ownerId, conflictId, choice) {
               outbox.delete(operation.sequence);
               entityStore.delete(conflict.entityId);
               const copy = {
-                ...conflict.localRecord, id: newId, ownerId, updatedAt: now,
+                ...conflict.localRecord, id: newId, ownerId, scopeKey: accountScopeKey(ownerId), updatedAt: now,
                 sync: { status: "local", revision: 1 },
               };
               queueOutboxOperation(transaction, {
@@ -199,7 +217,7 @@ export async function resolveSyncConflict(ownerId, conflictId, choice) {
               if (conflict.entityType === "trip") {
                 const linkedRequest = transaction.objectStore("catches").getAll();
                 linkedRequest.onsuccess = () => {
-                  linkedRequest.result.filter((record) => record.tripId === conflict.entityId).forEach((record) => {
+                  linkedRequest.result.filter((record) => record.tripId === conflict.entityId && recordScopeKey(record) === accountScopeKey(ownerId)).forEach((record) => {
                     queueOutboxOperation(transaction, {
                       entityType: "catch", entityId: record.id, operation: "upsert", ownerId,
                       localRevision: (record.sync?.revision ?? 0) + 1,
@@ -228,7 +246,7 @@ export async function resolveSyncConflict(ownerId, conflictId, choice) {
               if (conflict.entityType === "trip") {
                 const linkedRequest = transaction.objectStore("catches").getAll();
                 linkedRequest.onsuccess = () => {
-                  linkedRequest.result.filter((record) => record.tripId === conflict.entityId).forEach((record) => {
+                  linkedRequest.result.filter((record) => record.tripId === conflict.entityId && recordScopeKey(record) === accountScopeKey(ownerId)).forEach((record) => {
                     queueOutboxOperation(transaction, {
                       entityType: "catch", entityId: record.id, operation: "upsert", ownerId,
                       localRevision: (record.sync?.revision ?? 0) + 1,
@@ -246,6 +264,7 @@ export async function resolveSyncConflict(ownerId, conflictId, choice) {
               entityStore.put({
                 ...conflict.remoteRecord,
                 ownerId,
+                scopeKey: accountScopeKey(ownerId),
                 sync: { status: "metadata-synced", revision: conflict.localRecord?.sync?.revision ?? 0, serverRevision: conflict.remoteRevision },
               });
             }
@@ -276,6 +295,7 @@ function metadataOnlyRecord(remote, local = null) {
   return {
     ...remote.record,
     ownerId: remote.record.ownerId,
+    scopeKey: accountScopeKey(remote.record.ownerId),
     photos,
     sync: {
       status: "metadata-synced",
@@ -292,7 +312,7 @@ function makeConflict(ownerId, snapshot, localRecord) {
   return {
     id,
     ownerId,
-    entityKey: outboxEntityKey(ownerId, snapshot.entityType, snapshot.entityId),
+    entityKey: outboxEntityKey(accountScopeKey(ownerId), snapshot.entityType, snapshot.entityId),
     entityType: snapshot.entityType,
     entityId: snapshot.entityId,
     localRecord: localRecord ?? null,
@@ -344,7 +364,7 @@ export async function applyRemotePage({ ownerId, snapshots, cursor, preserveCatc
       const snapshot = snapshots[index];
       const entityStore = transaction.objectStore(STORES[snapshot.entityType]);
       const localRequest = entityStore.get(snapshot.entityId);
-      const operationRequest = outbox.index("entityKey").get(outboxEntityKey(ownerId, snapshot.entityType, snapshot.entityId));
+      const operationRequest = outbox.index("entityKey").get(outboxEntityKey(accountScopeKey(ownerId), snapshot.entityType, snapshot.entityId));
       let localRecord;
       let pendingOperation;
       let loaded = 0;
@@ -433,7 +453,7 @@ export async function applyRemotePage({ ownerId, snapshots, cursor, preserveCatc
           return;
         }
 
-        if (localRecord && localRecord.ownerId !== ownerId) {
+        if (localRecord && recordScopeKey(localRecord) !== accountScopeKey(ownerId)) {
           putConflict(snapshot, localRecord, null);
           processSnapshot(index + 1);
           return;
@@ -455,7 +475,8 @@ export async function applyRemotePage({ ownerId, snapshots, cursor, preserveCatc
           if (snapshot.entityType === "trip") {
             const linkedRequest = transaction.objectStore("catches").getAll();
             linkedRequest.onsuccess = () => {
-              if (linkedRequest.result.some((item) => item.tripId === snapshot.entityId)) {
+              if (linkedRequest.result.some((item) => item.tripId === snapshot.entityId
+                && recordScopeKey(item) === accountScopeKey(ownerId))) {
                 putConflict(snapshot, localRecord, null);
               } else if (localRecord) {
                 entityStore.delete(snapshot.entityId);

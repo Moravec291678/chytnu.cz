@@ -3,16 +3,45 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   DEFAULT_BAITS,
   DEFAULT_METHODS,
+  DEFAULT_SPECIES,
   SPECIES_CATEGORIES,
 } from "../shared/constants/constants";
 import Layout from "../shared/layout/Layout";
-import { DEFAULT_SPECIES } from "../shared/constants/constants";
 import "./AddCatchPage.css";
-import { normalizeText } from "../shared/utils/helpers";
 import { useCatches } from "../features/catches/context/useCatches";
-import { catchToForm, createCatchRecord, validateCatchForm } from "../features/catches/data/catchModel";
+import { catchToForm, createCatchRecord, updateCatchFormField, validateCatchForm } from "../features/catches/data/catchModel";
 import { useTrips } from "../features/trips/context/useTrips";
-import { formatCoordinates } from "../features/catches/data/coordinates";
+import { formatCoordinates, parseCoordinateText } from "../features/catches/data/coordinates";
+import { normalizeCatchPrivacy } from "../features/privacy/data/privacyModel";
+import { readPreferences } from "../features/preferences/data/preferences.js";
+import { useDataScope } from "../features/auth/context/dataScopeContextValue.js";
+import { waterRepository } from "../features/waters/data/waterRepository.js";
+import { findNearestSavedWater } from "../features/waters/data/nearbyWaterMatch.js";
+import { fetchCatchWeather, replaceAutomaticConditions } from "../shared/data/catchWeather.js";
+import { calculateMoonPhase } from "../shared/utils/moonPhase.js";
+import {
+  filterSpeciesCatalog,
+  getPrimarySpeciesCategoryKey,
+  getSpeciesCategory,
+  getSpeciesForCategory,
+} from "../features/catches/data/speciesPicker.js";
+import {
+  MAX_QUICK_SPECIES,
+  readQuickSpeciesIds,
+  saveQuickSpeciesIds,
+  toggleQuickSpecies,
+} from "../features/preferences/data/quickSpeciesPreferences.js";
+
+const MOON_PHASES = [
+  ["new", "Nov"],
+  ["waxingCrescent", "Dorůstající srpek"],
+  ["firstQuarter", "První čtvrt"],
+  ["waxingGibbous", "Dorůstající"],
+  ["full", "Úplněk"],
+  ["waningGibbous", "Ubývající"],
+  ["lastQuarter", "Poslední čtvrt"],
+  ["waningCrescent", "Ubývající srpek"],
+];
 
 function localDateTime() {
   const now = new Date();
@@ -36,31 +65,46 @@ async function optimizePhoto(file) {
   }
 }
 
+function SpeciesManagementRow({ species, selected, pinned, onSelect, onTogglePin }) {
+  return <div className={selected ? "species-picker-row species-picker-row-selected" : "species-picker-row"}>
+    <button className="species-picker-select" type="button" aria-pressed={selected} onClick={onSelect}>
+      <span className="species-item-label">{species.label}</span>
+      {species.latinName && <span className="species-picker-latin">{species.latinName}</span>}
+    </button>
+    <button className={pinned ? "species-pin-button species-pin-button-active" : "species-pin-button"} type="button" aria-pressed={pinned} aria-label={pinned ? `Odebrat ${species.label} z rychlého výběru` : `Přidat ${species.label} do rychlého výběru`} onClick={onTogglePin}>
+      {pinned ? "★ Odepnout" : "☆ Připnout"}
+    </button>
+  </div>;
+}
+
 function AddCatchPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { state, createCatch, updateCatch } = useCatches();
   const { state: tripState } = useTrips();
+  const scope = useDataScope();
+  const preferenceAppliedScopeRef = useRef(null);
+  const [availableWaters, setAvailableWaters] = useState([]);
+  const [watersError, setWatersError] = useState("");
   const existingCatch = id ? state.catches.find((item) => item.id === id) : null;
-  const [displayFull, setDisplayFull] = useState(false);
+  const [displayFull, setDisplayFull] = useState(() => readPreferences(globalThis.localStorage, scope.scopeKey).detailMode === "detailed");
+  useEffect(() => {
+    if (scope.status !== "ready") return undefined;
+    let active = true;
+    waterRepository.list(scope).then((items) => { if (active) { setAvailableWaters(items); setWatersError(""); } })
+      .catch((error) => { if (active) setWatersError(error?.message || "Revíry se nepodařilo načíst."); });
+    return () => { active = false; };
+  }, [scope]);
   const [photoProcessing, setPhotoProcessing] = useState(false);
-  const [expandedCategoryKey, setExpandedCategoryKey] = useState(null);
-  const visibleSpecies = DEFAULT_SPECIES.filter((species) => {
-    if (expandedCategoryKey === "predators") {
-      return species.isPredator;
-    }
-    if (expandedCategoryKey === "common") {
-      return species.isCommon;
-    }
-    if (expandedCategoryKey === "protected") {
-      return species.isProtected;
-    }
-    if (expandedCategoryKey === "nonNative") {
-      return species.isNonNative;
-    }
-
-    return species.categoryKey === expandedCategoryKey;
-  });
+  const [showSpeciesPicker, setShowSpeciesPicker] = useState(() => readPreferences(globalThis.localStorage, scope.scopeKey).detailMode === "detailed");
+  const [selectedSpeciesCategoryKey, setSelectedSpeciesCategoryKey] = useState("");
+  const [quickSpeciesOverride, setQuickSpeciesOverride] = useState(null);
+  const quickSpeciesIds = quickSpeciesOverride?.scopeKey === scope.scopeKey
+    ? quickSpeciesOverride.ids
+    : readQuickSpeciesIds(scope.scopeKey);
+  const [quickSpeciesError, setQuickSpeciesError] = useState("");
+  const [waterSuggestionDismissed, setWaterSuggestionDismissed] = useState(false);
+  const [manualWaterChoice, setManualWaterChoice] = useState(Boolean(existingCatch?.waterId || existingCatch?.locationName));
   const fileInputRef = useRef(null);
   const photoUrlsRef = useRef(new Set());
   useEffect(() => {
@@ -125,12 +169,14 @@ function AddCatchPage() {
 
   const [catchData, setCatchData] = useState({
     weightKg: "",
+    weightSource: "estimated",
     lengthCm: "",
 
     girthCm: "",
     fightDurationMin: "",
 
     locationName: "",
+    waterId: "",
     waterNumber: "",
 
     catchDate: localDateTime().date,
@@ -143,18 +189,43 @@ function AddCatchPage() {
     bottomType: "",
 
     speciesKey: "",
-    resultKey: "unspecified",
+    resultKey: displayFull ? "unspecified" : "released",
 
+    conditions: { airTempC: "", waterTempC: "", pressureHpa: "", windKmh: "", moonPhase: "" },
+    conditionSources: {},
     fishingMethod: "",
     photos: [],
     baits: [], notes: "", isFavorite: false, tripId: "",
+    privacy: normalizeCatchPrivacy(null),
   });
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
   const [gpsLoading, setGpsLoading] = useState(false);
   const [gpsMessage, setGpsMessage] = useState("");
+  const [weatherStatus, setWeatherStatus] = useState({ state: "idle", message: "" });
+  const manualConditionFieldsRef = useRef(new Set());
+  const automaticConditionsRef = useRef({});
   const savingRef = useRef(false);
   const [loadedId, setLoadedId] = useState("");
+
+  useEffect(() => {
+    if (id || scope.status !== "ready" || preferenceAppliedScopeRef.current === scope.scopeKey) return;
+    preferenceAppliedScopeRef.current = scope.scopeKey;
+    const detailed = readPreferences(globalThis.localStorage, scope.scopeKey).detailMode === "detailed";
+    queueMicrotask(() => {
+      setDisplayFull(detailed);
+      setShowSpeciesPicker(detailed);
+      setCatchData((current) => ({
+        ...current,
+        resultKey: detailed && current.resultKey === "released" ? "unspecified" : !detailed && current.resultKey === "unspecified" ? "released" : current.resultKey,
+      }));
+    });
+  }, [id, scope.scopeKey, scope.status]);
+
+  useEffect(() => {
+    manualConditionFieldsRef.current = new Set();
+    automaticConditionsRef.current = {};
+  }, [id]);
 
   useEffect(() => {
     if (!id || !existingCatch || loadedId === id) return;
@@ -169,12 +240,76 @@ function AddCatchPage() {
     let active = true;
     Promise.resolve().then(() => {
       if (!active) return;
+      manualConditionFieldsRef.current = new Set(Object.entries(values.conditionSources ?? {}).filter(([, source]) => source === "manual").map(([field]) => field));
+      for (const [field, value] of Object.entries(values.conditions ?? {})) {
+        if (value !== "" && value !== null && value !== undefined && values.conditionSources?.[field] !== "auto") manualConditionFieldsRef.current.add(field);
+      }
+      automaticConditionsRef.current = Object.fromEntries(Object.entries(values.conditions ?? {}).filter(([field, value]) => value !== "" && value !== null && value !== undefined && values.conditionSources?.[field] === "auto"));
       setCatchData(values);
+      setManualWaterChoice(Boolean(values.waterId || values.locationName));
       setDisplayFull(true);
+      setShowSpeciesPicker(true);
+      setSelectedSpeciesCategoryKey(getPrimarySpeciesCategoryKey(DEFAULT_SPECIES.find((species) => species.key === values.speciesKey)));
       setLoadedId(id);
     });
     return () => { active = false; };
   }, [existingCatch, id, loadedId]);
+
+  useEffect(() => {
+    if (!displayFull) return undefined;
+    const controller = new AbortController();
+    let timer;
+    const coordinates = catchData.coordinates;
+    const nextMoon = calculateMoonPhase(catchData.catchDate, catchData.catchTime);
+    const automatic = nextMoon ? { moonPhase: nextMoon } : {};
+    setCatchData((previous) => {
+      const conditions = replaceAutomaticConditions(
+        previous.conditions,
+        automaticConditionsRef.current,
+        automatic,
+        manualConditionFieldsRef.current,
+      );
+      const conditionSources = { ...(previous.conditionSources ?? {}) };
+      for (const [field, value] of Object.entries(automaticConditionsRef.current)) {
+        if (conditions[field] !== value && !manualConditionFieldsRef.current.has(field)) delete conditionSources[field];
+      }
+      for (const [field, value] of Object.entries(automatic)) {
+        if (!manualConditionFieldsRef.current.has(field) && conditions[field] === value) conditionSources[field] = "auto";
+      }
+      automaticConditionsRef.current = Object.fromEntries(
+        Object.entries(automatic).filter(([field, value]) => !manualConditionFieldsRef.current.has(field) && conditions[field] === value),
+      );
+      return { ...previous, conditions, conditionSources };
+    });
+
+    if (!coordinates || !Number.isFinite(coordinates.latitude) || !Number.isFinite(coordinates.longitude)) {
+      setWeatherStatus({ state: "idle", message: "" });
+      return () => controller.abort();
+    }
+
+    setWeatherStatus({ state: "loading", message: "Načítám počasí pro místo a čas úlovku…" });
+    timer = setTimeout(async () => {
+      try {
+        const values = await fetchCatchWeather(coordinates.latitude, coordinates.longitude, catchData.catchDate, catchData.catchTime, { signal: controller.signal });
+        setCatchData((previous) => {
+          const conditions = replaceAutomaticConditions(previous.conditions, {}, values, manualConditionFieldsRef.current);
+          const conditionSources = { ...(previous.conditionSources ?? {}) };
+          automaticConditionsRef.current = {
+            ...automaticConditionsRef.current,
+            ...Object.fromEntries(Object.entries(values).filter(([field, value]) => !manualConditionFieldsRef.current.has(field) && conditions[field] === value)),
+          };
+          for (const [field, value] of Object.entries(values)) {
+            if (!manualConditionFieldsRef.current.has(field) && conditions[field] === value) conditionSources[field] = "auto";
+          }
+          return { ...previous, conditions, conditionSources };
+        });
+        setWeatherStatus({ state: "loaded", message: "Dostupné počasí bylo doplněno; ruční hodnoty zůstávají beze změny." });
+      } catch (error) {
+        if (!controller.signal.aborted) setWeatherStatus({ state: "error", message: error.message || "Počasí pro tento čas není dostupné. Úlovek lze uložit i bez něj." });
+      }
+    }, 500);
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [catchData.coordinates, catchData.coordinates?.latitude, catchData.coordinates?.longitude, catchData.catchDate, catchData.catchTime, displayFull]);
 
   const handleSave = async () => {
     if (savingRef.current) return;
@@ -193,9 +328,13 @@ function AddCatchPage() {
     setFormError("");
     try {
       const record = createCatchRecord(catchData, selected, DEFAULT_METHODS, existingCatch, DEFAULT_BAITS);
+      let progressionEventIds = [];
       if (existingCatch) await updateCatch(record);
-      else await createCatch(record);
-      navigate(`/catch/${record.id}`, { replace: true, state: { saved: true } });
+      else progressionEventIds = (await createCatch(record))?.progressionEventIds ?? [];
+      navigate(existingCatch ? `/catch/${record.id}` : `/catch/${record.id}/reward`, {
+        replace: true,
+        state: existingCatch ? { saved: true } : { rewardEventIds: progressionEventIds },
+      });
     } catch (error) {
       setFormError(error.message || "Úlovek se nepodařilo uložit. Zkus to znovu.");
     } finally {
@@ -209,27 +348,74 @@ function AddCatchPage() {
     (species) => catchData.speciesKey === species.key,
   );
   const [speciesSearch, setSpeciesSearch] = useState("");
-  const normalizedSearch = normalizeText(speciesSearch);
-  const filteredSpecies = visibleSpecies.filter((species) => {
-    return normalizeText(species.label).includes(normalizedSearch);
-  });
-
-  const selectedCategory = SPECIES_CATEGORIES.find(
-    (category) => category.key === expandedCategoryKey,
-  );
+  const filteredSpecies = filterSpeciesCatalog(DEFAULT_SPECIES, speciesSearch);
+  const filteredPinnedSpecies = quickSpeciesIds
+    .map((speciesId) => filteredSpecies.find((species) => species.key === speciesId))
+    .filter(Boolean);
+  const filteredUnpinnedSpecies = filteredSpecies.filter((species) => !quickSpeciesIds.includes(species.key));
+  const nearestWater = findNearestSavedWater(catchData.coordinates, availableWaters);
+  const waterSuggestion = !catchData.waterId && !manualWaterChoice && !waterSuggestionDismissed ? nearestWater : null;
+  const selectedSpeciesCategory = getSpeciesCategory(selectedSpeciesCategoryKey);
+  const categorySpecies = selectedSpeciesCategoryKey
+    ? getSpeciesForCategory(selectedSpeciesCategoryKey, filteredSpecies)
+    : [];
 
   const updateCatchData = (field, value) => {
     setFormError("");
-    setCatchData((prev) => ({
-      ...prev,
-      [field]: value,
+    setCatchData((previous) => updateCatchFormField(previous, field, value));
+  };
+
+  const togglePinnedSpecies = (speciesId) => {
+    if (scope.status !== "ready" || !scope.scopeKey) {
+      setQuickSpeciesError("Načítám profil. Zkus připnutí za okamžik znovu.");
+      return;
+    }
+    const validIds = new Set(DEFAULT_SPECIES.map((species) => species.key));
+    const result = toggleQuickSpecies(quickSpeciesIds, speciesId, validIds);
+    if (result.error) {
+      setQuickSpeciesError(result.error);
+      return;
+    }
+    try {
+      const saved = saveQuickSpeciesIds(scope.scopeKey, result.ids, globalThis.localStorage, validIds);
+      setQuickSpeciesOverride({ scopeKey: scope.scopeKey, ids: saved });
+      setQuickSpeciesError("");
+    } catch (error) {
+      setQuickSpeciesError(error.message || "Rychlý výběr se nepodařilo uložit.");
+    }
+  };
+
+  const updateConditions = (field, value) => {
+    setFormError("");
+    manualConditionFieldsRef.current.add(field);
+    setCatchData((previous) => ({
+      ...previous,
+      conditions: { ...(previous.conditions ?? {}), [field]: value },
+      conditionSources: { ...(previous.conditionSources ?? {}), [field]: "manual" },
     }));
+  };
+
+  const removeSelectedSpecies = () => {
+    updateCatchData("speciesKey", "");
+    setSelectedSpeciesCategoryKey("");
+    setSpeciesSearch("");
+    setShowSpeciesPicker(true);
+  };
+
+  const applyWaterSuggestion = () => {
+    if (!waterSuggestion) return;
+    setManualWaterChoice(true);
+    updateCatchData("waterId", waterSuggestion.water.id);
+    updateCatchData("locationName", waterSuggestion.water.name);
+    updateCatchData("waterNumber", String(waterSuggestion.water.waterNumber || "").replace(/\D/g, ""));
+    setWaterSuggestionDismissed(true);
   };
 
   const updateGpsLocation = (value, coordinates = null) => {
     setFormError("");
     setGpsMessage("");
-    setCatchData((previous) => ({ ...previous, gpsLocation: value, coordinates }));
+    const parsedCoordinates = coordinates ?? parseCoordinateText(value);
+    setCatchData((previous) => ({ ...previous, gpsLocation: value, coordinates: parsedCoordinates }));
   };
 
   const useCurrentLocation = () => {
@@ -258,35 +444,44 @@ function AddCatchPage() {
   };
 
   if (id && !state.loading && !existingCatch) {
-    return <Layout><section className="add-catch-section"><h1>Úlovek nenalezen</h1><p>Tento úlovek mohl být smazán nebo není v místním deníku dostupný.</p><Link to="/">Zpět do deníku</Link></section></Layout>;
+    return <Layout><section className="add-catch-section"><h1>Úlovek nenalezen</h1><p>Tento úlovek mohl být smazán nebo není v místním deníku dostupný.</p><Link to="/journal">Zpět do deníku</Link></section></Layout>;
   }
 
   return (
     <Layout>
       <div className="add-catch-page">
         <header className="add-catch-header">
-          <h1>{id ? "Upravit úlovek" : "Nový úlovek"}</h1>
-
-          <p>Přidej svůj úlovek</p>
+          <Link className="add-catch-back" to={id ? `/catch/${id}` : "/journal"} aria-label={id ? "Zpět na detail úlovku" : "Zpět do deníku"}>←</Link>
+          <div>
+            <h1>{id ? "Upravit úlovek" : "Nový úlovek"}</h1>
+            <p>Rychlý zápis, nebo podrobnosti podle potřeby.</p>
+          </div>
         </header>
 
         <section className="add-catch-mode-switch">
           <button
+            type="button"
             className={
               !displayFull ? "mode-button mode-button-active" : "mode-button"
             }
-            onClick={() => setDisplayFull(false)}
+            onClick={() => {
+              setDisplayFull(false);
+              setShowSpeciesPicker(false);
+              setSpeciesSearch("");
+              if (catchData.resultKey === "unspecified") updateCatchData("resultKey", "released");
+            }}
           >
-            ⚡ Rychle
+            Rychle (3 kroky)
           </button>
 
           <button
+            type="button"
             className={
               displayFull ? "mode-button mode-button-active" : "mode-button"
             }
-            onClick={() => setDisplayFull(true)}
+            onClick={() => { setDisplayFull(true); setShowSpeciesPicker(true); setSelectedSpeciesCategoryKey(""); setSpeciesSearch(""); }}
           >
-            📋 Plný záznam
+            Plný záznam
           </button>
         </section>
 
@@ -320,140 +515,137 @@ function AddCatchPage() {
             </>
           ) : (
             <button onClick={handleAddPhoto} className="photo-upload-button">
-              <span>📷</span>
-              <span>Přidat fotku</span>
+              <span className="photo-upload-icon" aria-hidden="true">⌑</span>
+              <span>Přidat fotku{existingCatch ? "" : " · +5 XP"}</span>
             </button>
           )}
         </section>
         <section className="add-catch-section">
-          <h2>🐟 Druh ryby *</h2>
+          <h2>Druh ryby *</h2>
 
           {selectedSpecies ? (
             <div className="selected-species">
-              <span className="selected-species-title">Vybraná ryba</span>
-
               <div className="selected-species-content">
                 <span className="selected-species-name">
                   {selectedSpecies.label}
                 </span>
-
-                <button
-                  className="selected-species-button"
-                  onClick={() => {
-                    updateCatchData("speciesKey", "");
-
-                    setExpandedCategoryKey(null);
-                  }}
-                >
+                {selectedSpecies.latinName && <span className="selected-species-latin">{selectedSpecies.latinName}</span>}
+              </div>
+              <div className="selected-species-actions">
+                <button className="selected-species-button" type="button" onClick={() => { setShowSpeciesPicker(true); setSpeciesSearch(""); if (displayFull && !selectedSpeciesCategoryKey) setSelectedSpeciesCategoryKey(getPrimarySpeciesCategoryKey(selectedSpecies)); }}>
                   ✏️ Změnit
+                </button>
+                <button className="selected-species-remove" type="button" onClick={removeSelectedSpecies} aria-label={`Odebrat druh ${selectedSpecies.label}`}>
+                  × Odebrat
                 </button>
               </div>
             </div>
+          ) : displayFull ? (
+            <p className="species-picker-hint">Vyber druh z kompletního katalogu.</p>
           ) : (
             <>
-              {expandedCategoryKey === null && (
-                <div className="species-list">
-                  {SPECIES_CATEGORIES.map((category) => {
-                    return (
-                      <div key={category.key} className="species-category">
-                        <button
-                          className="species-category-header"
-                          onClick={() => {
-                            setExpandedCategoryKey(
-                              expandedCategoryKey === category.key
-                                ? null
-                                : category.key,
-                            );
-                          }}
-                        >
-                          <div className="species-category-label">
-                            <span>{category.label}</span>
-                          </div>
-
-                          <span className="species-category-arrow">›</span>
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {expandedCategoryKey !== null && (
-                <div className="species-selection">
-                  <div className="species-selection-header">
-                    <div className="species-selection-title">
-                      {selectedCategory.label}
-                    </div>
-                    <button
-                      className="species-back-button"
-                      onClick={() => {
-                        setExpandedCategoryKey(null);
-                        setSpeciesSearch("");
-                      }}
-                    >
-                      ← Kategorie
-                    </button>
-                  </div>
-
-                  <div className="species-search">
-                    <input
-                      className="species-search-input"
-                      value={speciesSearch}
-                      onChange={(e) => setSpeciesSearch(e.target.value)}
-                      type="text"
-                      placeholder="Hledat rybu..."
-                    />
-
-                    {speciesSearch && (
-                      <button
-                        className="species-search-clear"
-                        onClick={() => setSpeciesSearch("")}
-                      >
-                        ✕
-                      </button>
-                    )}
-                  </div>
-
-                  {filteredSpecies.length === 0 ? (
-                    <div className="species-empty">
-                      <span className="species-empty-icon">🐟</span>
-
-                      <p className="species-empty-title">
-                        Žádná ryba nebyla nalezena
-                      </p>
-
-                      <p className="species-empty-text">
-                        Zkus jiný název nebo vymaž hledání.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="species-items">
-                      {filteredSpecies.map((species) => (
-                        <button
-                          key={species.key}
-                          className="species-item"
-                          onClick={() => {
-                            setSpeciesSearch("");
-                            updateCatchData("speciesKey", species.key);
-
-                            setExpandedCategoryKey(null);
-                          }}
-                        >
-                          <span className="species-item-label">
-                            {species.label}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
+              <div className="quick-species-grid">
+                {quickSpeciesIds.map((speciesId) => DEFAULT_SPECIES.find((species) => species.key === speciesId)).filter(Boolean).map((species) => (
+                  <button
+                    className="quick-species-button"
+                    key={species.key}
+                    type="button"
+                    aria-label={`Vybrat ${species.label}`}
+                    onClick={() => updateCatchData("speciesKey", species.key)}
+                  ><span className="quick-species-fish" aria-hidden="true">◀</span>{species.label}</button>
+                ))}
+                <button className="quick-species-button quick-species-other" type="button" onClick={() => { setShowSpeciesPicker(true); setSpeciesSearch(""); }}>
+                  <span aria-hidden="true">＋</span>Upravit +
+                </button>
+              </div>
+              {quickSpeciesIds.length === 0 && <p className="species-picker-hint">Připni si oblíbené druhy, nebo vyber libovolný z katalogu.</p>}
             </>
           )}
+
+          {displayFull && showSpeciesPicker ? <div className="species-selection">
+            {!selectedSpeciesCategoryKey ? (
+              <div className="species-list species-category-list" aria-label="Kategorie druhů ryb">
+                {SPECIES_CATEGORIES.map((category) => <button
+                  className="species-category"
+                  type="button"
+                  key={category.key}
+                  aria-label={`Otevřít kategorii ${category.label.replace(/^\S+\s/, "")}`}
+                  onClick={() => { setSelectedSpeciesCategoryKey(category.key); setSpeciesSearch(""); }}
+                >
+                  <span>{category.label}</span>
+                  <span className="species-category-arrow" aria-hidden="true">›</span>
+                </button>)}
+              </div>
+            ) : <>
+            <div className="species-selection-header">
+              <div className="species-selection-title">{selectedSpeciesCategory?.label}</div>
+              <button className="species-back-button" type="button" onClick={() => { setSelectedSpeciesCategoryKey(""); setSpeciesSearch(""); }}>← Kategorie</button>
+            </div>
+            <div className="species-search">
+              <input
+                className="species-search-input"
+                aria-label="Hledat druh podle českého nebo latinského názvu"
+                value={speciesSearch}
+                onChange={(e) => setSpeciesSearch(e.target.value)}
+                type="search"
+                placeholder="Hledat druh nebo latinský název..."
+              />
+              {speciesSearch && <button className="species-search-clear" type="button" aria-label="Vymazat hledání" onClick={() => setSpeciesSearch("")}>✕</button>}
+            </div>
+            {categorySpecies.length === 0 ? (
+              <div className="species-empty"><span className="species-empty-icon">🐟</span><p className="species-empty-title">Žádná ryba nebyla nalezena</p><p className="species-empty-text">Zkus jiný název nebo vymaž hledání.</p></div>
+            ) : (
+              <div className="species-items species-items-full" aria-label={`Druhy v kategorii ${selectedSpeciesCategory?.label}`}>
+                {categorySpecies.map((species) => (
+                  <button className={species.key === catchData.speciesKey ? "species-picker-select species-picker-select-full species-picker-row-selected" : "species-picker-select species-picker-select-full"} key={species.key} type="button" aria-pressed={species.key === catchData.speciesKey} onClick={() => { updateCatchData("speciesKey", species.key); setSpeciesSearch(""); setShowSpeciesPicker(false); }}>
+                    <span className="species-item-label">{species.label}</span>
+                    {species.latinName && <span className="species-picker-latin">{species.latinName}</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+            </>}
+          </div> : showSpeciesPicker && <div className="species-selection">
+            <div className="species-selection-header">
+              <div className="species-selection-title">Všechny druhy</div>
+              <button className="species-back-button" type="button" onClick={() => { setShowSpeciesPicker(false); setSpeciesSearch(""); setQuickSpeciesError(""); }}>Zavřít</button>
+            </div>
+            <div className="species-search">
+              <input
+                className="species-search-input"
+                aria-label="Hledat druh podle českého nebo latinského názvu"
+                value={speciesSearch}
+                onChange={(e) => setSpeciesSearch(e.target.value)}
+                type="search"
+                placeholder="Hledat druh nebo latinský název..."
+              />
+              {speciesSearch && <button className="species-search-clear" type="button" aria-label="Vymazat hledání" onClick={() => setSpeciesSearch("")}>✕</button>}
+            </div>
+            {quickSpeciesError && <p className="species-preference-error" role="alert">{quickSpeciesError}</p>}
+            {filteredSpecies.length === 0 ? (
+              <div className="species-empty"><span className="species-empty-icon">🐟</span><p className="species-empty-title">Žádná ryba nebyla nalezena</p><p className="species-empty-text">Zkus jiný název nebo vymaž hledání.</p></div>
+            ) : (
+              <div className="quick-species-management">
+                {filteredPinnedSpecies.length > 0 && <>
+                  <h3 className="species-management-heading">Připnuté</h3>
+                  <div className="species-items" aria-label="Připnuté druhy ryb">
+                    {filteredPinnedSpecies.map((species) => <SpeciesManagementRow key={species.key} species={species} selected={species.key === catchData.speciesKey} pinned onSelect={() => { updateCatchData("speciesKey", species.key); setSpeciesSearch(""); setQuickSpeciesError(""); setShowSpeciesPicker(false); }} onTogglePin={() => togglePinnedSpecies(species.key)} />)}
+                  </div>
+                </>}
+                {filteredUnpinnedSpecies.length > 0 && <>
+                  <h3 className="species-management-heading">Všechny druhy</h3>
+                  <div className="species-items" aria-label="Všechny druhy ryb">
+                    {filteredUnpinnedSpecies.map((species) => <SpeciesManagementRow key={species.key} species={species} selected={species.key === catchData.speciesKey} pinned={false} onSelect={() => { updateCatchData("speciesKey", species.key); setSpeciesSearch(""); setQuickSpeciesError(""); setShowSpeciesPicker(false); }} onTogglePin={() => togglePinnedSpecies(species.key)} />)}
+                  </div>
+                </>}
+              </div>
+            )}
+            <p className="species-preference-count">Rychlý výběr: {quickSpeciesIds.length}/{MAX_QUICK_SPECIES}</p>
+          </div>}
         </section>
 
         <section className="add-catch-section">
-          <h2>📏 Míry</h2>
+          <h2>Míry</h2>
 
           <div
             className={
@@ -478,6 +670,10 @@ function AddCatchPage() {
                   updateCatchData("weightKg", value);
                 }}
               />
+              {catchData.weightSource === "estimated" && String(catchData.weightKg).trim() !== ""
+                && Number.isFinite(Number(String(catchData.weightKg).replace(",", ".")))
+                ? <span className="weight-estimate-note">Odhad podle délky a druhu</span>
+                : <span className="weight-estimate-note" aria-hidden="true">&nbsp;</span>}
             </label>
 
             <label className="input-group">
@@ -495,6 +691,7 @@ function AddCatchPage() {
                   updateCatchData("lengthCm", value);
                 }}
               />
+              <span className="weight-estimate-note" aria-hidden="true">&nbsp;</span>
             </label>
 
             {displayFull && (
@@ -537,10 +734,30 @@ function AddCatchPage() {
           </div>
         </section>
 
-        <section className="add-catch-section">
-          <h2>📍 Místo a čas</h2>
+        {displayFull && <section className="add-catch-section">
+          <h2>Místo a čas</h2>
 
           <div className="measurements-grid">
+            <label className="input-group input-group-full">
+              <span>Uložený revír</span>
+              <select aria-label="Vybrat uložený revír" value={catchData.waterId || ""} onChange={(event) => {
+                const water = availableWaters.find((item) => item.id === event.target.value);
+                setManualWaterChoice(true);
+                updateCatchData("waterId", water?.id || "");
+                if (water) {
+                  updateCatchData("locationName", water.name);
+                  const numericWaterNumber = String(water.waterNumber || "").replace(/\D/g, "");
+                  updateCatchData("waterNumber", numericWaterNumber || "");
+                }
+                setWaterSuggestionDismissed(true);
+              }}>
+                <option value="">Bez uloženého revíru / vlastní lokalita</option>
+                {catchData.waterId && !availableWaters.some((item) => item.id === catchData.waterId) && <option value={catchData.waterId}>Dříve vybraný revír (nedostupný)</option>}
+                {availableWaters.map((water) => <option value={water.id} key={water.id}>{water.name}{water.waterNumber ? ` · ${water.waterNumber}` : ""}</option>)}
+              </select>
+              {watersError && <span className="field-error" role="alert">{watersError}</span>}
+              {!availableWaters.length && !watersError && <span><Link to="/waters/new">Přidat revír →</Link></span>}
+            </label>
             <label className="input-group input-group-full">
               <span>Revír / lokalita</span>
 
@@ -548,9 +765,7 @@ function AddCatchPage() {
                 type="text"
                 placeholder="Např. Lipno - sever"
                 value={catchData.locationName}
-                onChange={(e) =>
-                  updateCatchData("locationName", e.target.value)
-                }
+                onChange={(e) => { setManualWaterChoice(true); setWaterSuggestionDismissed(true); updateCatchData("locationName", e.target.value); updateCatchData("waterId", ""); }}
               />
             </label>
 
@@ -567,6 +782,7 @@ function AddCatchPage() {
                   onChange={(e) => {
                     const value = e.target.value;
 
+                    setManualWaterChoice(true);
                     updateCatchData("waterNumber", value);
                   }}
                 />
@@ -603,6 +819,7 @@ function AddCatchPage() {
                     onChange={(e) => updateGpsLocation(e.target.value)}
                   />
                   <span className="gps-actions"><button type="button" className="photo-action-button" onClick={useCurrentLocation} disabled={gpsLoading}>{gpsLoading ? "Zjišťuji polohu…" : "Použít aktuální polohu"}</button>{catchData.gpsLocation && <button type="button" className="photo-action-button" onClick={() => updateGpsLocation("")}>Odstranit GPS</button>}</span>
+                  {waterSuggestion && <div className="water-suggestion" role="status"><span>Nejbližší uložený revír: <strong>{waterSuggestion.water.name}</strong>{waterSuggestion.water.waterNumber ? ` · ${waterSuggestion.water.waterNumber}` : ""} ({waterSuggestion.distanceMeters} m). Návrh podle GPS může být nepřesný.</span><button type="button" onClick={applyWaterSuggestion}>Použít</button><button type="button" aria-label="Skrýt návrh revíru" onClick={() => setWaterSuggestionDismissed(true)}>×</button></div>}
                   {gpsMessage && <small className="gps-message" role="status">{gpsMessage}</small>}
                 </label>
 
@@ -643,12 +860,12 @@ function AddCatchPage() {
               </>
             )}
           </div>
-        </section>
+        </section>}
 
         {displayFull && (
           <>
             <section className="add-catch-section">
-              <h2>🎣 Metoda lovu</h2>
+              <h2>Metoda lovu</h2>
 
               <div className="fishing-methods-grid">
                 {DEFAULT_METHODS.map((method) => {
@@ -681,15 +898,15 @@ function AddCatchPage() {
             </section>
 
             <section className="add-catch-section">
-              <h2>🪱 Nástrahy</h2>
-              {DEFAULT_BAITS.map((bait) => <label key={bait.key} className="favorite-checkbox"><input type="checkbox" checked={catchData.baits.includes(bait.key)} onChange={(event) => updateCatchData("baits", event.target.checked ? [...catchData.baits, bait.key] : catchData.baits.filter((key) => key !== bait.key))} />{bait.label}</label>)}
+              <h2>Nástrahy</h2>
+              <div className="bait-options">{DEFAULT_BAITS.map((bait) => <label key={bait.key} className={catchData.baits.includes(bait.key) ? "bait-chip bait-chip-active" : "bait-chip"}><input type="checkbox" checked={catchData.baits.includes(bait.key)} onChange={(event) => updateCatchData("baits", event.target.checked ? [...catchData.baits, bait.key] : catchData.baits.filter((key) => key !== bait.key))} />{bait.label}</label>)}</div>
             </section>
 
           </>
         )}
 
-        <section className="add-catch-section">
-          <h2>🗺️ Výprava</h2>
+        {displayFull && <section className="add-catch-section">
+          <h2>Výprava</h2>
           <label className="input-group">
             <span>Zařadit úlovek k výpravě</span>
             <select value={catchData.tripId} onChange={(event) => updateCatchData("tripId", event.target.value)} disabled={tripState.loading}>
@@ -698,10 +915,49 @@ function AddCatchPage() {
             </select>
           </label>
           {tripState.error && <p role="status">Výpravy se nepodařilo načíst; úlovek lze uložit samostatně.</p>}
-        </section>
+        </section>}
+
+        {displayFull && <section className="add-catch-section">
+          <h2>Podmínky</h2>
+          {weatherStatus.message && <p className={`catch-weather-status catch-weather-status-${weatherStatus.state}`} role="status">{weatherStatus.message}</p>}
+          <div className="measurements-grid conditions-grid">
+            <label className="input-group">
+              <span>Vzduch (°C)</span>
+              <input type="text" inputMode="decimal" placeholder="Např. 11" value={catchData.conditions?.airTempC ?? ""} onChange={(event) => updateConditions("airTempC", event.target.value)} />
+            </label>
+            <label className="input-group">
+              <span>Voda (°C)</span>
+              <input type="text" inputMode="decimal" placeholder="Např. 12" value={catchData.conditions?.waterTempC ?? ""} onChange={(event) => updateConditions("waterTempC", event.target.value)} />
+            </label>
+            <label className="input-group">
+              <span>Tlak (hPa)</span>
+              <input type="text" inputMode="decimal" placeholder="Např. 1018" value={catchData.conditions?.pressureHpa ?? ""} onChange={(event) => updateConditions("pressureHpa", event.target.value)} />
+            </label>
+            <label className="input-group">
+              <span>Vítr (km/h)</span>
+              <input type="text" inputMode="decimal" placeholder="Např. 9" value={catchData.conditions?.windKmh ?? ""} onChange={(event) => updateConditions("windKmh", event.target.value)} />
+            </label>
+          </div>
+          <div className="conditions-moon">
+            <h3>Fáze měsíce</h3>
+            <div className="conditions-moon-grid" role="group" aria-label="Fáze měsíce">
+              {MOON_PHASES.map(([key, label]) => (
+                <button
+                  aria-pressed={catchData.conditions?.moonPhase === key}
+                  className={catchData.conditions?.moonPhase === key ? "conditions-moon-button conditions-moon-button-active" : "conditions-moon-button"}
+                  key={key}
+                  type="button"
+                  onClick={() => updateConditions("moonPhase", catchData.conditions?.moonPhase === key ? "" : key)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </section>}
 
         <section className="add-catch-section">
-          <h2>🔁 Výsledek</h2>
+          <h2>Výsledek</h2>
           <div className="result-buttons">
             <button
               className={
@@ -711,7 +967,7 @@ function AddCatchPage() {
                 updateCatchData("resultKey", "released");
               }}
             >
-              ↩️ Puštěno zpět
+              Puštěno zpět
             </button>
 
             <button
@@ -724,18 +980,19 @@ function AddCatchPage() {
                 updateCatchData("resultKey", "kept");
               }}
             >
-              🧊 Necháno
+              Necháno
             </button>
-            <button
+            {displayFull && <button
               className={catchData.resultKey === "unspecified" ? "result-button button-active" : "result-button"}
               onClick={() => updateCatchData("resultKey", "unspecified")}
             >
               Neuvedeno
-            </button>
+            </button>}
           </div>
         </section>
 
         {displayFull && (
+          <>
           <section className="add-catch-section">
             <h2>📝 Poznámky</h2>
 
@@ -747,12 +1004,57 @@ function AddCatchPage() {
               <span>⭐ Označit jako oblíbený</span>
             </label>
           </section>
+
+          <section className="add-catch-section" aria-labelledby="catch-privacy-title">
+            <h2 id="catch-privacy-title">🔒 Soukromí úlovku</h2>
+            <label className="input-group">
+              <span>Viditelnost úlovku</span>
+              <select
+                value={catchData.privacy?.visibility ?? "private"}
+                onChange={(event) => updateCatchData("privacy", { ...(catchData.privacy ?? {}), visibility: event.target.value })}
+              >
+                <option value="private">Soukromý</option>
+                <option value="public">Veřejný</option>
+              </select>
+            </label>
+            <label className="input-group">
+              <span>Viditelnost fotografie</span>
+              <select
+                value={catchData.privacy?.photoVisibility ?? "private"}
+                onChange={(event) => updateCatchData("privacy", { ...(catchData.privacy ?? {}), photoVisibility: event.target.value })}
+              >
+                <option value="private">Soukromá</option>
+                <option value="public">Veřejná</option>
+              </select>
+            </label>
+            <label className="input-group">
+              <span>Přesnost polohy</span>
+              <select
+                value={catchData.privacy?.privateSpot ? "none" : (catchData.privacy?.locationPrecision ?? "none")}
+                disabled={catchData.privacy?.privateSpot}
+                onChange={(event) => updateCatchData("privacy", { ...(catchData.privacy ?? {}), locationPrecision: event.target.value })}
+              >
+                <option value="none">Nezveřejňovat polohu</option>
+                <option value="approximate">Přibližná oblast</option>
+                <option value="exact">Přesná poloha</option>
+              </select>
+            </label>
+            <label className="favorite-checkbox">
+              <input
+                type="checkbox"
+                checked={catchData.privacy?.privateSpot ?? true}
+                onChange={(event) => updateCatchData("privacy", { ...(catchData.privacy ?? {}), privateSpot: event.target.checked })}
+              />
+              <span>Považovat místo za soukromé (vždy skryje polohu)</span>
+            </label>
+          </section>
+          </>
         )}
 
         {formError && <p role="alert" className="catch-form-error">{formError}</p>}
         {state.error && <p role="alert" className="catch-form-error">{state.error}</p>}
-        {id && state.loading && <p>Načítám úlovek…</p>}
-        <button type="button" className="save-catch-button" onClick={handleSave} disabled={saving || photoProcessing || (id && !existingCatch)}>{photoProcessing ? "Připravuji fotografii…" : saving ? "Ukládám…" : id ? "✓ Uložit změny" : "✓ Uložit úlovek"}</button>
+        {id && state.loading && <p className="loading-state" role="status">Načítám úlovek…</p>}
+        <button type="button" className="save-catch-button" onClick={handleSave} disabled={saving || photoProcessing || (id && !existingCatch)}>{photoProcessing ? "Připravuji fotografii…" : saving ? "Ukládám…" : id ? "Uložit změny" : "Uložit úlovek"}</button>
       </div>
     </Layout>
   );

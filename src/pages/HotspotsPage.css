@@ -1,0 +1,263 @@
+.hotspots-page {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-5) var(--space-5) calc(var(--space-7) + env(safe-area-inset-bottom));
+}
+
+.hotspots-header {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.hotspots-header h1 {
+  color: var(--text-primary);
+  font-size: var(--font-size-display);
+  font-weight: 900;
+  letter-spacing: -0.8px;
+}
+
+.hotspots-header p {
+  color: var(--text-secondary);
+  font-size: var(--font-size-card);
+}
+
+.hotspots-header > span,
+.hotspots-section-heading span,
+.hotspots-backend-state > span {
+  width: fit-content;
+  color: var(--accent-green);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.hotspots-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-1);
+}
+
+.hotspots-tabs button {
+  min-width: 0;
+  min-height: 52px;
+  border: 0;
+  background: transparent;
+  color: var(--text-disabled);
+  font-size: var(--font-size-card);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.hotspots-tabs button[aria-selected="true"] {
+  background: var(--accent-green-soft);
+  color: var(--accent-green);
+}
+
+.hotspots-tabs button:focus-visible,
+.hotspots-section-heading a:focus-visible,
+.hotspot-main a:focus-visible {
+  outline: 2px solid var(--accent-green);
+  outline-offset: -2px;
+}
+
+.hotspots-section {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-3);
+}
+
+.hotspots-section-heading {
+  display: flex;
+  min-width: 0;
+  align-items: end;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.hotspots-section-heading > div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.hotspots-section-heading h2 {
+  color: var(--text-primary);
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.hotspots-section-heading a,
+.hotspot-main a {
+  color: var(--accent-green);
+  font-size: var(--font-size-sm);
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.hotspots-explanation {
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: 1.45;
+}
+
+.hotspots-list,
+.heatmap-list {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.hotspot-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+}
+
+.hotspot-rank {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: 900;
+}
+
+.hotspot-main {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.hotspot-main > strong,
+.hotspot-main > a {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: var(--font-size-card);
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hotspot-main > span,
+.hotspot-main > small {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hotspot-main > small {
+  color: var(--text-muted);
+}
+
+.hotspot-card > b {
+  color: var(--accent-orange);
+  font-size: var(--font-size-sm);
+  text-align: right;
+}
+
+.heatmap-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+}
+
+.heatmap-row-copy {
+  display: grid;
+  gap: 2px;
+}
+
+.heatmap-row-copy strong {
+  color: var(--text-primary);
+  font-size: var(--font-size-card);
+}
+
+.heatmap-row-copy span,
+.heatmap-row time {
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.heatmap-row time {
+  align-self: start;
+}
+
+.heatmap-meter {
+  grid-column: 1 / -1;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--surface-3);
+}
+
+.heatmap-meter span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent-green), var(--accent-orange));
+}
+
+.hotspots-empty,
+.hotspots-state,
+.hotspots-warning,
+.hotspots-backend-state {
+  padding: var(--space-4);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+}
+
+.hotspots-warning {
+  border-style: solid;
+  color: var(--accent-orange);
+}
+
+.hotspots-state {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.hotspots-state strong,
+.hotspots-backend-state strong {
+  color: var(--text-primary);
+}
+
+.hotspots-backend-state {
+  display: grid;
+  gap: var(--space-1);
+  border-style: solid;
+}
+
+.hotspots-backend-state > span {
+  color: var(--accent-orange);
+}
+
+@media (max-width: 390px) {
+  .hotspots-page {
+    padding-right: var(--space-4);
+    padding-left: var(--space-4);
+  }
+
+  .hotspot-card {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .hotspot-card > b {
+    grid-column: 2;
+    text-align: left;
+  }
+}

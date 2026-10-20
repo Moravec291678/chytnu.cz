@@ -1,6 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildSpeciesAlbum } from "./speciesAlbum.js";
+import {
+  buildLocationCollections,
+  buildSeasonCollections,
+  buildSpeciesAlbum,
+  buildTrophyRecords,
+} from "./speciesAlbum.js";
 
 const catalog = [{ key: "carp", label: "Kapr" }, { key: "pike", label: "Štika" }];
 
@@ -11,6 +16,7 @@ test("album derives empty and discovered species from the catch journal", () => 
   const album = buildSpeciesAlbum([{ speciesKey: "carp", caughtAt: "2026-01-02T00:00:00.000Z", weightKg: null, lengthCm: 50 }], catalog);
   assert.equal(album[0].discovered, true);
   assert.equal(album[0].bestWeightKg, null);
+  assert.equal(album[0].bestWeightCatch, null);
   assert.equal(album[0].bestLengthCm, 50);
   assert.equal(album[1].discovered, false);
 });
@@ -23,6 +29,7 @@ test("duplicate species aggregate count, personal records, and first and last ca
   ], catalog);
   assert.deepEqual(album.map((item) => item.catchCount), [2, 1]);
   assert.equal(album[0].bestWeightKg, 5);
+  assert.equal(album[0].bestWeightCatch.weightKg, 5);
   assert.equal(album[0].bestLengthCm, 60);
   assert.equal(album[0].firstCaughtAt, "2026-01-01T00:00:00.000Z");
   assert.equal(album[0].lastCaughtAt, "2026-03-01T00:00:00.000Z");
@@ -34,4 +41,62 @@ test("album changes deterministically after species edit, delete, restore, or re
   assert.equal(buildSpeciesAlbum([{ ...source[0], speciesKey: "pike" }], catalog)[1].catchCount, 1);
   assert.equal(buildSpeciesAlbum([], catalog)[0].catchCount, 0);
   assert.deepEqual(buildSpeciesAlbum(structuredClone(source), catalog), buildSpeciesAlbum(source, catalog));
+});
+
+test("location collections group actual catches and trips without inventing named waters", () => {
+  const locations = buildLocationCollections(
+    [
+      { locationName: "Řeka", caughtAt: "2026-03-01T12:00:00.000Z" },
+      { locationName: " reka ", caughtAt: "2026-03-02T12:00:00.000Z" },
+      { locationName: "Jezero" },
+      { locationName: "" },
+    ],
+    [
+      { locationName: "REKA", startedAt: "2026-03-03T12:00:00.000Z" },
+      { locationName: "Kanál", startedAt: "2026-03-04T12:00:00.000Z" },
+    ],
+  );
+
+  assert.deepEqual(locations.map(({ name, catchCount, tripCount }) => [name, catchCount, tripCount]), [
+    ["Kanál", 0, 1],
+    ["Řeka", 2, 1],
+    ["Jezero", 1, 0],
+  ]);
+});
+
+test("season collections use local record dates and only include the requested year", () => {
+  const seasons = buildSeasonCollections(
+    [
+      { caughtAt: "2026-06-15T12:00:00.000Z" },
+      { caughtAt: "2026-06-16T12:00:00.000Z" },
+      { caughtAt: "2025-06-15T12:00:00.000Z" },
+      { caughtAt: "not-a-date" },
+    ],
+    [
+      { startedAt: "2026-10-15T12:00:00.000Z" },
+      { startedAt: "2026-10-16T12:00:00.000Z" },
+      { startedAt: "not-a-date" },
+    ],
+    2026,
+  );
+
+  assert.deepEqual(seasons.map(({ key, catchCount, tripCount }) => [key, catchCount, tripCount]), [
+    ["autumn", 0, 2],
+    ["summer", 2, 0],
+  ]);
+});
+
+test("trophy records rank the five heaviest measured catches and respect the requested limit", () => {
+  const catches = [
+    { id: "one", speciesKey: "carp", weightKg: 5 },
+    { id: "two", speciesKey: "carp", weightKg: 4 },
+    { id: "three", speciesKey: "pike", weightKg: 3 },
+    { id: "unmeasured", speciesKey: "pike", weightKg: null },
+  ];
+
+  assert.deepEqual(buildTrophyRecords(catches, catalog, 2).map(({ speciesKey, catch: record }) => [speciesKey, record.weightKg]), [
+    ["carp", 5],
+    ["carp", 4],
+  ]);
+  assert.deepEqual(buildTrophyRecords([], catalog), []);
 });

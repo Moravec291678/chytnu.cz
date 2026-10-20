@@ -1,26 +1,153 @@
 import { Link } from "react-router-dom";
 import Layout from "../shared/layout/Layout";
+import { isMeasuredCatchWeight } from "../features/catches/data/catchWeight.js";
 import { useCatches } from "../features/catches/context/useCatches";
-import { buildSpeciesAlbum } from "../features/species/data/speciesAlbum";
+import { useTrips } from "../features/trips/context/useTrips";
+import {
+  buildLocationCollections,
+  buildSeasonCollections,
+  buildSpeciesAlbum,
+  buildTrophyRecords,
+} from "../features/species/data/speciesAlbum";
+import { useProgression } from "../features/progression/context/progressionContextValue.js";
+import { formatTripCatchCount } from "../features/trips/data/tripModel";
 import { DEFAULT_SPECIES } from "../shared/constants/constants";
 import "./SpeciesAlbumPage.css";
 
+const numberFormat = new Intl.NumberFormat("cs-CZ", { maximumFractionDigits: 2 });
+
 function measurement(value, unit) {
-  return Number.isFinite(value) ? `${value} ${unit}` : "Neuvedeno";
+  return Number.isFinite(value) ? `${numberFormat.format(value)} ${unit}` : "Neuvedeno";
+}
+
+function countLabel(count, one, few, many) {
+  if (count === 1) return `${count} ${one}`;
+  if (count >= 2 && count <= 4) return `${count} ${few}`;
+  return `${count} ${many}`;
 }
 
 function SpeciesAlbumPage() {
-  const { state } = useCatches();
-  const album = buildSpeciesAlbum(state.catches, DEFAULT_SPECIES);
+  const { state: catchState, refresh: refreshCatches } = useCatches();
+  const { state: tripState, refresh: refreshTrips } = useTrips();
+  const catches = catchState.catches ?? [];
+  const trips = tripState.trips ?? [];
+  const { summary: progression, loading: progressionLoading, error: progressionError } = useProgression();
+  const masteryBySpecies = new Map(progression.mastery.map((item) => [item.speciesKey, item]));
+  const album = buildSpeciesAlbum(catches, DEFAULT_SPECIES).map((item) => ({
+    ...item, discovered: item.discovered || (masteryBySpecies.get(item.key)?.level ?? 0) > 0,
+  }));
   const discovered = album.filter((item) => item.discovered).length;
+  const locations = buildLocationCollections(catches, trips);
+  const seasons = buildSeasonCollections(catches, trips);
+  const trophies = buildTrophyRecords(catches, DEFAULT_SPECIES);
+  const yearRecord = catches
+    .filter((record) => isMeasuredCatchWeight(record) && new Date(record.caughtAt).getFullYear() === new Date().getFullYear())
+    .sort((a, b) => b.weightKg - a.weightKg)[0];
+  const isLoading = catchState.loading || tripState.loading || progressionLoading;
+  const errors = [catchState.error, tripState.error, progressionError].filter(Boolean);
+
+  const retry = () => {
+    void Promise.all([refreshCatches(), refreshTrips()]);
+  };
+
   return <Layout><div className="album-page">
-    <header className="album-header"><Link to="/profile">← Profil</Link><h1>Druhové album</h1><p>{discovered} z {album.length} druhů v osobním deníku</p></header>
-    {state.loading ? <p>Načítám album…</p> : <div className="album-grid">{album.map((species) => species.discovered
-      ? <Link className="album-card album-card--discovered" to={`/species/${species.key}`} key={species.key}>
-        <span className="album-fish" aria-hidden="true">🐟</span><strong>{species.label}</strong><small>{species.latinName}</small>
-        <span>{species.catchCount}× zaznamenáno</span><span>Rekord: {measurement(species.bestWeightKg, "kg")} · {measurement(species.bestLengthCm, "cm")}</span>
-      </Link>
-      : <article className="album-card album-card--locked" key={species.key}><span className="album-fish" aria-hidden="true">○</span><strong>{species.label}</strong><small>{species.latinName}</small><span>Zatím bez úlovku</span></article>)}</div>}
+    <header className="album-header">
+      <Link to="/profile">← Profil</Link>
+      <div className="album-heading">
+        <div><p className="album-eyebrow">TVŮJ RYBÁŘSKÝ DENÍK</p><h1>Sbírky</h1></div>
+        <span className="album-total">{discovered}<span>/{album.length}</span></span>
+      </div>
+      <p>Druhy, místa a osobní rekordy zapsané v deníku.</p>
+    </header>
+
+    {isLoading ? <p className="album-status" role="status">Načítám tvoje sbírky…</p> : errors.length
+      ? <section className="album-error" role="alert">
+        <h2>Data sbírek se nepodařilo načíst</h2>
+        {errors.map((error, index) => <p key={`${index}-${error}`}>{error}</p>)}
+        <button type="button" onClick={retry}>Zkusit znovu</button>
+      </section>
+      : <>
+        <section className="album-section" aria-labelledby="album-species-title">
+          <div className="album-section-heading">
+            <div><p className="album-eyebrow">01 · OBJEVENÉ DRUHY</p><h2 id="album-species-title">Druhové album</h2></div>
+            <span>{discovered} z {album.length}</span>
+          </div>
+          {discovered === 0 && <p className="album-empty-intro">První úlovek odemkne kartu druhu. Dosavadní záznamy se tu zobrazí automaticky.</p>}
+          <div className="album-grid">{album.map((species) => {
+            if (!species.discovered) {
+              return <article className="album-card album-card--locked" aria-label="Neobjevený druh" key={species.key}>
+                <span className="album-fish" aria-hidden="true">?</span>
+                <span className="album-locked-label">Neobjeveno</span>
+                <span className="album-lock-mark" aria-hidden="true">◇</span>
+              </article>;
+            }
+            const stars = masteryBySpecies.get(species.key)?.stars ?? 1;
+            return <Link className="album-card album-card--discovered" to={`/species/${species.key}`} key={species.key}>
+              <span className="album-fish" aria-hidden="true">🐟</span>
+              <strong>{species.label}</strong>
+              <span className="album-stars" aria-label={`${stars} ${stars === 1 ? "hvězda" : "hvězdy"} mastery`}>
+                {"★".repeat(stars)}<span>{"☆".repeat(Math.max(0, 5 - stars))}</span>
+              </span>
+              <span>{formatTripCatchCount(species.catchCount)}</span>
+              <span className="album-record">Rekord {measurement(species.bestWeightKg, "kg")}</span>
+            </Link>;
+          })}</div>
+        </section>
+
+        <section className="album-section" aria-labelledby="album-locations-title">
+          <div className="album-section-heading">
+            <div><p className="album-eyebrow">02 · VLASTNÍ ZÁZNAMY</p><h2 id="album-locations-title">Místa z deníku</h2></div>
+            <span>{locations.length}</span>
+          </div>
+          {locations.length
+            ? <div className="album-list">{locations.map((location) => <article className="album-list-card" key={location.key}>
+              <span className="album-list-icon" aria-hidden="true">⌖</span>
+              <div><h3>{location.name}</h3><p>
+                {location.catchCount > 0 && <span>{formatTripCatchCount(location.catchCount)}</span>}
+                {location.catchCount > 0 && location.tripCount > 0 && <span aria-hidden="true"> · </span>}
+                {location.tripCount > 0 && <span>{countLabel(location.tripCount, "výprava", "výpravy", "výprav")}</span>}
+              </p></div>
+              <span className="album-list-arrow" aria-hidden="true">›</span>
+            </article>)}</div>
+            : <p className="album-empty">Místa se zobrazí, až je přidáš k úlovku nebo výpravě.</p>}
+        </section>
+
+        <section className="album-section" aria-labelledby="album-seasons-title">
+          <div className="album-section-heading">
+            <div><p className="album-eyebrow">03 · ROK {new Date().getFullYear()}</p><h2 id="album-seasons-title">Sezónní přehled</h2></div>
+            <span>{seasons.length}</span>
+          </div>
+          {seasons.length
+            ? <div className="album-season-grid">{seasons.map((season) => <article className="album-season-card" key={season.key}>
+              <span className={`album-season-mark album-season-mark--${season.key}`} aria-hidden="true">{season.name.slice(0, 1)}</span>
+              <div><h3>{season.name}</h3><p>{season.catchCount > 0 ? formatTripCatchCount(season.catchCount) : "Bez úlovků"}{season.tripCount > 0 ? ` · ${countLabel(season.tripCount, "výprava", "výpravy", "výprav")}` : ""}</p></div>
+            </article>)}</div>
+            : <p className="album-empty">V tomto roce zatím nejsou uložené úlovky ani výpravy.</p>}
+        </section>
+
+        <section className="album-section" aria-labelledby="album-records-title">
+          <div className="album-section-heading">
+            <div><p className="album-eyebrow">04 · Z MĚŘENÝCH ÚLOVKŮ</p><h2 id="album-records-title">Osobní rekordy</h2></div>
+            <span>{trophies.length}</span>
+          </div>
+          {yearRecord && <article className="album-year-record">
+            <span aria-hidden="true">✦</span>
+            <div><p>NEJTĚŽŠÍ ÚLOVEK ROKU {new Date().getFullYear()}</p><strong>{measurement(yearRecord.weightKg, "kg")}</strong><span>{yearRecord.species || "Druh neuveden"}</span></div>
+            {yearRecord.id && <Link to={`/catch/${yearRecord.id}`} aria-label="Otevřít nejtěžší úlovek roku">›</Link>}
+          </article>}
+          {trophies.length
+            ? <div className="album-list album-trophies">{trophies.map((record, index) => {
+              const content = <><span className="album-rank">{String(index + 1).padStart(2, "0")}</span>
+                <div><h3>{record.speciesName}</h3><p>{record.catch.locationName?.trim() || "Místo neuvedeno"}</p></div>
+                <strong>{measurement(record.catch.weightKg, "kg")}</strong></>;
+              return record.catch.id
+                ? <Link className="album-list-card album-trophy-card" to={`/catch/${record.catch.id}`} key={`${record.speciesKey}-${record.catch.id}`}>{content}</Link>
+                : <article className="album-list-card album-trophy-card" key={`${record.speciesKey}-${index}`}>{content}</article>;
+            })}</div>
+            : <p className="album-empty">Rekordy se objeví po uložení hmotnosti úlovku.</p>}
+          {yearRecord && <p className="album-year-note">Roční rekord používá pouze úlovky s uloženým datem a hmotností.</p>}
+        </section>
+      </>}
   </div></Layout>;
 }
 

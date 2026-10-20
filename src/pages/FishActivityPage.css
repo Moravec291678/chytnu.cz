@@ -1,0 +1,165 @@
+.fish-activity-page {
+  display: grid;
+  gap: var(--space-4);
+  width: min(100%, 760px);
+  margin: 0 auto;
+  padding: var(--space-5) var(--space-4) 110px;
+}
+
+.fish-activity-page-back {
+  width: fit-content;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.fish-activity-page > header {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.fish-activity-page > header > span {
+  color: var(--accent-green);
+  font-size: var(--font-size-xs);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.fish-activity-page h1 {
+  color: var(--text-primary);
+  font-size: clamp(28px, 7vw, 38px);
+  font-weight: 900;
+}
+
+.fish-activity-page > header > p,
+.fish-activity-privacy p {
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+}
+
+.fish-activity-page .fish-activity-card {
+  margin: 0;
+}
+
+.fish-activity-privacy {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+}
+
+.fish-activity-personal {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-1);
+}
+
+.fish-activity-personal > span {
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.fish-activity-personal h2 {
+  color: var(--text-primary);
+  font-size: var(--font-size-card);
+}
+
+.fish-activity-personal strong {
+  color: var(--accent-green);
+  font-size: var(--font-size-title);
+}
+
+.fish-activity-personal p {
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.fish-activity-privacy h2 {
+  color: var(--text-primary);
+  font-size: var(--font-size-card);
+  font-weight: 800;
+}
+
+.fish-activity-breakdown {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+
+.fish-activity-breakdown h2 {
+  color: var(--text-primary);
+  font-size: var(--font-size-card);
+  font-weight: 800;
+}
+
+.fish-activity-breakdown > p {
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: 1.55;
+}
+
+.fish-activity-breakdown ul {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fish-activity-factor-heading {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-1) var(--space-3);
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.fish-activity-factor-heading strong {
+  color: var(--text-primary);
+}
+
+.fish-activity-factor-meter {
+  height: 7px;
+  margin-top: 6px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--surface-3);
+}
+
+.fish-activity-factor-meter span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent-green);
+}
+
+.fish-activity-detail-link {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  gap: var(--space-2);
+  width: fit-content;
+  color: var(--accent-green);
+  font-size: var(--font-size-xs);
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.fish-activity-detail-link:focus-visible,
+.fish-activity-page-back:focus-visible {
+  outline: 2px solid var(--accent-green);
+  outline-offset: 3px;
+}
