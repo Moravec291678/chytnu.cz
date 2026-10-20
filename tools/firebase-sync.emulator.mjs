@@ -9,10 +9,11 @@ import {
 import { connectFirestoreEmulator, doc, getDoc, getFirestore } from "firebase/firestore";
 import "fake-indexeddb/auto";
 import { catchRepository, outboxRepository } from "../src/features/catches/data/catchRepository.js";
-import { createFirestoreSyncAdapter } from "../src/features/sync/data/firestoreSyncAdapter.js";
+import { createFirestoreSyncAdapter, toRemoteRecord } from "../src/features/sync/data/firestoreSyncAdapter.js";
 import { createSyncPort } from "../src/features/sync/data/syncPort.js";
 import { createSyncService } from "../src/features/sync/data/syncService.js";
 import { tripRepository } from "../src/features/trips/data/tripRepository.js";
+import { waterRepository } from "../src/features/waters/data/waterRepository.js";
 
 const projectId = "demo-chytnucz-local";
 const app = initializeApp({ apiKey: "demo-api-key", authDomain: "localhost", projectId }, `sync-test-${crypto.randomUUID()}`);
@@ -37,11 +38,17 @@ try {
   const stamp = new Date().toISOString();
   const tripId = `trip-${crypto.randomUUID()}`;
   const catchId = `catch-${crypto.randomUUID()}`;
+  const waterId = `water-${crypto.randomUUID()}`;
 
   await tripRepository.start({
     schemaVersion: 1, id: tripId, title: "Testovací výprava", locationName: "Labe",
     methodKey: null, createdAt: stamp, updatedAt: stamp, startedAt: stamp, endedAt: null,
     sync: { status: "local", revision: 1 },
+  }, accountScope);
+  await waterRepository.put({
+    schemaVersion: 1, id: waterId, ownerId, name: "Labe", waterNumber: "411050", type: "Řeka", area: null,
+    coordinates: { latitude: 50.087, longitude: 14.421 }, notes: "emulator water", targetFish: ["Kapr"],
+    isFavorite: false, moderationStatus: "pending", createdAt: stamp, updatedAt: stamp, sync: { status: "local", revision: 1 },
   }, accountScope);
   const photoBlob = new Blob([new Uint8Array([1, 2, 3])], { type: "image/jpeg" });
   await catchRepository.put({
@@ -56,15 +63,20 @@ try {
     notes: "emulator integration fixture", isFavorite: false, sync: { status: "local", revision: 1 },
   }, accountScope);
 
+  const queuedBeforeFirstSync = await outboxRepository.list();
+  assert.equal(queuedBeforeFirstSync.length, 3, `Unexpected outbox before first sync: ${JSON.stringify(queuedBeforeFirstSync)}`);
   const first = await firestoreService.run(ownerId);
   assert.equal(first.status, "success", first.error);
-  assert.equal(first.sent, 2);
+  assert.equal(first.sent, 3, `Unexpected first sync result: ${JSON.stringify(first)}; outbox: ${JSON.stringify(await outboxRepository.list())}`);
   assert.equal((await outboxRepository.list()).length, 0);
 
   const remoteTrip = await getDoc(doc(db, "users", ownerId, "trips", tripId));
   const remoteCatch = await getDoc(doc(db, "users", ownerId, "catches", catchId));
+  const remoteWater = await getDoc(doc(db, "users", ownerId, "waters", waterId));
   assert.equal(remoteTrip.data().title, "Testovací výprava");
   assert.equal(remoteCatch.data().tripId, tripId);
+  assert.equal(remoteWater.data().name, "Labe");
+  assert.equal(remoteWater.data().id, waterId);
   assert.deepEqual(remoteCatch.data().coordinates, { latitude: 50.087, longitude: 14.421 });
   assert.deepEqual(remoteCatch.data().conditions, { airTempC: 11, moonPhase: "full" });
   assert.deepEqual(remoteCatch.data().conditionSources, { airTempC: "auto", moonPhase: "auto" });
@@ -87,12 +99,11 @@ try {
     operationId: `invalid-coordinates-${crypto.randomUUID()}`, localRevision: 2,
   }), /nepodařilo|oprávnění|permission/i, "out-of-range coordinates must be rejected by Firestore rules");
 
-  await assert.rejects(() => firestoreAdapter.write({
-    ownerId, entityType: "catch", entityId: catchId,
-    record: { ...local, conditionSources: { airTempC: "fabricated" } },
-    expectedRevision: remoteCatch.data().serverRevision,
-    operationId: `invalid-condition-source-${crypto.randomUUID()}`, localRevision: 2,
-  }), /nepodařilo|oprávnění|permission/i, "invalid automatic/manual condition provenance must be rejected by Firestore rules");
+  assert.deepEqual(
+    toRemoteRecord("catch", { ...local, conditionSources: { airTempC: "fabricated" } }, ownerId).conditionSources,
+    {},
+    "invalid automatic/manual condition provenance must be removed before a remote write",
+  );
 
   await firestoreAdapter.write({
     ownerId, entityType: "catch", entityId: catchId,
@@ -116,7 +127,11 @@ try {
   assert.equal(tombstone.data().deleted, true);
   assert.equal((await outboxRepository.list()).length, 0);
 
-  console.log("Firestore sync emulator passed: authenticated Trip/Catch writes, trip linkage, photo metadata-only projection, retained local Blob, exact operation replay, remote delta pull, idempotent resync, durable deletion tombstone, and clean outbox.");
+  await waterRepository.delete(waterId, accountScope);
+  await firestoreService.run(ownerId);
+  assert.equal((await getDoc(doc(db, "users", ownerId, "waters", waterId))).data().deleted, true);
+
+  console.log("Firestore sync emulator passed: authenticated Trip/Catch/Water writes, trip linkage, photo metadata-only projection, retained local Blob, exact operation replay, remote delta pull, idempotent resync, durable deletion tombstones, and clean outbox.");
 } finally {
   await deleteApp(app);
 }

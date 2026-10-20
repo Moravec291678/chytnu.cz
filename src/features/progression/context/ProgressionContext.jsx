@@ -58,11 +58,17 @@ export function ProgressionProvider({ children }) {
     (catchId, eventIds) => buildCatchRewardFromLedger(events, catchId, summary, eventIds),
     [events, summary],
   );
+  const useStreakFreeze = useCallback(async () => {
+    const result = await progressionLedger.useStreakFreeze(scope);
+    const reconciled = await progressionLedger.reconcile(scope);
+    if (activeScopeKey.current === scope.scopeKey) setEvents(reconciled.events);
+    return result;
+  }, [scope]);
   const isChallengeCompleted = useCallback((challengeId, periodKey) => events.some((event) => (
     event.type === "challenge.completed" && event.reasonKey === `challenge.completed:${challengeId}:${periodKey}`
   )), [events]);
   const value = useMemo(() => ({
-    events, summary, loading, error, refresh, rewardForCatch, isChallengeCompleted,
-  }), [events, summary, loading, error, refresh, rewardForCatch, isChallengeCompleted]);
+    events, summary, loading, error, refresh, rewardForCatch, isChallengeCompleted, useStreakFreeze,
+  }), [events, summary, loading, error, refresh, rewardForCatch, isChallengeCompleted, useStreakFreeze]);
   return <ProgressionContext.Provider value={value}>{children}</ProgressionContext.Provider>;
 }

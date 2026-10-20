@@ -7,6 +7,8 @@ import { getCatchOutcomeStats } from "../features/home/utils/profileStats";
 import { getCatchPatterns, getCatchStatistics } from "../features/stats/utils/catchStatistics";
 import { getMonthlyCatchSeries, getPeriodLabel, getPeriodRange } from "../features/stats/utils/statsPeriod.js";
 import { getBiggestCatch } from "../features/home/utils/profileStats";
+import { isFeatureEnabled } from "../shared/config/featureFlags.js";
+import { getEntitlementState } from "../features/entitlements/data/entitlementAccess.js";
 import "./StatsPage.css";
 
 const PERIODS = [
@@ -95,6 +97,7 @@ function StatsPage() {
     patterns.time && { label: "Čas úlovku", value: patterns.time.labels.join(" · "), note: `${patterns.time.count}× z ${patterns.time.sampleCount}` },
     patterns.location && { label: "Místo", value: patterns.location.labels.join(" · "), note: `${patterns.location.count}× z ${patterns.location.sampleCount}` },
     patterns.bait && { label: "Nástraha", value: patterns.bait.labels.join(" · "), note: `${patterns.bait.count}× z ${patterns.bait.sampleCount}` },
+    patterns.month && { label: "Měsíc", value: patterns.month.labels.join(" · "), note: `${patterns.month.count}× z ${patterns.month.sampleCount}` },
     patterns.pressureHpa && { label: "Průměrný tlak", value: `${formatNumber(patterns.pressureHpa.value, 0)} hPa`, note: `${patterns.pressureHpa.sampleCount} měření` },
     patterns.waterTemperatureC && { label: "Teplota vody", value: `${formatNumber(patterns.waterTemperatureC.value)} °C`, note: `${patterns.waterTemperatureC.sampleCount} měření` },
   ].filter(Boolean);
@@ -131,6 +134,7 @@ function StatsPage() {
         {patternItems.length > 0 && <section className="stats-panel stats-patterns">
           <div className="stats-panel-heading"><h2>Nejčastěji zaznamenané podmínky</h2><span>{formatCatchCount(periodCatches.length)} v období</span></div>
           <p className="stats-panel-note">Popis četností z tvých záznamů; nejde o předpověď ani doporučení.</p>
+          <p className="stats-pattern-threshold">Vzorce se zobrazí až při alespoň 3 skutečných záznamech a opakování stejné hodnoty.</p>
           <div className="stats-pattern-grid">{patternItems.map((item) => <article className="stats-pattern" key={item.label}>
             <span>{item.label}</span><strong>{item.value}</strong><small>{item.note}</small>
           </article>)}</div>
@@ -145,6 +149,10 @@ function StatsPage() {
             <StatCard label="Zaznamenané úlovky" value={formatNumber(stats.catchCount, 0)} />
             <StatCard label="Různé druhy" value={formatNumber(stats.speciesCount, 0)} />
             {recordCatch && <StatCard label="Nejtěžší za období" value={`${formatNumber(recordCatch.weightKg)} kg`} note={recordCatch.species} />}
+            {allTimeRecord && <StatCard label="Osobní rekord" value={`${formatNumber(allTimeRecord.weightKg)} kg`} note={`${allTimeRecord.species} · ověřená hmotnost`} />}
+            {patterns.time && <StatCard label="Nejlepší čas" value={patterns.time.labels.join(" · ")} note={`${patterns.time.count}× z ${patterns.time.sampleCount} záznamů`} />}
+            {patterns.bait && <StatCard label="Nejlepší nástraha" value={patterns.bait.labels.join(" · ")} note={`${patterns.bait.count}× z ${patterns.bait.sampleCount} záznamů`} />}
+            {stats.species[0] && <StatCard label="Nejčastější druh" value={stats.species[0].label} note={`${stats.species[0].count}× v tomto období`} />}
             {stats.longestLengthCm !== null && <StatCard label="Nejdelší změřený" value={`${formatNumber(stats.longestLengthCm, 0)} cm`} note={`${formatCatchCount(stats.measuredLengthCount)} se známou délkou`} />}
             {outcomes && <StatCard label="Puštěno ze známých výsledků" value={`${outcomes.percentageReleased}%`} note={`${outcomes.released} z ${outcomes.known} úlovků se známým výsledkem`} />}
           </section>
@@ -174,9 +182,22 @@ function StatsPage() {
             <h2>Nejtěžší úlovky</h2>
             {periodCatches.filter((item) => Number.isFinite(item.weightKg)).length
               ? [...periodCatches].filter((item) => Number.isFinite(item.weightKg)).sort((a, b) => b.weightKg - a.weightKg).slice(0, 5).map((item) => <CatchCard key={item.id} catchedFish={item} isPersonalRecord={item.id === allTimeRecord?.id} />)
-              : <p className="stats-panel-note">Úlovky se známou hmotností se zobrazí zde.</p>}
+              : <p className="stats-panel-note">Úlovky s uvedenou hmotností se zobrazí zde.</p>}
           </section>
         </>}
+
+        <section className="stats-panel stats-unavailable" aria-label="Doporučení na příštích 48 hodin">
+          <h2>Doporučení na 48 hodin</h2>
+          <p className="stats-panel-note">{isFeatureEnabled("aiInsights")
+            ? "Doporučení se zobrazí, až budou dostupné ověřené podmínky a výpočty pro tvá data."
+            : "Tato funkce zatím není dostupná. Zobrazené statistiky vycházejí pouze z tvých uložených záznamů."}</p>
+        </section>
+
+        {getEntitlementState(null, "supporter") !== "active" && <section className="stats-supporter" aria-label="Rybářský příběh sezóny">
+          <span>SUPPORTER</span>
+          <h2>Rybářský příběh sezóny</h2>
+          <p>Tato funkce zatím není dostupná.</p>
+        </section>}
 
         <section className="stats-panel stats-trips">
           <h2>Výpravy</h2>

@@ -134,6 +134,40 @@
   background: var(--accent-orange-soft);
 }
 
+.mastery-facts {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-1);
+}
+
+.mastery-facts h2 {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.mastery-facts p,
+.mastery-facts li {
+  padding: var(--space-4);
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+}
+
+.mastery-facts ul {
+  padding: 0;
+  list-style: none;
+}
+
+.mastery-facts li + li {
+  border-top: 1px solid var(--border);
+}
+
 .mastery-title-card > span {
   color: var(--accent-orange);
   font-size: var(--font-size-sm);

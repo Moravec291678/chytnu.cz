@@ -16,7 +16,13 @@ export const privacyRepository = {
     try {
       const transaction = db.transaction(PRIVACY_STORE_NAME, "readonly");
       const stored = await requestValue(transaction.objectStore(PRIVACY_STORE_NAME).get(scope.scopeKey));
-      return { ...DEFAULT_PRIVACY_SETTINGS, ...normalizePrivacySettings(stored), scopeKey: scope.scopeKey, ownerId: scope.ownerId };
+      return {
+        ...DEFAULT_PRIVACY_SETTINGS,
+        ...normalizePrivacySettings(stored),
+        scopeKey: scope.scopeKey,
+        ownerId: scope.ownerId,
+        hasSavedSettings: Boolean(stored),
+      };
     } finally { db.close(); }
   },
 

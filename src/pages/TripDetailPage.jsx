@@ -59,7 +59,7 @@ function TripDetailPage() {
     {catchState.error && <p className="trip-form-error" role="alert">{catchState.error} <button type="button" onClick={refreshCatches}>Načíst úlovky znovu</button></p>}
     {confirmingDelete && <ConfirmDialog titleId="delete-trip-title" descriptionId="delete-trip-description" title="Smazat výpravu?" description="Tato prázdná výprava včetně její historie bude trvale odstraněna z tohoto zařízení." busy={deleting} confirmLabel="Smazat výpravu" busyLabel="Mažu…" confirmClassName="trip-delete-button" onCancel={closeDeleteDialog} onConfirm={handleDelete} />}
     <h2 className="section-title">Úlovky z výpravy</h2>
-    {catchState.loading ? <p className="loading-state" role="status">Načítám úlovky výpravy…</p> : catchState.error ? null : tripCatches.length ? tripCatches.map((item) => <CatchCard key={item.id} catchedFish={item} />) : <div className="empty-search"><p>Úlovky přiřazené k této výpravě se zobrazí zde.</p><Link to="/add">Přidat úlovek</Link></div>}
+    {catchState.loading ? <p className="loading-state" role="status">Načítám úlovky výpravy…</p> : catchState.error ? null : tripCatches.length ? tripCatches.map((item) => <CatchCard key={item.id} catchedFish={item} />) : <div className="empty-search"><p>Úlovky přiřazené k této výpravě se zobrazí zde.</p><Link to="/add" state={{ tripId: trip.id }}>Přidat úlovek</Link></div>}
   </div></Layout>;
 }
 

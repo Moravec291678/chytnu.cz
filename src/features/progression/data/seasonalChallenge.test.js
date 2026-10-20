@@ -58,3 +58,12 @@ test("winter challenge requires a recorded temperature below five degrees", () =
   assert.equal(challenge.completed, true);
 });
 
+test("autumn carp challenge requires the stable carp species ID and a measured weight", () => {
+  const challenge = buildSeasonalChallenge([
+    { id: "legacy-carp", species: "Kapr obecný", weightKg: 8, caughtAt: "2026-10-01T08:00:00Z" },
+    { id: "estimated-carp", speciesKey: "commonCarp", weightKg: 8, weightSource: "estimated", caughtAt: "2026-10-02T08:00:00Z" },
+  ], new Date("2026-10-18T10:00:00Z"));
+  assert.equal(challenge.progress, 0);
+  assert.equal(challenge.completed, false);
+});
+

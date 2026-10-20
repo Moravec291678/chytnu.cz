@@ -64,7 +64,19 @@ test("levels use deterministic increasing thresholds through level 100 and expos
   assert.equal(MAX_LEVEL, 100);
   assert.equal(getRankForLevel(1).name, "Nováček");
   assert.equal(getRankForLevel(16).title, "Znalec vod");
-  assert.equal(getRankForLevel(100).name, "Prestige");
+  assert.equal(getRankForLevel(100).name, "Prestige I+");
+  for (const [lastLevel, nextLevel, rankBefore, rankAfter] of [
+    [5, 6, "Nováček", "Rybář"],
+    [15, 16, "Rybář", "Zkušený rybář"],
+    [29, 30, "Zkušený rybář", "Senior rybář"],
+    [49, 50, "Senior rybář", "Expert"],
+    [74, 75, "Expert", "Legenda"],
+    [99, 100, "Legenda", "Prestige I+"],
+  ]) {
+    assert.equal(getRankForLevel(lastLevel).name, rankBefore, `level ${lastLevel}`);
+    assert.equal(getRankForLevel(nextLevel).name, rankAfter, `level ${nextLevel}`);
+    assert.equal(getRankForLevel(nextLevel - 1).name, rankBefore, `boundary before ${nextLevel}`);
+  }
   const many = Array.from({ length: 10000 }, (_, index) => makeCatch(String(index), { speciesKey: `s${index}`, locationName: `l${index}` }));
   assert.equal(calculateProgression(many).level, 100);
   assert.equal(calculateProgression(many).nextThreshold, null);

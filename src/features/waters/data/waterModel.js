@@ -7,6 +7,8 @@ export const WATER_TYPES = Object.freeze([
   "Lom",
 ]);
 
+export const WATER_ACTIVITY_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+
 const MAX_NAME_LENGTH = 120;
 const MAX_WATER_NUMBER_LENGTH = 40;
 const MAX_AREA_LENGTH = 160;
@@ -58,6 +60,20 @@ export function createWaterRecord(data, scope = {}) {
   };
 }
 
+export function updateWaterRecord(existing, data) {
+  if (!existing?.id) throw new TypeError("Upravovaný revír nemá stabilní ID.");
+  return {
+    ...existing,
+    name: String(data?.name ?? "").trim(),
+    waterNumber: data?.waterNumber ? String(data.waterNumber).trim() : null,
+    type: WATER_TYPES.includes(data?.type) ? data.type : existing.type,
+    area: String(data?.area ?? "").trim() || null,
+    notes: String(data?.notes ?? "").trim() || null,
+    targetFish: cleanTargetFish(data?.targetFish),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
 export function filterWaters(waters, { query = "", favoriteOnly = false, type = "" } = {}) {
   const normalizedQuery = normalizeText(query);
   return (waters || []).filter((water) => {
@@ -72,4 +88,43 @@ export function filterWaters(waters, { query = "", favoriteOnly = false, type = 
     }
     return true;
   });
+}
+
+function matchesWaterActivity(activity, water) {
+  if (activity?.waterId && activity.waterId === water.id) return true;
+  const locationName = normalizeText(activity?.locationName ?? "");
+  if (!locationName) return false;
+  return [water.name, water.waterNumber]
+    .filter(Boolean)
+    .some((value) => normalizeText(value) === locationName);
+}
+
+export function buildWaterActivity(waters, catches, trips, { now = new Date(), windowMs = WATER_ACTIVITY_WINDOW_MS } = {}) {
+  const nowMs = now instanceof Date ? now.getTime() : Date.parse(now);
+  const startMs = nowMs - windowMs;
+  const activityByWaterId = new Map((waters ?? []).map((water) => [water.id, { recentCount: 0, isActive: false }]));
+  if (!Number.isFinite(nowMs)) return activityByWaterId;
+
+  const addActivity = (entries, timestampKey, isTrip = false) => {
+    for (const entry of entries ?? []) {
+      const timestamp = Date.parse(entry?.[timestampKey]);
+      if (!Number.isFinite(timestamp) || timestamp < startMs || timestamp > nowMs) continue;
+      for (const water of waters ?? []) {
+        if (!matchesWaterActivity(entry, water)) continue;
+        const activity = activityByWaterId.get(water.id);
+        activity.recentCount += 1;
+        if (isTrip && !entry.endedAt) activity.isActive = true;
+      }
+    }
+  };
+
+  addActivity(catches, "caughtAt");
+  addActivity(trips, "startedAt", true);
+  for (const trip of trips ?? []) {
+    if (trip?.endedAt) continue;
+    for (const water of waters ?? []) {
+      if (matchesWaterActivity(trip, water)) activityByWaterId.get(water.id).isActive = true;
+    }
+  }
+  return activityByWaterId;
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { formatCatchWeight, isMeasuredCatchWeight } from "../features/catches/data/catchWeight.js";
 import Layout from "../shared/layout/Layout";
 import { useAuth } from "../features/auth/context/authContextValue.js";
@@ -43,7 +43,9 @@ function formatCount(count, one, few, many) {
 }
 
 function ProfilePage() {
+  const location = useLocation();
   const fileInput = useRef(null);
+  const trophyEditorRef = useRef(null);
   const [exporting, setExporting] = useState(false);
   const [reading, setReading] = useState(false);
   const [restoring, setRestoring] = useState(false);
@@ -98,6 +100,13 @@ function ProfilePage() {
     }),
     [catchState.catches],
   );
+  useEffect(() => {
+    if (location.hash !== "#profile-trophy-editor") return;
+    const editor = trophyEditorRef.current;
+    if (!editor) return;
+    editor.open = true;
+    requestAnimationFrame(() => editor.scrollIntoView({ block: "center", behavior: "smooth" }));
+  }, [location.hash, trophyCatches.length]);
   const trophySelectionLoaded = dataScope.status === "ready";
   const savedTrophyIds = trophySelection.scopeKey === dataScope.scopeKey
     ? trophySelection.ids
@@ -380,7 +389,7 @@ function ProfilePage() {
       <section className="profile-identity" aria-label="Aktuální profil">
         <span className="profile-avatar" aria-hidden="true">{avatarInitial}</span>
         <div><strong>{profileIdentity}</strong><span>{progression.rank.name} · {progression.rank.title}</span></div>
-        <span className="profile-status-badge">{privacyLoading ? "Načítám" : privacySettings.profileVisibility === "public" ? "Veřejný" : "Soukromý"}</span>
+        <span className="profile-status-badge">{privacyLoading ? "Načítám" : privacySettings.profileVisibility === "public" ? "Zatím nepublikován" : "Soukromý"}</span>
         <span className="profile-level-badge">Úroveň {progression.level}</span>
       </section>
 
@@ -413,6 +422,7 @@ function ProfilePage() {
         <Link className="profile-secondary-link" to="/achievements">Achievementy <span aria-hidden="true">→</span></Link>
         <Link className="profile-secondary-link" to="/challenges">Osobní výzvy <span aria-hidden="true">→</span></Link>
         <Link className="profile-secondary-link" to="/streak">Týdenní série <span aria-hidden="true">→</span></Link>
+        <Link className="profile-secondary-link" to="/supporter">Supporter <span aria-hidden="true">→</span></Link>
       </nav>
 
       <section className="profile-panel profile-preferences" aria-labelledby="profile-preferences-title">
@@ -429,6 +439,7 @@ function ProfilePage() {
           <input type="checkbox" checked={privacySettings.profileVisibility === "public"} onChange={(event) => updateProfileVisibility(event.target.checked)} disabled={privacyLoading || privacySaving || dataScope.status !== "ready"} />
           <span>Veřejný profil</span>
         </label>
+        <p className="profile-privacy-note">Tato volba se ukládá pro tento profil. Veřejné zobrazení zatím není aktivní a nic se nepublikuje.</p>
         {privacyLoading && <p className="loading-state" role="status">Načítám soukromí profilu…</p>}
         {privacySaving && <p role="status">Ukládám viditelnost profilu…</p>}
         {privacyError && <p className="profile-error" role="alert">{privacyError}</p>}
@@ -445,7 +456,7 @@ function ProfilePage() {
             ? <>
               <p>Vyber až 5 trofejí. Výběr je uložený pro tento profil.</p>
               {trophyCatches.filter((item) => selectedTrophyIds.includes(item.id)).map((item) => <CatchCard key={item.id} catchedFish={item} isPersonalRecord={item.id === recordCatch?.id} />)}
-              <details><summary>Upravit výběr trofejí</summary>
+              <details id="profile-trophy-editor" ref={trophyEditorRef}><summary>Upravit výběr trofejí</summary>
                 {trophyCatches.map((item) => <label key={item.id} style={{ display: "flex", alignItems: "center", gap: ".5rem", margin: ".45rem 0" }}>
                   <input type="checkbox" checked={selectedTrophyIds.includes(item.id)} onChange={(event) => {
                     const next = event.target.checked ? [...selectedTrophyIds, item.id] : selectedTrophyIds.filter((id) => id !== item.id);

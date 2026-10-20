@@ -1,0 +1,84 @@
+.ui-state {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+}
+
+.ui-state > strong,
+.ui-state > h2 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 850;
+}
+
+.ui-state > p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.ui-state-error > h2 { color: var(--text-primary); }
+
+.ui-state button {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.ui-skeleton-list {
+  display: grid;
+  min-width: 0;
+  gap: 9px;
+}
+
+.ui-skeleton-list > span {
+  display: block;
+  min-width: 0;
+  height: 82px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(100deg, var(--surface-1) 25%, var(--surface-2) 45%, var(--surface-1) 65%);
+  background-size: 220% 100%;
+  animation: ui-skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+.offline-notice {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 16px;
+  border-bottom: 1px solid rgb(var(--accent-blue-rgb) / 35%);
+  background: var(--accent-blue-soft);
+}
+
+.offline-notice > div { min-width: 0; }
+.offline-notice strong { color: var(--text-primary); font-size: 13px; }
+.offline-notice p { margin-top: 3px; color: var(--text-secondary); font-size: 11px; line-height: 1.45; overflow-wrap: anywhere; }
+.offline-notice-error { border-color: rgb(var(--accent-red-rgb) / 35%); background: var(--accent-red-soft); }
+.offline-notice button { min-height: 40px; flex: 0 0 auto; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface-1); color: var(--text-primary); font: inherit; font-size: 11px; font-weight: 800; }
+
+@keyframes ui-skeleton-shimmer {
+  to { background-position-x: -220%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-skeleton-list > span { animation: none; }
+}
+
+@media (max-width: 360px) {
+  .offline-notice { align-items: flex-start; flex-direction: column; }
+}

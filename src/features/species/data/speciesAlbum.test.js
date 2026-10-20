@@ -5,6 +5,7 @@ import {
   buildSeasonCollections,
   buildSpeciesAlbum,
   buildTrophyRecords,
+  getSpeciesAlbumYear,
 } from "./speciesAlbum.js";
 
 const catalog = [{ key: "carp", label: "Kapr" }, { key: "pike", label: "Štika" }];
@@ -41,6 +42,15 @@ test("album changes deterministically after species edit, delete, restore, or re
   assert.equal(buildSpeciesAlbum([{ ...source[0], speciesKey: "pike" }], catalog)[1].catchCount, 1);
   assert.equal(buildSpeciesAlbum([], catalog)[0].catchCount, 0);
   assert.deepEqual(buildSpeciesAlbum(structuredClone(source), catalog), buildSpeciesAlbum(source, catalog));
+});
+
+test("persistent shared mastery can keep a species discovered without inventing remaining Catch history", () => {
+  const album = buildSpeciesAlbum([], catalog, [{ speciesKey: "carp", level: 3, stars: 3 }]);
+  assert.equal(album[0].discovered, true);
+  assert.equal(album[0].catchCount, 0);
+  assert.equal(album[0].stars, 3);
+  assert.equal(album[1].discovered, false);
+  assert.equal(album[1].stars, 0);
 });
 
 test("location collections group actual catches and trips without inventing named waters", () => {
@@ -86,11 +96,23 @@ test("season collections use local record dates and only include the requested y
   ]);
 });
 
+test("season collection boundaries use Europe/Prague local calendar dates", () => {
+  const catches = [
+    { caughtAt: "2025-12-31T23:30:00.000Z" },
+    { caughtAt: "2026-12-31T23:30:00.000Z" },
+  ];
+  assert.equal(getSpeciesAlbumYear(new Date("2026-12-31T23:30:00.000Z")), 2027);
+  assert.deepEqual(buildSeasonCollections(catches, [], 2025), []);
+  assert.deepEqual(buildSeasonCollections(catches, [], 2026).map(({ year, key, catchCount }) => [year, key, catchCount]), [[2026, "winter", 1]]);
+  assert.equal(getSpeciesAlbumYear("invalid"), null);
+});
+
 test("trophy records rank the five heaviest measured catches and respect the requested limit", () => {
   const catches = [
     { id: "one", speciesKey: "carp", weightKg: 5 },
     { id: "two", speciesKey: "carp", weightKg: 4 },
     { id: "three", speciesKey: "pike", weightKg: 3 },
+    { id: "estimated", speciesKey: "pike", weightKg: 99, weightSource: "estimated" },
     { id: "unmeasured", speciesKey: "pike", weightKg: null },
   ];
 

@@ -8,9 +8,11 @@ import {
 } from "../../auth/data/localDataScope.js";
 
 const DATABASE_NAME = "chytnu-local";
-export const DATABASE_VERSION = 5;
+export const DATABASE_VERSION = 6;
 export const CATCH_STORE_NAME = "catches";
 export const TRIP_STORE_NAME = "trips";
+export const WATER_STORE_NAME = "waters";
+export const WATER_CHAT_STORE_NAME = "waterChat";
 export const OUTBOX_STORE_NAME = "outbox";
 export const CONFLICT_STORE_NAME = "syncConflicts";
 export const SYNC_STATE_STORE_NAME = "syncState";
@@ -93,7 +95,7 @@ export function openLocalDatabase() {
       return;
     }
     const request = indexedDB.open(DATABASE_NAME, DATABASE_VERSION);
-    request.onupgradeneeded = () => {
+    request.onupgradeneeded = (event) => {
       const db = request.result;
       const transaction = request.transaction;
       const guestScopeKey = createGuestScopeKey();
@@ -103,8 +105,18 @@ export function openLocalDatabase() {
       const trips = db.objectStoreNames.contains(TRIP_STORE_NAME)
         ? transaction.objectStore(TRIP_STORE_NAME)
         : db.createObjectStore(TRIP_STORE_NAME, { keyPath: "id" });
+      const waters = db.objectStoreNames.contains(WATER_STORE_NAME)
+        ? transaction.objectStore(WATER_STORE_NAME)
+        : db.createObjectStore(WATER_STORE_NAME, { keyPath: "id" });
+      const waterChat = db.objectStoreNames.contains(WATER_CHAT_STORE_NAME)
+        ? transaction.objectStore(WATER_CHAT_STORE_NAME)
+        : db.createObjectStore(WATER_CHAT_STORE_NAME, { keyPath: "id" });
       if (!catches.indexNames.contains("scopeKey")) catches.createIndex("scopeKey", "scopeKey", { unique: false });
       if (!trips.indexNames.contains("scopeKey")) trips.createIndex("scopeKey", "scopeKey", { unique: false });
+      if (!waters.indexNames.contains("scopeKey")) waters.createIndex("scopeKey", "scopeKey", { unique: false });
+      if (!waters.indexNames.contains("name")) waters.createIndex("name", "name", { unique: false });
+      if (!waterChat.indexNames.contains("waterId")) waterChat.createIndex("waterId", "waterId", { unique: false });
+      if (!waterChat.indexNames.contains("scopeKey")) waterChat.createIndex("scopeKey", "scopeKey", { unique: false });
       if (!db.objectStoreNames.contains(OUTBOX_STORE_NAME)) {
         const outbox = db.createObjectStore(OUTBOX_STORE_NAME, { keyPath: "sequence", autoIncrement: true });
         outbox.createIndex("entityKey", "entityKey", { unique: true });
@@ -147,37 +159,39 @@ export function openLocalDatabase() {
         if (!progression.indexNames.contains(name)) progression.createIndex(name, keyPath, { unique: false });
       }
 
-      const createdAt = new Date().toISOString();
-      profiles.put({ id: guestScopeKey, kind: "guest", createdAt, updatedAt: createdAt });
-      appMeta.put({ key: ACTIVE_GUEST_SCOPE_KEY, scopeKey: guestScopeKey });
+      if (event.oldVersion < 5) {
+        const createdAt = new Date().toISOString();
+        profiles.put({ id: guestScopeKey, kind: "guest", createdAt, updatedAt: createdAt });
+        appMeta.put({ key: ACTIVE_GUEST_SCOPE_KEY, scopeKey: guestScopeKey });
 
-      const migrateStore = (store) => {
-        const cursorRequest = store.openCursor();
-        cursorRequest.onsuccess = () => {
-          const cursor = cursorRequest.result;
+        const migrateStore = (store) => {
+          const cursorRequest = store.openCursor();
+          cursorRequest.onsuccess = () => {
+            const cursor = cursorRequest.result;
+            if (!cursor) return;
+            const record = cursor.value;
+            const scopeKey = record.ownerId ? accountScopeKey(record.ownerId) : guestScopeKey;
+            cursor.update({ ...record, scopeKey });
+            cursor.continue();
+          };
+        };
+        migrateStore(catches);
+        migrateStore(trips);
+        const outbox = transaction.objectStore(OUTBOX_STORE_NAME);
+        const outboxCursor = outbox.openCursor();
+        outboxCursor.onsuccess = () => {
+          const cursor = outboxCursor.result;
           if (!cursor) return;
-          const record = cursor.value;
-          const scopeKey = record.ownerId ? accountScopeKey(record.ownerId) : guestScopeKey;
-          cursor.update({ ...record, scopeKey });
+          const operation = cursor.value;
+          const scopeKey = operation.ownerId ? accountScopeKey(operation.ownerId) : guestScopeKey;
+          cursor.update({
+            ...operation,
+            scopeKey,
+            entityKey: outboxEntityKey(scopeKey, operation.entityType, operation.entityId),
+          });
           cursor.continue();
         };
-      };
-      migrateStore(catches);
-      migrateStore(trips);
-      const outbox = transaction.objectStore(OUTBOX_STORE_NAME);
-      const outboxCursor = outbox.openCursor();
-      outboxCursor.onsuccess = () => {
-        const cursor = outboxCursor.result;
-        if (!cursor) return;
-        const operation = cursor.value;
-        const scopeKey = operation.ownerId ? accountScopeKey(operation.ownerId) : guestScopeKey;
-        cursor.update({
-          ...operation,
-          scopeKey,
-          entityKey: outboxEntityKey(scopeKey, operation.entityType, operation.entityId),
-        });
-        cursor.continue();
-      };
+      }
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error ?? new Error("Databázi úlovků se nepodařilo otevřít."));
@@ -252,7 +266,7 @@ export const catchRepository = {
     const requestedScope = requireRepositoryScope(options);
     const db = await openLocalDatabase();
     return new Promise((resolve, reject) => {
-      const transaction = db.transaction([CATCH_STORE_NAME, TRIP_STORE_NAME, OUTBOX_STORE_NAME], "readwrite");
+      const transaction = db.transaction([CATCH_STORE_NAME, TRIP_STORE_NAME, WATER_STORE_NAME, OUTBOX_STORE_NAME], "readwrite");
       const catchStore = transaction.objectStore(CATCH_STORE_NAME);
       let failure;
       let storedRecord = record;
@@ -434,7 +448,7 @@ export const outboxRepository = {
   acknowledge: async (operationId, expectedLocalRevision, serverRevision = null) => {
     const db = await openLocalDatabase();
     return new Promise((resolve, reject) => {
-      const transaction = db.transaction([CATCH_STORE_NAME, TRIP_STORE_NAME, OUTBOX_STORE_NAME], "readwrite");
+      const transaction = db.transaction([CATCH_STORE_NAME, TRIP_STORE_NAME, WATER_STORE_NAME, OUTBOX_STORE_NAME], "readwrite");
       const store = transaction.objectStore(OUTBOX_STORE_NAME);
       const request = store.index("operationId").get(operationId);
       let acknowledged = false;
@@ -447,7 +461,7 @@ export const outboxRepository = {
           return;
         }
         if (operation.operation === "upsert") {
-          const entityStore = transaction.objectStore(operation.entityType === "catch" ? CATCH_STORE_NAME : TRIP_STORE_NAME);
+          const entityStore = transaction.objectStore(operation.entityType === "catch" ? CATCH_STORE_NAME : operation.entityType === "trip" ? TRIP_STORE_NAME : WATER_STORE_NAME);
           const entityRequest = entityStore.get(operation.entityId);
           entityRequest.onsuccess = () => {
             const record = entityRequest.result;

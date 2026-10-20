@@ -1,0 +1,146 @@
+.year-summary-page {
+  display: grid;
+  gap: 13px;
+  padding: 18px 18px calc(26px + env(safe-area-inset-bottom));
+}
+
+.year-summary-header {
+  margin: 0 2px 2px;
+}
+
+.year-summary-header > a {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.year-summary-header h1 {
+  margin-top: 7px;
+  color: var(--text-primary);
+  font-size: 29px;
+  font-weight: 900;
+  letter-spacing: -0.7px;
+  line-height: 1.1;
+}
+
+.year-summary-header p {
+  margin-top: 4px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.year-summary-select-label {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.year-summary-select-label select {
+  min-width: 100px;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--surface-1);
+  color: var(--text-primary);
+  font: inherit;
+}
+
+.year-summary-cards {
+  display: grid;
+  gap: 12px;
+}
+
+.year-summary-card {
+  display: flex;
+  min-width: 0;
+  min-height: 138px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 15px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--surface-1);
+  text-align: center;
+}
+
+.year-summary-card strong {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  color: var(--accent-green);
+  font-size: clamp(31px, 9vw, 56px);
+  font-weight: 950;
+  letter-spacing: -1px;
+  line-height: 1.08;
+}
+
+.year-summary-card span {
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.year-summary-card small {
+  max-width: 100%;
+  margin-top: 3px;
+  overflow-wrap: anywhere;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.year-summary-card-gold strong {
+  color: var(--accent-gold, #f0a820);
+}
+
+.year-summary-state,
+.year-summary-empty {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface-1);
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.year-summary-empty h2,
+.year-summary-state h2 {
+  color: var(--text-primary);
+  font-size: 16px;
+}
+
+.year-summary-empty p,
+.year-summary-state p {
+  margin-top: 6px;
+}
+
+.year-summary-no-catches {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.year-summary-links a {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  color: var(--accent-green);
+  font-size: 12px;
+  font-weight: 800;
+  text-decoration: none;
+}

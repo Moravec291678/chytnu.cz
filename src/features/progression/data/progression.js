@@ -2,6 +2,9 @@ import { normalizeText } from "../../../shared/utils/helpers.js";
 import { calculateQuestXp } from "./challenges.js";
 import { calculateSeasonalChallengeXp } from "./seasonalChallenge.js";
 import { isMeasuredCatchWeight } from "../../catches/data/catchWeight.js";
+import { calculateWeeklyStreak } from "./streakModel.js";
+import { XP_RULES } from "./xpRules.js";
+export { calculateWeeklyStreak } from "./streakModel.js";
 
 export const MAX_LEVEL = 100;
 
@@ -12,7 +15,7 @@ export const RANKS = Object.freeze([
   { minLevel: 30, maxLevel: 49, name: "Senior rybář", title: "Mistr prutu" },
   { minLevel: 50, maxLevel: 74, name: "Expert", title: "Vodní vlk" },
   { minLevel: 75, maxLevel: 99, name: "Legenda", title: "Kapitán vod" },
-  { minLevel: 100, maxLevel: 100, name: "Prestige", title: "Rybářská legenda" },
+  { minLevel: 100, maxLevel: 100, name: "Prestige I+", title: "Rybářská legenda" },
 ]);
 
 const ACHIEVEMENT_DEFINITIONS = [
@@ -115,45 +118,6 @@ export function hasWeatherConditions(conditions) {
   ].some((value) => value !== null && value !== undefined && value !== "");
 }
 
-function getWeekStart(timestamp) {
-  const date = new Date(timestamp);
-  const formatter = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Europe/Prague",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
-  const dayKey = formatter.format(date);
-  const [y, m, d] = dayKey.split("-").map(Number);
-  const utcDate = new Date(Date.UTC(y, m - 1, d));
-  const day = (utcDate.getUTCDay() + 6) % 7;
-  utcDate.setUTCDate(utcDate.getUTCDate() - day);
-  return utcDate.getTime();
-}
-
-
-export function calculateWeeklyStreak(catches, now = new Date()) {
-  const nowTimestamp = now instanceof Date ? now.getTime() : Date.parse(now);
-  if (!Number.isFinite(nowTimestamp)) throw new TypeError("Datum výpočtu série musí být platné.");
-  const recentCatchTimestamps = catches
-    .map((item) => Date.parse(item.caughtAt))
-    .filter((timestamp) => Number.isFinite(timestamp) && timestamp <= nowTimestamp)
-    .sort((left, right) => right - left);
-  const lastCatchAt = recentCatchTimestamps[0] ?? null;
-  const activeWeeks = new Set(recentCatchTimestamps.map(getWeekStart));
-  if (lastCatchAt === null || nowTimestamp - lastCatchAt > 7 * 24 * 60 * 60 * 1000) {
-    return { weeks: 0, isActive: false, lastCatchAt: lastCatchAt === null ? null : new Date(lastCatchAt).toISOString() };
-  }
-
-  let cursor = getWeekStart(lastCatchAt);
-  let weeks = 0;
-  while (activeWeeks.has(cursor)) {
-    weeks += 1;
-    cursor -= 7 * 24 * 60 * 60 * 1000;
-  }
-  return { weeks, isActive: true, lastCatchAt: new Date(lastCatchAt).toISOString() };
-}
-
 export function calculateSpeciesMastery(catches) {
   const recordsBySpecies = new Map();
   for (const record of catches) {
@@ -184,22 +148,22 @@ export function getRankForLevel(level) {
   return RANKS.find((rank) => bounded >= rank.minLevel && bounded <= rank.maxLevel);
 }
 
-export function calculateProgression(catches, trips = [], { now = new Date() } = {}) {
+export function calculateProgression(catches, trips = [], { now = new Date(), streakFreezes = [] } = {}) {
   const speciesCount = uniqueKnown(catches, (item) => item.speciesKey || normalizeText(item.species ?? "") || null);
   const locationCount = uniqueKnown(catches, (item) => item.waterId || null);
   const completedTrips = trips.filter((trip) => trip.endedAt).length;
   const questXp = calculateQuestXp(catches, trips);
   const mastery = calculateSpeciesMastery(catches);
-  const streak = calculateWeeklyStreak(catches, now);
+  const streak = calculateWeeklyStreak(catches, now, streakFreezes);
   const catchXp = catches.reduce((total, item) => {
-    if (item.coordinates && hasWeatherConditions(item.conditions)) return total + 20;
-    if (item.photos?.length > 0) return total + 15;
-    return total + 10;
+    if (item.coordinates && hasWeatherConditions(item.conditions)) return total + XP_RULES.catch.gpsAndWeather;
+    if (item.photos?.length > 0) return total + XP_RULES.catch.photo;
+    return total + XP_RULES.catch.base;
   }, 0);
-  const speciesXp = speciesCount * 50;
+  const speciesXp = speciesCount * XP_RULES.newSpecies;
   const masteryXp = mastery.reduce((total, item) => total + item.xp - MASTERY_LEVELS[0].xp, 0);
-  const streakXp = Math.floor(streak.weeks / 7) * 50;
-  const locationXp = locationCount * 30;
+  const streakXp = Math.floor(streak.weeks / 7) * XP_RULES.streakBonus;
+  const locationXp = locationCount * XP_RULES.newWater;
   const seasonalXp = calculateSeasonalChallengeXp(catches);
   const maxCatchWeight = catches.reduce((maximum, item) => (
     isMeasuredCatchWeight(item) ? Math.max(maximum, item.weightKg) : maximum

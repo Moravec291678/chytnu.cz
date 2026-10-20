@@ -1,5 +1,8 @@
 import { normalizeText } from "../../../shared/utils/helpers.js";
 import { isMeasuredCatchWeight } from "../../catches/data/catchWeight.js";
+import { getPragueDateParts } from "./statsPeriod.js";
+
+export const PATTERN_MIN_SAMPLE_SIZE = 3;
 
 function groupBy(items, getKey, getLabel) {
   const groups = new Map();
@@ -29,12 +32,13 @@ function mostCommon(values) {
   const ranked = [...groups.values()].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, "cs-CZ"));
   if (!ranked.length) return null;
   const count = ranked[0].count;
+  if (values.length < PATTERN_MIN_SAMPLE_SIZE || count < 2) return null;
   return { labels: ranked.filter((item) => item.count === count).map((item) => item.label), count, sampleCount: values.length };
 }
 
 function averageMeasurement(records, getValue) {
   const values = records.map(getValue).filter((value) => Number.isFinite(value));
-  if (!values.length) return null;
+  if (values.length < PATTERN_MIN_SAMPLE_SIZE) return null;
   return { value: values.reduce((total, value) => total + value, 0) / values.length, sampleCount: values.length };
 }
 
@@ -42,13 +46,16 @@ export function getCatchPatterns(catches) {
   const timeSlots = [];
   const locations = [];
   const baits = [];
+  const months = [];
   for (const record of catches) {
     const timestamp = Date.parse(record.caughtAt);
     if (Number.isFinite(timestamp)) {
-      const startHour = Math.floor(new Date(timestamp).getHours() / 3) * 3;
+      const date = getPragueDateParts(new Date(timestamp));
+      const startHour = Math.floor(date.hour / 3) * 3;
       const endHour = (startHour + 3) % 24;
       const label = `${String(startHour).padStart(2, "0")}–${String(endHour).padStart(2, "0")} h`;
       timeSlots.push({ key: String(startHour), label });
+      months.push({ key: String(date.month), label: new Intl.DateTimeFormat("cs-CZ", { timeZone: "Europe/Prague", month: "long" }).format(new Date(Date.UTC(2020, date.month - 1, 15))) });
     }
 
     const location = typeof record.locationName === "string" ? record.locationName.trim() : "";
@@ -67,6 +74,7 @@ export function getCatchPatterns(catches) {
     time: mostCommon(timeSlots),
     location: mostCommon(locations),
     bait: mostCommon(baits),
+    month: mostCommon(months),
     pressureHpa: averageMeasurement(catches, (record) => record.conditions?.pressureHpa),
     waterTemperatureC: averageMeasurement(catches, (record) => record.conditions?.waterTempC ?? record.conditions?.waterTemperatureC),
   };
@@ -81,20 +89,20 @@ export function getCatchStatistics(catches, trips = [], now = new Date()) {
   const activeTrips = trips.filter((trip) => !trip.endedAt);
   const completedTripIds = new Set(completedTrips.map((trip) => trip.id));
   const linkedCatchCount = catches.filter((item) => completedTripIds.has(item.tripId)).length;
-  const currentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const nowParts = getPragueDateParts(now);
   const monthlyCatchCounts = Array.from({ length: 6 }, (_, index) => {
-    const month = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - (5 - index), 1);
-    const year = month.getFullYear();
-    const monthIndex = month.getMonth();
+    const month = new Date(Date.UTC(nowParts.year, nowParts.month - 1 - (5 - index), 15));
+    const year = month.getUTCFullYear();
+    const monthIndex = month.getUTCMonth();
     const count = catches.filter((item) => {
       const timestamp = Date.parse(item.caughtAt);
       if (!Number.isFinite(timestamp)) return false;
-      const date = new Date(timestamp);
-      return date.getFullYear() === year && date.getMonth() === monthIndex;
+      const date = getPragueDateParts(new Date(timestamp));
+      return date.year === year && date.month === monthIndex + 1;
     }).length;
     return {
       key: `${year}-${String(monthIndex + 1).padStart(2, "0")}`,
-      label: new Intl.DateTimeFormat("cs-CZ", { month: "short" }).format(month).replace(/\.$/, ""),
+      label: new Intl.DateTimeFormat("cs-CZ", { timeZone: "Europe/Prague", month: "short" }).format(month).replace(/\.$/, ""),
       count,
     };
   });

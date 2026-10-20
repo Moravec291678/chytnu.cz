@@ -68,15 +68,34 @@ test("catch patterns describe recorded conditions, count ties, and skip missing 
       baits: [{ label: "Kukuřice" }],
       conditions: { pressureHpa: 1020, waterTemperatureC: 14 },
     },
+    {
+      caughtAt: "2026-10-04T07:30:00",
+      locationName: "Labe",
+      baits: [{ label: "Boilie" }],
+      conditions: { pressureHpa: 1015, waterTempC: 13 },
+    },
     { caughtAt: "invalid", conditions: {} },
   ]);
 
-  assert.deepEqual(patterns.time, { labels: ["06–09 h"], count: 2, sampleCount: 2 });
-  assert.deepEqual(patterns.location, { labels: ["Labe"], count: 2, sampleCount: 2 });
-  assert.deepEqual(patterns.bait, { labels: ["Boilie", "Kukuřice"], count: 1, sampleCount: 2 });
-  assert.deepEqual(patterns.pressureHpa, { value: 1015, sampleCount: 2 });
-  assert.deepEqual(patterns.waterTemperatureC, { value: 13, sampleCount: 2 });
+  assert.deepEqual(patterns.time, { labels: ["06–09 h"], count: 3, sampleCount: 3 });
+  assert.deepEqual(patterns.location, { labels: ["Labe"], count: 3, sampleCount: 3 });
+  assert.deepEqual(patterns.bait, { labels: ["Boilie"], count: 2, sampleCount: 3 });
+  assert.deepEqual(patterns.month, { labels: ["říjen"], count: 3, sampleCount: 3 });
+  assert.deepEqual(patterns.pressureHpa, { value: 1015, sampleCount: 3 });
+  assert.deepEqual(patterns.waterTemperatureC, { value: 13, sampleCount: 3 });
   assert.deepEqual(getCatchPatterns([]), {
-    time: null, location: null, bait: null, pressureHpa: null, waterTemperatureC: null,
+    time: null, location: null, bait: null, month: null, pressureHpa: null, waterTemperatureC: null,
   });
+});
+
+test("patterns stay unavailable with fewer than three records or no repeated category", () => {
+  assert.equal(getCatchPatterns([
+    { caughtAt: "2026-10-02T06:30:00", locationName: "Labe" },
+    { caughtAt: "2026-10-03T08:30:00", locationName: "Vltava" },
+  ]).time, null);
+  assert.equal(getCatchPatterns([
+    { caughtAt: "2026-10-02T06:30:00" },
+    { caughtAt: "2026-10-03T09:30:00" },
+    { caughtAt: "2026-10-04T12:30:00" },
+  ]).time, null);
 });

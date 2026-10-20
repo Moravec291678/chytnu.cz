@@ -53,7 +53,8 @@ function normalizeFirebaseError(error) {
 }
 
 function entityRef(db, ownerId, entityType, entityId) {
-  return doc(db, "users", ownerId, entityType === "catch" ? "catches" : "trips", entityId);
+  const collectionName = entityType === "catch" ? "catches" : entityType === "trip" ? "trips" : "waters";
+  return doc(db, "users", ownerId, collectionName, entityId);
 }
 
 function requireValue(value, fallback) {
@@ -105,6 +106,20 @@ export function toRemoteRecord(entityType, record, ownerId) {
       methodKey: requireValue(record.methodKey, null),
       startedAt: requireValue(record.startedAt, record.createdAt),
       endedAt: requireValue(record.endedAt, null),
+    };
+  }
+  if (entityType === "water") {
+    return {
+      ...common,
+      name: requireValue(record.name, ""),
+      waterNumber: requireValue(record.waterNumber, null),
+      type: requireValue(record.type, "Rybník"),
+      area: requireValue(record.area, null),
+      coordinates: requireValue(record.coordinates, null),
+      notes: requireValue(record.notes, ""),
+      targetFish: requireValue(record.targetFish, []),
+      isFavorite: Boolean(record.isFavorite),
+      moderationStatus: requireValue(record.moderationStatus, "pending"),
     };
   }
   return {
@@ -208,7 +223,9 @@ function minimalTombstone(entityType, ownerId, entityId, now) {
   };
   return entityType === "trip"
     ? { ...common, entityType: "trip" }
-    : { ...common, entityType: "catch" };
+    : entityType === "water"
+      ? { ...common, entityType: "water" }
+      : { ...common, entityType: "catch" };
 }
 
 function makePortError(error) {
@@ -362,7 +379,8 @@ export function createFirestoreSyncAdapter({ now = () => new Date().toISOString(
     async list({ ownerId, entityType, cursor = null, limit: pageSize = 100 }) {
       requireActiveOwner(ownerId, currentUserId);
       try {
-        const base = collection(db, "users", ownerId, entityType === "catch" ? "catches" : "trips");
+      const collectionName = entityType === "catch" ? "catches" : entityType === "trip" ? "trips" : "waters";
+      const base = collection(db, "users", ownerId, collectionName);
         const constraints = [orderBy(documentId()), limit(pageSize + 1)];
         if (cursor) constraints.splice(1, 0, startAfter(cursor));
         const snapshot = await getDocs(query(base, ...constraints));

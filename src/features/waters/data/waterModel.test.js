@@ -1,7 +1,7 @@
 import "fake-indexeddb/auto";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createWaterRecord, filterWaters, validateWaterForm } from "./waterModel.js";
+import { buildWaterActivity, createWaterRecord, filterWaters, updateWaterRecord, validateWaterForm } from "./waterModel.js";
 import { waterRepository } from "./waterRepository.js";
 
 test("water model creates valid records with default values", () => {
@@ -39,6 +39,28 @@ test("new local Water keeps a stable ID, pending moderation and selected species
   assert.equal(water.coordinates, null);
 });
 
+test("editing Water preserves stable profile, favorite, coordinates, and moderation data", () => {
+  const existing = {
+    ...createWaterRecord({
+    id: "water-existing", name: "Původní název", isFavorite: true,
+      coordinates: { latitude: 49.8, longitude: 14.2 },
+    }, { scopeKey: "water-edit-scope", ownerId: "owner-1" }),
+    moderationStatus: "verified",
+  };
+  const updated = updateWaterRecord(existing, {
+    name: "  Nový název  ", type: "Řeka", waterNumber: " 411050 ", targetFish: ["Kapr", "Kapr"],
+  });
+  assert.equal(updated.id, existing.id);
+  assert.equal(updated.scopeKey, existing.scopeKey);
+  assert.equal(updated.ownerId, existing.ownerId);
+  assert.equal(updated.isFavorite, true);
+  assert.deepEqual(updated.coordinates, existing.coordinates);
+  assert.equal(updated.moderationStatus, existing.moderationStatus);
+  assert.equal(updated.name, "Nový název");
+  assert.equal(updated.waterNumber, "411050");
+  assert.deepEqual(updated.targetFish, ["Kapr"]);
+});
+
 test("water form validates bounded text and the four supported water types", () => {
   assert.equal(validateWaterForm({ name: "Vltava", type: "Moře" }).type, "Vyber platný druh vody.");
   assert.ok(validateWaterForm({ name: "x".repeat(121) }).name);
@@ -56,6 +78,34 @@ test("water filtering by search, type, and favorite", () => {
   assert.equal(filterWaters(waters, { query: "vltava" }).length, 1);
   assert.equal(filterWaters(waters, { favoriteOnly: true }).length, 2);
   assert.equal(filterWaters(waters, { type: "Přehrada" }).length, 1);
+});
+
+test("water search matches accent-insensitive name, water number, and type", () => {
+  const waters = [
+    createWaterRecord({ name: "Řeka Desná", waterNumber: "401018", type: "Řeka" }),
+    createWaterRecord({ name: "Rybník Dubový", type: "Rybník" }),
+  ];
+  assert.equal(filterWaters(waters, { query: "reka desna" })[0].name, "Řeka Desná");
+  assert.equal(filterWaters(waters, { query: "401018" })[0].waterNumber, "401018");
+  assert.equal(filterWaters(waters, { query: "rybnik" }).length, 1);
+});
+
+test("water activity counts only recent linked catches and trips and marks a current trip", () => {
+  const now = new Date("2026-10-20T12:00:00.000Z");
+  const waters = [
+    { id: "water-1", name: "Rybník Dubový", waterNumber: "401018" },
+    { id: "water-2", name: "Řeka Desná", waterNumber: "401019" },
+  ];
+  const activity = buildWaterActivity(waters, [
+    { id: "catch-recent", waterId: "water-1", caughtAt: "2026-10-19T09:00:00.000Z" },
+    { id: "catch-old", waterId: "water-1", caughtAt: "2026-08-01T09:00:00.000Z" },
+    { id: "catch-unlinked", locationName: "Nespojený rybník", caughtAt: "2026-10-18T09:00:00.000Z" },
+  ], [
+    { id: "trip-active", locationName: "Rybník Dubový", startedAt: "2026-10-20T10:00:00.000Z", endedAt: null },
+    { id: "trip-other", waterId: "water-2", startedAt: "2026-10-17T10:00:00.000Z", endedAt: "2026-10-17T14:00:00.000Z" },
+  ], { now });
+  assert.deepEqual(activity.get("water-1"), { recentCount: 2, isActive: true });
+  assert.deepEqual(activity.get("water-2"), { recentCount: 1, isActive: false });
 });
 
 test("water repository stores, reloads, lists and opens a local pending Water with species", async () => {

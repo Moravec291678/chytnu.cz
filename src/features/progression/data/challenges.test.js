@@ -29,6 +29,29 @@ test("malformed dates do not falsely count toward challenge progress", () => {
   assert.ok([...overview.daily, ...overview.weekly].every((task) => !task.completed && task.progress === 0));
 });
 
+test("species challenges require stable species IDs and use Prague day and week boundaries", () => {
+  const now = new Date("2026-10-18T22:05:00.000Z"); // Monday 00:05 in Prague.
+  const overview = buildChallengeOverview([
+    { id: "before-midnight", speciesKey: "carp", caughtAt: "2026-10-18T21:59:00.000Z" },
+    { id: "after-midnight-a", speciesKey: "pike", caughtAt: "2026-10-18T22:01:00.000Z" },
+    { id: "after-midnight-b", species: "Okoun", caughtAt: "2026-10-18T22:02:00.000Z" },
+  ], [], now);
+  assert.equal(overview.daily[0].progress, 1);
+  assert.equal(overview.daily[1].progress, 1);
+  assert.equal(overview.weekly[0].progress, 1);
+  assert.equal(overview.weekly[1].periodKey, "2026-10-19");
+});
+
+test("legacy display names without stable species IDs cannot earn species XP", async () => {
+  const { listCompletedChallengeRewards } = await import("./challenges.js");
+  const records = ["Kapr", "Štika", "Okoun"].map((species, index) => ({
+    id: `legacy-${index}`, species, caughtAt: `2026-10-19T0${index}:00:00.000Z`,
+  }));
+  const overview = buildChallengeOverview(records, [], new Date("2026-10-19T10:00:00.000Z"));
+  assert.equal(overview.weekly[0].progress, 0);
+  assert.equal(listCompletedChallengeRewards(records).some((reward) => reward.challengeId === "weekly-species"), false);
+});
+
 test("weekly water challenge counts a first stable-ID visit and ignores a visit yesterday", () => {
   const now = new Date("2026-10-19T10:00:00+02:00");
   const firstVisit = buildChallengeOverview([{ id: "first", waterId: "water-a", caughtAt: now.toISOString() }], [], now);

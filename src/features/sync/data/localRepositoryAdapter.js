@@ -1,8 +1,9 @@
 import { catchRepository } from "../../catches/data/catchRepository.js";
 import { tripRepository } from "../../trips/data/tripRepository.js";
+import { waterRepository } from "../../waters/data/waterRepository.js";
 import { SyncPortError } from "./syncPort.js";
 
-const REPOSITORIES = Object.freeze({ catch: catchRepository, trip: tripRepository });
+const REPOSITORIES = Object.freeze({ catch: catchRepository, trip: tripRepository, water: waterRepository });
 
 /**
  * Local CRUD adapter for domain code. It deliberately has no ownerId, delta,

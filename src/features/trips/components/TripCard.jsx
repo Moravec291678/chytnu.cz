@@ -1,12 +1,13 @@
 import { Link } from "react-router-dom";
 import { formatTripCatchCount, formatTripDuration, getDistinctTripSpecies, getTripDurationMs } from "../data/tripModel";
 import { FishMark } from "../../catches/components/CatchCard";
+import { isMeasuredCatchWeight } from "../../catches/data/catchWeight.js";
 import "./TripCard.css";
 
 function TripCard({ trip, catches = null }) {
   const catchesAvailable = Array.isArray(catches);
   const associated = catchesAvailable ? catches.filter((item) => item.tripId === trip.id) : [];
-  const measuredWeights = associated.map((item) => item.weightKg).filter(Number.isFinite);
+  const measuredWeights = associated.filter((item) => isMeasuredCatchWeight(item) && item.weightKg >= 0).map((item) => item.weightKg);
   const species = catchesAvailable ? getDistinctTripSpecies(associated) : [];
   const speciesNoun = species.length === 1 ? "druh" : species.length >= 2 && species.length <= 4 ? "druhy" : "druhů";
   return <Link to={`/trips/${trip.id}`} className="trip-card-link">

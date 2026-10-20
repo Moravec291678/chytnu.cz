@@ -1,4 +1,7 @@
+import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
+import { useOptionalSync } from "../../features/sync/context/syncContextValue.js";
+import { OfflineNotice } from "../components/UIStates.jsx";
 import "./Layout.css";
 
 function NavIcon({ name }) {
@@ -17,12 +20,24 @@ function NavIcon({ name }) {
 
 function Layout({ children }) {
   const { pathname } = useLocation();
+  const sync = useOptionalSync();
+  const [isOnline, setIsOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine !== false);
+  useEffect(() => {
+    const update = () => setIsOnline(navigator.onLine !== false);
+    window.addEventListener("online", update);
+    window.addEventListener("offline", update);
+    return () => {
+      window.removeEventListener("online", update);
+      window.removeEventListener("offline", update);
+    };
+  }, []);
   const itemClass = (active) => active ? "nav-item nav-item-active" : "nav-item";
   const homeActive = pathname === "/";
   const journalActive = pathname.startsWith("/journal") || pathname.startsWith("/catch/") || pathname.startsWith("/species/") || pathname === "/gallery" || pathname === "/album" || pathname === "/map";
   const tripsActive = pathname === "/trips" || pathname.startsWith("/trips/");
   return (
     <div className="layout">
+      {(!isOnline || sync?.status === "offline" || sync?.status === "error") && <OfflineNotice pending={sync?.pending} status={sync?.status === "error" ? "error" : "offline"} onRetry={sync?.retry} />}
       <main className="layout-main">{children}</main>
       <nav className="bottom-nav" aria-label="Hlavní navigace">
         <Link to="/" className={itemClass(homeActive)} aria-current={homeActive ? "page" : undefined}>

@@ -18,8 +18,7 @@ const SEASONS = [
     return hour >= 22 || hour < 4;
   } },
   { key: "autumn", label: "Podzim", months: [8, 9, 10], title: "Kapřan sezóny", description: "Zaznamenej kapra s uvedenou hmotností.", matches: (record) => {
-    const species = String(record.species ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("cs-CZ");
-    return (record.speciesKey === "commonCarp" || species.includes("kapr"))
+    return ["commonCarp", "carp"].includes(record.speciesKey)
       && isMeasuredCatchWeight(record);
   } },
 ];

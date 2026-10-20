@@ -1,5 +1,8 @@
+import { normalizeCoordinates } from "../../catches/data/coordinates.js";
+
 export const CATCH_VISIBILITY = Object.freeze({ PRIVATE: "private", PUBLIC: "public" });
 export const LOCATION_PRECISION = Object.freeze({ NONE: "none", APPROXIMATE: "approximate", EXACT: "exact" });
+export const HEATMAP_GRANULARITY = Object.freeze({ CITY: "city", AREA: "area", OFF: "off" });
 
 export const DEFAULT_PRIVACY_SETTINGS = Object.freeze({
   profileVisibility: "private",
@@ -10,6 +13,7 @@ export const DEFAULT_PRIVACY_SETTINGS = Object.freeze({
   nearbyOptIn: false,
   nearbyLocationPrecision: LOCATION_PRECISION.APPROXIMATE,
   heatmapOptIn: false,
+  heatmapGranularity: HEATMAP_GRANULARITY.OFF,
 });
 
 export function normalizeCatchPrivacy(value) {
@@ -38,6 +42,9 @@ export function normalizePrivacySettings(value) {
   const requestedPrecision = Object.values(LOCATION_PRECISION).includes(value?.defaultLocationPrecision)
     ? value.defaultLocationPrecision
     : legacyPrecision;
+  const heatmapGranularity = Object.values(HEATMAP_GRANULARITY).includes(value?.heatmapGranularity)
+    ? value.heatmapGranularity
+    : value?.heatmapOptIn === true ? HEATMAP_GRANULARITY.AREA : HEATMAP_GRANULARITY.OFF;
   return {
     profileVisibility: value?.profileVisibility === "public" ? "public" : "private",
     defaultCatchVisibility: value?.defaultCatchVisibility === CATCH_VISIBILITY.PUBLIC
@@ -52,8 +59,18 @@ export function normalizePrivacySettings(value) {
     nearbyLocationPrecision: value?.nearbyLocationPrecision === LOCATION_PRECISION.NONE
       ? LOCATION_PRECISION.NONE
       : LOCATION_PRECISION.APPROXIMATE,
-    heatmapOptIn: value?.heatmapOptIn === true,
+    heatmapOptIn: heatmapGranularity !== HEATMAP_GRANULARITY.OFF,
+    heatmapGranularity,
   };
+}
+
+// Public location data is always reduced to a broad grid cell in this one place.
+// Exact GPS remains in the private record only; raw `locationArea` is never trusted.
+export function anonymizePublicCoordinates(value, precision) {
+  if (precision !== LOCATION_PRECISION.APPROXIMATE) return null;
+  const coordinates = normalizeCoordinates(value);
+  if (!coordinates) return null;
+  return `${coordinates.latitude.toFixed(1)}, ${coordinates.longitude.toFixed(1)}`;
 }
 
 export function createPublicCatchProjection(record) {
@@ -69,8 +86,11 @@ export function createPublicCatchProjection(record) {
     photos: privacy.photoVisibility === CATCH_VISIBILITY.PUBLIC
       ? (record.photos ?? []).filter((photo) => photo.publicUrl).map((photo) => ({ type: photo.type, publicUrl: photo.publicUrl }))
       : [],
-    ...(!privacy.privateSpot && privacy.locationPrecision !== LOCATION_PRECISION.NONE && record.locationArea
-      ? { locationArea: record.locationArea }
+    ...(!privacy.privateSpot && !record.isPrivateLocation
+      ? (() => {
+          const locationArea = anonymizePublicCoordinates(record.coordinates, privacy.locationPrecision);
+          return locationArea ? { locationArea } : {};
+        })()
       : {}),
   };
 }

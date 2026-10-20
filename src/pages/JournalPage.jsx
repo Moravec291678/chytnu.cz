@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import Layout from "../shared/layout/Layout";
+import { EmptyState, ErrorState, LoadingSkeleton, NoResultsState } from "../shared/components/UIStates.jsx";
 import { DEFAULT_METHODS } from "../shared/constants/constants";
 import CatchCard from "../features/catches/components/CatchCard";
 import { useCatches } from "../features/catches/context/useCatches";
@@ -84,10 +85,10 @@ function JournalPage() {
     </header>
 
     <h2 className="section-title">{activeFilters ? `Výsledky · ${results.length}` : "Všechny úlovky"}</h2>
-    {state.loading ? <div className="journal-skeleton" role="status" aria-label="Načítám místní deník"><span /><span /><span /></div>
-      : state.error ? <div className="journal-empty" role="alert"><strong>Deník se nepodařilo načíst</strong><p>{state.error}</p><button type="button" onClick={refresh}>Zkusit znovu</button></div>
-        : state.catches.length === 0 ? <div className="journal-empty"><strong>Zatím tu nic není</strong><p>Zapiš svůj první úlovek a začni budovat rybářský příběh.</p><Link to="/add">Zapsat první úlovek</Link></div>
-          : visibleCatches.length === 0 ? <div className="empty-search"><p>Žádný úlovek neodpovídá zvolenému hledání a filtrům.</p><button type="button" onClick={resetFilters}>Vymazat filtry</button></div>
+    {state.loading ? <LoadingSkeleton className="journal-skeleton" label="Načítám místní deník" count={3} />
+      : state.error ? <ErrorState className="journal-empty" title="Deník se nepodařilo načíst" message="Zkontroluj místní úložiště a zkus načtení zopakovat." onRetry={refresh} />
+        : state.catches.length === 0 ? <EmptyState className="journal-empty" title="Zatím tu nic není" description="Zapiš svůj první úlovek a začni budovat rybářský příběh." action={<Link to="/add">Zapsat první úlovek</Link>} />
+          : visibleCatches.length === 0 ? <NoResultsState className="empty-search" title="Žádné výsledky" description="Úlovek neodpovídá zvolenému hledání a filtrům." action={<button type="button" onClick={resetFilters}>Vymazat filtry</button>} />
             : visibleCatches.map((item) => <CatchCard key={item.id} catchedFish={item} />)}
   </div></Layout>;
 }

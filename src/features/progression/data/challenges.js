@@ -1,4 +1,4 @@
-import { normalizeText } from "../../../shared/utils/helpers.js";
+import { XP_RULES } from "./xpRules.js";
 
 const PRAGUE_TIME_ZONE = "Europe/Prague";
 const WATER_VISIT_GAP_MS = 30 * 24 * 60 * 60 * 1000;
@@ -28,7 +28,7 @@ function currentPeriodRecords(records, predicate) {
 }
 
 function uniqueSpecies(records) {
-  return new Set(records.map((record) => record.speciesKey || normalizeText(record.species ?? "")).filter(Boolean));
+  return new Set(records.map((record) => record.speciesKey).filter((speciesKey) => typeof speciesKey === "string" && speciesKey.trim()));
 }
 
 function dailyTasks(catches, trips, now) {
@@ -37,9 +37,9 @@ function dailyTasks(catches, trips, now) {
   const speciesToday = uniqueSpecies(todayCatches).size;
   const completedTripsToday = trips.filter((trip) => trip.endedAt && localDayKey(trip.endedAt) === today).length;
   return [
-    { id: "daily-catch", periodKey: today, title: "Zaznamenej dnešní úlovek", progress: Math.min(todayCatches.length, 1), goal: 1, xp: 25 },
-    { id: "daily-species", periodKey: today, title: "Zaznamenej dnes dva různé druhy", progress: Math.min(speciesToday, 2), goal: 2, xp: 25 },
-    { id: "daily-trip", periodKey: today, title: "Dokonči dnešní výpravu", progress: Math.min(completedTripsToday, 1), goal: 1, xp: 25 },
+    { id: "daily-catch", periodKey: today, title: "Zaznamenej dnešní úlovek", progress: Math.min(todayCatches.length, 1), goal: 1, xp: XP_RULES.dailyChallenge },
+    { id: "daily-species", periodKey: today, title: "Zaznamenej dnes dva různé druhy", progress: Math.min(speciesToday, 2), goal: 2, xp: XP_RULES.dailyChallenge },
+    { id: "daily-trip", periodKey: today, title: "Dokonči dnešní výpravu", progress: Math.min(completedTripsToday, 1), goal: 1, xp: XP_RULES.dailyChallenge },
   ];
 }
 
@@ -76,7 +76,7 @@ export function listCompletedChallengeRewards(catches, trips = []) {
     dailyCatchDays.add(day);
     if (!firstCatchByDay.has(day) || timestamp < Date.parse(firstCatchByDay.get(day).caughtAt)) firstCatchByDay.set(day, record);
 
-    const speciesKey = record.speciesKey || normalizeText(record.species ?? "");
+    const speciesKey = typeof record.speciesKey === "string" ? record.speciesKey.trim() : "";
     if (speciesKey) {
       const daySpecies = speciesByDay.get(day) ?? new Set();
       daySpecies.add(speciesKey);
@@ -103,11 +103,11 @@ export function listCompletedChallengeRewards(catches, trips = []) {
     if (day && !firstTripByDay.has(day)) firstTripByDay.set(day, trip);
   }
   const rewards = [];
-  for (const day of dailyCatchDays) rewards.push({ challengeId: "daily-catch", periodKey: day, xp: 25, sourceEntityType: "catch", sourceEntityId: firstCatchByDay.get(day)?.id ?? day });
-  for (const [day, species] of speciesByDay) if (species.size >= 2) rewards.push({ challengeId: "daily-species", periodKey: day, xp: 25, sourceEntityType: "catch", sourceEntityId: speciesCompletionByDay.get(day)?.id ?? day });
-  for (const [day, trip] of firstTripByDay) rewards.push({ challengeId: "daily-trip", periodKey: day, xp: 25, sourceEntityType: "trip", sourceEntityId: trip.id });
-  for (const [week, species] of speciesByWeek) if (species.size >= 3) rewards.push({ challengeId: "weekly-species", periodKey: week, xp: 75, sourceEntityType: "catch", sourceEntityId: speciesCompletionByWeek.get(week)?.id ?? week });
-  for (const [week, source] of waterVisitsByWeek) rewards.push({ challengeId: "weekly-water", periodKey: week, xp: 75, sourceEntityType: "catch", sourceEntityId: source.id });
+  for (const day of dailyCatchDays) rewards.push({ challengeId: "daily-catch", periodKey: day, xp: XP_RULES.dailyChallenge, sourceEntityType: "catch", sourceEntityId: firstCatchByDay.get(day)?.id ?? day });
+  for (const [day, species] of speciesByDay) if (species.size >= 2) rewards.push({ challengeId: "daily-species", periodKey: day, xp: XP_RULES.dailyChallenge, sourceEntityType: "catch", sourceEntityId: speciesCompletionByDay.get(day)?.id ?? day });
+  for (const [day, trip] of firstTripByDay) rewards.push({ challengeId: "daily-trip", periodKey: day, xp: XP_RULES.dailyChallenge, sourceEntityType: "trip", sourceEntityId: trip.id });
+  for (const [week, species] of speciesByWeek) if (species.size >= 3) rewards.push({ challengeId: "weekly-species", periodKey: week, xp: XP_RULES.weeklyChallenge, sourceEntityType: "catch", sourceEntityId: speciesCompletionByWeek.get(week)?.id ?? week });
+  for (const [week, source] of waterVisitsByWeek) rewards.push({ challengeId: "weekly-water", periodKey: week, xp: XP_RULES.weeklyChallenge, sourceEntityType: "catch", sourceEntityId: source.id });
   return rewards;
 }
 
@@ -129,8 +129,8 @@ function weeklyTasks(catches, now) {
     if (previous === undefined || timestamp - previous >= WATER_VISIT_GAP_MS) waterVisitProgress.add(record.waterId);
   }
   return [
-    { id: "weekly-species", periodKey: thisWeek, title: "Zaznamenej tři druhy tento týden", progress: Math.min(uniqueSpecies(weekRecords).size, 3), goal: 3, xp: 75 },
-    { id: "weekly-water", periodKey: thisWeek, title: "Navštiv revír po 30 a více dnech", progress: Math.min(waterVisitProgress.size, 1), goal: 1, xp: 75 },
+    { id: "weekly-species", periodKey: thisWeek, title: "Zaznamenej tři druhy tento týden", progress: Math.min(uniqueSpecies(weekRecords).size, 3), goal: 3, xp: XP_RULES.weeklyChallenge },
+    { id: "weekly-water", periodKey: thisWeek, title: "Navštiv revír po 30 a více dnech", progress: Math.min(waterVisitProgress.size, 1), goal: 1, xp: XP_RULES.weeklyChallenge },
   ];
 }
 

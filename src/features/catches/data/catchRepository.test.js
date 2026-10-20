@@ -68,8 +68,8 @@ test("v2 to v4 upgrade preserves existing catches, trips, photos, and starts wit
   const catches = await catchRepository.list(scope);
   const trips = await tripRepository.list(scope);
   const db = await openLocalDatabase();
-  assert.equal(db.version, 5);
-  assert.deepEqual([...db.objectStoreNames].sort(), ["appMeta", "catches", "localProfiles", "outbox", "privacySettings", "progressionEvents", "syncConflicts", "syncState", "trips"]);
+  assert.equal(db.version, 6);
+  assert.deepEqual([...db.objectStoreNames].sort(), ["appMeta", "catches", "localProfiles", "outbox", "privacySettings", "progressionEvents", "syncConflicts", "syncState", "trips", "waterChat", "waters"]);
   db.close();
   assert.equal(catches[0].id, "old-catch");
   assert.equal(catches[0].tripId, "old-trip");

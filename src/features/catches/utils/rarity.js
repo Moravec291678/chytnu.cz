@@ -1,11 +1,11 @@
 import { isMeasuredCatchWeight } from "../data/catchWeight.js";
 
 export const RARITY_LEVELS = Object.freeze({
-  COMMON: { key: "common", label: "Běžný", color: "gray" },
-  UNCOMMON: { key: "uncommon", label: "Méně běžný", color: "green" },
-  RARE: { key: "rare", label: "Vzácný", color: "blue" },
-  EPIC: { key: "epic", label: "Epický", color: "purple" },
-  LEGENDARY: { key: "legendary", label: "Legendární", color: "gold" },
+  COMMON: { key: "common", label: "Běžný", color: "gray", rule: "Běžný druh" },
+  UNCOMMON: { key: "uncommon", label: "Méně běžný", color: "green", rule: "Méně obvyklý nebo nepůvodní druh" },
+  RARE: { key: "rare", label: "Vzácný", color: "blue", rule: "Chráněný druh nebo měřená hmotnost od 5 kg" },
+  EPIC: { key: "epic", label: "Epický", color: "purple", rule: "Měřená hmotnost od 10 kg nebo délka od 75 cm" },
+  LEGENDARY: { key: "legendary", label: "Legendární", color: "gold", rule: "Měřená hmotnost od 20 kg nebo délka od 100 cm" },
 });
 
 export function getCatchRarity(record, speciesCatalog = []) {

@@ -1,71 +1,164 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import Layout from "../shared/layout/Layout";
 import { useDataScope } from "../features/auth/context/dataScopeContextValue.js";
-import { DEFAULT_PRIVACY_SETTINGS } from "../features/privacy/data/privacyModel.js";
+import { useCatches } from "../features/catches/context/useCatches.js";
+import { applyOnboardingLocationMode } from "../features/privacy/data/onboardingLocationPreference.js";
+import { DEFAULT_PRIVACY_SETTINGS, HEATMAP_GRANULARITY } from "../features/privacy/data/privacyModel.js";
 import { privacyRepository } from "../features/privacy/data/privacyRepository.js";
-import "./ProfilePage.css";
+import { waterRepository } from "../features/waters/data/waterRepository.js";
+import "./PrivacyPage.css";
+
+const GPS_OPTIONS = [
+  { value: "exact", label: "Přesně" },
+  { value: "approximate", label: "Přibližně" },
+  { value: "none", label: "Bez GPS" },
+];
+
+const HEATMAP_OPTIONS = [
+  { value: HEATMAP_GRANULARITY.CITY, label: "Město" },
+  { value: HEATMAP_GRANULARITY.AREA, label: "Oblast" },
+  { value: HEATMAP_GRANULARITY.OFF, label: "Vypnuto" },
+];
+
+function SegmentedOptions({ label, value, options, onChange, disabled }) {
+  return <div className="privacy-segmented" role="group" aria-label={label}>
+    {options.map((option) => <button
+      key={option.value}
+      type="button"
+      aria-pressed={value === option.value}
+      className={value === option.value ? "privacy-segment privacy-segment-active" : "privacy-segment"}
+      disabled={disabled}
+      onClick={() => onChange(option.value)}
+    >{option.label}</button>)}
+  </div>;
+}
 
 export default function PrivacyPage() {
   const scope = useDataScope();
+  const { state: catchState } = useCatches();
   const [settings, setSettings] = useState(DEFAULT_PRIVACY_SETTINGS);
   const [status, setStatus] = useState("loading");
+  const [loadedScopeKey, setLoadedScopeKey] = useState(null);
   const [message, setMessage] = useState("");
+  const [waters, setWaters] = useState({ scopeKey: null, records: [], status: "loading" });
 
   useEffect(() => {
     let active = true;
     if (scope.status !== "ready") return () => { active = false; };
+    const scopeKey = scope.scopeKey;
     privacyRepository.get(scope).then((value) => {
-      if (active) { setSettings(value); setStatus("ready"); }
-    }).catch(() => { if (active) setStatus("error"); });
+      if (active) {
+        setSettings(value);
+        setLoadedScopeKey(scopeKey);
+        setStatus("ready");
+      }
+    }).catch(() => {
+      if (active) {
+        setLoadedScopeKey(scopeKey);
+        setStatus("load-error");
+      }
+    });
     return () => { active = false; };
   }, [scope]);
 
-  const update = (key, value) => setSettings((current) => ({ ...current, [key]: value }));
+  useEffect(() => {
+    let active = true;
+    if (scope.status !== "ready") return () => { active = false; };
+    const scopeKey = scope.scopeKey;
+    waterRepository.list(scope).then((records) => {
+      if (active) setWaters({ scopeKey, records, status: "ready" });
+    }).catch(() => {
+      if (active) setWaters({ scopeKey, records: [], status: "error" });
+    });
+    return () => { active = false; };
+  }, [scope]);
 
-  const save = async () => {
-    if (scope.status !== "ready") return;
+  const readyForScope = scope.status === "ready" && loadedScopeKey === scope.scopeKey && status !== "loading";
+  const disabled = !readyForScope || status === "load-error" || status === "saving";
+  const currentSettings = loadedScopeKey === scope.scopeKey && status !== "load-error"
+    ? settings
+    : DEFAULT_PRIVACY_SETTINGS;
+
+  const save = async (patch) => {
+    if (disabled) return;
+    const previous = settings;
+    const next = { ...settings, ...patch };
+    setSettings(next);
     setStatus("saving");
     setMessage("");
     try {
-      setSettings(await privacyRepository.put(settings, scope));
-      setMessage("Nastavení soukromí bylo uloženo.");
+      const persisted = await privacyRepository.put(next, scope);
+      setSettings(persisted);
       setStatus("ready");
+      setMessage("Volba se uložila pro tento profil.");
     } catch {
-      setMessage("Nastavení soukromí se nepodařilo uložit.");
-      setStatus("error");
+      setSettings(previous);
+      setStatus("ready");
+      setMessage("Volbu se nepodařilo uložit. Zkontroluj připojení k místnímu úložišti a zkus to znovu.");
     }
   };
 
-  return <Layout><div className="profile-page">
-    <header className="profile-header"><h1>Soukromí</h1><p>Ve výchozím stavu zůstává profil, poloha i každý úlovek soukromý.</p></header>
-    <section className="profile-panel" aria-labelledby="privacy-profile-title">
-      <h2 id="privacy-profile-title">Výchozí sdílení</h2>
-      <label className="profile-restore-mode">Viditelnost profilu
-        <select value={settings.profileVisibility} onChange={(event) => update("profileVisibility", event.target.value)} disabled={status === "loading" || status === "saving"}>
-          <option value="private">Soukromý</option><option value="public">Veřejný</option>
-        </select>
-      </label>
-      <label className="profile-restore-mode">Nové úlovky
-        <select value={settings.defaultCatchVisibility} onChange={(event) => update("defaultCatchVisibility", event.target.value)} disabled={status === "loading" || status === "saving"}>
-          <option value="private">Soukromé</option><option value="public">Veřejné</option>
-        </select>
-      </label>
-      <label className="profile-restore-mode">Fotografie nových úlovků
-        <select value={settings.defaultPhotoVisibility} onChange={(event) => update("defaultPhotoVisibility", event.target.value)} disabled={status === "loading" || status === "saving"}>
-          <option value="private">Soukromé</option><option value="public">Veřejné</option>
-        </select>
-      </label>
-      <label className="profile-restore-mode">Výchozí přesnost polohy
-        <select value={settings.defaultLocationPrecision} onChange={(event) => update("defaultLocationPrecision", event.target.value)} disabled={settings.privateSpotDefault || status === "loading" || status === "saving"}>
-          <option value="none">Nezveřejňovat</option><option value="approximate">Pouze přibližná oblast</option><option value="exact">Přesná poloha</option>
-        </select>
-      </label>
-      <label className="privacy-checkbox-row"><input type="checkbox" checked={settings.privateSpotDefault} onChange={(event) => update("privateSpotDefault", event.target.checked)} /> <span>Nová místa považovat za soukromá</span></label>
-      <label className="privacy-checkbox-row"><input type="checkbox" checked={settings.nearbyOptIn} onChange={(event) => update("nearbyOptIn", event.target.checked)} /> <span>Povolit anonymní zahrnutí do funkce Okolí</span></label>
-      <label className="privacy-checkbox-row"><input type="checkbox" checked={settings.heatmapOptIn} onChange={(event) => update("heatmapOptIn", event.target.checked)} /> <span>Povolit anonymní zahrnutí do heatmapy</span></label>
-      <p className="profile-privacy-note">Soukromé místo vždy skryje polohu a vyloučí záznam z funkcí Okolí a heatmapy. Změna výchozí volby sama nezmění starší úlovky.</p>
-      <button className="profile-backup-button" type="button" onClick={save} disabled={scope.status !== "ready" || status === "saving"}>{status === "saving" ? "Ukládám…" : "Uložit nastavení"}</button>
-      {message && <p className={status === "error" ? "profile-error" : "profile-feedback"} role="status">{message}</p>}
-    </section>
-  </div></Layout>;
+  const privatePlaces = useMemo(() => {
+    if (waters.scopeKey !== scope.scopeKey) return [];
+    const items = new Map();
+    for (const water of waters.records) {
+      if (water?.id && water?.name?.trim()) items.set(`water:${water.id}`, { key: `water:${water.id}`, name: water.name.trim(), detail: [water.type, water.waterNumber].filter(Boolean).join(" · ") || "Uložený revír" });
+    }
+    if (catchState.loading) return [...items.values()];
+    for (const record of catchState.catches) {
+      const name = record?.locationName?.trim();
+      if (!name || record?.privacy?.privateSpot !== true) continue;
+      const key = record.waterId ? `water:${record.waterId}` : `spot:${name.toLocaleLowerCase("cs-CZ")}`;
+      if (!items.has(key)) items.set(key, { key, name, detail: "Soukromé místo z deníku" });
+    }
+    return [...items.values()];
+  }, [catchState.catches, catchState.loading, scope.scopeKey, waters]);
+
+  const currentGpsMode = currentSettings.privateSpotDefault ? "none" : currentSettings.defaultLocationPrecision;
+
+  return <Layout>
+    <main className="privacy-page">
+      <header className="privacy-header">
+        <Link className="privacy-back" to="/profile" aria-label="Zpět na profil">‹</Link>
+        <div><h1>Soukromí a poloha</h1><p>Ty rozhoduješ, co zůstane jen u tebe.</p></div>
+      </header>
+
+      <section className="privacy-card" aria-labelledby="privacy-gps-title">
+        <div className="privacy-section-heading"><span className="privacy-icon" aria-hidden="true">⌖</span><div><h2 id="privacy-gps-title">GPS při záznamu</h2><p>Výchozí režim pro nová místa</p></div></div>
+        <SegmentedOptions label="Přesnost GPS při záznamu" value={currentGpsMode} options={GPS_OPTIONS} disabled={disabled} onChange={(mode) => save(applyOnboardingLocationMode(currentSettings, mode))} />
+        <p className="privacy-hint">Přesná poloha se uloží do soukromého deníku. Přibližná volba se při případném veřejném zobrazení anonymizuje. Přesné GPS se nikdy neposílá jako veřejná souřadnice.</p>
+      </section>
+
+      <section className="privacy-card" aria-labelledby="privacy-visibility-title">
+        <div className="privacy-section-heading"><span className="privacy-icon" aria-hidden="true">◉</span><div><h2 id="privacy-visibility-title">Viditelnost</h2><p>Uložené volby, bez aktivního zveřejnění</p></div></div>
+        <label className="privacy-toggle-row">
+          <span><strong>Veřejný profil</strong><small>Volba se ukládá pro tento profil.</small></span>
+          <input type="checkbox" role="switch" checked={currentSettings.profileVisibility === "public"} disabled={disabled} onChange={(event) => save({ profileVisibility: event.target.checked ? "public" : "private" })} />
+        </label>
+        <p className="privacy-hint privacy-backend-note">Veřejné profily zatím nejsou aktivní. Tato volba nic nezveřejňuje ani neposílá na server.</p>
+        <div className="privacy-toggle-row privacy-heatmap-heading">
+          <span><strong>Moje úlovky v heatmapě</strong><small>Preference se uloží jen pro tento profil.</small></span>
+          <input type="checkbox" aria-label="Zahrnout úlovky do heatmapy podle zvolené granularity" checked={currentSettings.heatmapGranularity !== HEATMAP_GRANULARITY.OFF} disabled={disabled} onChange={(event) => save({ heatmapGranularity: event.target.checked ? HEATMAP_GRANULARITY.AREA : HEATMAP_GRANULARITY.OFF })} />
+        </div>
+        <SegmentedOptions label="Granularita heatmapy" value={currentSettings.heatmapGranularity} options={HEATMAP_OPTIONS} disabled={disabled} onChange={(granularity) => save({ heatmapGranularity: granularity })} />
+        <p className="privacy-hint privacy-backend-note">Veřejná agregační heatmapa není dostupná. Uložená preference zatím žádná data nesdílí.</p>
+      </section>
+
+      <section className="privacy-card privacy-places-card" aria-labelledby="privacy-places-title">
+        <div className="privacy-section-heading"><span className="privacy-icon" aria-hidden="true">⌖</span><div><h2 id="privacy-places-title">Soukromé lokace</h2><p>Pouze uložená místa z aktivního profilu</p></div></div>
+        {!readyForScope || waters.scopeKey !== scope.scopeKey || waters.status === "loading" || catchState.loading
+          ? <p className="privacy-empty" role="status">Načítám uložená místa…</p>
+          : waters.status === "error"
+            ? <p className="privacy-empty" role="alert">Uložená místa se nepodařilo načíst.</p>
+            : privatePlaces.length
+              ? <ul className="privacy-place-list">{privatePlaces.map((place) => <li key={place.key}><span className="privacy-place-pin" aria-hidden="true">⌖</span><span><strong>{place.name}</strong><small>{place.detail}</small></span><span className="privacy-lock" aria-label="Soukromé">🔒</span></li>)}</ul>
+              : <p className="privacy-empty">V tomto profilu zatím nejsou uložené žádné lokace.</p>}
+      </section>
+
+      {status === "load-error" && <p className="privacy-error" role="alert">Nastavení soukromí se nepodařilo načíst.</p>}
+      {status === "saving" && <p className="privacy-feedback" role="status">Ukládám nastavení…</p>}
+      {message && <p className={message.startsWith("Volbu se nepodařilo") ? "privacy-error" : "privacy-feedback"} role="status">{message}</p>}
+    </main>
+  </Layout>;
 }

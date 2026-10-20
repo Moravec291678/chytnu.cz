@@ -1,0 +1,88 @@
+.privacy-page {
+  display: flex;
+  width: min(100%, 560px);
+  min-width: 0;
+  flex-direction: column;
+  gap: 14px;
+  margin: 0 auto;
+  padding: 18px 18px calc(24px + env(safe-area-inset-bottom));
+}
+
+.privacy-header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 13px;
+  padding: 4px 2px 7px;
+}
+
+.privacy-back {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  color: var(--text-primary);
+  background: var(--surface-1);
+  font-size: 31px;
+  line-height: 1;
+  text-decoration: none;
+}
+
+.privacy-header > div { min-width: 0; }
+.privacy-header h1 { color: var(--text-primary); font-size: clamp(22px, 6vw, 27px); font-weight: 900; letter-spacing: -0.7px; line-height: 1.12; }
+.privacy-header p { margin-top: 5px; color: var(--text-secondary); font-size: 12px; line-height: 1.4; }
+
+.privacy-card {
+  display: grid;
+  min-width: 0;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 17px;
+  background: var(--surface-1);
+  box-shadow: var(--shadow-card);
+}
+
+.privacy-section-heading { display: flex; min-width: 0; align-items: center; gap: 11px; }
+.privacy-section-heading > div { min-width: 0; }
+.privacy-icon { display: grid; width: 39px; height: 39px; flex: 0 0 39px; place-items: center; border: 1px solid rgb(var(--accent-green-rgb) / 22%); border-radius: 12px; color: var(--accent-green); background: var(--accent-green-soft); font-size: 20px; font-weight: 800; }
+.privacy-section-heading h2 { color: var(--text-primary); font-size: 15px; font-weight: 850; }
+.privacy-section-heading p { margin-top: 3px; color: var(--text-secondary); font-size: 11px; line-height: 1.35; }
+
+.privacy-segmented { display: grid; min-width: 0; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; padding: 5px; border: 1px solid var(--border); border-radius: 13px; background: var(--app-bg); }
+.privacy-segment { min-width: 0; min-height: 42px; padding: 7px 5px; border: 1px solid transparent; border-radius: 9px; color: var(--text-secondary); background: transparent; font: inherit; font-size: 12px; font-weight: 750; overflow-wrap: anywhere; cursor: pointer; }
+.privacy-segment-active { border-color: rgb(var(--accent-green-rgb) / 35%); color: var(--accent-green); background: var(--accent-green-soft); }
+.privacy-segment:focus-visible, .privacy-back:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 2px; }
+.privacy-segment:disabled { cursor: wait; opacity: 0.55; }
+
+.privacy-hint { color: var(--text-secondary); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.privacy-backend-note { padding: 9px 10px; border: 1px solid var(--border); border-radius: 10px; color: var(--text-secondary); background: var(--app-bg); }
+
+.privacy-toggle-row { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 12px; }
+.privacy-toggle-row > span { display: grid; min-width: 0; gap: 4px; }
+.privacy-toggle-row strong { color: var(--text-primary); font-size: 13px; font-weight: 750; }
+.privacy-toggle-row small { color: var(--text-secondary); font-size: 11px; line-height: 1.4; }
+.privacy-toggle-row input { width: 22px; height: 22px; flex: 0 0 22px; accent-color: var(--accent-green); cursor: pointer; }
+.privacy-toggle-row input:disabled { cursor: wait; opacity: 0.55; }
+.privacy-heatmap-heading { padding-top: 2px; }
+
+.privacy-places-card { gap: 11px; }
+.privacy-place-list { display: grid; gap: 8px; list-style: none; }
+.privacy-place-list li { display: flex; min-width: 0; align-items: center; gap: 10px; padding: 10px; border: 1px solid var(--border); border-radius: 12px; background: var(--app-bg); }
+.privacy-place-pin { display: grid; width: 33px; height: 33px; flex: 0 0 33px; place-items: center; border-radius: 10px; color: var(--accent-green); background: var(--accent-green-soft); font-size: 17px; }
+.privacy-place-list li > span:nth-child(2) { display: grid; min-width: 0; flex: 1; gap: 3px; }
+.privacy-place-list strong { overflow: hidden; color: var(--text-primary); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.privacy-place-list small { color: var(--text-secondary); font-size: 10px; overflow-wrap: anywhere; }
+.privacy-lock { flex: 0 0 auto; font-size: 13px; }
+.privacy-empty, .privacy-error, .privacy-feedback { color: var(--text-secondary); font-size: 11px; line-height: 1.45; overflow-wrap: anywhere; }
+.privacy-error { color: var(--accent-red); }
+.privacy-feedback { color: var(--accent-green); }
+
+@media (max-width: 360px) {
+  .privacy-page { padding-right: 12px; padding-left: 12px; }
+  .privacy-card { padding: 13px; }
+  .privacy-segment { font-size: 11px; }
+}

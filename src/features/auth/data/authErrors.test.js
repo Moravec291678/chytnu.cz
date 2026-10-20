@@ -7,6 +7,9 @@ test("auth errors map to clear Czech messages without exposing internals", () =>
   assert.match(getAuthErrorMessage({ code: "auth/weak-password" }), /alespoň 6 znaků/);
   assert.match(getAuthErrorMessage({ code: "auth/invalid-credential" }), /E-mail nebo heslo/);
   assert.doesNotMatch(getAuthErrorMessage({ code: "auth/unknown", message: "secret stack detail" }), /secret stack detail/);
+  assert.match(getAuthErrorMessage({ code: "auth/network-request-failed" }), /Přihlašovací služba není dostupná/);
+  assert.match(getAuthErrorMessage({ code: "auth/unauthorized-domain" }), /této adresy není povolené/);
+  assert.match(getAuthErrorMessage({ code: "auth/invalid-api-key" }), /není správně nastavená/);
 });
 
 test("only non-local auth configuration errors are reported as unavailable", () => {

@@ -9,8 +9,9 @@ function measuredMaximum(records, field) {
   }, null);
 }
 
-export function buildSpeciesAlbum(catches, catalog) {
+export function buildSpeciesAlbum(catches, catalog, mastery = []) {
   const grouped = new Map();
+  const masteryBySpecies = new Map(mastery.map((item) => [item.speciesKey, item]));
   for (const record of catches) {
     if (!record?.speciesKey) continue;
     const group = grouped.get(record.speciesKey) ?? [];
@@ -20,11 +21,14 @@ export function buildSpeciesAlbum(catches, catalog) {
 
   return catalog.map((species) => {
     const records = grouped.get(species.key) ?? [];
+    const speciesMastery = masteryBySpecies.get(species.key);
     const timestamps = records.map((record) => Date.parse(record.caughtAt)).filter(Number.isFinite).sort((a, b) => a - b);
     return {
       ...species,
-      discovered: records.length > 0,
+      discovered: records.length > 0 || (speciesMastery?.level ?? 0) > 0,
       catchCount: records.length,
+      masteryLevel: speciesMastery?.level ?? 0,
+      stars: speciesMastery?.stars ?? 0,
       bestWeightCatch: measuredMaximum(records, "weightKg"),
       bestLengthCatch: measuredMaximum(records, "lengthCm"),
       bestWeightKg: measuredMaximum(records, "weightKg")?.weightKg ?? null,
@@ -42,11 +46,28 @@ const SEASONS = [
   { key: "autumn", name: "Podzim", months: [8, 9, 10] },
 ];
 
+export const SPECIES_ALBUM_TIME_ZONE = "Europe/Prague";
+
+function localCalendarParts(timestamp) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: SPECIES_ALBUM_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+  }).formatToParts(new Date(timestamp));
+  const fields = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+  return { year: Number(fields.year), month: Number(fields.month) - 1 };
+}
+
+export function getSpeciesAlbumYear(date = new Date()) {
+  const timestamp = date instanceof Date ? date.getTime() : Date.parse(date);
+  if (!Number.isFinite(timestamp)) return null;
+  return localCalendarParts(timestamp).year;
+}
+
 function dateParts(value) {
   const timestamp = Date.parse(value);
   if (!Number.isFinite(timestamp)) return null;
-  const date = new Date(timestamp);
-  return { timestamp, year: date.getFullYear(), month: date.getMonth() };
+  return { timestamp, ...localCalendarParts(timestamp) };
 }
 
 function getSeason(month) {
@@ -72,7 +93,7 @@ export function buildLocationCollections(catches, trips) {
   return [...locations.values()].sort((a, b) => b.latestTimestamp - a.latestTimestamp || a.name.localeCompare(b.name, "cs-CZ"));
 }
 
-export function buildSeasonCollections(catches, trips, year = new Date().getFullYear()) {
+export function buildSeasonCollections(catches, trips, year = getSpeciesAlbumYear()) {
   const collections = new Map();
   const addRecord = (record, type) => {
     const date = dateParts(type === "catch" ? record.caughtAt : record.startedAt);

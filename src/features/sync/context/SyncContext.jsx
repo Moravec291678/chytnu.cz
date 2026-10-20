@@ -45,12 +45,9 @@ export function SyncProvider({ children }) {
     setState((previous) => ({ ...previous, status: "syncing", error: "" }));
     try {
       if (!serviceRef.current) {
-        const [{ createFirestoreSyncAdapter }, { createFirebasePhotoStorage }] = await Promise.all([
-          import("../data/firestoreSyncAdapter.js"),
-          import("../data/firebasePhotoStorage.js"),
-        ]);
+        const { createFirestoreSyncAdapter } = await import("../data/firestoreSyncAdapter.js");
         const port = createSyncPort(createFirestoreSyncAdapter());
-        serviceRef.current = createSyncService({ port, photoStorage: createFirebasePhotoStorage(), getCurrentOwnerId: () => {
+        serviceRef.current = createSyncService({ port, photoStorage: null, getCurrentOwnerId: () => {
           try { return firebaseAuth.currentUserId(); } catch { return null; }
         } });
       }

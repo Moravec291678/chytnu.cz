@@ -1,4 +1,4 @@
-const ENTITY_TYPES = new Set(["catch", "trip"]);
+const ENTITY_TYPES = new Set(["catch", "trip", "water"]);
 const ERROR_CODES = new Set([
   "invalid_request",
   "not_found",

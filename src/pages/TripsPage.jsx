@@ -4,7 +4,8 @@ import ActiveTripCard from "../features/trips/components/ActiveTripCard";
 import { Link } from "react-router-dom";
 import { useCatches } from "../features/catches/context/useCatches";
 import { useTrips } from "../features/trips/context/useTrips";
-import { formatTripCatchCount, getActiveTrip, getTripDurationMs } from "../features/trips/data/tripModel";
+import { formatTripCatchCount, getActiveTrip } from "../features/trips/data/tripModel";
+import { getTotalTripsHours, getTripCatchCount } from "../features/trips/utils/tripStats.js";
 import "./TripsPage.css";
 
 function pluralize(count) {
@@ -21,7 +22,8 @@ function TripsPage() {
   const { state: catchState, refresh: refreshCatches } = useCatches();
   const activeTrip = getActiveTrip(tripState.trips);
   const completedTrips = tripState.trips.filter((trip) => trip.endedAt).sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt));
-  const totalHours = Math.floor(tripState.trips.reduce((sum, trip) => sum + (getTripDurationMs(trip) ?? 0), 0) / 3600000);
+  const totalHours = getTotalTripsHours(tripState.trips);
+  const tripCatchCount = getTripCatchCount(catchState.catches, tripState.trips);
   const tripCatches = catchState.loading || catchState.error ? null : catchState.catches;
   return (
     <Layout>
@@ -29,10 +31,10 @@ function TripsPage() {
         <header className="trips-header">
           <div className="trips-header-top">
             <div className="trips-header-top-wrapper">
-              <h1>Výpravy</h1>
+              <h1>Výlety</h1>
 
               <p className="trips-subtitle">
-                {tripState.loading || catchState.loading ? "Načítám přehled…" : `${tripState.trips.length} ${pluralize(tripState.trips.length)} · ${totalHours} hodin · ${formatTripCatchCount(catchState.catches.length)}`}
+                {tripState.loading || catchState.loading ? "Načítám přehled…" : `${tripState.trips.length} ${pluralize(tripState.trips.length)} · ${totalHours} hodin · ${formatTripCatchCount(tripCatchCount)}`}
               </p>
             </div>
             {!activeTrip && !tripState.loading && !tripState.error && <Link aria-label="Zahájit výpravu" className="trips-add-btn header-btn" to="/trips/new">＋</Link>}
@@ -46,7 +48,7 @@ function TripsPage() {
         {!tripState.loading && !tripState.error && !activeTrip && <div className="trips-empty"><strong>Žádná aktivní výprava</strong><p>Spusť novou výpravu a přiřazuj k ní své úlovky.</p><Link to="/trips/new">Zahájit výpravu</Link></div>}
 
         <section className="trips-section">
-          <h3 className="section-title">Dokončené výpravy</h3>
+          <h3 className="section-title">Minulé výlety</h3>
 
           {!tripState.loading && !tripState.error && completedTrips.length === 0 && <p className="trips-empty-history">Dokončené výpravy se zde zobrazí po jejich ukončení.</p>}
           {completedTrips.map((trip) => (

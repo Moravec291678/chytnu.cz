@@ -232,6 +232,11 @@
   font-size: 16px;
 }
 
+.journal-empty h2 {
+  color: var(--text-primary);
+  font-size: 16px;
+}
+
 .journal-empty p {
   color: var(--text-secondary);
   font-size: 13px;

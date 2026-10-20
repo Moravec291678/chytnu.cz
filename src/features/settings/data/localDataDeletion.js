@@ -6,6 +6,8 @@ import {
   PROGRESSION_EVENT_STORE_NAME,
   SYNC_STATE_STORE_NAME,
   TRIP_STORE_NAME,
+  WATER_STORE_NAME,
+  WATER_CHAT_STORE_NAME,
   openLocalDatabase,
 } from "../../catches/data/catchRepository.js";
 import { validateDataScope } from "../../auth/data/localDataScope.js";
@@ -40,11 +42,15 @@ async function deleteJournalScope(scope) {
     PRIVACY_STORE_NAME,
     PROGRESSION_EVENT_STORE_NAME,
     SYNC_STATE_STORE_NAME,
+    WATER_STORE_NAME,
+    WATER_CHAT_STORE_NAME,
   ];
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(stores, "readwrite");
     deleteIndexMatches(transaction.objectStore(CATCH_STORE_NAME), "scopeKey", scope.scopeKey);
     deleteIndexMatches(transaction.objectStore(TRIP_STORE_NAME), "scopeKey", scope.scopeKey);
+    deleteIndexMatches(transaction.objectStore(WATER_STORE_NAME), "scopeKey", scope.scopeKey);
+    deleteIndexMatches(transaction.objectStore(WATER_CHAT_STORE_NAME), "scopeKey", scope.scopeKey);
     deleteIndexMatches(transaction.objectStore(OUTBOX_STORE_NAME), "scopeKey", scope.scopeKey);
     deleteIndexMatches(transaction.objectStore(PROGRESSION_EVENT_STORE_NAME), "scopeKey", scope.scopeKey);
     transaction.objectStore(PRIVACY_STORE_NAME).delete(scope.scopeKey);
@@ -58,34 +64,6 @@ async function deleteJournalScope(scope) {
   });
 }
 
-function openWatersDatabase() {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open("chytnu-waters", 1);
-    request.onupgradeneeded = () => {
-      const db = request.result;
-      const waters = db.createObjectStore("waters", { keyPath: "id" });
-      waters.createIndex("scopeKey", "scopeKey", { unique: false });
-      waters.createIndex("name", "name", { unique: false });
-      const chat = db.createObjectStore("waterChat", { keyPath: "id" });
-      chat.createIndex("waterId", "waterId", { unique: false });
-      chat.createIndex("scopeKey", "scopeKey", { unique: false });
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error ?? new Error("Místní revíry se nepodařilo otevřít."));
-  });
-}
-
-async function deleteWaterScope(scopeKey) {
-  const db = await openWatersDatabase();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(["waters", "waterChat"], "readwrite");
-    deleteIndexMatches(transaction.objectStore("waters"), "scopeKey", scopeKey);
-    deleteIndexMatches(transaction.objectStore("waterChat"), "scopeKey", scopeKey);
-    transaction.oncomplete = () => { db.close(); resolve(); };
-    transaction.onerror = () => { db.close(); reject(transaction.error ?? new Error("Místní revíry se nepodařilo smazat.")); };
-    transaction.onabort = () => { db.close(); reject(transaction.error ?? new Error("Mazání místních revírů bylo přerušeno.")); };
-  });
-}
 
 function deleteScopedPreferences(scopeKey, storage) {
   for (const key of [
@@ -99,7 +77,6 @@ function deleteScopedPreferences(scopeKey, storage) {
 export async function deleteLocalScopeData(options, storage = globalThis.localStorage) {
   const scope = validateDataScope(options ?? {});
   await deleteJournalScope(scope);
-  await deleteWaterScope(scope.scopeKey);
   try {
     deleteScopedPreferences(scope.scopeKey, storage);
   } catch (error) {

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   DEFAULT_BAITS,
   DEFAULT_METHODS,
@@ -10,9 +10,12 @@ import Layout from "../shared/layout/Layout";
 import "./AddCatchPage.css";
 import { useCatches } from "../features/catches/context/useCatches";
 import { catchToForm, createCatchRecord, updateCatchFormField, validateCatchForm } from "../features/catches/data/catchModel";
+import { resolveCatchTripId } from "../features/catches/data/catchTripDefault.js";
 import { useTrips } from "../features/trips/context/useTrips";
+import { getActiveTrip } from "../features/trips/data/tripModel.js";
 import { formatCoordinates, parseCoordinateText } from "../features/catches/data/coordinates";
 import { normalizeCatchPrivacy } from "../features/privacy/data/privacyModel";
+import { privacyRepository } from "../features/privacy/data/privacyRepository.js";
 import { readPreferences } from "../features/preferences/data/preferences.js";
 import { useDataScope } from "../features/auth/context/dataScopeContextValue.js";
 import { waterRepository } from "../features/waters/data/waterRepository.js";
@@ -79,11 +82,14 @@ function SpeciesManagementRow({ species, selected, pinned, onSelect, onTogglePin
 
 function AddCatchPage() {
   const { id } = useParams();
+  const location = useLocation();
   const navigate = useNavigate();
   const { state, createCatch, updateCatch } = useCatches();
   const { state: tripState } = useTrips();
   const scope = useDataScope();
   const preferenceAppliedScopeRef = useRef(null);
+  const privacyTouchedScopeRef = useRef(null);
+  const privacyDefaultsAppliedScopeRef = useRef(null);
   const [availableWaters, setAvailableWaters] = useState([]);
   const [watersError, setWatersError] = useState("");
   const existingCatch = id ? state.catches.find((item) => item.id === id) : null;
@@ -104,7 +110,7 @@ function AddCatchPage() {
     : readQuickSpeciesIds(scope.scopeKey);
   const [quickSpeciesError, setQuickSpeciesError] = useState("");
   const [waterSuggestionDismissed, setWaterSuggestionDismissed] = useState(false);
-  const [manualWaterChoice, setManualWaterChoice] = useState(Boolean(existingCatch?.waterId || existingCatch?.locationName));
+  const [manualWaterChoice, setManualWaterChoice] = useState(Boolean(existingCatch?.waterId || existingCatch?.locationName || location.state?.preselectedWaterId));
   const fileInputRef = useRef(null);
   const photoUrlsRef = useRef(new Set());
   useEffect(() => {
@@ -195,9 +201,64 @@ function AddCatchPage() {
     conditionSources: {},
     fishingMethod: "",
     photos: [],
-    baits: [], notes: "", isFavorite: false, tripId: "",
+    baits: [], notes: "", isFavorite: false, tripId: location.state?.tripId ?? "",
     privacy: normalizeCatchPrivacy(null),
   });
+  const activeTrip = getActiveTrip(tripState.trips);
+  useEffect(() => {
+    if (id || tripState.loading) return;
+    const nextTripId = resolveCatchTripId({
+      isEditing: false,
+      currentTripId: catchData.tripId,
+      requestedTripId: location.state?.tripId,
+      activeTripId: activeTrip?.id,
+    });
+    if (nextTripId && nextTripId !== catchData.tripId) {
+      queueMicrotask(() => setCatchData((current) => ({
+        ...current,
+        tripId: resolveCatchTripId({
+          isEditing: false,
+          currentTripId: current.tripId,
+          requestedTripId: location.state?.tripId,
+          activeTripId: activeTrip?.id,
+        }),
+      })));
+    }
+  }, [activeTrip?.id, catchData.tripId, id, location.state, tripState.loading]);
+  useEffect(() => {
+    if (id || scope.status !== "ready" || privacyDefaultsAppliedScopeRef.current === scope.scopeKey) return undefined;
+    privacyDefaultsAppliedScopeRef.current = scope.scopeKey;
+    let active = true;
+    privacyRepository.get(scope).then((defaults) => {
+      if (!active || privacyTouchedScopeRef.current === scope.scopeKey) return;
+      setCatchData((current) => ({
+        ...current,
+        privacy: normalizeCatchPrivacy({
+          visibility: defaults.defaultCatchVisibility,
+          photoVisibility: defaults.defaultPhotoVisibility,
+          privateSpot: defaults.privateSpotDefault,
+          locationPrecision: defaults.defaultLocationPrecision,
+          nearbyEligible: false,
+          heatmapEligible: false,
+        }),
+      }));
+    }).catch(() => {
+      // Private form defaults remain in place if saved preferences cannot be read.
+    });
+    return () => { active = false; };
+  }, [id, scope]);
+  useEffect(() => {
+    if (id || !location.state?.preselectedWaterId || !availableWaters.length) return undefined;
+    const selectedWater = availableWaters.find((water) => water.id === location.state.preselectedWaterId);
+    if (!selectedWater) return undefined;
+    let active = true;
+    Promise.resolve().then(() => {
+      if (!active) return;
+      setCatchData((current) => ({ ...current, waterId: selectedWater.id, locationName: selectedWater.name }));
+      setManualWaterChoice(true);
+    });
+    return () => { active = false; };
+  }, [availableWaters, id, location.state]);
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
   const [gpsLoading, setGpsLoading] = useState(false);
@@ -362,6 +423,7 @@ function AddCatchPage() {
 
   const updateCatchData = (field, value) => {
     setFormError("");
+    if (field === "privacy") privacyTouchedScopeRef.current = scope.scopeKey;
     setCatchData((previous) => updateCatchFormField(previous, field, value));
   };
 

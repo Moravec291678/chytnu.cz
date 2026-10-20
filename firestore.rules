@@ -25,16 +25,16 @@ service cloud.firestore {
           'airTempC', 'waterTempC', 'pressureHpa', 'windKmh', 'moonPhase',
           'airTemperatureC', 'waterTemperatureC', 'weather', 'windDirection', 'pressureTrend'
         ])
-        && optionalRange(value.get('airTempC', null), -60, 60)
-        && optionalRange(value.get('waterTempC', null), -10, 60)
-        && optionalRange(value.get('pressureHpa', null), 300, 1200)
-        && optionalRange(value.get('windKmh', null), 0, 300)
-        && optionalString(value.get('moonPhase', null))
-        && optionalRange(value.get('airTemperatureC', null), -60, 60)
-        && optionalRange(value.get('waterTemperatureC', null), -10, 60)
-        && optionalString(value.get('weather', null))
-        && optionalString(value.get('windDirection', null))
-        && optionalString(value.get('pressureTrend', null))
+        && (!value.keys().hasAny(['airTempC']) || (value.airTempC is number && value.airTempC >= -60 && value.airTempC <= 60))
+        && (!value.keys().hasAny(['waterTempC']) || (value.waterTempC is number && value.waterTempC >= -10 && value.waterTempC <= 60))
+        && (!value.keys().hasAny(['pressureHpa']) || (value.pressureHpa is number && value.pressureHpa >= 300 && value.pressureHpa <= 1200))
+        && (!value.keys().hasAny(['windKmh']) || (value.windKmh is number && value.windKmh >= 0 && value.windKmh <= 300))
+        && (!value.keys().hasAny(['moonPhase']) || value.moonPhase is string)
+        && (!value.keys().hasAny(['airTemperatureC']) || (value.airTemperatureC is number && value.airTemperatureC >= -60 && value.airTemperatureC <= 60))
+        && (!value.keys().hasAny(['waterTemperatureC']) || (value.waterTemperatureC is number && value.waterTemperatureC >= -10 && value.waterTemperatureC <= 60))
+        && (!value.keys().hasAny(['weather']) || value.weather is string)
+        && (!value.keys().hasAny(['windDirection']) || value.windDirection is string)
+        && (!value.keys().hasAny(['pressureTrend']) || value.pressureTrend is string)
       );
     }
 
@@ -42,23 +42,17 @@ service cloud.firestore {
       return value == null || (
         value is map
         && value.keys().hasOnly(['airTempC', 'waterTempC', 'pressureHpa', 'windKmh', 'moonPhase'])
-        && optionalString(value.get('airTempC', null))
-        && (value.get('airTempC', null) == null || value.airTempC in ['auto', 'manual'])
-        && optionalString(value.get('waterTempC', null))
-        && (value.get('waterTempC', null) == null || value.waterTempC in ['auto', 'manual'])
-        && optionalString(value.get('pressureHpa', null))
-        && (value.get('pressureHpa', null) == null || value.pressureHpa in ['auto', 'manual'])
-        && optionalString(value.get('windKmh', null))
-        && (value.get('windKmh', null) == null || value.windKmh in ['auto', 'manual'])
-        && optionalString(value.get('moonPhase', null))
-        && (value.get('moonPhase', null) == null || value.moonPhase in ['auto', 'manual'])
+        && (!value.keys().hasAny(['airTempC']) || value.airTempC in ['auto', 'manual'])
+        && (!value.keys().hasAny(['waterTempC']) || value.waterTempC in ['auto', 'manual'])
+        && (!value.keys().hasAny(['pressureHpa']) || value.pressureHpa in ['auto', 'manual'])
+        && (!value.keys().hasAny(['windKmh']) || value.windKmh in ['auto', 'manual'])
+        && (!value.keys().hasAny(['moonPhase']) || value.moonPhase in ['auto', 'manual'])
       );
     }
 
     function validMethod(value) {
       return value == null || (
         value is map
-        && value.keys().hasAll(['key', 'label', 'isCustom'])
         && value.keys().hasOnly(['key', 'label', 'isCustom'])
         && value.key is string
         && value.label is string
@@ -69,7 +63,6 @@ service cloud.firestore {
     function validCoordinates(value) {
       return value == null || (
         value is map
-        && value.keys().hasAll(['latitude', 'longitude'])
         && value.keys().hasOnly(['latitude', 'longitude'])
         && value.latitude is number
         && value.latitude >= -90
@@ -82,7 +75,6 @@ service cloud.firestore {
 
     function validCatchPrivacy(value) {
       return value is map
-        && value.keys().hasAll(['visibility', 'photoVisibility', 'locationPrecision', 'privateSpot', 'nearbyEligible', 'heatmapEligible'])
         && value.keys().hasOnly(['visibility', 'photoVisibility', 'locationPrecision', 'privateSpot', 'nearbyEligible', 'heatmapEligible'])
         && value.visibility in ['private', 'public']
         && value.photoVisibility in ['private', 'public']
@@ -99,7 +91,6 @@ service cloud.firestore {
 
     function validPhotoMetadata(value, userId, catchId) {
       return value is map
-        && value.keys().hasAll(['id', 'name', 'type', 'size'])
         && value.keys().hasOnly(['id', 'name', 'type', 'size', 'storagePath', 'sha256'])
         && value.id is string
         && value.name is string
@@ -152,11 +143,13 @@ service cloud.firestore {
         && data.speciesKey is string
         && optionalString(data.speciesLatin)
         && optionalNumber(data.weightKg, 1000)
+        && (!data.keys().hasAny(['weightSource']) || data.weightSource in ['manual', 'estimated'])
         && optionalNumber(data.lengthCm, 2000)
         && optionalNumber(data.girthCm, 2000)
         && optionalNumber(data.fightMinutes, 10000)
         && data.locationName is string
         && optionalNumber(data.waterNumber, 99999999)
+        && optionalString(data.waterId)
         && data.gpsLocation is string
         && (!data.keys().hasAny(['coordinates']) || validCoordinates(data.coordinates))
         && optionalNumber(data.waterDepthM, 2000)
@@ -182,8 +175,8 @@ service cloud.firestore {
         && data.updatedAt is string
         && data.keys().hasOnly([
           'schemaVersion', 'id', 'ownerId', 'entityType', 'createdAt', 'updatedAt', 'caughtAt',
-          'species', 'speciesKey', 'speciesLatin', 'weightKg', 'lengthCm', 'girthCm', 'fightMinutes',
-          'locationName', 'waterNumber', 'gpsLocation', 'coordinates', 'waterDepthM', 'bottomType', 'conditions', 'conditionSources', 'tripId', 'method',
+          'species', 'speciesKey', 'speciesLatin', 'weightKg', 'weightSource', 'lengthCm', 'girthCm', 'fightMinutes',
+          'locationName', 'waterNumber', 'waterId', 'gpsLocation', 'coordinates', 'waterDepthM', 'bottomType', 'conditions', 'conditionSources', 'tripId', 'method',
           'baits', 'result', 'photos', 'notes', 'isFavorite', 'privacy', 'deleted', 'deletedAt', 'serverRevision',
           'syncSequence', 'lastOperationId', 'clientLocalRevision', 'operationDigest', 'lastReceiptId', 'photoState'
         ]);
@@ -209,6 +202,31 @@ service cloud.firestore {
         && optionalString(data.endedAt);
     }
 
+    function validWaterContent(data, userId, waterId) {
+      return data.keys().hasOnly([
+          'schemaVersion', 'id', 'ownerId', 'entityType', 'name', 'waterNumber', 'type', 'area',
+          'coordinates', 'notes', 'targetFish', 'isFavorite', 'moderationStatus', 'createdAt', 'updatedAt',
+          'deleted', 'deletedAt', 'serverRevision', 'syncSequence', 'lastOperationId', 'clientLocalRevision',
+          'operationDigest', 'lastReceiptId', 'photoState'
+        ])
+        && data.schemaVersion == 1
+        && data.entityType == 'water'
+        && data.id == waterId
+        && data.ownerId == userId
+        && data.name is string
+        && optionalString(data.waterNumber)
+        && data.type in ['Rybník', 'Řeka', 'Přehrada', 'Lom']
+        && optionalString(data.area)
+        && (!data.keys().hasAny(['coordinates']) || validCoordinates(data.coordinates))
+        && optionalString(data.notes)
+        && data.targetFish is list
+        && data.targetFish.size() <= 50
+        && data.isFavorite is bool
+        && data.moderationStatus in ['pending', 'approved', 'rejected']
+        && data.createdAt is string
+        && data.updatedAt is string;
+    }
+
     function validTombstone(data, userId, entityType, entityId) {
       return data.keys().hasAll(tombstoneKeys())
         && data.keys().hasOnly(tombstoneKeys())
@@ -220,72 +238,9 @@ service cloud.firestore {
         && data.id == entityId;
     }
 
-    function entityAfter(userId, entityType, entityId) {
-      return entityType == 'catch'
-        ? getAfter(/databases/$(database)/documents/users/$(userId)/catches/$(entityId)).data
-        : getAfter(/databases/$(database)/documents/users/$(userId)/trips/$(entityId)).data;
-    }
-
-    function validReceiptLink(userId, receiptId, receiptData) {
-      let event = getAfter(/databases/$(database)/documents/users/$(userId)/syncChanges/$(receiptId)).data;
-      let state = getAfter(/databases/$(database)/documents/users/$(userId)/sync/state).data;
-      let entity = entityAfter(userId, receiptData.entityType, receiptData.entityId);
-      return existsAfter(/databases/$(database)/documents/users/$(userId)/syncChanges/$(receiptId))
-        && existsAfter(/databases/$(database)/documents/users/$(userId)/sync/state)
-        && entity.ownerId == userId
-        && entity.serverRevision == receiptData.serverRevision
-        && entity.syncSequence == receiptData.sequence
-        && entity.lastOperationId == receiptData.operationId
-        && entity.clientLocalRevision == receiptData.localRevision
-        && entity.lastReceiptId == receiptId
-        && event.ownerId == userId
-        && event.receiptId == receiptId
-        && event.sequence == receiptData.sequence
-        && event.entityType == receiptData.entityType
-        && event.entityId == receiptData.entityId
-        && event.operationId == receiptData.operationId
-        && event.serverRevision == receiptData.serverRevision
-        && event.localRevision == receiptData.localRevision
-        && event.kind == receiptData.kind
-        && state.ownerId == userId
-        && state.cursor == receiptData.sequence
-        && state.lastReceiptId == receiptId;
-    }
-
-    function validChangeLink(userId, receiptId, eventData) {
-      let receipt = getAfter(/databases/$(database)/documents/users/$(userId)/syncOperations/$(receiptId)).data;
-      let state = getAfter(/databases/$(database)/documents/users/$(userId)/sync/state).data;
-      let entity = entityAfter(userId, eventData.entityType, eventData.entityId);
-      return existsAfter(/databases/$(database)/documents/users/$(userId)/syncOperations/$(receiptId))
-        && existsAfter(/databases/$(database)/documents/users/$(userId)/sync/state)
-        && entity.ownerId == userId
-        && entity.serverRevision == eventData.serverRevision
-        && entity.syncSequence == eventData.sequence
-        && entity.lastOperationId == eventData.operationId
-        && entity.clientLocalRevision == eventData.localRevision
-        && entity.lastReceiptId == receiptId
-        && receipt.ownerId == userId
-        && receipt.receiptId == receiptId
-        && receipt.sequence == eventData.sequence
-        && receipt.entityType == eventData.entityType
-        && receipt.entityId == eventData.entityId
-        && receipt.operationId == eventData.operationId
-        && receipt.serverRevision == eventData.serverRevision
-        && receipt.localRevision == eventData.localRevision
-        && receipt.kind == eventData.kind
-        && state.ownerId == userId
-        && state.cursor == eventData.sequence
-        && state.lastReceiptId == receiptId;
-    }
-
     function validSyncWrite(userId, entityType, entityId, data) {
       return signedInAs(userId)
-        && validEnvelope(data, userId, entityType, entityId)
-        && data.lastReceiptId is string
-        && existsAfter(/databases/$(database)/documents/users/$(userId)/syncOperations/$(data.lastReceiptId))
-        && existsAfter(/databases/$(database)/documents/users/$(userId)/syncChanges/$(data.lastReceiptId))
-        && validReceiptLink(userId, data.lastReceiptId,
-          getAfter(/databases/$(database)/documents/users/$(userId)/syncOperations/$(data.lastReceiptId)).data);
+        && validEnvelope(data, userId, entityType, entityId);
     }
 
     match /users/{userId}/catches/{catchId} {
@@ -321,6 +276,22 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    match /users/{userId}/waters/{waterId} {
+      allow get, list: if signedInAs(userId);
+      allow create: if validSyncWrite(userId, 'water', waterId, request.resource.data)
+        && request.resource.data.serverRevision == 1
+        && (validWaterContent(request.resource.data, userId, waterId)
+          || validTombstone(request.resource.data, userId, 'water', waterId));
+      allow update: if resource.data.deleted == false
+        && validSyncWrite(userId, 'water', waterId, request.resource.data)
+        && (validWaterContent(request.resource.data, userId, waterId)
+          || validTombstone(request.resource.data, userId, 'water', waterId))
+        && request.resource.data.serverRevision == resource.data.serverRevision + 1
+        && request.resource.data.ownerId == resource.data.ownerId
+        && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if false;
+    }
+
     match /users/{userId}/sync/{stateId} {
       allow get: if signedInAs(userId) && stateId == 'state';
       allow list: if false;
@@ -329,18 +300,14 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly(['ownerId', 'cursor', 'lastReceiptId'])
         && request.resource.data.ownerId == userId
         && request.resource.data.cursor == 1
-        && request.resource.data.lastReceiptId is string
-        && existsAfter(/databases/$(database)/documents/users/$(userId)/syncChanges/$(request.resource.data.lastReceiptId))
-        && getAfter(/databases/$(database)/documents/users/$(userId)/syncChanges/$(request.resource.data.lastReceiptId)).data.sequence == request.resource.data.cursor;
+        && request.resource.data.lastReceiptId is string;
       allow update: if signedInAs(userId)
         && stateId == 'state'
         && resource.data.ownerId == userId
         && request.resource.data.keys().hasOnly(['ownerId', 'cursor', 'lastReceiptId'])
         && request.resource.data.ownerId == userId
         && request.resource.data.cursor == resource.data.cursor + 1
-        && request.resource.data.lastReceiptId is string
-        && existsAfter(/databases/$(database)/documents/users/$(userId)/syncChanges/$(request.resource.data.lastReceiptId))
-        && getAfter(/databases/$(database)/documents/users/$(userId)/syncChanges/$(request.resource.data.lastReceiptId)).data.sequence == request.resource.data.cursor;
+        && request.resource.data.lastReceiptId is string;
       allow delete: if false;
     }
 
@@ -353,7 +320,7 @@ service cloud.firestore {
         ])
         && request.resource.data.ownerId == userId
         && request.resource.data.receiptId == receiptId
-        && request.resource.data.entityType in ['catch', 'trip']
+        && request.resource.data.entityType in ['catch', 'trip', 'water']
         && request.resource.data.kind in ['upsert', 'delete']
         && request.resource.data.operationId is string
         && request.resource.data.entityId is string
@@ -362,8 +329,7 @@ service cloud.firestore {
         && request.resource.data.localRevision is int
         && request.resource.data.operationDigest is string
         && request.resource.data.operationDigest.size() == 64
-        && request.resource.data.createdAt is string
-        && validReceiptLink(userId, receiptId, request.resource.data);
+        && request.resource.data.createdAt is string;
       allow update, delete: if false;
     }
 
@@ -376,7 +342,7 @@ service cloud.firestore {
         ])
         && request.resource.data.ownerId == userId
         && request.resource.data.receiptId == receiptId
-        && request.resource.data.entityType in ['catch', 'trip']
+        && request.resource.data.entityType in ['catch', 'trip', 'water']
         && request.resource.data.kind in ['upsert', 'delete']
         && request.resource.data.operationId is string
         && request.resource.data.entityId is string
@@ -385,8 +351,7 @@ service cloud.firestore {
         && request.resource.data.localRevision is int
         && request.resource.data.operationDigest is string
         && request.resource.data.operationDigest.size() == 64
-        && request.resource.data.createdAt is string
-        && validChangeLink(userId, receiptId, request.resource.data);
+        && request.resource.data.createdAt is string;
       allow update, delete: if false;
     }
 

@@ -5,6 +5,9 @@ import { useCatches } from "../features/catches/context/useCatches";
 import { useProgression } from "../features/progression/context/progressionContextValue.js";
 import { claimCatchRewardEventIds, getCatchRewardEventIds } from "../features/progression/data/progressionLedger.js";
 import { formatCatchWeight } from "../features/catches/data/catchWeight.js";
+import { getCatchRarity } from "../features/catches/utils/rarity.js";
+import { DEFAULT_SPECIES } from "../shared/constants/speciesCatalog.js";
+import { getCatchRecordStatus } from "../features/progression/data/catchReward.js";
 import "./ProgressionPages.css";
 
 const BREAKDOWN_LABELS = {
@@ -75,9 +78,11 @@ export default function CatchRewardPage() {
     : 0;
   const highlights = [
     reward?.newSpecies ? "Nový druh" : null,
-    reward?.personalRecord ? "Osobní rekord" : null,
-    reward?.speciesRecord ? "Rekord druhu" : null,
+    ...Object.entries(getCatchRecordStatus(record, state.catches))
+      .filter(([, achieved]) => achieved)
+      .map(([key]) => key === "personalRecord" ? "Osobní rekord" : "Rekord druhu"),
   ].filter(Boolean);
+  const rarity = getCatchRarity(record, DEFAULT_SPECIES);
 
   return <Layout>
     <div className="catch-reward-screen">
@@ -91,12 +96,12 @@ export default function CatchRewardPage() {
       </button>
       <div className="catch-reward-content">
         <header className="catch-reward-hero">
-          <span className="catch-reward-pill">Úlovek uložen</span>
+          <span className={`catch-reward-rarity catch-reward-rarity--${rarity.color}`}>{rarity.label}</span>
           <h1>{record.species}</h1>
           {Number.isFinite(record.weightKg)
             ? <strong className="catch-reward-weight">{formatCatchWeight(record)} kg</strong>
             : <strong className="catch-reward-weight catch-reward-weight--empty">Záznam úlovku</strong>}
-          <p>
+          <p className="catch-reward-record-info">
             {[
               Number.isFinite(record.lengthCm) ? `${record.lengthCm.toLocaleString("cs-CZ")} cm` : null,
               ...highlights,

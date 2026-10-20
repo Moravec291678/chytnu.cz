@@ -10,7 +10,7 @@ import {
 } from "../../catches/data/catchRepository.js";
 import { accountScopeKey, isGuestScope, recordScopeKey } from "../../auth/data/localDataScope.js";
 
-const STORES = { catch: "catches", trip: "trips" };
+const STORES = { catch: "catches", trip: "trips", water: "waters" };
 
 function photoSyncStatus(photos, remoteConfirmed = false) {
   if (photos.length === 0) return "none";
@@ -91,23 +91,25 @@ export async function linkGuestData(ownerId, guestScopeKey) {
   if (!isGuestScope(guestScopeKey)) throw new Error("Místní profil není platný.");
   const accountScope = accountScopeKey(ownerId);
   const db = await openLocalDatabase();
-  const transaction = db.transaction(["catches", "trips", OUTBOX_STORE_NAME, PRIVACY_STORE_NAME, PROGRESSION_EVENT_STORE_NAME], "readwrite");
+  const transaction = db.transaction(["catches", "trips", "waters", OUTBOX_STORE_NAME, PRIVACY_STORE_NAME, PROGRESSION_EVENT_STORE_NAME], "readwrite");
   const catchStore = transaction.objectStore("catches");
   const tripStore = transaction.objectStore("trips");
+  const waterStore = transaction.objectStore("waters");
   const outbox = transaction.objectStore(OUTBOX_STORE_NAME);
   const privacyStore = transaction.objectStore(PRIVACY_STORE_NAME);
   const progressionStore = transaction.objectStore(PROGRESSION_EVENT_STORE_NAME);
   const result = { catches: 0, trips: 0, photos: 0 };
   let failure;
-  const requests = [catchStore.getAll(), tripStore.getAll(), outbox.getAll(), privacyStore.get(guestScopeKey), progressionStore.index("scopeKey").getAll(guestScopeKey)];
+  const requests = [catchStore.getAll(), tripStore.getAll(), waterStore.getAll(), outbox.getAll(), privacyStore.get(guestScopeKey), progressionStore.index("scopeKey").getAll(guestScopeKey)];
   let loaded = 0;
   const process = () => {
     loaded += 1;
     if (loaded !== requests.length) return;
     try {
-      const [allCatches, allTrips, allOperations, guestPrivacy, guestProgression] = requests.map((request) => request.result);
+      const [allCatches, allTrips, allWaters, allOperations, guestPrivacy, guestProgression] = requests.map((request) => request.result);
       const ownerlessTrips = allTrips.filter((record) => recordScopeKey(record) === guestScopeKey);
       const ownerlessCatches = allCatches.filter((record) => recordScopeKey(record) === guestScopeKey);
+      const ownerlessWaters = allWaters.filter((record) => recordScopeKey(record) === guestScopeKey);
       const tripsById = new Map(allTrips.map((record) => [record.id, record]));
       for (const record of ownerlessCatches) {
         const linkedTrip = record.tripId ? tripsById.get(record.tripId) : null;
@@ -126,6 +128,7 @@ export async function linkGuestData(ownerId, guestScopeKey) {
       const linkedIds = new Set([
         ...ownerlessTrips.map((record) => outboxEntityKey(guestScopeKey, "trip", record.id)),
         ...ownerlessCatches.map((record) => outboxEntityKey(guestScopeKey, "catch", record.id)),
+        ...ownerlessWaters.map((record) => outboxEntityKey(guestScopeKey, "water", record.id)),
       ]);
       allOperations.filter((operation) => linkedIds.has(operation.entityKey)).forEach((operation) => outbox.delete(operation.sequence));
       for (const record of ownerlessTrips) {
@@ -150,6 +153,12 @@ export async function linkGuestData(ownerId, guestScopeKey) {
             photoStatus: (record.photos ?? []).some((photo) => photo.blob) ? "local-only" : "none",
           },
         }));
+      }
+      for (const record of ownerlessWaters) {
+        queueOutboxOperation(transaction, {
+          entityType: "water", entityId: record.id, operation: "upsert", ownerId,
+          scopeKey: accountScope, localRevision: Math.max(1, record.sync?.revision ?? 1), baseServerRevision: null,
+        }, (revision) => waterStore.put({ ...record, ownerId, scopeKey: accountScope, sync: { ...(record.sync ?? {}), status: "local", revision } }));
       }
       result.catches = ownerlessCatches.length;
       result.trips = ownerlessTrips.length;
@@ -183,7 +192,7 @@ export async function listSyncConflicts(ownerId) {
 export async function resolveSyncConflict(ownerId, conflictId, choice) {
   if (choice !== "local" && choice !== "remote") throw new Error("Vyber verzi konfliktu.");
   const db = await openLocalDatabase();
-  const transaction = db.transaction(["catches", "trips", OUTBOX_STORE_NAME, CONFLICT_STORE_NAME], "readwrite");
+  const transaction = db.transaction(["catches", "trips", "waters", OUTBOX_STORE_NAME, CONFLICT_STORE_NAME], "readwrite");
   const conflicts = transaction.objectStore(CONFLICT_STORE_NAME);
   const outbox = transaction.objectStore(OUTBOX_STORE_NAME);
   let failure;
@@ -282,6 +291,18 @@ export async function resolveSyncConflict(ownerId, conflictId, choice) {
 }
 
 function metadataOnlyRecord(remote, local = null) {
+  if (remote.entityType === "water") {
+    return {
+      ...remote.record,
+      ownerId: remote.record.ownerId,
+      scopeKey: accountScopeKey(remote.record.ownerId),
+      sync: {
+        status: "metadata-synced",
+        revision: local?.sync?.revision ?? 0,
+        serverRevision: remote.revision,
+      },
+    };
+  }
   const localPhotos = new Map((local?.photos ?? []).filter((photo) => photo.blob).map((photo) => [photo.id, photo]));
   const photos = (remote.record.photos ?? []).map((photo) => {
     const localPhoto = localPhotos.get(photo.id);
@@ -333,7 +354,7 @@ export async function applyRemotePage({ ownerId, snapshots, cursor, preserveCatc
   const db = await openLocalDatabase();
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(
-      ["catches", "trips", OUTBOX_STORE_NAME, CONFLICT_STORE_NAME, SYNC_STATE_STORE_NAME],
+      ["catches", "trips", "waters", OUTBOX_STORE_NAME, CONFLICT_STORE_NAME, SYNC_STATE_STORE_NAME],
       "readwrite",
     );
     const outbox = transaction.objectStore(OUTBOX_STORE_NAME);

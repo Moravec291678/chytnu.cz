@@ -102,6 +102,13 @@
   text-transform: none;
 }
 
+.stats-pattern-threshold {
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 9px;
+  line-height: 1.4;
+}
+
 .stats-pattern-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -339,6 +346,38 @@
 
 .stats-top-catches .catch-card-link {
   margin: 8px 0 0;
+}
+
+.stats-unavailable {
+  border-color: var(--border);
+  background: var(--surface-1);
+}
+
+.stats-supporter {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgb(255 173 20 / 30%);
+  border-radius: 14px;
+  background: rgb(255 173 20 / 8%);
+}
+
+.stats-supporter > span {
+  color: var(--accent-gold, #f0a820);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.5px;
+}
+
+.stats-supporter h2 {
+  margin-top: 5px;
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.stats-supporter p {
+  margin-top: 4px;
+  color: var(--text-secondary);
+  font-size: 11px;
 }
 
 @media (min-width: 420px) {

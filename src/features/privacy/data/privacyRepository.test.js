@@ -25,19 +25,24 @@ test("privacy settings persist per account scope and remain private by default",
     privateSpotDefault: false,
     nearbyOptIn: true,
     nearbyLocationPrecision: "none",
-    heatmapOptIn: false,
+    heatmapGranularity: "city",
   }, first);
 
   const persisted = await privacyRepository.get(first);
+  assert.equal(persisted.hasSavedSettings, true);
   assert.equal(persisted.profileVisibility, "public");
   assert.equal(persisted.defaultLocationPrecision, "approximate");
   assert.equal(persisted.nearbyOptIn, true);
   assert.equal(persisted.nearbyLocationPrecision, "none");
+  assert.equal(persisted.heatmapGranularity, "city");
+  assert.equal(persisted.heatmapOptIn, true);
 
   const isolated = await privacyRepository.get(second);
+  assert.equal(isolated.hasSavedSettings, false);
   assert.equal(isolated.profileVisibility, "private");
   assert.equal(isolated.defaultCatchVisibility, "private");
   assert.equal(isolated.defaultLocationPrecision, "none");
   assert.equal(isolated.nearbyOptIn, false);
   assert.equal(isolated.nearbyLocationPrecision, "approximate");
+  assert.equal(isolated.heatmapGranularity, "off");
 });

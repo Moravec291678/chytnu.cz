@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createPublicCatchProjection, normalizeCatchPrivacy, normalizePrivacySettings } from "./privacyModel.js";
+import { anonymizePublicCoordinates, createPublicCatchProjection, HEATMAP_GRANULARITY, normalizeCatchPrivacy, normalizePrivacySettings } from "./privacyModel.js";
 
 test("privacy defaults are private and exact location requires location sharing", () => {
   assert.deepEqual(normalizeCatchPrivacy(), {
@@ -10,7 +10,7 @@ test("privacy defaults are private and exact location requires location sharing"
   assert.deepEqual(normalizePrivacySettings({ showExactLocation: true }), {
     profileVisibility: "private", defaultCatchVisibility: "private", defaultPhotoVisibility: "private",
     defaultLocationPrecision: "none", privateSpotDefault: true, nearbyOptIn: false,
-    nearbyLocationPrecision: "approximate", heatmapOptIn: false,
+    nearbyLocationPrecision: "approximate", heatmapOptIn: false, heatmapGranularity: HEATMAP_GRANULARITY.OFF,
   });
 });
 
@@ -37,7 +37,31 @@ test("public projection exposes only an explicit allowlist", () => {
   assert.equal("ownerId" in projection, false);
   assert.equal("id" in projection, false);
   assert.equal(JSON.stringify(projection).includes("storagePath"), false);
+  assert.equal(projection.locationArea, "50.0, 14.0");
+  assert.equal(projection.locationArea.includes("50.123456"), false);
+  const exactPrecisionProjection = createPublicCatchProjection({
+    ...record,
+    privacy: { visibility: "public", photoVisibility: "private", privateSpot: false, locationPrecision: "exact" },
+  });
+  assert.equal("coordinates" in exactPrecisionProjection, false);
+  assert.equal("gpsLocation" in exactPrecisionProjection, false);
+  assert.equal("locationArea" in exactPrecisionProjection, false);
+  assert.equal(createPublicCatchProjection({
+    ...record, locationArea: "50.123456, 14.123456", coordinates: null,
+  }).locationArea, undefined);
   assert.equal(createPublicCatchProjection({ ...record, privacy: { visibility: "private" } }), null);
+});
+
+test("public coordinate anonymization only emits validated coarse coordinates", () => {
+  assert.equal(anonymizePublicCoordinates({ latitude: 50.123456, longitude: 14.654321 }, "approximate"), "50.1, 14.7");
+  assert.equal(anonymizePublicCoordinates({ latitude: 50.123456, longitude: 14.654321 }, "exact"), null);
+  assert.equal(anonymizePublicCoordinates({ latitude: 95, longitude: 14 }, "approximate"), null);
+});
+
+test("heatmap granularity is normalized and legacy opt-in maps to area", () => {
+  assert.equal(normalizePrivacySettings({ heatmapGranularity: "city" }).heatmapOptIn, true);
+  assert.equal(normalizePrivacySettings({ heatmapGranularity: "off", heatmapOptIn: true }).heatmapOptIn, false);
+  assert.equal(normalizePrivacySettings({ heatmapOptIn: true }).heatmapGranularity, HEATMAP_GRANULARITY.AREA);
 });
 
 test("private spot overrides location and aggregate eligibility", () => {

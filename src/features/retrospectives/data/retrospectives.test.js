@@ -5,6 +5,9 @@ import {
   buildSeasonStory,
   buildSeasonStoryWithWaters,
   buildYearSummary,
+  getAvailableSummaryYears,
+  getBestCatchBait,
+  getBestCatchMonth,
   createSeasonStoryShareData,
   formatSeasonStoryShareText,
 } from "./retrospectives.js";
@@ -18,9 +21,85 @@ test("insights show only patterns supported by at least three records", () => {
   assert.equal(buildInsights(rows.slice(0, 2)).find((item) => item.key === "method").value, null);
 });
 
+test("species patterns use stable IDs and time buckets use Europe/Prague", () => {
+  const rows = [1, 2, 3].map((id) => catchRecord({
+    id,
+    caughtAt: `2026-05-01T22:3${id}:00.000Z`,
+    species: "Kapr",
+    speciesKey: "carp-stable",
+  }));
+  const insights = buildInsights(rows);
+  assert.equal(insights.find((item) => item.key === "time").value, "00:00");
+  assert.equal(insights.find((item) => item.key === "species").value, "Kapr");
+  assert.equal(buildInsights(rows.map((row) => ({ ...row, speciesKey: null, speciesId: null }))).find((item) => item.key === "species").value, null);
+});
+
 test("year summary uses only the selected year and measured personal bests", () => {
   const result = buildYearSummary([catchRecord({ weightKg: 4 }), catchRecord({ caughtAt: "2025-01-01", weightKg: 90 })], [], 2026);
   assert.equal(result.catches, 1); assert.equal(result.biggest.weightKg, 4); assert.equal(result.species, 1);
+});
+
+test("year summary returns an empty, non-invented state for a year without data", () => {
+  const result = buildYearSummary([], [], 2040);
+  assert.equal(result.year, 2040);
+  assert.equal(result.catches, 0);
+  assert.equal(result.trips, 0);
+  assert.equal(result.biggest, null);
+  assert.equal(result.largestRecordedCatch, null);
+  assert.equal(result.bestMonth, null);
+  assert.equal(result.bestBait, null);
+});
+
+test("year summary applies Prague calendar years to Catch and Trip start dates", () => {
+  const catches = [
+    catchRecord({ id: "included-at-boundary", caughtAt: "2025-12-31T23:00:00.000Z", weightKg: 2 }),
+    catchRecord({ id: "excluded-at-boundary", caughtAt: "2026-12-31T23:00:00.000Z", weightKg: 20 }),
+  ];
+  const trips = [
+    { id: "included", startedAt: "2025-12-31T23:30:00.000Z", createdAt: "2025-01-01T00:00:00.000Z" },
+    { id: "excluded", startedAt: "2026-12-31T23:00:00.000Z", createdAt: "2026-01-01T00:00:00.000Z" },
+  ];
+  const result = buildYearSummary(catches, trips, 2026);
+  assert.equal(result.catches, 1);
+  assert.equal(result.trips, 1);
+  assert.equal(result.biggest.id, "included-at-boundary");
+});
+
+test("year summary keeps estimates visible but distinct from a measured record", () => {
+  const result = buildYearSummary([
+    catchRecord({ id: "weighed", weightKg: 4, weightSource: "manual" }),
+    catchRecord({ id: "estimated", weightKg: 8, weightSource: "estimated" }),
+  ], [], 2026);
+  assert.equal(result.biggest.id, "weighed");
+  assert.equal(result.largestRecordedCatch.id, "estimated");
+});
+
+test("best month is centralized by Prague month Catch count", () => {
+  const rows = [
+    catchRecord({ caughtAt: "2025-12-31T23:00:00.000Z" }),
+    catchRecord({ caughtAt: "2026-01-15T10:00:00.000Z" }),
+    catchRecord({ caughtAt: "2026-02-15T10:00:00.000Z" }),
+  ];
+  assert.deepEqual(getBestCatchMonth(rows), { key: "1", label: "leden", count: 2 });
+  assert.deepEqual(buildYearSummary(rows, [], 2026).bestMonth, { key: "1", label: "leden", count: 2 });
+});
+
+test("best bait ignores missing and unknown entries and counts once per catch", () => {
+  const rows = [
+    catchRecord({ baits: [{ key: "boilie", label: "Boilie" }, { key: "boilie", label: "Boilie" }] }),
+    catchRecord({ baits: [{ key: "boilie", label: "Boilie" }, { key: "unknown", label: "Neznámá" }] }),
+    catchRecord({ baits: [{ key: "unset", label: "Neuvedeno" }, { label: "" }] }),
+  ];
+  assert.deepEqual(getBestCatchBait(rows), { key: "boilie", label: "Boilie", count: 2 });
+  assert.deepEqual(buildYearSummary(rows, [], 2026).bestBait, { key: "boilie", label: "Boilie", count: 2 });
+  assert.equal(getBestCatchBait([catchRecord({ baits: [{ key: "unknown", label: "Neznámá" }] })]), null);
+});
+
+test("available summary year selector includes years with Trips only", () => {
+  assert.deepEqual(getAvailableSummaryYears([], [
+    { startedAt: "2024-12-31T23:30:00.000Z" },
+    { startedAt: "invalid", createdAt: "2023-06-01T12:00:00.000Z" },
+  ], 2026), [2026, 2025, 2023]);
 });
 
 test("season story handles zero data and does not invent distance or highlights", () => {

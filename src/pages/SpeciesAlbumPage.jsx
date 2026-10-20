@@ -1,16 +1,20 @@
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import Layout from "../shared/layout/Layout";
 import { isMeasuredCatchWeight } from "../features/catches/data/catchWeight.js";
+import { useDataScope } from "../features/auth/context/dataScopeContextValue.js";
 import { useCatches } from "../features/catches/context/useCatches";
 import { useTrips } from "../features/trips/context/useTrips";
 import {
-  buildLocationCollections,
   buildSeasonCollections,
   buildSpeciesAlbum,
   buildTrophyRecords,
+  getSpeciesAlbumYear,
 } from "../features/species/data/speciesAlbum";
 import { useProgression } from "../features/progression/context/progressionContextValue.js";
 import { formatTripCatchCount } from "../features/trips/data/tripModel";
+import { buildVisitedWaterCollections } from "../features/waters/data/waterDetailStats.js";
+import { waterRepository } from "../features/waters/data/waterRepository.js";
 import { DEFAULT_SPECIES } from "../shared/constants/constants";
 import "./SpeciesAlbumPage.css";
 
@@ -27,27 +31,41 @@ function countLabel(count, one, few, many) {
 }
 
 function SpeciesAlbumPage() {
+  const scope = useDataScope();
   const { state: catchState, refresh: refreshCatches } = useCatches();
   const { state: tripState, refresh: refreshTrips } = useTrips();
+  const [waterState, setWaterState] = useState({ scopeKey: null, records: [], loading: true, error: "" });
   const catches = catchState.catches ?? [];
   const trips = tripState.trips ?? [];
   const { summary: progression, loading: progressionLoading, error: progressionError } = useProgression();
-  const masteryBySpecies = new Map(progression.mastery.map((item) => [item.speciesKey, item]));
-  const album = buildSpeciesAlbum(catches, DEFAULT_SPECIES).map((item) => ({
-    ...item, discovered: item.discovered || (masteryBySpecies.get(item.key)?.level ?? 0) > 0,
-  }));
+  const loadWaters = useCallback(async () => {
+    if (scope.status !== "ready") return;
+    setWaterState({ scopeKey: scope.scopeKey, records: [], loading: true, error: "" });
+    try {
+      const records = await waterRepository.list(scope);
+      setWaterState({ scopeKey: scope.scopeKey, records, loading: false, error: "" });
+    } catch (error) {
+      setWaterState({ scopeKey: scope.scopeKey, records: [], loading: false, error: error?.message || "Revíry se nepodařilo načíst." });
+    }
+  }, [scope]);
+  useEffect(() => { void Promise.resolve().then(loadWaters); }, [loadWaters]);
+  const waters = waterState.scopeKey === scope.scopeKey ? waterState.records : [];
+  const waterError = waterState.scopeKey === scope.scopeKey ? waterState.error : "";
+  const waterLoading = scope.status !== "ready" || waterState.scopeKey !== scope.scopeKey || waterState.loading;
+  const album = buildSpeciesAlbum(catches, DEFAULT_SPECIES, progression.mastery);
   const discovered = album.filter((item) => item.discovered).length;
-  const locations = buildLocationCollections(catches, trips);
-  const seasons = buildSeasonCollections(catches, trips);
+  const visitedWaters = buildVisitedWaterCollections(waters, catches, trips);
+  const currentYear = getSpeciesAlbumYear();
+  const seasons = buildSeasonCollections(catches, trips, currentYear);
   const trophies = buildTrophyRecords(catches, DEFAULT_SPECIES);
   const yearRecord = catches
-    .filter((record) => isMeasuredCatchWeight(record) && new Date(record.caughtAt).getFullYear() === new Date().getFullYear())
+    .filter((record) => isMeasuredCatchWeight(record) && getSpeciesAlbumYear(record.caughtAt) === currentYear)
     .sort((a, b) => b.weightKg - a.weightKg)[0];
-  const isLoading = catchState.loading || tripState.loading || progressionLoading;
-  const errors = [catchState.error, tripState.error, progressionError].filter(Boolean);
+  const isLoading = catchState.loading || tripState.loading || progressionLoading || waterLoading;
+  const errors = [catchState.error, tripState.error, progressionError, waterError].filter(Boolean);
 
   const retry = () => {
-    void Promise.all([refreshCatches(), refreshTrips()]);
+    void Promise.all([refreshCatches(), refreshTrips(), loadWaters()]);
   };
 
   return <Layout><div className="album-page">
@@ -81,7 +99,7 @@ function SpeciesAlbumPage() {
                 <span className="album-lock-mark" aria-hidden="true">◇</span>
               </article>;
             }
-            const stars = masteryBySpecies.get(species.key)?.stars ?? 1;
+            const stars = species.stars;
             return <Link className="album-card album-card--discovered" to={`/species/${species.key}`} key={species.key}>
               <span className="album-fish" aria-hidden="true">🐟</span>
               <strong>{species.label}</strong>
@@ -96,25 +114,27 @@ function SpeciesAlbumPage() {
 
         <section className="album-section" aria-labelledby="album-locations-title">
           <div className="album-section-heading">
-            <div><p className="album-eyebrow">02 · VLASTNÍ ZÁZNAMY</p><h2 id="album-locations-title">Místa z deníku</h2></div>
-            <span>{locations.length}</span>
+            <div><p className="album-eyebrow">02 · NAVŠTÍVENÉ REVÍRY</p><h2 id="album-locations-title">Revíry</h2></div>
+            <span>{visitedWaters.length} navštívené</span>
           </div>
-          {locations.length
-            ? <div className="album-list">{locations.map((location) => <article className="album-list-card" key={location.key}>
+          {visitedWaters.length
+            ? <div className="album-list">{visitedWaters.map((water) => <Link className="album-list-card" to={`/waters/${water.id}`} key={water.id}>
               <span className="album-list-icon" aria-hidden="true">⌖</span>
-              <div><h3>{location.name}</h3><p>
-                {location.catchCount > 0 && <span>{formatTripCatchCount(location.catchCount)}</span>}
-                {location.catchCount > 0 && location.tripCount > 0 && <span aria-hidden="true"> · </span>}
-                {location.tripCount > 0 && <span>{countLabel(location.tripCount, "výprava", "výpravy", "výprav")}</span>}
+              <div><h3>{water.name}</h3><p>
+                {water.type && <span>{water.type}</span>}
+                {water.type && (water.catchCount > 0 || water.tripCount > 0) && <span aria-hidden="true"> · </span>}
+                {water.catchCount > 0 && <span>{formatTripCatchCount(water.catchCount)}</span>}
+                {water.catchCount > 0 && water.tripCount > 0 && <span aria-hidden="true"> · </span>}
+                {water.tripCount > 0 && <span>{countLabel(water.tripCount, "výprava", "výpravy", "výprav")}</span>}
               </p></div>
               <span className="album-list-arrow" aria-hidden="true">›</span>
-            </article>)}</div>
-            : <p className="album-empty">Místa se zobrazí, až je přidáš k úlovku nebo výpravě.</p>}
+            </Link>)}</div>
+            : <p className="album-empty">Revíry se zobrazí po propojení skutečného úlovku nebo výpravy s uloženým revírem.</p>}
         </section>
 
         <section className="album-section" aria-labelledby="album-seasons-title">
           <div className="album-section-heading">
-            <div><p className="album-eyebrow">03 · ROK {new Date().getFullYear()}</p><h2 id="album-seasons-title">Sezónní přehled</h2></div>
+            <div><p className="album-eyebrow">03 · ROK {currentYear}</p><h2 id="album-seasons-title">Sezónní přehled</h2></div>
             <span>{seasons.length}</span>
           </div>
           {seasons.length
@@ -128,11 +148,11 @@ function SpeciesAlbumPage() {
         <section className="album-section" aria-labelledby="album-records-title">
           <div className="album-section-heading">
             <div><p className="album-eyebrow">04 · Z MĚŘENÝCH ÚLOVKŮ</p><h2 id="album-records-title">Osobní rekordy</h2></div>
-            <span>{trophies.length}</span>
+            <Link to="/profile#profile-trophy-editor">Upravit</Link>
           </div>
           {yearRecord && <article className="album-year-record">
             <span aria-hidden="true">✦</span>
-            <div><p>NEJTĚŽŠÍ ÚLOVEK ROKU {new Date().getFullYear()}</p><strong>{measurement(yearRecord.weightKg, "kg")}</strong><span>{yearRecord.species || "Druh neuveden"}</span></div>
+            <div><p>NEJTĚŽŠÍ ÚLOVEK ROKU {currentYear}</p><strong>{measurement(yearRecord.weightKg, "kg")}</strong><span>{yearRecord.species || "Druh neuveden"}</span></div>
             {yearRecord.id && <Link to={`/catch/${yearRecord.id}`} aria-label="Otevřít nejtěžší úlovek roku">›</Link>}
           </article>}
           {trophies.length

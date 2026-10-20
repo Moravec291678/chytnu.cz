@@ -22,6 +22,7 @@ import { hasLegacyProfileData } from "../features/preferences/data/legacyProfile
 import { useDataScope } from "../features/auth/context/dataScopeContextValue.js";
 import { useCatches } from "../features/catches/context/useCatches.js";
 import { useTrips } from "../features/trips/context/useTrips.js";
+import { resolveHomeEntry } from "./homeEntry.js";
 
 const MapPage = lazy(() => import("../pages/MapPage"));
 const CalendarPage = lazy(() => import("../pages/JournalCalendarPage"));
@@ -50,6 +51,8 @@ const OnboardingPage = lazy(() => import("../pages/OnboardingPage"));
 const InsightsPage = lazy(() => import("../pages/InsightsPage"));
 const SeasonStoryPage = lazy(() => import("../pages/SeasonStoryPage"));
 const YearSummaryPage = lazy(() => import("../pages/YearSummaryPage"));
+const SupporterPage = lazy(() => import("../pages/SupporterPage"));
+const LoginPage = lazy(() => import("../pages/LoginPage"));
 
 function PageSuspense({ children }) {
   return <Suspense fallback={<Layout><p className="loading-state" role="status">Načítám obrazovku…</p></Layout>}>{children}</Suspense>;
@@ -86,11 +89,17 @@ function HomeRoute() {
     return () => { active = false; };
   }, [dataLoaded, hasLoadedLegacyRecords, legacyCheck.scopeKey, scope.scopeKey, scopeReady]);
 
-  if (scopeReady && isOnboardingComplete(scope.scopeKey)) return <HomePage />;
-  if (hasReadError || hasLoadedLegacyRecords || (scopeReady && legacyCheck.scopeKey === scope.scopeKey && legacyCheck.result)) return <HomePage />;
-  if (scopeReady && dataLoaded && legacyCheck.scopeKey === scope.scopeKey && legacyCheck.result === false) {
-    return <Navigate to="/onboarding" replace />;
-  }
+  const entry = resolveHomeEntry({
+    scopeReady,
+    dataLoaded,
+    onboardingComplete: scopeReady && isOnboardingComplete(scope.scopeKey),
+    hasReadError,
+    hasLegacyRecords: hasLoadedLegacyRecords,
+    legacyCheckComplete: legacyCheck.scopeKey === scope.scopeKey,
+    legacyDataFound: legacyCheck.result,
+  });
+  if (entry === "home") return <HomePage />;
+  if (entry === "onboarding") return <Navigate to="/onboarding" replace />;
   return <Layout><p className="loading-state" role="status">Načítám místní profil…</p></Layout>;
 }
 
@@ -99,6 +108,7 @@ function App() {
     <>
       <Routes>
         <Route path="/" element={<HomeRoute />} />
+        <Route path="/login" element={<PageSuspense><LoginPage /></PageSuspense>} />
         <Route path="/onboarding" element={<PageSuspense><OnboardingPage /></PageSuspense>} />
         <Route path="/journal" element={<JournalPage />} />
         <Route path="/journal/calendar" element={<PageSuspense><CalendarPage /></PageSuspense>} />
@@ -126,12 +136,14 @@ function App() {
         <Route path="/insights" element={<PageSuspense><InsightsPage /></PageSuspense>} />
         <Route path="/season-story" element={<PageSuspense><SeasonStoryPage /></PageSuspense>} />
         <Route path="/year-summary" element={<PageSuspense><YearSummaryPage /></PageSuspense>} />
+        <Route path="/supporter" element={<PageSuspense><SupporterPage /></PageSuspense>} />
         <Route path="/trips" element={<TripsPage />} />
         <Route path="/trips/new" element={<TripCreatePage />} />
         <Route path="/trips/:id" element={<TripDetailPage />} />
         <Route path="/trips/:id/edit" element={<TripEditPage />} />
         <Route path="/waters" element={<PageSuspense><WatersPage /></PageSuspense>} />
         <Route path="/waters/new" element={<PageSuspense><WaterCreatePage /></PageSuspense>} />
+        <Route path="/waters/:waterId/edit" element={<PageSuspense><WaterCreatePage /></PageSuspense>} />
         <Route path="/waters/:waterId" element={<PageSuspense><WaterDetailPage /></PageSuspense>} />
         <Route path="/waters/:waterId/chat" element={<PageSuspense><WaterChatPage /></PageSuspense>} />
         <Route path="/hotspots" element={<PageSuspense><HotspotsPage /></PageSuspense>} />

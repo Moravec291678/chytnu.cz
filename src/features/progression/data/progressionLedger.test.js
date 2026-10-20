@@ -2,8 +2,10 @@ import "fake-indexeddb/auto";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { catchRepository, getActiveGuestScopeKey } from "../../catches/data/catchRepository.js";
+import { tripRepository } from "../../trips/data/tripRepository.js";
 import { waterRepository } from "../../waters/data/waterRepository.js";
-import { buildCatchRewardFromLedger, buildLedgerProgressionSummary, claimCatchRewardEventIds, getCatchRewardEventIds, progressionLedger } from "./progressionLedger.js";
+import { buildCatchRewardFromLedger, buildLedgerProgressionSummary, claimCatchRewardEventIds, getCatchRewardEventIds, progressionLedger, summaryForXp } from "./progressionLedger.js";
+import { xpForLevel } from "./progression.js";
 
 async function reset() {
   await new Promise((resolve, reject) => {
@@ -126,6 +128,36 @@ test("free-text catch locations never award new-water XP; mastery, achievements 
     events.filter((event) => event.type === "challenge.completed").length);
 });
 
+test("species mastery rewards and unlocked milestones survive deletion of their qualifying catches", async () => {
+  const scope = await reset();
+  const records = [];
+  for (let index = 0; index < 20; index += 1) {
+    records.push(await catchRepository.put(record(`mastery-catch-${index}`, {
+      speciesKey: "stable-species-id", species: "Testovací druh",
+    }), scope));
+  }
+  await progressionLedger.reconcile(scope);
+  const beforeEvents = await progressionLedger.list(scope);
+  const beforeSummary = buildLedgerProgressionSummary(beforeEvents, records, []);
+  const beforeMastery = beforeSummary.mastery.find((item) => item.speciesKey === "stable-species-id");
+  assert.equal(beforeMastery.level, 3);
+  assert.equal(beforeMastery.progressCount, 20);
+  assert.equal(beforeMastery.xp, 130);
+
+  for (const recordToDelete of records) await catchRepository.delete(recordToDelete.id, scope);
+  await progressionLedger.reconcile(scope);
+  const afterEvents = await progressionLedger.list(scope);
+  const afterSummary = buildLedgerProgressionSummary(afterEvents, [], []);
+  const afterMastery = afterSummary.mastery.find((item) => item.speciesKey === "stable-species-id");
+  assert.equal(afterSummary.xp, beforeSummary.xp);
+  assert.equal(afterMastery.level, 3);
+  assert.equal(afterMastery.progressCount, 20);
+  assert.equal(afterMastery.catchCount, 0);
+  assert.equal(afterMastery.nextLevelAt, 50);
+  assert.equal(afterMastery.xp, 130);
+  assert.equal(afterEvents.filter((event) => event.reasonKey === "mastery.milestone:stable-species-id:3").length, 1);
+});
+
 test("new-water XP uses its stable Water ID and is not duplicated by retry or rename", async () => {
   const scope = await reset();
   const water = { id: "water-stable-id", name: "Labe 24", createdAt: "2026-10-19T10:00:00.000Z" };
@@ -137,6 +169,59 @@ test("new-water XP uses its stable Water ID and is not duplicated by retry or re
   assert.equal(retry.isNew, false);
   assert.equal(events.filter((event) => event.reasonKey === "water.created:water-stable-id").length, 1);
   assert.equal(events.find((event) => event.reasonKey === "water.created:water-stable-id").xp, 30);
+});
+
+test("legendary rarity and completed public share award persistent XP once", async () => {
+  const scope = await reset();
+  const legendary = await catchRepository.put(record("legendary-catch", {
+    speciesKey: "commonCarp", weightKg: 20, weightSource: "manual",
+  }), scope);
+  await progressionLedger.reconcile(scope);
+  await progressionLedger.reconcile(scope);
+  let events = await progressionLedger.list(scope);
+  assert.equal(events.filter((event) => event.reasonKey === "rarity.legendary:legendary-catch").length, 1);
+  assert.equal(events.find((event) => event.reasonKey === "rarity.legendary:legendary-catch").xp, 200);
+
+  const firstShare = await progressionLedger.awardPublicShare(legendary.id, scope);
+  const retryShare = await progressionLedger.awardPublicShare(legendary.id, scope);
+  events = await progressionLedger.list(scope);
+  assert.equal(firstShare.isNew, true);
+  assert.equal(retryShare.isNew, false);
+  assert.equal(events.filter((event) => event.reasonKey === "share.public:legendary-catch").length, 1);
+  assert.equal(events.find((event) => event.reasonKey === "share.public:legendary-catch").xp, 10);
+  assert.equal(buildLedgerProgressionSummary(events, [legendary], []).xpBreakdown.publicShareXp, 10);
+});
+
+test("streak freeze is scoped, persisted, and can be applied only once per Prague month", async () => {
+  const scope = await reset();
+  const now = new Date("2026-06-17T10:00:00.000Z");
+  await assert.rejects(progressionLedger.useStreakFreeze(scope, { now }), /Zmrazení lze použít/);
+  await catchRepository.put(record("freeze-week-one", { caughtAt: "2026-06-04T10:00:00.000Z" }), scope);
+  await catchRepository.put(record("freeze-week-two", { caughtAt: "2026-06-11T10:00:00.000Z" }), scope);
+  const first = await progressionLedger.useStreakFreeze(scope, { now });
+  const retry = await progressionLedger.useStreakFreeze(scope, { now });
+  assert.equal(first.isNew, true);
+  assert.equal(retry.isNew, false);
+  assert.equal(first.event.periodKey, "2026-06-15");
+  assert.equal((await progressionLedger.list(scope)).filter((event) => event.type === "streak.freeze.used").length, 1);
+  await progressionLedger.reconcile(scope, { now });
+  const events = await progressionLedger.list(scope);
+  const catches = await catchRepository.list(scope);
+  assert.equal(progressionLedger.summary(events, catches, [], { now }).streak.weeks, 3);
+});
+
+test("the +50 XP streak bonus is recorded once when the seventh qualifying week is reached", async () => {
+  const scope = await reset();
+  const dates = ["2026-05-06", "2026-05-13", "2026-05-20", "2026-05-27", "2026-06-03", "2026-06-10", "2026-06-17"];
+  for (const [index, date] of dates.entries()) {
+    await catchRepository.put(record(`bonus-week-${index}`, { caughtAt: `${date}T10:00:00.000Z` }), scope);
+  }
+  const now = new Date("2026-06-17T12:00:00.000Z");
+  await progressionLedger.reconcile(scope, { now });
+  await progressionLedger.reconcile(scope, { now });
+  const bonusEvents = (await progressionLedger.list(scope)).filter((event) => event.reasonKey === "streak.bonus:7");
+  assert.equal(bonusEvents.length, 1);
+  assert.equal(bonusEvents[0].xp, 50);
 });
 
 test("every screen selector receives the same ledger XP, level, rank, and progress", () => {
@@ -151,6 +236,24 @@ test("every screen selector receives the same ledger XP, level, rank, and progre
       { xp: summary.xp, level: summary.level, rank: summary.rank, progressPercent: summary.progressPercent },
       { xp: summaries[0].xp, level: summaries[0].level, rank: summaries[0].rank, progressPercent: summaries[0].progressPercent },
     );
+  }
+});
+
+test("ledger level and rank transitions match every requested boundary", () => {
+  for (const [lastLevel, nextLevel, rankBefore, rankAfter] of [
+    [5, 6, "Nováček", "Rybář"],
+    [15, 16, "Rybář", "Zkušený rybář"],
+    [29, 30, "Zkušený rybář", "Senior rybář"],
+    [49, 50, "Senior rybář", "Expert"],
+    [74, 75, "Expert", "Legenda"],
+    [99, 100, "Legenda", "Prestige I+"],
+  ]) {
+    const beforeTransition = summaryForXp(xpForLevel(nextLevel) - 1);
+    const afterTransition = summaryForXp(xpForLevel(nextLevel));
+    assert.equal(beforeTransition.level, lastLevel);
+    assert.equal(beforeTransition.rank.name, rankBefore);
+    assert.equal(afterTransition.level, nextLevel);
+    assert.equal(afterTransition.rank.name, rankAfter);
   }
 });
 
@@ -186,4 +289,23 @@ test("a saved catch carries its ledger event IDs into the reward calculation", a
   assert.ok(eventIds.length > 0);
   assert.equal(reward.breakdown.catchXp, 10);
   assert.equal(reward.breakdown.speciesXp, 50);
+});
+
+test("a marathon achievement is attributed to its qualifying Trip instead of an unrelated Catch", async () => {
+  const scope = await reset();
+  await catchRepository.put(record("unrelated-catch"), scope);
+  const trip = await tripRepository.start({
+    id: "marathon-trip-source",
+    title: "Noční výprava",
+    startedAt: "2026-10-18T18:00:00.000Z",
+  }, scope);
+  await tripRepository.put({ ...trip, endedAt: "2026-10-19T03:00:00.000Z" }, scope);
+
+  await progressionLedger.reconcile(scope);
+  const event = (await progressionLedger.list(scope))
+    .find((item) => item.reasonKey === "achievement.unlocked:marathon-trip");
+
+  assert.equal(event.sourceEntityType, "trip");
+  assert.equal(event.sourceEntityId, "marathon-trip-source");
+  assert.equal(event.occurredAt, "2026-10-19T03:00:00.000Z");
 });

@@ -1,14 +1,17 @@
-import { useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import Layout from "../shared/layout/Layout";
 import { useDataScope } from "../features/auth/context/dataScopeContextValue.js";
-import { createWaterRecord, validateWaterForm, WATER_TYPES } from "../features/waters/data/waterModel.js";
+import { createWaterRecord, updateWaterRecord, validateWaterForm, WATER_TYPES } from "../features/waters/data/waterModel.js";
+import { resolveWaterEditorView } from "../features/waters/data/waterEditorState.js";
 import { waterRepository } from "../features/waters/data/waterRepository.js";
+import { EmptyState, ErrorState } from "../shared/components/UIStates.jsx";
 import "./WaterCreatePage.css";
 
 const COMMON_FISH = ["Kapr", "Štika", "Candát", "Lín", "Okoun", "Pstruh", "Sumec", "Amur"];
 
 function WaterCreatePage() {
+  const { waterId } = useParams();
   const scope = useDataScope();
   const navigate = useNavigate();
   const pendingWaterId = useRef(crypto.randomUUID());
@@ -24,6 +27,37 @@ function WaterCreatePage() {
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  const [existingWater, setExistingWater] = useState(null);
+  const [loadingWater, setLoadingWater] = useState(Boolean(waterId));
+  const [loadError, setLoadError] = useState("");
+
+  useEffect(() => {
+    if (!waterId || scope.status !== "ready") return undefined;
+    let active = true;
+    waterRepository.get(waterId, scope).then((record) => {
+      if (!active) return;
+      if (!record) {
+        setExistingWater(null);
+        setLoadError("");
+        return;
+      }
+      setExistingWater(record);
+      setFormData({
+        name: record.name ?? "",
+        waterNumber: record.waterNumber ?? "",
+        type: record.type ?? "Rybník",
+        area: record.area ?? "",
+        notes: record.notes ?? "",
+        targetFish: record.targetFish ?? [],
+      });
+      setLoadError("");
+    }).catch((loadError) => {
+      if (active) setLoadError(loadError?.message || "Revír se nepodařilo načíst.");
+    }).finally(() => {
+      if (active) setLoadingWater(false);
+    });
+    return () => { active = false; };
+  }, [waterId, scope]);
 
   const updateField = (key, value) => {
     setFormData((prev) => ({ ...prev, [key]: value }));
@@ -58,7 +92,9 @@ function WaterCreatePage() {
     setSaving(true);
     setSubmitError("");
     try {
-      const record = createWaterRecord({ ...formData, id: pendingWaterId.current }, scope);
+      const record = existingWater
+        ? updateWaterRecord(existingWater, formData)
+        : createWaterRecord({ ...formData, id: pendingWaterId.current }, scope);
       await waterRepository.put(record, scope);
       navigate(`/waters/${record.id}`);
     } catch (err) {
@@ -68,13 +104,31 @@ function WaterCreatePage() {
     }
   };
 
+  const editorView = resolveWaterEditorView({
+    waterId,
+    loading: loadingWater || Boolean(waterId && existingWater && existingWater.scopeKey !== scope.scopeKey),
+    record: existingWater,
+    error: loadError,
+  });
+  if (editorView === "loading") {
+    return <Layout><div className="water-create-page"><p className="loading-state" role="status">Načítám uložený revír…</p></div></Layout>;
+  }
+  if (editorView === "not-found") {
+    return <Layout><div className="water-create-page"><EmptyState title="Revír nenalezen" description="Záznam mohl být smazán nebo patří do jiného profilu." action={<Link className="water-create-back" to="/waters">Zpět na revíry</Link>} /></div></Layout>;
+  }
+  if (editorView === "error") {
+    return <Layout><div className="water-create-page"><ErrorState title="Revír se nepodařilo načíst" message={loadError} /></div></Layout>;
+  }
+
   return (
     <Layout>
       <div className="water-create-page">
         <header className="water-create-header">
-          <h1>Přidat revír</h1>
-          <p>Ulož si vlastní revír do svého deníku</p>
+          <h1>{waterId ? "Upravit revír" : "Přidat revír"}</h1>
+          <p>{waterId ? "Uprav údaje uloženého revíru" : "Ulož si vlastní revír do svého deníku"}</p>
         </header>
+
+        {loadingWater && <p className="loading-state" role="status">Načítám revír…</p>}
 
         <form id="water-create-form" className="water-create-form" onSubmit={handleSubmit}>
           <label>
@@ -174,14 +228,14 @@ function WaterCreatePage() {
           {submitError && <p className="water-create-submit-error" role="alert">{submitError}</p>}
         </form>
 
-        <p className="water-create-note">
+        {!waterId && <p className="water-create-note">
           Revír se uloží lokálně se stavem „čeká na schválení“. Veřejná moderace zatím není připojená a za lokální uložení se neuděluje XP.
-        </p>
+        </p>}
         <Link className="water-create-back" to="/waters">Zpět na revíry</Link>
 
         <div className="water-create-submit">
-          <button type="submit" form="water-create-form" disabled={saving || scope.status !== "ready"}>
-            {saving ? "Ukládám…" : "Uložit jako čekající"}
+          <button type="submit" form="water-create-form" disabled={saving || loadingWater || scope.status !== "ready" || Boolean(waterId && !existingWater)}>
+            {saving ? "Ukládám…" : waterId ? "Uložit změny" : "Uložit jako čekající"}
           </button>
         </div>
       </div>

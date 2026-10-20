@@ -7,6 +7,7 @@ import { getStartedTripDayLabel } from "../utils/getStartedTripDayLabel";
 import { Link } from "react-router-dom";
 import { useTrips } from "../context/useTrips";
 import { getDistinctTripSpecies, getTripCatchRatePerHour, getTripDurationMs } from "../data/tripModel";
+import { isMeasuredCatchWeight } from "../../catches/data/catchWeight.js";
 
 function ActiveTripCard({ activeTrip, catches = null }) {
   const navigate = useNavigate();
@@ -19,7 +20,7 @@ function ActiveTripCard({ activeTrip, catches = null }) {
   const activeTripDayLabel = getStartedTripDayLabel(activeTrip);
   const hasCatchData = Array.isArray(catches);
   const tripCatches = hasCatchData ? catches.filter((item) => item.tripId === activeTrip.id) : [];
-  const measuredWeights = tripCatches.map((item) => item.weightKg).filter(Number.isFinite);
+  const measuredWeights = tripCatches.filter((item) => isMeasuredCatchWeight(item) && item.weightKg >= 0).map((item) => item.weightKg);
   const speciesCount = hasCatchData ? getDistinctTripSpecies(tripCatches).length : null;
   const catchRate = hasCatchData ? getTripCatchRatePerHour(tripCatches.length, getTripDurationMs(activeTrip)) : null;
   const finishTrip = async () => {
@@ -83,7 +84,7 @@ function ActiveTripCard({ activeTrip, catches = null }) {
       </div>
       {error && <p className="active-trip-error" role="alert">{error}</p>}
       <div className="active-trip-actions">
-        <Link className="active-trip-add" to="/add">Zapsat úlovek</Link>
+        <Link className="active-trip-add" to="/add" state={{ tripId: activeTrip.id }}>Zapsat úlovek</Link>
         <button className="active-trip-finish" type="button" onClick={finishTrip} disabled={ending}>{ending ? "Ukončuji…" : "Ukončit výpravu"}</button>
       </div>
       <Link className="active-trip-open" to={`/trips/${activeTrip.id}`}>Detail výpravy →</Link>

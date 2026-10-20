@@ -3,15 +3,17 @@ import { validateDataScope } from "../../auth/data/localDataScope.js";
 import { normalizeText } from "../../../shared/utils/helpers.js";
 import {
   ACHIEVEMENTS, MASTERY_LEVELS, calculateProgression, calculateSpeciesMastery,
-  calculateWeeklyStreak, getRankForLevel, hasWeatherConditions, MAX_LEVEL, xpForLevel,
+  getRankForLevel, hasWeatherConditions, MAX_LEVEL, xpForLevel,
 } from "./progression.js";
 import { listCompletedChallengeRewards } from "./challenges.js";
 import { listCompletedSeasonalChallengeRewards } from "./seasonalChallenge.js";
+import { canUseStreakFreeze, calculateWeeklyStreak, getPragueStreakMonthKey, getPragueStreakWeekKey } from "./streakModel.js";
+import { XP_RULES } from "./xpRules.js";
+import { getCatchRarity } from "../../catches/utils/rarity.js";
+import { DEFAULT_SPECIES } from "../../../shared/constants/speciesCatalog.js";
 
 const DEFINITION_VERSION = 2;
 const claimedRewardEventIds = new Set();
-const WATER_CREATION_XP = 30;
-
 function hasContext(record) {
   return Boolean(record?.coordinates && hasWeatherConditions(record.conditions));
 }
@@ -62,6 +64,7 @@ const BREAKDOWN_KEYS = Object.freeze({
   "species.first": "speciesXp", "water.first": "locationXp", "water.created": "locationXp",
   "achievement.unlocked": "achievementXp", "mastery.milestone": "masteryXp",
   "streak.milestone": "streakXp", "streak.bonus": "streakXp",
+  "share.public": "publicShareXp", "rarity.legendary": "rarityXp",
 });
 
 function breakdownKey(event) {
@@ -74,7 +77,8 @@ function breakdownKey(event) {
 }
 
 export function buildLedgerProgressionSummary(events, catches = [], trips = [], { now = new Date() } = {}) {
-  const current = calculateProgression(catches, trips, { now });
+  const streakFreezes = events.filter((event) => event.type === "streak.freeze.used");
+  const current = calculateProgression(catches, trips, { now, streakFreezes });
   const xp = events.reduce((total, event) => total + Math.max(0, Number(event.xp) || 0), 0);
   const persistentAchievementIds = new Set(events.filter((event) => event.type === "achievement.unlocked")
     .map((event) => event.reasonKey.slice("achievement.unlocked:".length)));
@@ -89,11 +93,26 @@ export function buildLedgerProgressionSummary(events, catches = [], trips = [], 
     const persistentLevel = masteryEvents.filter((event) => event.reasonKey.startsWith(`mastery.milestone:${speciesKey}:`))
       .reduce((maximum, event) => Math.max(maximum, Number(event.reasonKey.split(":").at(-1)) || 0), 0);
     const level = Math.max(item.level ?? 0, persistentLevel);
-    return { ...item, level, stars: level, title: MASTERY_LEVELS[level - 1]?.title ?? null };
+    const persistedProgress = MASTERY_LEVELS.find((milestone) => milestone.level === persistentLevel)?.catches ?? 0;
+    const progressCount = Math.max(item.catchCount, persistedProgress);
+    const nextMilestone = MASTERY_LEVELS.find((milestone) => milestone.level > level) ?? null;
+    const persistentXp = events.filter((event) => (
+      event.reasonKey === `species.first:${speciesKey}`
+      || event.reasonKey.startsWith(`mastery.milestone:${speciesKey}:`)
+    )).reduce((total, event) => total + Math.max(0, Number(event.xp) || 0), 0);
+    return {
+      ...item,
+      level,
+      stars: level,
+      xp: persistentXp,
+      progressCount,
+      nextLevelAt: nextMilestone?.catches ?? null,
+      title: MASTERY_LEVELS[level - 1]?.title ?? null,
+    };
   });
   const xpBreakdown = {
     catchXp: 0, speciesXp: 0, locationXp: 0, dailyQuestXp: 0, weeklyQuestXp: 0,
-    seasonalXp: 0, masteryXp: 0, streakXp: 0, achievementXp: 0, otherXp: 0,
+    seasonalXp: 0, masteryXp: 0, streakXp: 0, achievementXp: 0, publicShareXp: 0, rarityXp: 0, otherXp: 0,
   };
   for (const event of events) xpBreakdown[breakdownKey(event)] += Math.max(0, Number(event.xp) || 0);
   return {
@@ -107,6 +126,61 @@ function eventOccurredAt(entityType, entityId, catches, trips, fallback) {
   if (entityType === "catch") return catches.find((item) => item.id === entityId)?.caughtAt ?? fallback;
   if (entityType === "trip") return trips.find((item) => item.id === entityId)?.endedAt ?? fallback;
   return fallback;
+}
+
+function speciesKeyFor(record) {
+  return record?.speciesKey || normalizeText(record?.species ?? "") || null;
+}
+
+function firstUniqueRecord(records, keyForRecord, targetCount) {
+  const seen = new Set();
+  for (const record of records) {
+    const key = keyForRecord(record);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    if (seen.size >= targetCount) return record;
+  }
+  return null;
+}
+
+function achievementSource(achievementId, catches, trips, nowIso) {
+  const byWeight = (minimum) => catches.find((record) => (
+    record.weightSource !== "estimated" && Number.isFinite(record.weightKg) && record.weightKg >= minimum
+  ));
+  const catchTargets = { "first-catch": 1, "ten-catches": 10, "fifty-catches": 50, "five-hundred-catches": 500 };
+  const speciesTargets = { "five-species": 5, "ten-species": 10, "twenty-five-species": 25, "fifty-species": 50 };
+  const waterTargets = { "five-waters": 5, "ten-waters": 10, "twenty-five-waters": 25 };
+  let source = catchTargets[achievementId] ? catches[catchTargets[achievementId] - 1] : null;
+  if (achievementId === "first-kilo") source = byWeight(1);
+  if (achievementId === "trophy-catch") source = byWeight(10);
+  if (speciesTargets[achievementId]) source = firstUniqueRecord(catches, speciesKeyFor, speciesTargets[achievementId]);
+  if (waterTargets[achievementId]) source = firstUniqueRecord(catches, (record) => record.waterId || null, waterTargets[achievementId]);
+  if (achievementId === "summer-catch") source = catches.find((record) => {
+    const month = new Date(record.caughtAt).getMonth();
+    return Number.isFinite(month) && [5, 6, 7].includes(month);
+  });
+  if (achievementId === "winter-catch") source = catches.find((record) => {
+    const month = new Date(record.caughtAt).getMonth();
+    return Number.isFinite(month) && [11, 0, 1].includes(month);
+  });
+  if (achievementId === "night-catch") source = catches.find((record) => {
+    if (!Number.isFinite(Date.parse(record.caughtAt))) return false;
+    const hour = Number(new Intl.DateTimeFormat("en-GB", {
+      hour: "2-digit", hourCycle: "h23", timeZone: "Europe/Prague",
+    }).format(new Date(record.caughtAt)));
+    return hour >= 22 || hour < 4;
+  });
+  if (achievementId === "marathon-trip") {
+    const trip = [...trips].sort((a, b) => Date.parse(a.endedAt) - Date.parse(b.endedAt)).find((item) => (
+      Number.isFinite(Date.parse(item.startedAt)) && Number.isFinite(Date.parse(item.endedAt))
+      && Date.parse(item.endedAt) - Date.parse(item.startedAt) >= 8 * 60 * 60 * 1000
+    ));
+    if (trip) return { entityType: "trip", entityId: trip.id, occurredAt: trip.endedAt };
+  }
+  if (!source && achievementId.endsWith("-week-streak")) source = catches.at(-1);
+  return source
+    ? { entityType: "catch", entityId: source.id, occurredAt: source.caughtAt }
+    : { entityType: "system", entityId: achievementId, occurredAt: nowIso };
 }
 
 export const progressionLedger = {
@@ -134,11 +208,81 @@ export const progressionLedger = {
       return { event: existing, isNew: false };
     }
     const event = makeEvent(scope, {
-      reasonKey, type: "water.created", xp: WATER_CREATION_XP,
+      reasonKey, type: "water.created", xp: XP_RULES.newWater,
       sourceEntityType: "water", sourceEntityId: water.id,
       occurredAt: water.createdAt,
     }, new Date().toISOString());
     store.add(event);
+    await transactionDone(transaction, db);
+    return { event, isNew: true };
+  },
+
+  async awardPublicShare(catchId, options) {
+    const scope = validateDataScope(options ?? {});
+    if (!catchId) throw new Error("Sdílený úlovek nemá stabilní ID.");
+    const reasonKey = `share.public:${catchId}`;
+    const db = await openLocalDatabase();
+    const transaction = db.transaction([PROGRESSION_EVENT_STORE_NAME, "catches"], "readwrite");
+    const store = transaction.objectStore(PROGRESSION_EVENT_STORE_NAME);
+    const id = eventId(scope.scopeKey, reasonKey);
+    const [existing, catchRecord] = await Promise.all([
+      requestValue(store.get(id)),
+      requestValue(transaction.objectStore("catches").get(catchId)),
+    ]);
+    if (existing) {
+      await transactionDone(transaction, db);
+      return { event: existing, isNew: false };
+    }
+    if (!catchRecord || catchRecord.scopeKey !== scope.scopeKey) {
+      transaction.abort();
+      await new Promise((resolve) => { transaction.onabort = resolve; transaction.onerror = resolve; });
+      db.close();
+      throw new Error("Sdílený úlovek už není dostupný v tomto profilu.");
+    }
+    const event = makeEvent(scope, {
+      reasonKey, type: "share.public", xp: XP_RULES.publicShare,
+      sourceEntityType: "catch", sourceEntityId: catchId, occurredAt: new Date().toISOString(),
+    }, new Date().toISOString());
+    store.add(event);
+    await transactionDone(transaction, db);
+    return { event, isNew: true };
+  },
+
+  async useStreakFreeze(options, { now = new Date() } = {}) {
+    const scope = validateDataScope(options ?? {});
+    const nowDate = now instanceof Date ? now : new Date(now);
+    if (!Number.isFinite(nowDate.getTime())) throw new TypeError("Datum zmrazení série musí být platné.");
+    const monthKey = getPragueStreakMonthKey(nowDate);
+    const weekKey = getPragueStreakWeekKey(nowDate);
+    const reasonKey = `streak.freeze.used:${monthKey}`;
+    const db = await openLocalDatabase();
+    const transaction = db.transaction([PROGRESSION_EVENT_STORE_NAME, "catches"], "readwrite");
+    const eventStore = transaction.objectStore(PROGRESSION_EVENT_STORE_NAME);
+    const id = eventId(scope.scopeKey, reasonKey);
+    const [existing, events, catches] = await Promise.all([
+      requestValue(eventStore.get(id)),
+      requestValue(eventStore.index("scopeKey").getAll(scope.scopeKey)),
+      requestValue(transaction.objectStore("catches").index("scopeKey").getAll(scope.scopeKey)),
+    ]);
+    if (existing) {
+      await transactionDone(transaction, db);
+      return { event: existing, isNew: false };
+    }
+    if (!canUseStreakFreeze(catches, events, nowDate)) {
+      transaction.abort();
+      await new Promise((resolve) => {
+        transaction.onabort = resolve;
+        transaction.onerror = resolve;
+      });
+      db.close();
+      throw new Error("Zmrazení lze použít jen pro aktivní sérii bez úlovku v tomto týdnu; měsíční limit je vyčerpán nebo nelze sérii zachránit.");
+    }
+    const event = makeEvent(scope, {
+      reasonKey, type: "streak.freeze.used", xp: 0,
+      sourceEntityType: "system", sourceEntityId: `streak-freeze:${weekKey}`,
+      periodKey: weekKey, occurredAt: nowDate.toISOString(),
+    }, nowDate.toISOString());
+    eventStore.add(event);
     await transactionDone(transaction, db);
     return { event, isNew: true };
   },
@@ -169,23 +313,33 @@ export const progressionLedger = {
     };
     const orderedCatches = [...catches].sort((a, b) => Date.parse(a.caughtAt) - Date.parse(b.caughtAt));
     for (const record of orderedCatches) {
-      add({ reasonKey: `catch.created:${record.id}`, type: "catch.created", xp: 10, sourceEntityType: "catch", sourceEntityId: record.id, occurredAt: record.caughtAt });
+      add({ reasonKey: `catch.created:${record.id}`, type: "catch.created", xp: XP_RULES.catch.base, sourceEntityType: "catch", sourceEntityId: record.id, occurredAt: record.caughtAt });
       const catchXp = () => events.filter((event) => event.sourceEntityType === "catch" && event.sourceEntityId === record.id && event.type.startsWith("catch."))
         .reduce((total, event) => total + event.xp, 0);
-      if ((record.photos ?? []).length > 0) add({ reasonKey: `catch.photo:${record.id}`, type: "catch.photo", xp: Math.max(0, 15 - catchXp()), sourceEntityType: "catch", sourceEntityId: record.id, occurredAt: record.caughtAt });
-      if (hasContext(record)) add({ reasonKey: `catch.context:${record.id}`, type: "catch.context", xp: Math.max(0, 20 - catchXp()), sourceEntityType: "catch", sourceEntityId: record.id, occurredAt: record.caughtAt });
+      if ((record.photos ?? []).length > 0) add({ reasonKey: `catch.photo:${record.id}`, type: "catch.photo", xp: Math.max(0, XP_RULES.catch.photo - catchXp()), sourceEntityType: "catch", sourceEntityId: record.id, occurredAt: record.caughtAt });
+      if (hasContext(record)) add({ reasonKey: `catch.context:${record.id}`, type: "catch.context", xp: Math.max(0, XP_RULES.catch.gpsAndWeather - catchXp()), sourceEntityType: "catch", sourceEntityId: record.id, occurredAt: record.caughtAt });
     }
     const firstBySpecies = new Map();
     for (const record of orderedCatches) {
       const speciesKey = record.speciesKey || normalizeText(record.species ?? "");
       if (speciesKey && !firstBySpecies.has(speciesKey)) firstBySpecies.set(speciesKey, record);
     }
-    for (const [speciesKey, record] of firstBySpecies) add({ reasonKey: `species.first:${speciesKey}`, type: "species.first", xp: 50, sourceEntityType: "catch", sourceEntityId: record.id, occurredAt: record.caughtAt });
+    for (const [speciesKey, record] of firstBySpecies) add({ reasonKey: `species.first:${speciesKey}`, type: "species.first", xp: XP_RULES.newSpecies, sourceEntityType: "catch", sourceEntityId: record.id, occurredAt: record.caughtAt });
+    for (const record of orderedCatches) {
+      if (getCatchRarity(record, DEFAULT_SPECIES).key === "legendary") add({
+        reasonKey: `rarity.legendary:${record.id}`, type: "rarity.legendary", xp: XP_RULES.legendaryRarity,
+        sourceEntityType: "catch", sourceEntityId: record.id, occurredAt: record.caughtAt,
+      });
+    }
 
-    const live = calculateProgression(catches, trips, { now });
+    const streakFreezes = events.filter((event) => event.type === "streak.freeze.used");
+    const live = calculateProgression(catches, trips, { now, streakFreezes });
     for (const achievement of live.achievements.filter((item) => item.isCompleted)) {
-      const source = orderedCatches.at(-1) ?? trips.find((trip) => trip.endedAt);
-      add({ reasonKey: `achievement.unlocked:${achievement.id}`, type: "achievement.unlocked", xp: achievement.xp, sourceEntityType: source ? (source.caughtAt ? "catch" : "trip") : "system", sourceEntityId: source?.id ?? achievement.id, occurredAt: source?.caughtAt ?? source?.endedAt ?? nowIso });
+      const source = achievementSource(achievement.id, orderedCatches, trips, nowIso);
+      add({
+        reasonKey: `achievement.unlocked:${achievement.id}`, type: "achievement.unlocked", xp: achievement.xp,
+        sourceEntityType: source.entityType, sourceEntityId: source.entityId, occurredAt: source.occurredAt,
+      });
     }
     for (const item of calculateSpeciesMastery(catches)) {
       const speciesCatches = orderedCatches.filter((record) => (record.speciesKey || normalizeText(record.species ?? "")) === item.speciesKey);
@@ -199,9 +353,9 @@ export const progressionLedger = {
       sourceEntityType: reward.sourceEntityType, sourceEntityId: reward.sourceEntityId, periodKey: reward.periodKey,
       occurredAt: eventOccurredAt(reward.sourceEntityType, reward.sourceEntityId, catches, trips, nowIso),
     });
-    const streak = calculateWeeklyStreak(catches, now);
+    const streak = calculateWeeklyStreak(catches, now, streakFreezes);
     for (const milestone of [4, 12, 52].filter((weeks) => streak.weeks >= weeks)) add({ reasonKey: `streak.milestone:${milestone}`, type: "streak.milestone", xp: 0, sourceEntityType: "system", sourceEntityId: `streak-${milestone}`, occurredAt: streak.lastCatchAt ?? nowIso });
-    for (let weeks = 7; weeks <= streak.weeks; weeks += 7) add({ reasonKey: `streak.bonus:${weeks}`, type: "streak.bonus", xp: 50, sourceEntityType: "system", sourceEntityId: `streak-${weeks}`, occurredAt: streak.lastCatchAt ?? nowIso });
+    for (let weeks = 7; weeks <= streak.weeks; weeks += 7) add({ reasonKey: `streak.bonus:${weeks}`, type: "streak.bonus", xp: XP_RULES.streakBonus, sourceEntityType: "system", sourceEntityId: `streak-${weeks}`, occurredAt: streak.lastCatchAt ?? nowIso });
     await transactionDone(transaction, db);
     return { events: events.sort((a, b) => a.createdAt.localeCompare(b.createdAt)), newEvents };
   },

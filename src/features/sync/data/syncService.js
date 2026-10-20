@@ -1,9 +1,10 @@
 import { catchRepository, outboxRepository } from "../../catches/data/catchRepository.js";
 import { tripRepository } from "../../trips/data/tripRepository.js";
+import { waterRepository } from "../../waters/data/waterRepository.js";
 import { applyRemotePage, readSyncCursor } from "./localSyncRepository.js";
 import { accountScopeKey } from "../../auth/data/localDataScope.js";
 
-const REPOSITORIES = { catch: catchRepository, trip: tripRepository };
+const REPOSITORIES = { catch: catchRepository, trip: tripRepository, water: waterRepository };
 const PAGE_SIZE = 100;
 const MAX_PULL_PAGES = 100;
 const MAX_PUSH_PASSES = 3;

@@ -169,6 +169,8 @@ test("úlovek nemůže obejít validaci polí ani odkazovat na neexistující v�
   const db = alice.firestore();
   const catchRef = doc(db, catchPath("angler-a", "catch-a"));
   await assertFails(updateDoc(catchRef, { weightKg: -1 }));
+  await assertFails(updateDoc(catchRef, { weightSource: "guessed" }));
+  await assertFails(updateDoc(catchRef, { waterId: 42 }));
   await assertFails(updateDoc(catchRef, { photos: [{ id: "p1", name: "x.jpg", type: "image/jpeg", size: 20, blob: "data" }] }));
   await assertFails(updateDoc(catchRef, { tripId: "trip-does-not-exist" }));
   await assertFails(updateDoc(catchRef, { tripId: null }));

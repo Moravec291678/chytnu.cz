@@ -54,3 +54,19 @@ test("all-time chart displays a rolling six-month window without losing full-per
   assert.deepEqual(series.months.map(({ count }) => count), [1, 0, 0, 0, 0, 0]);
   assert.equal(series.datedCatchCount, 1);
 });
+
+test("period boundaries and month charts use Europe/Prague dates across UTC midnight", () => {
+  const now = new Date("2026-10-31T23:30:00.000Z"); // 1 November in Prague.
+  const [start, end] = getPeriodRange("year", now);
+  assert.equal(start.toISOString(), "2025-12-31T23:00:00.000Z");
+  assert.equal(end.toISOString(), "2026-12-31T23:00:00.000Z");
+  assert.equal(getPeriodLabel("year", now), "Rok 2026");
+
+  const series = getMonthlyCatchSeries([
+    { caughtAt: "2026-10-31T22:59:59.999Z" }, // October in Prague.
+    { caughtAt: "2026-10-31T23:00:00.000Z" }, // November in Prague.
+  ], "year", now);
+  assert.equal(series.months[9].count, 1);
+  assert.equal(series.months[10].count, 1);
+  assert.equal(series.datedCatchCount, 2);
+});
