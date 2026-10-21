@@ -1,6 +1,20 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { createHash } from 'node:crypto'
+import { execFileSync } from 'node:child_process'
+
+/* global process */
+
+function appBuildId() {
+  const deployed = process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA;
+  if (deployed) return deployed.slice(0, 12);
+  try {
+    const commit = execFileSync('git', ['rev-parse', '--short=12', 'HEAD'], { encoding: 'utf8' }).trim();
+    const dirty = execFileSync('git', ['status', '--porcelain'], { encoding: 'utf8' }).trim();
+    return `${commit}${dirty ? '-dirty' : ''}`;
+  }
+  catch { return 'local'; }
+}
 
 function offlineShell() {
   return {
@@ -34,4 +48,5 @@ self.addEventListener('fetch', (event) => {
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), offlineShell()],
+  define: { __APP_BUILD_ID__: JSON.stringify(appBuildId()) },
 })

@@ -1,6 +1,7 @@
 import "fake-indexeddb/auto";
 import test from "node:test";
 import assert from "node:assert/strict";
+import { IDBFactory } from "fake-indexeddb";
 import { openLocalDatabase, getActiveGuestScopeKey, catchRepository, outboxRepository, CONFLICT_STORE_NAME } from "../../catches/data/catchRepository.js";
 import { tripRepository } from "../../trips/data/tripRepository.js";
 import { createInMemorySyncAdapter } from "./inMemorySyncAdapter.js";
@@ -131,6 +132,36 @@ test("pull persists remote data and its cursor; repeated sync is idempotent", as
   const repeated = await service.run("angler-a");
   assert.equal(repeated.status, "success");
   assert.equal(await readSyncCursor("angler-a"), cursor);
+});
+
+test("two separate device databases sync same-account creates and edits in both directions", async () => {
+  const originalFactory = globalThis.indexedDB;
+  const deviceA = new IDBFactory();
+  const deviceB = new IDBFactory();
+  const remote = createInMemorySyncAdapter();
+  const sharedPort = createSyncPort(remote);
+  const serviceA = createSyncService({ port: sharedPort, getCurrentOwnerId: () => "angler-a" });
+  const serviceB = createSyncService({ port: sharedPort, getCurrentOwnerId: () => "angler-a" });
+  try {
+    globalThis.indexedDB = deviceA;
+    await catchRepository.put(makeCatch("cross-device"), accountScope());
+    assert.equal((await serviceA.run("angler-a")).status, "success");
+
+    globalThis.indexedDB = deviceB;
+    assert.equal((await serviceB.run("angler-a")).status, "success");
+    const received = await catchRepository.get("cross-device", accountScope());
+    assert.equal(received?.ownerId, "angler-a");
+    assert.equal(received?.notes, "");
+
+    await catchRepository.put({ ...received, notes: "upraveno na telefonu", sync: { ...received.sync, revision: received.sync.revision + 1 } }, accountScope());
+    assert.equal((await serviceB.run("angler-a")).status, "success");
+
+    globalThis.indexedDB = deviceA;
+    assert.equal((await serviceA.run("angler-a")).status, "success");
+    assert.equal((await catchRepository.get("cross-device", accountScope()))?.notes, "upraveno na telefonu");
+  } finally {
+    globalThis.indexedDB = originalFactory;
+  }
 });
 
 test("different concurrent versions are both preserved and the outbox remains blocked", async () => {

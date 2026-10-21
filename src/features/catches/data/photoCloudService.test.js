@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { IDBFactory } from "fake-indexeddb";
 import "fake-indexeddb/auto";
 import { accountScopeKey } from "../../auth/data/localDataScope.js";
 import { catchRepository, outboxRepository, photoCloudOutboxRepository } from "./catchRepository.js";
@@ -188,6 +189,47 @@ test("download prefers local bytes, verifies remote bytes, caches per account, a
   const otherService = createPhotoCloudService({ provider, getCurrentOwnerId: () => otherOwner });
   assert.equal(await otherService.getPhotoBlob({ photo: remotePhoto, ownerId, catchId: "catch-download", scopeKey: accountScopeKey(ownerId) }), null);
   assert.equal(provider.calls.downloads.length, 2, "cross-account access is rejected before provider access");
+});
+
+test("photo metadata moves between isolated devices; remote download caches and crop edit avoids reupload", async () => {
+  const originalFactory = globalThis.indexedDB;
+  const deviceA = new IDBFactory();
+  const deviceB = new IDBFactory();
+  const ownerId = "shared-account";
+  const scope = { ownerId, scopeKey: accountScopeKey(ownerId) };
+  const provider = createFakeProvider("cloudinary-mock");
+  const serviceA = makeService(ownerId, provider);
+  const serviceB = makeService(ownerId, provider);
+  try {
+    globalThis.indexedDB = deviceA;
+    const source = makeCatch(ownerId, "cross-device-photo", [makePhoto("p1", "shared photo bytes")]);
+    await catchRepository.put(source, scope);
+    assert.equal((await serviceA.run(ownerId)).status, "success");
+    const syncedA = await catchRepository.get(source.id, scope);
+    assert.equal(provider.calls.uploads.length, 1);
+
+    // Represents the Firestore photo metadata pulled by the other device; Blob bytes are device-local.
+    const remotePhoto = { ...syncedA.photos[0] };
+    delete remotePhoto.blob;
+    globalThis.indexedDB = deviceB;
+    const pulledRecord = { ...syncedA, photos: [remotePhoto], sync: { status: "metadata-synced", revision: 0, serverRevision: 1 } };
+    await catchRepository.put(pulledRecord, scope);
+    const downloaded = await serviceB.getPhotoBlob({ photo: remotePhoto, ownerId, catchId: source.id, scopeKey: scope.scopeKey });
+    assert.equal(await downloaded.text(), "shared photo bytes");
+    assert.equal((await catchRepository.get(source.id, scope)).photos[0].blob.size, downloaded.size);
+    assert.equal(provider.calls.downloads.length, 1);
+
+    globalThis.indexedDB = deviceA;
+    await catchRepository.put({
+      ...syncedA,
+      photos: syncedA.photos.map((photo) => ({ ...photo, focalX: 0.25, zoom: 1.3 })),
+      sync: { ...syncedA.sync, status: "local", revision: syncedA.sync.revision + 1 },
+    }, scope);
+    await serviceA.run(ownerId);
+    assert.equal(provider.calls.uploads.length, 1, "crop metadata change does not upload photo bytes again");
+  } finally {
+    globalThis.indexedDB = originalFactory;
+  }
 });
 
 test("photo and Catch deletion are local-first with durable cloud delete retries", async () => {

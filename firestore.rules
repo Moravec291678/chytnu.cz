@@ -165,6 +165,7 @@ service cloud.firestore {
         'operationDigest', 'lastReceiptId', 'photoState'];
     }
 
+    // Catch documents keep bounded photo references only; each photo's metadata is validated in its own subcollection document below.
     function validCatchContent(data, userId, catchId) {
       return data.schemaVersion == 1
         && data.caughtAt is string

@@ -21,3 +21,11 @@ test("unknown sync failures remain safe and keep useful operation context", () =
   assert.deepEqual({ code: failure.code, entityType: failure.entityType, operation: failure.operation }, { code: "unknown", entityType: "water", operation: "delete" });
   assert.doesNotMatch(failure.message, /token|secret/);
 });
+
+test("sync diagnostics distinguish auth, rules, network, and Cloudinary failures", () => {
+  assert.equal(describeSyncFailure({ code: "unauthenticated" }).code, "unauthenticated");
+  assert.equal(describeSyncFailure({ code: "firestore/invalid-argument" }).code, "rules_schema_rejection");
+  assert.equal(describeSyncFailure({ code: "photo_cloud_network_error" }).code, "network");
+  assert.equal(describeSyncFailure({ code: "cloudinary_signing_failed" }).code, "cloudinary_signing_failure");
+  assert.equal(describeSyncFailure({ code: "cloudinary_download_failed" }).code, "remote_delivery_failure");
+});

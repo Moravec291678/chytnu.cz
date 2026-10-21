@@ -43,8 +43,14 @@ function requireActiveOwner(ownerId, getCurrentUserId) {
 function normalizeFirebaseError(error) {
   if (error instanceof SyncPortError) return error;
   const code = String(error?.code ?? "");
-  if (code.includes("permission-denied") || code.includes("unauthenticated")) {
+  if (code.includes("unauthenticated")) {
+    return new SyncPortError("unauthenticated", "Přihlášení vypršelo.", { cause: error, providerCode: code });
+  }
+  if (code.includes("permission-denied")) {
     return new SyncPortError("permission_denied", "Účet už nemá oprávnění synchronizovat tyto záznamy.", { cause: error, providerCode: code });
+  }
+  if (code.includes("invalid-argument") || code.includes("failed-precondition")) {
+    return new SyncPortError("rules_schema_rejection", "Server odmítl strukturu synchronizovaného záznamu.", { cause: error, providerCode: code });
   }
   if (code.includes("unavailable") || code.includes("deadline-exceeded") || code.includes("network-request-failed")) {
     return new SyncPortError("unavailable", "Synchronizační server není dostupný.", { cause: error, providerCode: code });

@@ -9,8 +9,9 @@ import { createPhotoCloudService } from "../../catches/data/photoCloudService.js
 import { getPhotoCloudProvider } from "../../catches/data/photoCloudProvider.js";
 import { getBackendConfiguration } from "../../auth/data/backendConfig.js";
 import { SyncContext } from "./syncContextValue.js";
+import { attachSyncLifecycle } from "./syncLifecycle.js";
 
-const initialState = { status: "idle", sent: 0, applied: 0, conflicts: 0, pending: 0, error: "", errorCode: "", nextRetryAt: null };
+const initialState = { status: "idle", sent: 0, applied: 0, conflicts: 0, pending: 0, failed: 0, error: "", errorCode: "", nextRetryAt: null, lastResult: "never" };
 
 function online() {
   return typeof navigator === "undefined" || navigator.onLine !== false;
@@ -82,7 +83,7 @@ export function SyncProvider({ children }) {
       if (photoResult.status === "error" && finalResult.status === "success") {
         finalResult.status = "error";
         finalResult.error = photoResult.error;
-        finalResult.errorCode = "photo_cloud_failed";
+        finalResult.errorCode = describeSyncFailure({ code: photoResult.errorCode }).code;
       }
       const summary = await updateSummary(userId);
       setState({
@@ -94,6 +95,7 @@ export function SyncProvider({ children }) {
         conflicts: Math.max(finalResult.conflicts ?? 0, summary.conflicts),
         error: finalResult.error ?? "",
         errorCode: finalResult.errorCode ?? "",
+        lastResult: finalResult.status === "success" ? "success" : finalResult.status,
       });
       if ((result.applied ?? 0) > 0) window.dispatchEvent(new Event("chytnu:local-data-restored"));
     } catch (error) {
@@ -122,10 +124,10 @@ export function SyncProvider({ children }) {
     }
     void runSync();
     const retry = () => void runSync();
-    window.addEventListener("online", retry);
+    const detachLifecycle = attachSyncLifecycle({ runSync: retry });
     window.addEventListener("chytnu:outbox-changed", retry);
     return () => {
-      window.removeEventListener("online", retry);
+      detachLifecycle();
       window.removeEventListener("chytnu:outbox-changed", retry);
     };
   }, [authStatus, runSync, userId]);
@@ -138,5 +140,7 @@ export function SyncProvider({ children }) {
   }, [runSync, state.nextRetryAt, state.status, userId]);
 
   const retry = useCallback(() => runSync(true), [runSync]);
-  return <SyncContext.Provider value={{ ...state, retry }}>{children}</SyncContext.Provider>;
+  const backendMode = (() => { try { return getBackendConfiguration().mode; } catch { return "unavailable"; } })();
+  const providerId = getPhotoCloudProvider()?.id ?? "none";
+  return <SyncContext.Provider value={{ ...state, retry, backendMode, providerId, syncEnabled: Boolean(userId && authStatus === "ready") }}>{children}</SyncContext.Provider>;
 }

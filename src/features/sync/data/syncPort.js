@@ -4,7 +4,10 @@ const ERROR_CODES = new Set([
   "not_found",
   "conflict",
   "permission_denied",
+  "unauthenticated",
   "unavailable",
+  "network",
+  "rules_schema_rejection",
   "unsupported",
   "unknown",
 ]);

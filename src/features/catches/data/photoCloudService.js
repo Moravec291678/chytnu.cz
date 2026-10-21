@@ -225,7 +225,7 @@ export function createPhotoCloudService({
         break;
       }
     }
-    return { status: error ? "error" : "success", uploaded, deleted, queued, error: error?.message ?? "" };
+    return { status: error ? "error" : "success", uploaded, deleted, queued, error: error?.message ?? "", errorCode: error?.code ?? "photo_cloud_failed" };
   }
 
   return Object.freeze({

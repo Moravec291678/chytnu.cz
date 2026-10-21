@@ -8,7 +8,10 @@ import { useAuth } from "../features/auth/context/authContextValue.js";
 import { getLocalBackupFileName, serializeLocalBackupJson } from "../features/backup/data/backupFormat.js";
 import { readLocalBackupSnapshot } from "../features/backup/data/localBackupRepository.js";
 import { deleteLocalScopeData } from "../features/settings/data/localDataDeletion.js";
+import { useSync } from "../features/sync/context/syncContextValue.js";
 import "./SettingsPage.css";
+
+/* global __APP_BUILD_ID__ */
 
 const FEEDBACK_URL = "https://github.com/Moravec291678/chytnu.cz/issues/new";
 
@@ -16,6 +19,8 @@ export default function SettingsPage() {
   const navigate = useNavigate();
   const scope = useDataScope();
   const auth = useAuth();
+  const sync = useSync();
+  const debugMode = new URLSearchParams(window.location.search).get("debug") === "1";
   const [preferenceOverride, setPreferenceOverride] = useState({ scopeKey: null, value: null });
   const preferences = preferenceOverride.value && preferenceOverride.scopeKey === scope.scopeKey
     ? preferenceOverride.value
@@ -116,6 +121,21 @@ export default function SettingsPage() {
         {auth.status === "unavailable" && <p>Účet není v tomto prostředí nakonfigurovaný. Místní deník funguje dál.</p>}
         <Link className="settings-link" to="/profile">Správa účtu <span aria-hidden="true">→</span></Link>
       </section>
+
+      {debugMode && <section className="settings-card" aria-labelledby="settings-sync-debug-title">
+        <h2 id="settings-sync-debug-title">Diagnostika synchronizace</h2>
+        <dl>
+          <dt>Build</dt><dd>{typeof __APP_BUILD_ID__ === "string" ? __APP_BUILD_ID__ : "unknown"}</dd>
+          <dt>Auth / scope</dt><dd>{auth.user ? "authenticated" : auth.status === "loading" ? "loading" : "guest"} / {scope.kind ?? "unknown"}</dd>
+          <dt>UID</dt><dd>{auth.user?.uid ? `…${auth.user.uid.slice(-6)}` : "—"}</dd>
+          <dt>Backend</dt><dd>{sync.backendMode}</dd>
+          <dt>Sync enabled</dt><dd>{sync.syncEnabled ? "yes" : "no"}</dd>
+          <dt>Photo provider</dt><dd>{sync.providerId}</dd>
+          <dt>Outbox</dt><dd>{sync.pending} pending · {sync.failed} failed</dd>
+          <dt>Last sync</dt><dd>{sync.lastResult} · sent {sync.sent} · pulled {sync.applied}</dd>
+          <dt>Error classification</dt><dd>{sync.errorCode || sync.lastErrorCode || "none"}</dd>
+        </dl>
+      </section>}
 
       <section className="settings-card" aria-labelledby="settings-display-title">
         <h2 id="settings-display-title">Zobrazení zápisu</h2>

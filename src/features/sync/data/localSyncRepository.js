@@ -47,6 +47,7 @@ export async function readSyncSummary(ownerId) {
     const lastFailed = scoped.find((operation) => operation.lastError);
     return {
       pending: scoped.filter((operation) => operation.status !== "conflict").length,
+      failed: scoped.filter((operation) => operation.status === "failed").length,
       conflicts: conflicts.filter((conflict) => conflict.status === "unresolved").length,
       lastError: lastFailed?.lastError ?? "",
       lastErrorCode: lastFailed?.lastErrorCode ?? "",
