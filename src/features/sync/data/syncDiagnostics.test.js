@@ -1,0 +1,23 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { describeSyncFailure } from "./syncDiagnostics.js";
+
+test("sync diagnostics distinguish permission and connectivity without leaking provider messages", () => {
+  const denied = describeSyncFailure({ code: "permission_denied", message: "secret backend detail", providerCode: "firestore/permission-denied" }, { entityType: "catch", operation: "upsert" });
+  assert.equal(denied.entityType, "catch");
+  assert.equal(denied.operation, "upsert");
+  assert.equal(denied.code, "permission_denied");
+  assert.equal(denied.providerCode, "firestore/permission-denied");
+  assert.match(denied.message, /nebyla povolena serverem/);
+  assert.doesNotMatch(denied.message, /secret backend detail/);
+
+  const offline = describeSyncFailure({ code: "unavailable", retryable: true });
+  assert.equal(offline.retryable, true);
+  assert.match(offline.message, /není dostupný/);
+});
+
+test("unknown sync failures remain safe and keep useful operation context", () => {
+  const failure = describeSyncFailure({ code: "vendor/private", message: "token=secret" }, { entityType: "water", operation: "delete" });
+  assert.deepEqual({ code: failure.code, entityType: failure.entityType, operation: failure.operation }, { code: "unknown", entityType: "water", operation: "delete" });
+  assert.doesNotMatch(failure.message, /token|secret/);
+});

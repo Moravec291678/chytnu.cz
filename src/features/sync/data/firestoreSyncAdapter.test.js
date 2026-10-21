@@ -38,3 +38,19 @@ test("Firestore catch projection writes null when conditions were not recorded",
   assert.equal(toRemoteRecord("catch", record, "angler-1").conditions, null);
   assert.equal(toRemoteRecord("catch", record, "angler-1").conditionSources, null);
 });
+
+test("Firestore catch projection keeps local-only photo framing and never emits cloud object fields", () => {
+  const record = {
+    id: "catch-photo",
+    ownerId: "angler-1",
+    photos: [{
+      id: "photo-1", name: "kapr.jpg", type: "image/jpeg", size: 123,
+      focalX: 0.2, focalY: 0.8, zoom: 1.4,
+      storagePath: "legacy/cloud/path", sha256: "a".repeat(64),
+    }],
+  };
+  assert.deepEqual(toRemoteRecord("catch", record, "angler-1").photos, [{
+    id: "photo-1", name: "kapr.jpg", type: "image/jpeg", size: 123,
+    focalX: 0.2, focalY: 0.8, zoom: 1.4,
+  }]);
+});

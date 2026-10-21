@@ -3,6 +3,7 @@ import { tripRepository } from "../../trips/data/tripRepository.js";
 import { waterRepository } from "../../waters/data/waterRepository.js";
 import { applyRemotePage, readSyncCursor } from "./localSyncRepository.js";
 import { accountScopeKey } from "../../auth/data/localDataScope.js";
+import { describeSyncFailure } from "./syncDiagnostics.js";
 
 const REPOSITORIES = { catch: catchRepository, trip: tripRepository, water: waterRepository };
 const PAGE_SIZE = 100;
@@ -28,11 +29,10 @@ function isDue(operation, now) {
   return !operation.nextAttemptAt || Date.parse(operation.nextAttemptAt) <= now;
 }
 
-export function createSyncService({ port, photoStorage = null, getCurrentOwnerId, now = () => Date.now() }) {
+export function createSyncService({ port, getCurrentOwnerId, now = () => Date.now(), onDiagnostic = () => {} }) {
   let inFlight = null;
 
   async function pull(ownerId) {
-    const scope = { ownerId, scopeKey: accountScopeKey(ownerId) };
     let cursor = await readSyncCursor(ownerId);
     let applied = 0;
     let conflicts = 0;
@@ -47,35 +47,10 @@ export function createSyncService({ port, photoStorage = null, getCurrentOwnerId
       const snapshots = [];
       for (const change of latestByEntity.values()) {
         if (!activeOwner(getCurrentOwnerId, ownerId)) return { applied, conflicts, stopped: true };
-        let remote = await port.read({ ownerId, entityType: change.entityType, entityId: change.entityId });
-        if (photoStorage && change.entityType === "catch" && remote && !remote.deleted) {
-          const localRecord = await catchRepository.get(change.entityId, scope).catch(() => undefined);
-          const localPhotos = new Map((localRecord?.photos ?? []).filter((photo) => photo.blob).map((photo) => [photo.id, photo]));
-          const photos = await Promise.all((remote.record.photos ?? []).map(async (photo) => {
-            if (!photo.storagePath || !photo.sha256) return { ...photo, photoStatus: "metadata-only" };
-            const cachedPhoto = localPhotos.get(photo.id);
-            if (cachedPhoto?.photoStatus === "synced"
-              && cachedPhoto.storagePath === photo.storagePath
-              && cachedPhoto.sha256 === photo.sha256
-              && cachedPhoto.blob.size === photo.size
-              && cachedPhoto.blob.type === photo.type) {
-              return { ...cachedPhoto, ...photo, blob: cachedPhoto.blob, photoStatus: "synced" };
-            }
-            try {
-              return await photoStorage.download({ ownerId, catchId: change.entityId, photo });
-            } catch (error) {
-              const localPhoto = localPhotos.get(photo.id);
-              if (!localPhoto) throw error;
-              const localDescription = await photoStorage.describe({ ownerId, catchId: change.entityId, photo: localPhoto });
-              if (localDescription.sha256 !== photo.sha256 || localDescription.storagePath !== photo.storagePath) throw error;
-              return { ...photo, ...localPhoto, photoStatus: "local-only" };
-            }
-          }));
-          remote = { ...remote, record: { ...remote.record, photos } };
-        }
+        const remote = await port.read({ ownerId, entityType: change.entityType, entityId: change.entityId });
         snapshots.push(makeChangeSnapshot(change, remote));
       }
-      const result = await applyRemotePage({ ownerId, snapshots, cursor: page.cursor, preserveCatchOwnEcho: Boolean(photoStorage) });
+      const result = await applyRemotePage({ ownerId, snapshots, cursor: page.cursor });
       applied += result.applied;
       conflicts += result.conflicts;
       if (!page.hasMore) break;
@@ -90,11 +65,11 @@ export function createSyncService({ port, photoStorage = null, getCurrentOwnerId
     const scope = { ownerId, scopeKey: accountScopeKey(ownerId) };
     let sent = 0;
     let conflicts = 0;
-    let transientError = "";
+    let transientFailure = null;
     const operations = await outboxRepository.list();
     for (const operation of operations) {
       if (operation.ownerId !== ownerId || (!force && !isDue(operation, now()))) continue;
-      if (!activeOwner(getCurrentOwnerId, ownerId)) return { sent, conflicts, stopped: true, transientError };
+      if (!activeOwner(getCurrentOwnerId, ownerId)) return { sent, conflicts, stopped: true, transientFailure };
       const repository = REPOSITORIES[operation.entityType];
       if (!repository) continue;
 
@@ -109,20 +84,9 @@ export function createSyncService({ port, photoStorage = null, getCurrentOwnerId
             operationId: operation.operationId,
             localRevision: operation.localRevision,
           });
-          if (operation.entityType === "catch" && photoStorage) {
-            await photoStorage.deleteUnreferenced({ ownerId, catchId: operation.entityId, keepPaths: [] });
-          }
         } else {
-          let record = await repository.get(operation.entityId, scope);
+          const record = await repository.get(operation.entityId, scope);
           if (!record || record.ownerId !== ownerId || record.sync?.revision !== operation.localRevision) continue;
-          if (operation.entityType === "catch" && photoStorage) {
-            const photos = await Promise.all((record.photos ?? []).map((photo) => photoStorage.describe({
-              ownerId,
-              catchId: operation.entityId,
-              photo,
-            })));
-            record = { ...record, photos };
-          }
           result = await port.write({
             ownerId,
             entityType: operation.entityType,
@@ -131,21 +95,8 @@ export function createSyncService({ port, photoStorage = null, getCurrentOwnerId
             operationId: operation.operationId,
             localRevision: operation.localRevision,
           });
-          if (operation.entityType === "catch" && photoStorage) {
-            const photos = record.photos ?? [];
-            for (const photo of photos) {
-              if (!activeOwner(getCurrentOwnerId, ownerId)) return { sent, conflicts, stopped: true, transientError };
-              await photoStorage.upload({ ownerId, catchId: operation.entityId, photo });
-            }
-            await photoStorage.deleteUnreferenced({
-              ownerId,
-              catchId: operation.entityId,
-              keepPaths: photos.map((photo) => photo.storagePath).filter(Boolean),
-            });
-            await repository.markPhotosSynced(operation.entityId, operation.localRevision, photos, scope);
-          }
         }
-        if (!activeOwner(getCurrentOwnerId, ownerId)) return { sent, conflicts, stopped: true, transientError };
+        if (!activeOwner(getCurrentOwnerId, ownerId)) return { sent, conflicts, stopped: true, transientFailure };
         if (await outboxRepository.acknowledge(operation.operationId, operation.localRevision, result.revision)) sent += 1;
       } catch (error) {
         if (error?.code === "conflict") {
@@ -161,17 +112,18 @@ export function createSyncService({ port, photoStorage = null, getCurrentOwnerId
               record: null,
             })],
             cursor,
-            preserveCatchOwnEcho: Boolean(photoStorage),
           });
           conflicts += 1;
           continue;
         }
-        await outboxRepository.markFailed(operation.operationId, error?.message || "Synchronizace se nezdařila.");
-        transientError = error?.message || "Synchronizace se nezdařila.";
+        const failure = describeSyncFailure(error, operation);
+        await outboxRepository.markFailed(operation.operationId, failure.message, failure);
+        onDiagnostic({ event: "push-failed", ...failure });
+        transientFailure = failure;
         if (error?.retryable || error?.code === "permission_denied" || error?.code === "unauthenticated") break;
       }
     }
-    return { sent, conflicts, stopped: false, transientError };
+    return { sent, conflicts, stopped: false, transientFailure };
   }
 
   async function run(ownerId, { force = false } = {}) {
@@ -181,7 +133,7 @@ export function createSyncService({ port, photoStorage = null, getCurrentOwnerId
       let sent = 0;
       let applied = 0;
       let conflicts = 0;
-      let error = "";
+      let failure = null;
       for (let pass = 0; pass < MAX_PUSH_PASSES; pass += 1) {
         const pulled = await pull(ownerId);
         applied += pulled.applied;
@@ -190,10 +142,10 @@ export function createSyncService({ port, photoStorage = null, getCurrentOwnerId
         const pushed = await push(ownerId, force);
         sent += pushed.sent;
         conflicts += pushed.conflicts;
-        error = pushed.transientError;
+        failure = pushed.transientFailure;
         if (pushed.stopped || !activeOwner(getCurrentOwnerId, ownerId) || pushed.sent === 0) break;
       }
-      if (error) return { status: "error", sent, applied, conflicts, error };
+      if (failure) return { status: "error", sent, applied, conflicts, error: failure.message, errorCode: failure.code, failedOperation: failure.operation };
       return { status: "success", sent, applied, conflicts };
     })().finally(() => { inFlight = null; });
     return inFlight;

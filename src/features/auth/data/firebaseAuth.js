@@ -9,6 +9,14 @@ let firebaseAppApi;
 let firebaseAuthApi;
 let firebaseModulesPromise;
 
+function reportAuthFailure(operation, error) {
+  let mode = "unknown";
+  try { mode = getBackendConfiguration().mode; } catch { /* Configuration errors are reported by the caller. */ }
+  if (!["emulator", "staging"].includes(mode)) return;
+  const code = typeof error?.code === "string" ? error.code : "auth/unknown";
+  console.error(`[ChytnuCz auth] ${operation}: ${code}`);
+}
+
 function connectedEmulators() {
   globalThis[EMULATOR_CONNECTIONS] ??= new Set();
   return globalThis[EMULATOR_CONNECTIONS];
@@ -44,13 +52,7 @@ async function getAuthInstance() {
   await loadFirebaseModules();
   const app = getLocalFirebaseApp();
   try {
-    let auth;
-    try {
-      auth = firebaseAuthApi.initializeAuth(app, { persistence: firebaseAuthApi.browserLocalPersistence });
-    } catch (error) {
-      if (error?.code !== "auth/already-initialized") throw error;
-      auth = firebaseAuthApi.getAuth(app);
-    }
+    const auth = initializeBrowserAuth(app, firebaseAuthApi);
     const config = getBackendConfiguration();
     if (config.mode === "emulator" && !connectedEmulators().has(`auth:${app.name}`)) {
       firebaseAuthApi.connectAuthEmulator(auth, EMULATOR_URL, { disableWarnings: true });
@@ -60,6 +62,32 @@ async function getAuthInstance() {
     return authInstance;
   } catch (error) {
     authConfigurationError = error;
+    throw error;
+  }
+}
+
+export function initializeBrowserAuth(app, authApi) {
+  try {
+    return authApi.initializeAuth(app, {
+      persistence: authApi.browserLocalPersistence,
+      popupRedirectResolver: authApi.browserPopupRedirectResolver,
+    });
+  } catch (error) {
+    if (error?.code !== "auth/already-initialized") throw error;
+    return authApi.getAuth(app);
+  }
+}
+
+export async function runGoogleSignIn(auth, authApi) {
+  const provider = new authApi.GoogleAuthProvider();
+  try {
+    const credential = await authApi.signInWithPopup(auth, provider);
+    return credential.user;
+  } catch (error) {
+    if (error?.code === "auth/popup-blocked") {
+      await authApi.signInWithRedirect(auth, provider);
+      return null;
+    }
     throw error;
   }
 }
@@ -75,6 +103,11 @@ export const firebaseAuth = {
     getAuthInstance().then((auth) => {
       if (!active) return;
       unsubscribe = firebaseAuthApi.onAuthStateChanged(auth, listener, onError);
+      firebaseAuthApi.getRedirectResult(auth).catch((error) => {
+        if (!active) return;
+        reportAuthFailure("redirect-result", error);
+        onError?.(error);
+      });
     }).catch((error) => onError?.(error));
     return () => {
       active = false;
@@ -105,15 +138,10 @@ export const firebaseAuth = {
       throw Object.assign(new Error("Google přihlášení není v tomto prostředí zapnuté."), { code: "auth/provider-disabled" });
     }
     const auth = await getAuthInstance();
-    const provider = new firebaseAuthApi.GoogleAuthProvider();
     try {
-      const credential = await firebaseAuthApi.signInWithPopup(auth, provider);
-      return credential.user;
+      return await runGoogleSignIn(auth, firebaseAuthApi);
     } catch (error) {
-      if (["auth/popup-blocked", "auth/cancelled-popup-request"].includes(error?.code)) {
-        await firebaseAuthApi.signInWithRedirect(auth, provider);
-        return null;
-      }
+      reportAuthFailure("google-sign-in", error);
       throw error;
     }
   },

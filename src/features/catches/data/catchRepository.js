@@ -369,33 +369,6 @@ export const catchRepository = {
       transaction.onabort = () => { db.close(); reject(failure ?? transaction.error ?? new Error("Mazání úlovku bylo přerušeno.")); };
     });
   },
-  markPhotosSynced: async (id, expectedRevision, remotePhotos, options) => {
-    const requestedScope = requireRepositoryScope(options);
-    const db = await openLocalDatabase();
-    return new Promise((resolve, reject) => {
-      const transaction = db.transaction(CATCH_STORE_NAME, "readwrite");
-      const store = transaction.objectStore(CATCH_STORE_NAME);
-      const request = store.get(id);
-      let updated = false;
-      request.onsuccess = () => {
-        const record = request.result;
-        if (!record || recordScopeKey(record) !== requestedScope.scopeKey || record.sync?.revision !== expectedRevision) return;
-        const byId = new Map(remotePhotos.map((photo) => [photo.id, photo]));
-        const photos = (record.photos ?? []).map((photo) => {
-          const remote = byId.get(photo.id);
-          return remote?.storagePath && remote?.sha256
-            ? { ...photo, storagePath: remote.storagePath, sha256: remote.sha256, size: remote.size, photoStatus: "synced" }
-            : photo;
-        });
-        store.put({ ...record, photos, sync: { ...record.sync, photoStatus: photos.length ? "synced" : "none" } });
-        updated = true;
-      };
-      request.onerror = () => transaction.abort();
-      transaction.oncomplete = () => { db.close(); resolve(updated); };
-      transaction.onerror = () => { db.close(); reject(transaction.error ?? new Error("Stav fotografií se nepodařilo uložit.")); };
-      transaction.onabort = () => { db.close(); reject(transaction.error ?? new Error("Uložení stavu fotografií bylo přerušeno.")); };
-    });
-  },
 };
 
 export const outboxRepository = {
@@ -403,7 +376,7 @@ export const outboxRepository = {
     const operations = await runStoreOperation(OUTBOX_STORE_NAME, "list", "readonly");
     return operations.sort((left, right) => left.sequence - right.sequence);
   },
-  markFailed: async (operationId, message) => {
+  markFailed: async (operationId, message, details = {}) => {
     const db = await openLocalDatabase();
     return new Promise((resolve, reject) => {
       const transaction = db.transaction(OUTBOX_STORE_NAME, "readwrite");
@@ -416,6 +389,8 @@ export const outboxRepository = {
         operation.status = "failed";
         operation.attemptCount += 1;
         operation.lastError = String(message || "Operaci se nepodařilo synchronizovat.");
+        operation.lastErrorCode = typeof details.code === "string" ? details.code : "unknown";
+        operation.lastProviderCode = typeof details.providerCode === "string" ? details.providerCode : null;
         operation.nextAttemptAt = new Date(Date.now() + Math.min(30 * 60_000, 1000 * 2 ** Math.min(operation.attemptCount, 10))).toISOString();
         operation.updatedAt = new Date().toISOString();
         store.put(operation);
@@ -466,15 +441,14 @@ export const outboxRepository = {
           entityRequest.onsuccess = () => {
             const record = entityRequest.result;
             if (!record || recordScopeKey(record) !== operation.scopeKey || record.sync?.revision !== expectedLocalRevision) return;
-            const photosPending = operation.entityType === "catch"
-              && (record.photos ?? []).some((photo) => photo.blob && (!photo.storagePath || !photo.sha256));
+            const photosLocal = operation.entityType === "catch" && (record.photos ?? []).some((photo) => photo.blob);
             entityStore.put({
               ...record,
               sync: {
                 ...record.sync,
                 status: "metadata-synced",
                 serverRevision,
-                photoStatus: photosPending ? "local-only" : (record.photos?.length ? "synced" : "none"),
+                photoStatus: photosLocal ? "local-only" : (record.photos?.length ? "metadata-only" : "none"),
               },
             });
             store.delete(operation.sequence);

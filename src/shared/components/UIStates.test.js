@@ -18,3 +18,8 @@ test("sync failures have a safe human-readable message and bounded pending count
   assert.equal(failed.description, "Lokální úlovky a výpravy zůstávají uložené. Čekající změny: 2.");
   assert.doesNotMatch(failed.description, /Firebase|permission-denied|Error/);
 });
+
+test("sync notices distinguish server permission and connectivity failures", () => {
+  assert.match(getOfflineNoticeCopy("error", 2, "permission_denied").title, /nebyla povolena serverem/);
+  assert.match(getOfflineNoticeCopy("error", 1, "unavailable").title, /čeká na připojení/);
+});

@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { createHash } from "node:crypto";
 import { after, before, beforeEach, test } from "node:test";
 import {
   assertFails,
@@ -8,12 +7,10 @@ import {
   initializeTestEnvironment,
 } from "@firebase/rules-unit-testing";
 import { collection, deleteDoc, doc, getDoc, getDocs, setDoc, updateDoc } from "firebase/firestore";
-import { deleteObject, getBytes, ref, uploadBytes } from "firebase/storage";
 
 const projectId = "demo-chytnucz-local";
 const catchPath = (userId, catchId) => `users/${userId}/catches/${catchId}`;
 const tripPath = (userId, tripId) => `users/${userId}/trips/${tripId}`;
-const photoPath = (userId, catchId, photoId, hash) => `users/${userId}/catches/${catchId}/photos/${photoId}/${hash}`;
 
 function makeTrip(id, ownerId) {
   return {
@@ -78,11 +75,6 @@ before(async () => {
       port: 8080,
       rules: await readFile(new URL("../firestore.rules", import.meta.url), "utf8"),
     },
-    storage: {
-      host: "127.0.0.1",
-      port: 9199,
-      rules: await readFile(new URL("../storage.rules", import.meta.url), "utf8"),
-    },
   });
   alice = testEnv.authenticatedContext("angler-a");
   bob = testEnv.authenticatedContext("angler-b");
@@ -91,7 +83,6 @@ before(async () => {
 
 beforeEach(async () => {
   await testEnv.clearFirestore();
-  await testEnv.clearStorage();
   await testEnv.withSecurityRulesDisabled(async (context) => {
     const db = context.firestore();
     await setDoc(doc(db, tripPath("angler-a", "trip-a")), makeTrip("trip-a", "angler-a"));
@@ -174,39 +165,4 @@ test("úlovek nemůže obejít validaci polí ani odkazovat na neexistující v�
   await assertFails(updateDoc(catchRef, { photos: [{ id: "p1", name: "x.jpg", type: "image/jpeg", size: 20, blob: "data" }] }));
   await assertFails(updateDoc(catchRef, { tripId: "trip-does-not-exist" }));
   await assertFails(updateDoc(catchRef, { tripId: null }));
-});
-
-test("fotografie jsou soukromé, svázané s úlovkem a omezené na povolené typy a velikost", async () => {
-  const photo = new Uint8Array([0xff, 0xd8, 0xff, 0x00]);
-  const hash = createHash("sha256").update(photo).digest("hex");
-  const ownPhoto = ref(alice.storage(), photoPath("angler-a", "catch-a", "photo-a", hash));
-  const foreignPhoto = ref(bob.storage(), photoPath("angler-a", "catch-a", "photo-a", hash));
-  const anonymousPhoto = ref(anonymous.storage(), photoPath("angler-a", "catch-a", "photo-a", hash));
-  await testEnv.withSecurityRulesDisabled(async (context) => {
-    await setDoc(doc(context.firestore(), catchPath("angler-a", "catch-a")), {
-      ...makeCatch("catch-a", "angler-a", "trip-a"),
-      deleted: false,
-      photos: [{
-        id: "photo-a", name: "kapr.jpg", type: "image/jpeg", size: photo.byteLength, sha256: hash,
-        storagePath: photoPath("angler-a", "catch-a", "photo-a", hash),
-      }],
-    });
-  });
-
-  await assertSucceeds(uploadBytes(ownPhoto, photo, { contentType: "image/jpeg", customMetadata: { sha256: hash } }));
-  assert.deepEqual([...new Uint8Array(await getBytes(ownPhoto))], [...photo]);
-  await assertFails(getBytes(foreignPhoto));
-  await assertFails(uploadBytes(foreignPhoto, photo, { contentType: "image/jpeg", customMetadata: { sha256: hash } }));
-  await assertFails(deleteObject(foreignPhoto));
-  await assertFails(getBytes(anonymousPhoto));
-  await assertFails(uploadBytes(anonymousPhoto, photo, { contentType: "image/jpeg", customMetadata: { sha256: hash } }));
-  await assertFails(deleteObject(anonymousPhoto));
-  await assertFails(uploadBytes(ref(alice.storage(), photoPath("angler-a", "missing-catch", "photo", hash)), photo, { contentType: "image/jpeg", customMetadata: { sha256: hash } }));
-  await assertFails(uploadBytes(ref(alice.storage(), photoPath("angler-a", "catch-a", "script", hash)), photo, { contentType: "text/html", customMetadata: { sha256: hash } }));
-  await assertFails(uploadBytes(
-    ref(alice.storage(), photoPath("angler-a", "catch-a", "too-large", hash)),
-    new Uint8Array(10485761),
-    { contentType: "image/png", customMetadata: { sha256: hash } },
-  ));
-  await assertSucceeds(deleteObject(ownPhoto));
 });

@@ -21,6 +21,10 @@ const ERROR_MESSAGES = {
   "auth/invalid-api-key": "Přihlašovací služba není správně nastavená. Zkus to později.",
   "auth/api-key-not-valid.-please-pass-a-valid-api-key.": "Přihlašovací služba není správně nastavená. Zkus to později.",
   "auth/app-not-authorized": "Tato aplikace nemá povolený přístup k přihlášení.",
+  "auth/account-exists-with-different-credential": "Pro tento e-mail už existuje účet s jiným způsobem přihlášení.",
+  "auth/user-disabled": "Tento účet je zablokovaný. Obrať se na podporu aplikace.",
+  "auth/invalid-app-credential": "Google přihlášení není správně nastavené. Zkus to později.",
+  "auth/oauth-client-configuration-error": "Google přihlášení není správně nastavené. Zkus to později.",
 };
 
 export function getAuthErrorMessage(error) {

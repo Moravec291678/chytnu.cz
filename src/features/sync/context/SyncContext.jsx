@@ -4,12 +4,21 @@ import { firebaseAuth } from "../../auth/data/firebaseAuth.js";
 import { createSyncPort } from "../data/syncPort.js";
 import { createSyncService } from "../data/syncService.js";
 import { readSyncSummary } from "../data/localSyncRepository.js";
+import { describeSyncFailure } from "../data/syncDiagnostics.js";
+import { getBackendConfiguration } from "../../auth/data/backendConfig.js";
 import { SyncContext } from "./syncContextValue.js";
 
-const initialState = { status: "idle", sent: 0, applied: 0, conflicts: 0, pending: 0, error: "", nextRetryAt: null };
+const initialState = { status: "idle", sent: 0, applied: 0, conflicts: 0, pending: 0, error: "", errorCode: "", nextRetryAt: null };
 
 function online() {
   return typeof navigator === "undefined" || navigator.onLine !== false;
+}
+
+function reportSyncDiagnostic(diagnostic) {
+  let mode = "unknown";
+  try { mode = getBackendConfiguration().mode; } catch { /* Auth reports invalid configuration separately. */ }
+  if (!["emulator", "staging"].includes(mode)) return;
+  console.error("[ChytnuCz sync]", diagnostic);
 }
 
 export function SyncProvider({ children }) {
@@ -22,7 +31,7 @@ export function SyncProvider({ children }) {
   const userId = user?.uid ?? null;
 
   const updateSummary = useCallback(async (ownerId) => {
-    if (!ownerId) return { pending: 0, conflicts: 0, lastError: "", nextRetryAt: null };
+    if (!ownerId) return { pending: 0, conflicts: 0, lastError: "", lastErrorCode: "", nextRetryAt: null };
     return readSyncSummary(ownerId);
   }, []);
 
@@ -47,9 +56,9 @@ export function SyncProvider({ children }) {
       if (!serviceRef.current) {
         const { createFirestoreSyncAdapter } = await import("../data/firestoreSyncAdapter.js");
         const port = createSyncPort(createFirestoreSyncAdapter());
-        serviceRef.current = createSyncService({ port, photoStorage: null, getCurrentOwnerId: () => {
+        serviceRef.current = createSyncService({ port, getCurrentOwnerId: () => {
           try { return firebaseAuth.currentUserId(); } catch { return null; }
-        } });
+        }, onDiagnostic: reportSyncDiagnostic });
       }
       const result = await serviceRef.current.run(userId, { force });
       const summary = await updateSummary(userId);
@@ -61,11 +70,14 @@ export function SyncProvider({ children }) {
         applied: result.applied ?? 0,
         conflicts: Math.max(result.conflicts ?? 0, summary.conflicts),
         error: result.error ?? "",
+        errorCode: result.errorCode ?? "",
       });
       if ((result.applied ?? 0) > 0) window.dispatchEvent(new Event("chytnu:local-data-restored"));
     } catch (error) {
       const summary = await updateSummary(userId).catch(() => initialState);
-      setState((previous) => ({ ...previous, ...summary, status: "error", error: error?.message || "Synchronizaci se nepodařilo dokončit." }));
+      const failure = describeSyncFailure(error);
+      reportSyncDiagnostic({ event: "pull-failed", ...failure });
+      setState((previous) => ({ ...previous, ...summary, status: "error", error: failure.message, errorCode: failure.code }));
     } finally {
       runningRef.current = false;
       if (rerunRef.current) {

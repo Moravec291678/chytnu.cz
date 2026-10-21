@@ -89,21 +89,23 @@ service cloud.firestore {
         ));
     }
 
-    function validPhotoMetadata(value, userId, catchId) {
-      return value is map
-        && value.keys().hasOnly(['id', 'name', 'type', 'size', 'storagePath', 'sha256', 'focalX', 'focalY', 'zoom'])
+    function validPhotoMetadata(value) {
+      let focalX = value.get('focalX', 0.5);
+      let focalY = value.get('focalY', 0.5);
+      let zoom = value.get('zoom', 1);
+      return value.keys().hasOnly(['id', 'name', 'type', 'size', 'focalX', 'focalY', 'zoom'])
         && value.id is string
         && value.name is string
         && value.type in ['image/jpeg', 'image/png', 'image/webp']
         && value.size is int
         && value.size >= 0
         && value.size <= 10485760
-        && (!value.keys().hasAny(['storagePath', 'sha256']) || (
-          value.keys().hasAll(['storagePath', 'sha256'])
-          && value.sha256 is string
-          && value.sha256.matches('^[a-f0-9]{64}$')
-          && value.storagePath == 'users/' + userId + '/catches/' + catchId + '/photos/' + value.id + '/' + value.sha256
-        ));
+        && focalX >= 0
+        && focalX <= 1
+        && focalY >= 0
+        && focalY <= 1
+        && zoom >= 1
+        && zoom <= 2;
     }
 
     function validEnvelope(data, userId, entityType, entityId) {
@@ -134,11 +136,7 @@ service cloud.firestore {
     }
 
     function validCatchContent(data, userId, catchId) {
-      return data.deleted == false
-        && data.schemaVersion == 1
-        && data.entityType == 'catch'
-        && data.id == catchId
-        && data.ownerId == userId
+      return data.schemaVersion == 1
         && data.caughtAt is string
         && data.species is string
         && data.speciesKey is string
@@ -168,7 +166,7 @@ service cloud.firestore {
         && data.result is string
         && data.photos is list
         && data.photos.size() <= 1
-        && (data.photos.size() == 0 || validPhotoMetadata(data.photos[0], userId, catchId))
+        && (data.photos.size() == 0 || validPhotoMetadata(data.photos[0]))
         && data.notes is string
         && data.isFavorite is bool
         && validCatchPrivacy(data.privacy)
@@ -184,17 +182,13 @@ service cloud.firestore {
     }
 
     function validTripContent(data, userId, tripId) {
-      return data.deleted == false
-        && data.keys().hasOnly([
+      return data.keys().hasOnly([
           'schemaVersion', 'id', 'ownerId', 'entityType', 'title', 'locationName', 'methodKey',
           'createdAt', 'updatedAt', 'startedAt', 'endedAt', 'deleted', 'deletedAt',
           'serverRevision', 'syncSequence', 'lastOperationId', 'clientLocalRevision',
           'operationDigest', 'lastReceiptId', 'photoState'
         ])
         && data.schemaVersion == 1
-        && data.entityType == 'trip'
-        && data.id == tripId
-        && data.ownerId == userId
         && data.title is string
         && data.locationName is string
         && optionalString(data.methodKey)
@@ -205,17 +199,13 @@ service cloud.firestore {
     }
 
     function validWaterContent(data, userId, waterId) {
-      return data.deleted == false
-        && data.keys().hasOnly([
+      return data.keys().hasOnly([
           'schemaVersion', 'id', 'ownerId', 'entityType', 'name', 'waterNumber', 'type', 'area',
           'coordinates', 'notes', 'targetFish', 'isFavorite', 'moderationStatus', 'createdAt', 'updatedAt',
           'deleted', 'deletedAt', 'serverRevision', 'syncSequence', 'lastOperationId', 'clientLocalRevision',
           'operationDigest', 'lastReceiptId', 'photoState'
         ])
         && data.schemaVersion == 1
-        && data.entityType == 'water'
-        && data.id == waterId
-        && data.ownerId == userId
         && data.name is string
         && optionalString(data.waterNumber)
         && data.type in ['Rybník', 'Řeka', 'Přehrada', 'Lom']

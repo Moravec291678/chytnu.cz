@@ -4,7 +4,7 @@ Skutečný deployment nebyl proveden. `vercel.json` nastavuje Vite build, výstu
 
 | Prostředí | Backend mode | Firebase projekt | Build | Ověření |
 | --- | --- | --- | --- | --- |
-| Local development | `emulator` | `demo-chytnucz-local` | `npm run dev` | Auth/Firestore/Storage emulátory, unit a emulator testy |
+| Local development | `emulator` | `demo-chytnucz-local` | `npm run dev` | Auth/Firestore emulátory, unit a emulator testy; fotografie local-only |
 | Preview / staging | `staging` | samostatný staging projekt | `npm run build`, `dist` | preview URL, deep links, dva testovací klienty, e-mail a Google provider |
 | Production | `production` | samostatný production projekt | `npm run build`, `dist` | produkční smoke test, právní odkazy, monitoring a budget alerty |
 

@@ -16,7 +16,7 @@ Zachovat současný React/Vite projekt a offline-first repository architekturu. 
 - IndexedDB je zdroj pravdy pro UI.
 - Mutace entity a outbox operace jsou atomické.
 - Firestore používá owner-scoped projekce, revize, receipts, delta změny a tombstones.
-- Storage je privátní, hash-addressed a oddělený od Catch metadat.
+- Fotografie jsou local-only Bloby v IndexedDB; Firestore synchronizuje pouze bezpečný popis a framing metadata. Firebase Storage se nepoužívá.
 - Přesné GPS, fotografie a poznámky nejsou veřejné.
 
 ## Znovuposouzení

@@ -44,12 +44,12 @@ function normalizeFirebaseError(error) {
   if (error instanceof SyncPortError) return error;
   const code = String(error?.code ?? "");
   if (code.includes("permission-denied") || code.includes("unauthenticated")) {
-    return new SyncPortError("permission_denied", "Účet už nemá oprávnění synchronizovat tyto záznamy.", { cause: error });
+    return new SyncPortError("permission_denied", "Účet už nemá oprávnění synchronizovat tyto záznamy.", { cause: error, providerCode: code });
   }
   if (code.includes("unavailable") || code.includes("deadline-exceeded") || code.includes("network-request-failed")) {
-    return new SyncPortError("unavailable", "Synchronizační server není dostupný.", { cause: error });
+    return new SyncPortError("unavailable", "Synchronizační server není dostupný.", { cause: error, providerCode: code });
   }
-  return new SyncPortError("unknown", error?.message || "Synchronizaci se nepodařilo dokončit.", { cause: error });
+  return new SyncPortError("unknown", "Synchronizaci se nepodařilo dokončit.", { cause: error, providerCode: code || null });
 }
 
 function entityRef(db, ownerId, entityType, entityId) {
@@ -151,8 +151,6 @@ export function toRemoteRecord(entityType, record, ownerId) {
       name: photo.name ?? "fotografie",
       type: photo.type ?? photo.blob?.type ?? "image/jpeg",
       size: photo.blob?.size ?? photo.size ?? 0,
-      ...(photo.storagePath ? { storagePath: photo.storagePath } : {}),
-      ...(photo.sha256 ? { sha256: photo.sha256 } : {}),
       ...(Number.isFinite(photo.focalX) ? { focalX: photo.focalX } : {}),
       ...(Number.isFinite(photo.focalY) ? { focalY: photo.focalY } : {}),
       ...(Number.isFinite(photo.zoom) ? { zoom: photo.zoom } : {}),

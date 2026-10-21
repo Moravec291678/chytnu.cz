@@ -1,5 +1,7 @@
 # Životní cyklus účtu a dat
 
+> **Aktuální rozhodnutí 21. 10. 2026:** Firebase Storage se nepoužívá. Cloudový lifecycle se týká Auth a Firestore metadat; foto bytes uživatel spravuje lokálně přes IndexedDB a export/obnovu.
+
 ## Co bezpečně zvládá klient nyní
 
 - export místních Catch, Trip a fotografií do verzované zálohy;

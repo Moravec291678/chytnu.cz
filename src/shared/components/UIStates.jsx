@@ -43,9 +43,9 @@ export function LoadingSkeleton({ label = "Načítám…", count = 3, className 
   </div>;
 }
 
-export function OfflineNotice({ pending = 0, onRetry, status = "offline" }) {
+export function OfflineNotice({ pending = 0, onRetry, status = "offline", errorCode = "" }) {
   const failed = status === "error";
-  const copy = getOfflineNoticeCopy(status, pending);
+  const copy = getOfflineNoticeCopy(status, pending, errorCode);
   return <aside className={`offline-notice${failed ? " offline-notice-error" : ""}`} role="status" aria-live="polite">
     <div>
       <strong>{copy.title}</strong>

@@ -37,7 +37,7 @@ function Layout({ children }) {
   const tripsActive = pathname === "/trips" || pathname.startsWith("/trips/");
   return (
     <div className="layout">
-      {(!isOnline || sync?.status === "offline" || sync?.status === "error") && <OfflineNotice pending={sync?.pending} status={sync?.status === "error" ? "error" : "offline"} onRetry={sync?.retry} />}
+      {(!isOnline || sync?.status === "offline" || sync?.status === "error") && <OfflineNotice pending={sync?.pending} status={sync?.status === "error" ? "error" : "offline"} errorCode={sync?.errorCode} onRetry={sync?.retry} />}
       <main className="layout-main">{children}</main>
       <nav className="bottom-nav" aria-label="Hlavní navigace">
         <Link to="/" className={itemClass(homeActive)} aria-current={homeActive ? "page" : undefined}>

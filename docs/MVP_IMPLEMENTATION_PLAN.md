@@ -1,5 +1,7 @@
 # ChytnuCz — minimální první verze a plán implementace backendu
 
+> **Aktuální rozhodnutí 21. 10. 2026:** části popisující Firebase Storage a přenos foto bytes jsou historické. Současný MVP synchronizuje Catch/Trip/Water metadata přes Firestore; fotografie jsou local-only v IndexedDB a lokální záloze.
+
 **Stav:** etapový plán; etapa 6I je ověřena pouze proti lokálním emulátorům, bez produkčního projektu
 **Vazba:** dílčí plán pro ETAPU 6 hlavního promptu; navazuje na `docs/CATCH_STORAGE.md` a `docs/CLOUD_SYNC_DECISION.md`
 **Rozhodnutí Firebase:** pracovní doporučení, nikoli souhlas s účtem, fakturací nebo migrací
@@ -141,16 +143,11 @@ Každý níže uvedený bod je samostatná dílčí etapa. Následující etapa 
 
 ### ETAPA 6J — synchronizace soukromých fotografií
 
-- **Stav:** implementováno a ověřeno proti lokálním Auth/Firestore/Storage Emulatorům; produkční přenos není povolen ani nakonfigurován.
-- **Jediný hlavní cíl:** fotografie se synchronizuje nezávisle na Catch záznamu a po výpadku lze bezpečně pokračovat bez ztráty lokální kopie.
-- **Rozsah:** soukromé Storage objekty s vlastníkem, neměnnou cestou `owner/catch/photo/sha256`, MIME/byte limitem, opakovatelným upload/downloadem, ověřením hashe, metadaty, zobrazenou chybou neúspěšného uploadu, nahrazením a odstraněním. Přenos používá přihlášený Firebase SDK, nikoli veřejnou URL. Zachován současný limit jedné fotky a místní Blob.
-- **Mimo rozsah:** veřejné URL, galerie veřejných profilů, více fotografií bez produktové potřeby.
-- **Závislosti:** 6G a 6I; souhlas s regionem/billing; konkrétní limity, náhledová varianta a backup policy schválené před implementací.
-- **Rizika:** exif/GPS únik, orphaned blobs, falešné acky, bandwidth opakovaných downloadů, rozpočet, účetní smazání objektů.
-- **Automatické testy:** `npm run test:photos` ověřuje upload/read-back hash, izolované druhé IndexedDB, retry při chybě uploadu i následného úklidu, nahrazení, odstranění, ownerless izolaci, sign-out a tombstone cleanup; `npm run test:rules` ověřuje vlastní/cizí Storage rules, vazbu metadata/cesty, MIME a byte limit.
-- **Ruční testy:** foto zůstává viditelná offline; upload/pull na druhém zařízení; vypnout síť uprostřed uploadu; ověřit soukromou cestu, retry, odhlášení a mazání; kontrola EXIF.
-- **Splněno v emulátoru:** lokální Blob se ponechá do ověřeného ACK; cizí účet nemůže objekt číst; neodeslané změny zůstávají ve frontě; nahrazené a smazané objekty se opakovatelně uklízí.
-- **Produkční brána zůstává:** schválení providera/regionu/billingu, datové retence a zálohy Storage objektů; přečtení plného souboru po uploadu zvyšuje přenesený objem a jeho cenu je třeba posoudit před produkčním zapnutím. Chování mobilní background synchronizace a měření nákladů patří do navazující release přípravy.
+- **Aktuální rozhodnutí:** cloudová synchronizace fotografií není součástí MVP. Fotografie a jejich Blob zůstávají pouze v IndexedDB a v uživatelem vytvořené lokální záloze; Firebase Storage se nepoužívá.
+- **Synchronizovaný rozsah:** Firestore nese jen neškodná metadata `id`, `name`, `type`, `size` a volitelné orámování `focalX`, `focalY`, `zoom`. Neobsahuje Blob, veřejnou URL, Storage cestu ani hash objektu.
+- **Chování dalšího zařízení:** Catch se stáhne bez obrazových bajtů a UI použije branded fallback. Lokální Blob se při sloučení stejného photo ID zachová.
+- **Automatické testy:** `npm run test:photos` ověřuje zachování lokálních bajtů, omezenou Firestore projekci, absenci Firebase Storage runtime a bezpečný metadata-only stav druhého klienta. `npm run test:rules` testuje pouze Auth/Firestore pravidla.
+- **Budoucí možnost:** případný cloud fotografií vyžaduje samostatné produktové a bezpečnostní rozhodnutí o providerovi, soukromí, EXIF, limitech, retenci, zálohách a nákladech.
 
 ### ETAPA 6K — bezpečná volitelná migrace lokálního deníku do účtu
 

@@ -23,7 +23,7 @@ const db = getFirestore(app);
 connectFirestoreEmulator(db, "127.0.0.1", 8080);
 const uid = `sync-${crypto.randomUUID()}`;
 const email = `${uid}@example.test`;
-const password = "local-sync-test-password-123";
+const password = `Local-sync-${crypto.randomUUID()}-9a!`;
 
 function serviceFor(adapter) {
   return createSyncService({ port: createSyncPort(adapter), getCurrentOwnerId: () => auth.currentUser?.uid ?? null });
@@ -59,7 +59,7 @@ try {
     conditions: { airTempC: 11, moonPhase: "full" },
     conditionSources: { airTempC: "auto", moonPhase: "auto" },
     waterDepthM: null, bottomType: null, tripId, method: null, baits: [], result: "released",
-    photos: [{ id: "photo-1", name: "kapr.jpg", type: "image/jpeg", blob: photoBlob }],
+    photos: [{ id: "photo-1", name: "kapr.jpg", type: "image/jpeg", blob: photoBlob, focalX: 0.2, focalY: 0.8, zoom: 1.4 }],
     notes: "emulator integration fixture", isFavorite: false, sync: { status: "local", revision: 1 },
   }, accountScope);
 
@@ -80,7 +80,10 @@ try {
   assert.deepEqual(remoteCatch.data().coordinates, { latitude: 50.087, longitude: 14.421 });
   assert.deepEqual(remoteCatch.data().conditions, { airTempC: 11, moonPhase: "full" });
   assert.deepEqual(remoteCatch.data().conditionSources, { airTempC: "auto", moonPhase: "auto" });
-  assert.deepEqual(remoteCatch.data().photos, [{ id: "photo-1", name: "kapr.jpg", type: "image/jpeg", size: 3 }]);
+  assert.deepEqual(remoteCatch.data().photos, [{
+    id: "photo-1", name: "kapr.jpg", type: "image/jpeg", size: 3,
+    focalX: 0.2, focalY: 0.8, zoom: 1.4,
+  }]);
   assert.equal(JSON.stringify(remoteCatch.data()).includes("blob"), false);
 
   const local = await catchRepository.get(catchId, accountScope);
@@ -98,6 +101,25 @@ try {
     expectedRevision: remoteCatch.data().serverRevision,
     operationId: `invalid-coordinates-${crypto.randomUUID()}`, localRevision: 2,
   }), /nepodařilo|oprávnění|permission/i, "out-of-range coordinates must be rejected by Firestore rules");
+
+  await assert.rejects(() => firestoreAdapter.write({
+    ownerId, entityType: "catch", entityId: catchId,
+    record: { ...local, photos: [{ ...local.photos[0], focalX: 1.1, focalY: 0.5, zoom: 1 }] },
+    expectedRevision: remoteCatch.data().serverRevision,
+    operationId: `invalid-frame-${crypto.randomUUID()}`, localRevision: 2,
+  }), /nepodařilo|oprávnění|permission/i, "out-of-range framing must be rejected by Firestore rules");
+
+  const legacyCatchId = `legacy-frame-${crypto.randomUUID()}`;
+  const legacyCatch = {
+    ...local,
+    id: legacyCatchId,
+    photos: [{ id: "legacy-photo", name: "legacy.jpg", type: "image/jpeg", size: 3 }],
+  };
+  const legacyWrite = await firestoreAdapter.write({
+    ownerId, entityType: "catch", entityId: legacyCatchId, record: legacyCatch,
+    expectedRevision: null, operationId: `legacy-frame-${crypto.randomUUID()}`, localRevision: 1,
+  });
+  assert.equal(legacyWrite.revision, 1, "legacy photo metadata without framing must remain valid");
 
   assert.deepEqual(
     toRemoteRecord("catch", { ...local, conditionSources: { airTempC: "fabricated" } }, ownerId).conditionSources,

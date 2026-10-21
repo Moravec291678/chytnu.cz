@@ -1,6 +1,6 @@
 # Audit projektu ChytnuCz
 
-**Aktualizováno:** 18. 10. 2026
+**Aktualizováno:** 21. 10. 2026
 **Rozsah:** aktuální pracovní strom po lokálním dokončení bezpečně proveditelných částí MVP
 
 ## Ověřená architektura
@@ -8,8 +8,8 @@
 - React 18 + Vite 5, React Router, JavaScript a klasické CSS.
 - UI zapisuje přes Context a repository vrstvy. Lokálním zdrojem pravdy je IndexedDB `chytnu-local`.
 - Stores: `catches`, `trips`, `outbox`, `syncConflicts`, `syncState`. Upgrade na verzi 4 je aditivní.
-- Firebase Auth, Firestore a Storage jsou zapojené pouze proti lokálnímu demo emulátoru. Produkční build účet a cloud záměrně nenabízí.
-- Soukromé fotografie zůstávají jako Blob v IndexedDB; cloudová projekce obsahuje metadata a privátní hashovanou Storage cestu.
+- Firebase Auth a Firestore jsou zapojené proti lokálnímu demo emulátoru i explicitní staging konfiguraci projektu `chutnucz`. Aktuální rules byly 21. 10. 2026 nasazeny a reálný izolovaný smoke test Auth/Sync/Security prošel; koncový Google popup na Vercel doméně zůstává manuální release kontrolou.
+- Soukromé fotografie zůstávají jako Blob v IndexedDB. Cloudová projekce obsahuje jen ID, název, MIME, velikost a bezpečně omezená framing metadata; Firebase Storage se nepoužívá.
 - Produkční build obsahuje manifest a vlastní service worker pro statický shell. Firebase, počasí ani soukromé odpovědi necachuje.
 
 ## Ověřené funkce
@@ -26,14 +26,14 @@
 ## Automatické důkazy
 
 - `npm test`: 73/73 po doplnění Trip konfliktu (finální počet se ověřuje v závěrečné sadě).
-- `npm run test:rules`: 6/6, včetně anonymního a cizího přístupu a soukromých Storage objektů.
+- `npm run test:rules`: Firestore owner/schema/default-deny pravidla včetně crop bounds; aktuální počet je uveden v posledním QA reportu.
 - `npm run test:auth`, `npm run test:sync`, `npm run test:photos`: úspěšný exit code 0.
 - `npm run lint`, `npm run build`, `git diff --check`: úspěšné; build upozorňuje na hlavní JS chunk přibližně 831 kB.
 - Praktické QA v izolovaném IAB na 390 px: Catch CRUD bez smazání, fotografie po reloadu, Trip create/edit/end, Catch→Trip, filtry, naplněné statistiky, export a idempotentní import. Konzole bez warning/error.
 
 ## Neověřeno nebo blokováno
 
-- Produkční Firebase projekt, region, billing, rozpočtové alerty, skutečné e-maily, produkční Storage/Firestore a obnovovací zálohy.
+- Nasazená verze Firestore pravidel, skutečné e-maily, Google Authorized domains/OAuth a obnovovací zálohy cloudových metadat.
 - Smazání cloudového účtu a dat potřebuje schválenou serverovou infrastrukturu a retenční pravidla.
 - Service worker je vytvořen a buildnut, ale použitý IAB po vypnutí preview serveru nevykreslil offline shell; fyzický Chrome/Safari/PWA test zůstává nutný.
 - Živý požadavek počasí nebyl v tomto bloku spuštěn s přesnou polohou uživatele. Produkční licence/atribuce zdroje musí být potvrzena.

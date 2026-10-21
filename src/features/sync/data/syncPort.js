@@ -15,6 +15,7 @@ export class SyncPortError extends Error {
     this.name = "SyncPortError";
     this.code = ERROR_CODES.has(code) ? code : "unknown";
     this.retryable = code === "unavailable";
+    this.providerCode = typeof options.providerCode === "string" ? options.providerCode : null;
   }
 }
 

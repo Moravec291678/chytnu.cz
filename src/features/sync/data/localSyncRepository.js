@@ -12,9 +12,8 @@ import { accountScopeKey, isGuestScope, recordScopeKey } from "../../auth/data/l
 
 const STORES = { catch: "catches", trip: "trips", water: "waters" };
 
-function photoSyncStatus(photos, remoteConfirmed = false) {
+function photoSyncStatus(photos) {
   if (photos.length === 0) return "none";
-  if (remoteConfirmed) return "synced";
   return photos.some((photo) => photo.blob) ? "local-only" : "metadata-only";
 }
 
@@ -45,10 +44,12 @@ export async function readSyncSummary(ownerId) {
       requestResult(transaction.objectStore(CONFLICT_STORE_NAME).index("ownerId").getAll(ownerId)),
     ]);
     const scoped = operations.filter((operation) => operation.ownerId === ownerId);
+    const lastFailed = scoped.find((operation) => operation.lastError);
     return {
       pending: scoped.filter((operation) => operation.status !== "conflict").length,
       conflicts: conflicts.filter((conflict) => conflict.status === "unresolved").length,
-      lastError: scoped.find((operation) => operation.lastError)?.lastError ?? "",
+      lastError: lastFailed?.lastError ?? "",
+      lastErrorCode: lastFailed?.lastErrorCode ?? "",
       nextRetryAt: scoped
         .filter((operation) => operation.status === "failed" && operation.nextAttemptAt)
         .map((operation) => operation.nextAttemptAt)
@@ -306,11 +307,8 @@ function metadataOnlyRecord(remote, local = null) {
   const localPhotos = new Map((local?.photos ?? []).filter((photo) => photo.blob).map((photo) => [photo.id, photo]));
   const photos = (remote.record.photos ?? []).map((photo) => {
     const localPhoto = localPhotos.get(photo.id);
-    const sameRemoteObject = localPhoto
-      && localPhoto.storagePath === photo.storagePath
-      && localPhoto.sha256 === photo.sha256;
-    return sameRemoteObject && !(photo.blob instanceof Blob)
-      ? { ...photo, ...localPhoto, storagePath: photo.storagePath, sha256: photo.sha256 }
+    return localPhoto && !(photo.blob instanceof Blob)
+      ? { ...localPhoto, ...photo, blob: localPhoto.blob, photoStatus: "local-only" }
       : { ...photo, photoStatus: photo.photoStatus === "synced" ? "synced" : "metadata-only" };
   });
   return {
@@ -322,7 +320,7 @@ function metadataOnlyRecord(remote, local = null) {
       status: "metadata-synced",
       revision: local?.sync?.revision ?? 0,
       serverRevision: remote.revision,
-      photoStatus: photoSyncStatus(photos, photos.every((photo) => photo.photoStatus === "synced")),
+      photoStatus: photoSyncStatus(photos),
     },
   };
 }
@@ -350,7 +348,7 @@ function makeConflict(ownerId, snapshot, localRecord) {
  * Apply one fully fetched delta page atomically. The cursor advances in the
  * same IndexedDB transaction as entity changes and conflict snapshots.
  */
-export async function applyRemotePage({ ownerId, snapshots, cursor, preserveCatchOwnEcho = false }) {
+export async function applyRemotePage({ ownerId, snapshots, cursor }) {
   const db = await openLocalDatabase();
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(
@@ -405,32 +403,6 @@ export async function applyRemotePage({ ownerId, snapshots, cursor, preserveCatc
           && remote.lastOperationId === pendingOperation.operationId
           && remote.clientLocalRevision === pendingOperation.localRevision;
         if (ownEcho) {
-          // Catch photo upload/removal/deletion may still need Storage work after
-          // Firestore accepted the metadata. Only the push path may acknowledge it.
-          if (preserveCatchOwnEcho && snapshot.entityType === "catch") {
-            outbox.put({ ...pendingOperation, baseServerRevision: remote.revision, updatedAt: new Date().toISOString() });
-            if (pendingOperation.operation === "upsert" && localRecord?.sync?.revision === pendingOperation.localRevision) {
-              entityStore.put({
-                ...localRecord,
-                sync: { ...localRecord.sync, status: "metadata-synced", serverRevision: remote.revision },
-              });
-            }
-            processSnapshot(index + 1);
-            return;
-          }
-          const remotePhotosConfirmed = snapshot.entityType !== "catch"
-            || (remote.record.photos ?? []).every((photo) => photo.photoStatus === "synced");
-          if (pendingOperation.operation === "upsert" && localRecord?.sync?.revision === pendingOperation.localRevision
-            && (localRecord.photos ?? []).some((photo) => photo.blob)
-            && (!remotePhotosConfirmed || localRecord.sync?.photoStatus !== "synced")) {
-            outbox.put({ ...pendingOperation, baseServerRevision: remote.revision, updatedAt: new Date().toISOString() });
-            entityStore.put({
-              ...localRecord,
-              sync: { ...localRecord.sync, status: "metadata-synced", serverRevision: remote.revision, photoStatus: "local-only" },
-            });
-            processSnapshot(index + 1);
-            return;
-          }
           outbox.delete(pendingOperation.sequence);
           if (pendingOperation.operation === "upsert" && localRecord?.sync?.revision === pendingOperation.localRevision) {
             const acceptedRecord = snapshot.entityType === "catch"
@@ -442,7 +414,7 @@ export async function applyRemotePage({ ownerId, snapshots, cursor, preserveCatc
                 ...localRecord.sync,
                 status: "metadata-synced",
                 serverRevision: remote.revision,
-                photoStatus: photoSyncStatus(acceptedRecord.photos ?? [], remotePhotosConfirmed),
+                photoStatus: photoSyncStatus(acceptedRecord.photos ?? []),
               },
             });
           }

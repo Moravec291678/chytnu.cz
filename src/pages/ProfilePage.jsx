@@ -572,7 +572,7 @@ function ProfilePage() {
           {ownerless.catches + ownerless.trips > 0 && <div className="profile-restore-preview">
             <p><strong>Místní deník bez účtu</strong></p>
             <p>{ownerless.catches} úlovků · {ownerless.trips} výprav · {ownerless.photos} fotografií</p>
-            <p className="profile-privacy-note">Data se nepřenášejí automaticky. Propojení zachová jejich ID, vazby i místní fotografie a připraví je k synchronizaci s tímto účtem.</p>
+            <p className="profile-privacy-note">Data se nepřenášejí automaticky. Propojení zachová jejich ID, vazby i místní fotografie; do účtu synchronizuje pouze údaje úlovků a výprav.</p>
             <button className="profile-account-secondary" type="button" disabled={dataActionBusy} onClick={linkLocalJournal}>
               {dataActionBusy ? "Propojuji…" : "Propojit místní deník s účtem"}
             </button>
@@ -639,7 +639,7 @@ function ProfilePage() {
           </div>}
           {sync.status === "success" && sync.conflicts > 0 && conflicts.length === 0 && <p className="profile-error" role="status">Konflikty byly zachované. Obnovuji jejich seznam…</p>}
           {sync.status === "success" && sync.conflicts === 0 && sync.pending > 0 && <p className="profile-privacy-note" role="status">Čeká {sync.pending} změn na opakování synchronizace.</p>}
-          {sync.status === "success" && sync.conflicts === 0 && sync.pending === 0 && <p className="profile-feedback" role="status">Úlovky, výpravy a jejich fotografie jsou synchronizované.</p>}
+          {sync.status === "success" && sync.conflicts === 0 && sync.pending === 0 && <p className="profile-feedback" role="status">Úlovky a výpravy jsou synchronizované. Fotografie zůstávají pouze v tomto zařízení.</p>}
           {(sync.status === "error" || sync.status === "offline") && <button className="profile-account-secondary" type="button" onClick={sync.retry}>Zkusit synchronizaci znovu</button>}
         </div>}
         <p className="profile-privacy-note">Odhlášení místní data nemaže. Starší deník bez účtu se přenese jen po výslovném potvrzení výše.</p>

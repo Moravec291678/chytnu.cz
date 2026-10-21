@@ -1,44 +1,34 @@
-# Synchronizační kontrakt Catch a Trip
+# Synchronizační kontrakt
 
-**Stav:** Catch/Trip metadata a soukromé Catch fotografie se synchronizují proti vývojovým Firebase Emulatorům; žádný produkční projekt není nakonfigurován.
+## Zdroj pravdy
 
-## Rozsah a hranice
+IndexedDB `chytnu-local` je zdrojem pravdy pro UI. Catch, Trip a Water mutace zapisují entity a outbox atomicky. Firestore je soukromá replika účtu pro metadata. UI Firebase SDK přímo nevolá.
 
-`catchRepository` a `tripRepository` zůstávají jedinou cestou lokálního ukládání v IndexedDB. Databáze `chytnu-local` ve verzi 4 obsahuje záznamy, trvalou `outbox`, konfliktové kopie a kurzory; fotografie zůstávají Bloby uvnitř Catch záznamu. UI nevolá Firebase SDK přímo; `SyncProvider` používá `syncService`, provider-neutral port, Firestore adaptér a photo Storage adapter připnuté na lokální Auth/Firestore/Storage Emulatory. Produkční endpoint není fallbackem dostupný.
+Po přihlášení se synchronizují pouze záznamy se stejným `ownerId`. Ownerless deník se k účtu připojí jen po výslovném potvrzení; ID, vazby a lokální Bloby zůstanou zachované.
 
-Po přihlášení se synchronizují pouze záznamy vytvořené pro toto UID. Starší `ownerId: null` záznamy ani jejich fronta se nikdy automaticky nepřipojí k účtu. Uživatel je může po zobrazení souhrnu a potvrzení atomicky propojit s aktivním účtem; ID, Trip vazby a Bloby zůstávají zachované. Odhlášení nemaže místní data ani čekající změny.
+## Protokol
 
-## Operace a odolnost
+- Stálé `operationId`, rostoucí `localRevision` a serverová `serverRevision`.
+- Firestore transakce zapisuje entitu nebo tombstone, receipt v `syncOperations`, delta událost v `syncChanges` a kurzor v `sync/state`.
+- Opakované odeslání stejné operace je idempotentní.
+- Stará revize vytváří zachovaný konflikt; nepoužívá se tiché last-write-wins.
+- Síťová chyba ponechá operaci ve frontě s exponenciálním retry nejvýše 30 minut.
+- Přímé mazání dokumentů je zakázané. Smazání je tombstone.
+- Změna aktivního účtu zastaví běh a zabraňuje potvrzení operace jinému vlastníkovi.
 
-- Lokální Catch/Trip změna a její operace se zapisují v jedné IndexedDB transakci. Opakované změny stejné entity se sloučí do jedné operace s trvalým `operationId` a rostoucím `localRevision`.
-- Firestore transakce ověřuje očekávanou `serverRevision` (CAS) a současně zapisuje záznam nebo tombstone, idempotentní receipt, změnovou událost a uživatelský sekvenční kurzor.
-- Opakovaný `(ownerId, operationId, localRevision)` vrací původní potvrzení. Pozdější lokální edit téže dosud čekající operace pokračuje pouze pokud se vzdálená verze prokazatelně změnila stejným `operationId`.
-- Delta se stahuje po stránkách. Vzdálené záznamy a konflikty se aplikují atomicky s lokálním kurzorem. Selhání transaction nepostoupí kurzor.
-- Souběžná vzdálená změna zachová místní záznam, vzdálený snímek i položku fronty se stavem konfliktu; automatické slučování ani ztrátová politika „poslední zápis vyhrává“ se nepoužívá.
-- Profil umožní pro Catch i Trip vybrat místní nebo vzdálenou verzi. Lokální volba naváže operaci na poslední serverovou revizi; vzdálená volba bezpečně nahradí místní stav. Vzdálený tombstone místní variantu při volbě „místní“ zachová pod novým ID.
-- Smazání je vzdálený tombstone; přímé Firestore mazání dokumentu je zakázáno. Starší klient tak záznam znovu nevytvoří. Tombstones a receipty nemají zatím retenční purge.
-- Přechodná chyba zvyšuje retry delay exponenciálně s horní hranicí 30 minut. Neodeslaná operace zůstává ve frontě a poslední chyba je viditelná v Profilu. Připojení ani přijetí HTTP požadavku samo o sobě není potvrzením.
-- Změna účtu během požadavku zastaví další čtení/zápisy a klient potvrdí pouze účet, který zůstal aktivní.
+## Fotografie
 
-## Datová projekce, GPS a fotografie
+Fotografie jsou local-only. Blob zůstává v IndexedDB a v uživatelem vytvořené lokální záloze. Firestore projekce obsahuje pouze `id`, `name`, `type`, `size` a volitelně `focalX`, `focalY`, `zoom`. Adapter neodesílá Blob, `storagePath` ani `sha256`.
 
-Firestore používá cesty `/users/{uid}/catches/{catchId}` a `/users/{uid}/trips/{tripId}`. Vlastnictví a ID jsou ověřena pravidly. Catch může odkazovat pouze na existující výpravu téhož vlastníka. Lokální `sync.revision` je oddělená od serverové revize.
+Pokud má zařízení Blob stejné fotografie, remote metadata update jej zachová. Nové zařízení bez bytes zachová metadata-only stav a UI použije fallback. Firebase Storage není součástí runtime, konfigurace emulátoru ani testů.
 
-Volitelná přesná poloha se přenáší jako `coordinates: { latitude, longitude }` nebo `null`. Pravidla přijmou jen konečná čísla v rozsahu zeměpisné šířky `-90..90` a délky `-180..180`; starší textové `gpsLocation` zůstává kvůli kompatibilitě. Nejednoznačný starší text se automaticky nepřevádí. Souřadnice jsou součástí soukromého dokumentu vlastníka a nevzniká žádná veřejná mapová kolekce. Album druhů, XP, levely, achievementy a mapové body jsou deterministické projekce lokálně viditelných Catch/Trip a samostatně se nesynchronizují.
+## Diagnostika
 
-Do Firestore se posílají pouze metadata fotografie (ID, název, MIME, velikost, hash a soukromá Storage cesta). Blob zůstává v IndexedDB; synchronizátor jej kopíruje do soukromého Storage pouze pro Catch s ověřeným `ownerId` shodným s právě přihlášeným UID. Ownerless data ani jejich fotografie se nepřenášejí.
-
-Upload nejprve zapíše Catch metadata, která svazují owner/Catch/photo ID, hash, cestu, MIME a velikost. Storage Rules potom povolí upload přesně tohoto objektu. Cesta obsahuje SHA-256 a je neměnná podle obsahu; opakovaný požadavek tak použije stejný objekt. Adapter ověří serverová metadata a stáhne obsah zpět k plnému ověření SHA-256 před lokálním ACK. Před ACK také opakovatelně odstraňuje staré objekty u nahrazení/odstranění fotografie. U smazání Catch nejprve odešle Firestore tombstone a následně uklízí objekty pod jeho soukromou cestou; neúspěšný úklid ponechá Catch operaci ve frontě.
-
-Při delta pullu se soubor stáhne, ověří a uloží jako Blob do stejného Catch záznamu v IndexedDB ještě před atomickým uložením změn a kurzoru. Pokud objekt ještě není dostupný a zařízení nemá místní Blob, stránka ani kurzor se nepotvrdí; synchronizace zobrazí chybu a uživatel ji může zopakovat. Pokud má toto zařízení původní Blob a právě čekající upload, může jej ponechat lokálně a frontu neztratí.
-
-Storage Rules vyžadují přihlášeného vlastníka, odpovídající Catch metadata, správný SHA-256 v cestě i custom metadata, MIME a limit 10 MiB. Klient nepoužívá veřejné URL. Současný UI limit jedné fotografie na Catch a lokální komprese do 1920 px zůstávají. Náhled se nevytváří jako další Storage objekt; detail a galerie používají ověřený původní Blob. Read-back pro ověření hashe přidává přenosová data, což je nutné vyhodnotit před produkčním zapnutím.
+Development a staging zapisují do konzole pouze bezpečný kontext: typ entity, druh operace, normalizovaný error code, případný provider code a retryable stav. Nezapisují payload, token ani tajnou konfiguraci. UI rozlišuje nedostupný server, odmítnutí pravidly a jinou chybu; data vždy zůstávají v outboxu.
 
 ## Ověření
 
-- `npm test` obsahuje testy in-memory adapteru a služby: push/pull, explicitní změna vlastníka, řešení Catch i Trip konfliktu, retry, legacy záznamy, lokální Blob, změna během čekajícího ACK a cursor.
-- `npm run test:rules` ověřuje odmítnutí přístupu bez vlastníka, napříč vlastníky a přímých zápisů mimo receipt/cursor protokol, a samostatná Storage pravidla.
-- `npm run test:sync` ověřuje skutečný SDK/Auth/Firestore tok výprava → úlovek včetně strukturovaných souřadnic, vazbu trip, metadata-only fotografii, ponechání lokálního Blobu, opakování, odmítnutí GPS mimo rozsah a tombstone v emulátoru.
-- `npm run test:photos` ověřuje Storage upload a obsah, opakování po výpadku před uploadem i po uploadu při selhání úklidu, druhou izolovanou IndexedDB, Blob integrity, nahrazení/odstranění fotky, odhlášení, explicitní ownerless migraci a smazání Catch.
-
-Emulátorové výsledky neprokazují produkční fakturaci, region, indexy/kvóty, zálohy Storage objektů, skutečné e-maily, mobilní background sync ani chování při dlouhém síťovém přerušení na reálných zařízeních. Produkční projekt, region/fakturace, object backup/retence a migrace nejsou povoleny tímto nastavením.
+- `npm test`: lokální repository, retry, idempotence, konflikt, scope a UI copy.
+- `npm run test:rules`: Firestore pravidla a default deny.
+- `npm run test:sync`: SDK/Auth/Firestore transakce pro Catch, Trip, Water a framing metadata.
+- `npm run test:photos`: local-only Blob, metadata projekce, druhé zařízení bez bytes a absence Storage runtime.

@@ -1,5 +1,7 @@
 # Local catch storage
 
+> **Aktuální rozhodnutí 21. 10. 2026:** fotografie jsou local-only v IndexedDB a lokální záloze. Starší odstavce o Firebase Storage níže popisují zrušený experiment a nejsou součástí runtime.
+
 ## Scope
 
 Catch and trip records live in the browser's IndexedDB database `chytnu-local`, in separate `catches` and `trips` object stores. Database version 4 adds `outbox`, `syncConflicts`, and `syncState` stores additively; existing Catch/Trip records and photo Blobs are preserved. Repositories wait for the IndexedDB transaction to commit before reporting success or updating React state. Read/write/delete failures are surfaced to the user, so a failed write is not displayed as saved.
@@ -52,9 +54,9 @@ Server revisions use compare-and-set updates. If the server has a revision newer
 
 The Profile page lists unresolved Catch and Trip conflicts and lets the user keep the local or remote version. Choosing local rebases the queued operation on the remote revision; choosing remote replaces/removes the local entity. A local version opposed by a remote tombstone is preserved under a new ID, and Trip Catch links are updated together.
 
-Photo metadata now includes the private Storage path and SHA-256 in addition to ID/name/MIME/size; it never includes Blob bytes. For account-owned catches, the sync service prepares the deterministic path `users/{uid}/catches/{catchId}/photos/{photoId}/{sha256}`, writes the Catch metadata, uploads the local Blob, verifies remote metadata and downloaded bytes, removes objects no longer referenced by the Catch, then acknowledges the existing outbox entry. A failure at any of those steps retains the outbox operation and local Blob for retry. Identical upload retries reuse the same object path. Downloads verify size, MIME, custom hash metadata and SHA-256 before storing the Blob in IndexedDB. The form still limits a Catch to one optimized JPEG/PNG/WebP image up to 10 MB. Ownerless records are not uploaded. No public photo or location sharing exists.
+Photo metadata synchronized with the Catch is limited to `id`, `name`, `type`, `size` and optional framing values `focalX`, `focalY`, `zoom`. Blob bytes, cloud paths and hashes never leave IndexedDB. A second device therefore receives the Catch and its harmless display metadata without a broken photo URL; the UI uses its branded fallback until that device has its own local photo. Editing remote metadata does not replace a matching local Blob.
 
-The local database remains at version 4; no migration or parallel photo store was needed. Replacement uploads a new content-addressed object before stale objects are cleaned up. Photo removal updates the Catch metadata before cleanup. Catch deletion writes the existing Firestore tombstone before recursively deleting that Catch's Storage objects, so stale offline Catch data cannot restore them. Storage reads use the authenticated Firebase SDK rather than public URLs. A fully read-back SHA check currently adds an extra download of uploaded bytes; its production cost/latency needs review before enabling live Storage.
+The local database remains at version 4; no migration or parallel photo store is needed. Replacing or removing a photo changes the local Catch and its local Blob in the existing transaction/outbox flow. Catch deletion writes the Firestore tombstone for the record, while no remote photo object exists to clean up. The form keeps the current limit of one optimized JPEG/PNG/WebP image up to 10 MB. No public photo or location sharing exists.
 
 Firebase is used only as a local development emulator. No production cloud project, billing, region, account deployment, retention window, paid tier, or data migration is configured. Provider, region, free-tier and billing review, backup policy and migration path require separate review and owner approval before production is enabled.
 

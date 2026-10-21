@@ -285,7 +285,11 @@ test("unavailable server preserves outbox and a later retry sends it", async () 
   const first = makeService(adapter);
   const result = await first.service.run("angler-a");
   assert.equal(result.status, "error");
-  assert.equal((await outboxRepository.list())[0].status, "failed");
+  assert.equal(result.errorCode, "unavailable");
+  const [failedOperation] = await outboxRepository.list();
+  assert.equal(failedOperation.status, "failed");
+  assert.equal(failedOperation.lastErrorCode, "unavailable");
+  assert.equal(failedOperation.lastProviderCode, null);
   const retry = makeService(adapter, { now: () => Date.now() + 60_000 });
   await retry.service.run("angler-a");
   assert.equal((await outboxRepository.list()).length, 0);

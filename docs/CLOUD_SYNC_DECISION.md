@@ -1,5 +1,7 @@
 # ChytnuCz — ETAPA 6B: výběr cloudu, účtů a synchronizace
 
+> **Aktuální rozhodnutí 21. 10. 2026:** Firebase Storage se v MVP nepoužívá a fotografie zůstávají local-only v IndexedDB a lokální záloze. Níže uvedené varianty a náklady na cloudové fotografie jsou historická analýza, ne popis současného runtime.
+
 **Stav:** návrh k rozhodnutí, nic z tohoto dokumentu cloudově neimplementuje
 **Cenové údaje ověřeny:** 16. 10. 2026
 **Rozsah:** porovnání služeb, realistický model nákladů a doporučená migrace z aktuální IndexedDB
