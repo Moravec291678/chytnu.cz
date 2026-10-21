@@ -1,4 +1,7 @@
 import { createHash, createPrivateKey, generateKeyPairSync } from "node:crypto";
+import { cert, getApps, initializeApp } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
+import { getFirestore, Timestamp } from "firebase-admin/firestore";
 
 export const FIREBASE_PROJECT_ID = "chutnucz";
 export const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
@@ -361,22 +364,21 @@ async function adminStep(code, step, operation) {
 }
 
 export async function initializeFirebaseAdminContext(serviceAccount, {
-  importApp = () => import("firebase-admin/app"),
-  importAuth = () => import("firebase-admin/auth"),
-  importFirestore = () => import("firebase-admin/firestore"),
+  cert: createCredential = cert,
+  getApps: listApps = getApps,
+  initializeApp: createApp = initializeApp,
+  getAuth: createAuth = getAuth,
+  getFirestore: createFirestore = getFirestore,
 } = {}) {
-  const appApi = await adminStep("firebase_admin_import_app_error", "import_app", importApp);
-  const authApi = await adminStep("firebase_admin_import_auth_error", "import_auth", importAuth);
-  const firestoreApi = await adminStep("firebase_admin_import_firestore_error", "import_firestore", importFirestore);
   const appName = "chytnucz-cloudinary-server";
-  let app = await adminStep("firebase_admin_initialize_app_error", "initializeApp", () => appApi.getApps().find((candidate) => candidate.name === appName));
+  let app = await adminStep("firebase_admin_initialize_app_error", "initializeApp", () => listApps().find((candidate) => candidate.name === appName));
   if (!app) {
-    const credential = await adminStep("firebase_admin_cert_error", "cert", () => appApi.cert(serviceAccount));
-    app = await adminStep("firebase_admin_initialize_app_error", "initializeApp", () => appApi.initializeApp({ credential, projectId: FIREBASE_PROJECT_ID }, appName));
+    const credential = await adminStep("firebase_admin_cert_error", "cert", () => createCredential(serviceAccount));
+    app = await adminStep("firebase_admin_initialize_app_error", "initializeApp", () => createApp({ credential, projectId: FIREBASE_PROJECT_ID }, appName));
   }
-  const auth = await adminStep("firebase_admin_get_auth_error", "getAuth", () => authApi.getAuth(app));
-  const db = await adminStep("firebase_admin_get_firestore_error", "getFirestore", () => firestoreApi.getFirestore(app));
-  return { auth, db, Timestamp: firestoreApi.Timestamp };
+  const auth = await adminStep("firebase_admin_get_auth_error", "getAuth", () => createAuth(app));
+  const db = await adminStep("firebase_admin_get_firestore_error", "getFirestore", () => createFirestore(app));
+  return { auth, db, Timestamp };
 }
 
 async function getAdminContext(env, serviceAccount) {

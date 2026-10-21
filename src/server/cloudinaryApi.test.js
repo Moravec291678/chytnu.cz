@@ -154,31 +154,25 @@ test("service account loading distinguishes missing env, JSON parsing, and struc
   }
 });
 
-test("Firebase Admin initialization identifies each failing import and SDK call", async () => {
+test("Firebase Admin initialization identifies each failing SDK call", async () => {
   const account = readFirebaseServiceAccount(createEnabledTestEnvironment());
   const app = { name: "chytnucz-cloudinary-server" };
-  const modules = {
-    importApp: async () => ({ getApps: () => [], cert: () => ({}), initializeApp: () => app }),
-    importAuth: async () => ({ getAuth: () => ({ verifyIdToken: async () => ({ uid: ownerId }) }) }),
-    importFirestore: async () => ({ getFirestore: () => ({}), Timestamp: {} }),
+  const operations = {
+    getApps: () => [],
+    cert: () => ({}),
+    initializeApp: () => app,
+    getAuth: () => ({ verifyIdToken: async () => ({ uid: ownerId }) }),
+    getFirestore: () => ({}),
   };
   const failures = [
-    ["importApp", "firebase_admin_import_app_error", "import_app", "importApp"],
-    ["importAuth", "firebase_admin_import_auth_error", "import_auth", "importAuth"],
-    ["importFirestore", "firebase_admin_import_firestore_error", "import_firestore", "importFirestore"],
-    ["getApps", "firebase_admin_initialize_app_error", "initializeApp", "importApp"],
-    ["cert", "firebase_admin_cert_error", "cert", "importApp"],
-    ["initializeApp", "firebase_admin_initialize_app_error", "initializeApp", "importApp"],
-    ["getAuth", "firebase_admin_get_auth_error", "getAuth", "importAuth"],
-    ["getFirestore", "firebase_admin_get_firestore_error", "getFirestore", "importFirestore"],
+    ["getApps", "firebase_admin_initialize_app_error", "initializeApp"],
+    ["cert", "firebase_admin_cert_error", "cert"],
+    ["initializeApp", "firebase_admin_initialize_app_error", "initializeApp"],
+    ["getAuth", "firebase_admin_get_auth_error", "getAuth"],
+    ["getFirestore", "firebase_admin_get_firestore_error", "getFirestore"],
   ];
-  for (const [failure, code, step, moduleName] of failures) {
-    const override = { ...modules };
-    if (failure.startsWith("import")) override[moduleName] = async () => { throw new Error("private credential detail"); };
-    else {
-      const original = await modules[moduleName]();
-      override[moduleName] = async () => ({ ...original, [failure]: () => { throw new Error("private credential detail"); } });
-    }
+  for (const [failure, code, step] of failures) {
+    const override = { ...operations, [failure]: () => { throw new Error("private credential detail"); } };
     await assert.rejects(initializeFirebaseAdminContext(account, override), (error) => {
       assert.equal(error.code, code);
       assert.equal(error.step, step);
@@ -187,16 +181,18 @@ test("Firebase Admin initialization identifies each failing import and SDK call"
       return true;
     }, failure);
   }
-  assert.ok((await initializeFirebaseAdminContext(account, modules)).auth);
+  assert.ok((await initializeFirebaseAdminContext(account, operations)).auth);
 });
 
 test("existing named Firebase app is reused without another cert or initializeApp", async () => {
   const account = readFirebaseServiceAccount(createEnabledTestEnvironment());
   const existing = { name: "chytnucz-cloudinary-server" };
   const context = await initializeFirebaseAdminContext(account, {
-    importApp: async () => ({ getApps: () => [existing], cert: () => { throw new Error("unexpected cert"); }, initializeApp: () => { throw new Error("unexpected init"); } }),
-    importAuth: async () => ({ getAuth: (app) => { assert.equal(app, existing); return {}; } }),
-    importFirestore: async () => ({ getFirestore: (app) => { assert.equal(app, existing); return {}; }, Timestamp: {} }),
+    getApps: () => [existing],
+    cert: () => { throw new Error("unexpected cert"); },
+    initializeApp: () => { throw new Error("unexpected init"); },
+    getAuth: (app) => { assert.equal(app, existing); return {}; },
+    getFirestore: (app) => { assert.equal(app, existing); return {}; },
   });
   assert.ok(context.auth);
   assert.ok(context.db);
