@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { cloudinaryPublicId, createCloudinaryApi, createEnabledTestEnvironment, MAX_PHOTO_BYTES } from "./cloudinaryApi.js";
+import { classifyFirebaseAuthFailure, cloudinaryPublicId, createCloudinaryApi, createEnabledTestEnvironment, MAX_PHOTO_BYTES } from "./cloudinaryApi.js";
 
 const ownerId = "owner-a";
 const otherOwnerId = "owner-b";
@@ -100,6 +100,21 @@ test("photo API distinguishes missing auth, malformed bearer headers, and expire
   assert.equal(expiredResponse.statusCode, 401);
   assert.equal(expiredResponse.body.error, "firebase_token_expired");
   assert.doesNotMatch(JSON.stringify(expiredResponse.body), /private verifier detail/);
+});
+
+test("Firebase auth diagnostics log only an allowlisted class and action", async () => {
+  const logged = [];
+  const api = createCloudinaryApi({
+    env: createEnabledTestEnvironment(),
+    verifyToken: async () => { throw Object.assign(new Error("private token and credential detail"), { code: "auth/id-token-revoked" }); },
+    logAuthFailure: (entry) => logged.push(entry),
+  });
+  const response = await request(api.signUpload);
+  assert.equal(response.statusCode, 401);
+  assert.deepEqual(logged, [{ action: "sign", errorClass: "firebase_token_revoked" }]);
+  assert.equal(classifyFirebaseAuthFailure({ code: "unexpected-sensitive-code", message: "private" }), "firebase_unknown_auth_error");
+  assert.equal(classifyFirebaseAuthFailure({ code: "unexpected-sensitive-code", message: "private" }, "admin_init"), "firebase_admin_init_error");
+  assert.doesNotMatch(JSON.stringify(logged), /private|token and credential detail|unexpected-sensitive-code/);
 });
 
 test("Firebase Admin project mismatches and unusable private keys receive safe config classifications", async () => {

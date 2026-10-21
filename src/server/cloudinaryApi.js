@@ -89,6 +89,19 @@ function safeError(res, error) {
   return send(res, status, { error: code, message: status === 401 ? "Authentication is required." : status === 403 ? "Photo access is not allowed." : status === 429 ? "Photo cloud request limit reached." : "Photo cloud request could not be completed." });
 }
 
+export function classifyFirebaseAuthFailure(error, phase = "token_verification") {
+  if (error?.code === "firebase_admin_not_configured") return "firebase_admin_config_missing";
+  if (error?.code === "firebase_admin_config_invalid") return "firebase_admin_config_invalid";
+  if (error?.code === "firebase_project_mismatch") return "firebase_project_mismatch";
+  if (["app/invalid-credential", "auth/invalid-credential"].includes(error?.code)) return "firebase_invalid_credential";
+  if (phase === "admin_init") return "firebase_admin_init_error";
+  if (error?.code === "auth/id-token-expired") return "firebase_token_expired";
+  if (error?.code === "auth/id-token-revoked") return "firebase_token_revoked";
+  if (error?.code === "auth/argument-error") return "firebase_argument_error";
+  if (error?.code === "auth/invalid-id-token") return "firebase_token_invalid";
+  return "firebase_unknown_auth_error";
+}
+
 export function createCloudinaryApi({
   env = globalThis.process?.env ?? {},
   verifyToken,
@@ -96,6 +109,7 @@ export function createCloudinaryApi({
   consumeRateLimit = async () => true,
   getCloudinary,
   now = () => Date.now(),
+  logAuthFailure = () => {},
 } = {}) {
   async function prepare(req, res, allowedKeys, action) {
     if (req.method !== "POST") {
@@ -120,7 +134,8 @@ export function createCloudinaryApi({
       return null;
     }
     let identity;
-    try { identity = await verifyToken(bearer[1]); } catch (error) {
+    try { identity = await verifyToken(bearer[1], action); } catch (error) {
+      logAuthFailure({ action, errorClass: classifyFirebaseAuthFailure(error) });
       if (["auth/id-token-expired", "auth/id-token-revoked", "auth/argument-error"].includes(error?.code)) {
         const code = error.code === "auth/id-token-expired" ? "firebase_token_expired" : "invalid_auth";
         send(res, 401, { error: code, message: "Authentication is required." });
@@ -369,7 +384,19 @@ async function consumeDistributedRateLimit(env, uid, action, limit, windowMs, no
 export function createProductionCloudinaryApi({ env = globalThis.process?.env ?? {}, now = () => Date.now() } = {}) {
   return createCloudinaryApi({
     env,
-    verifyToken: async (token) => (await getAdminContext(env)).auth.verifyIdToken(token, true),
+    verifyToken: async (token, action) => {
+      let auth;
+      try { auth = (await getAdminContext(env)).auth; }
+      catch (error) {
+        console.warn("cloudinary_auth_failure", { action, errorClass: classifyFirebaseAuthFailure(error, "admin_init") });
+        throw error;
+      }
+      try { return await auth.verifyIdToken(token, true); }
+      catch (error) {
+        console.warn("cloudinary_auth_failure", { action, errorClass: classifyFirebaseAuthFailure(error) });
+        throw error;
+      }
+    },
     getPhotoAccess: (uid, catchId, photoId) => getPhotoAccess(env, uid, catchId, photoId),
     consumeRateLimit: (uid, action, limit, windowMs, nowValue) => consumeDistributedRateLimit(env, uid, action, limit, windowMs, nowValue),
     getCloudinary: getCloudinarySdk,
