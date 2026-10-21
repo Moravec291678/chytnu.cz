@@ -584,6 +584,8 @@ export const outboxRepository = {
         operation.lastError = String(message || "Operaci se nepodařilo synchronizovat.");
         operation.lastErrorCode = typeof details.code === "string" ? details.code : "unknown";
         operation.lastProviderCode = typeof details.providerCode === "string" ? details.providerCode : null;
+        operation.lastEndpoint = ["/api/cloudinary/sign", "/api/cloudinary/verify-upload", "/api/cloudinary/delivery", "/api/cloudinary/delete", "/api/cloudinary/metadata"].includes(details.endpoint)
+          ? details.endpoint : null;
         operation.nextAttemptAt = new Date(Date.now() + Math.min(30 * 60_000, 1000 * 2 ** Math.min(operation.attemptCount, 10))).toISOString();
         operation.updatedAt = new Date().toISOString();
         store.put(operation);

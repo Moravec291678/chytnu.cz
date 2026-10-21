@@ -134,6 +134,7 @@ export default function SettingsPage() {
           <dt>Outbox</dt><dd>{sync.pending} pending · {sync.failed} failed</dd>
           <dt>Last sync</dt><dd>{sync.lastResult} · sent {sync.sent} · pulled {sync.applied}</dd>
           <dt>Error classification</dt><dd>{sync.errorCode || sync.lastErrorCode || "none"}</dd>
+          <dt>Photo API endpoint</dt><dd>{sync.errorEndpoint || sync.lastErrorEndpoint || "none"}</dd>
         </dl>
       </section>}
 

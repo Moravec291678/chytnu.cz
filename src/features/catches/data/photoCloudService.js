@@ -24,33 +24,59 @@ function safePhotoCloud(photo) {
   return photo?.cloud ?? { state: PHOTO_CLOUD_STATE.LOCAL_ONLY, provider: null, objectKey: null, sha256: null };
 }
 
-async function callAuthenticatedPhotoEndpoint(path, payload) {
-  const idToken = await firebaseAuth.currentIdToken();
-  if (!idToken) throw Object.assign(new Error("Pro synchronizaci fotografií je potřeba přihlášení."), { code: "auth_required" });
-  let response;
-  try {
-    response = await fetch(path, {
-      method: "POST",
-      credentials: "same-origin",
-      headers: { Authorization: `Bearer ${idToken}`, "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-  } catch {
-    throw Object.assign(new Error("Server pro cloudové fotografie není dostupný."), { code: "photo_cloud_network_error" });
-  }
-  let result;
-  try { result = await response.json(); } catch { result = {}; }
-  if (!response.ok) {
-    const code = result.error ?? (response.status === 429 ? "rate_limited" : "photo_cloud_failed");
-    const message = response.status === 401 ? "Přihlášení vypršelo. Přihlas se znovu."
-      : response.status === 403 ? "K této fotografii nemáš přístup."
-        : response.status === 429 ? "Cloudové úložiště dočasně omezuje požadavky."
-          : response.status >= 500 ? "Server cloudových fotografií dočasně není dostupný."
-            : "Cloudový požadavek na fotografii nebyl přijat.";
-    throw Object.assign(new Error(message), { code, status: response.status });
-  }
-  return result;
+function photoEndpointError(path, response, result) {
+  const code = result.error ?? (response.status === 429 ? "rate_limited" : "photo_cloud_failed");
+  const error = Object.assign(new Error(response.status === 401 ? "Přihlášení k fotografiím se nezdařilo."
+    : response.status === 403 ? "K této fotografii nemáš přístup."
+      : response.status === 429 ? "Cloudové úložiště dočasně omezuje požadavky."
+        : response.status >= 500 ? "Server cloudových fotografií dočasně není dostupný."
+          : "Cloudový požadavek na fotografii nebyl přijat."), { code, status: response.status, endpoint: path });
+  return error;
 }
+
+export function createAuthenticatedPhotoEndpointCaller({
+  getIdToken = (forceRefresh) => firebaseAuth.currentIdToken(forceRefresh),
+  fetchImpl = globalThis.fetch,
+} = {}) {
+  return async function callAuthenticatedPhotoEndpoint(path, payload) {
+    let idToken;
+    try { idToken = await getIdToken(false); }
+    catch { throw Object.assign(new Error("Firebase přihlášení nelze ověřit."), { code: "firebase_token_invalid", endpoint: path }); }
+    if (!idToken) throw Object.assign(new Error("Pro synchronizaci fotografií je potřeba přihlášení."), { code: "missing_firebase_user", endpoint: path });
+
+    const send = async (token) => {
+      let response;
+      try {
+        response = await fetchImpl(path, {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      } catch {
+        throw Object.assign(new Error("Server pro cloudové fotografie není dostupný."), { code: "photo_cloud_network_error", endpoint: path });
+      }
+      let result;
+      try { result = await response.json(); } catch { result = {}; }
+      return { response, result };
+    };
+
+    let attempt = await send(idToken);
+    if (attempt.response.status === 401 && ["invalid_auth", "firebase_token_expired"].includes(attempt.result.error)) {
+      try { idToken = await getIdToken(true); }
+      catch { throw Object.assign(new Error("Obnovení Firebase přihlášení se nezdařilo."), { code: "token_refresh_failed", status: 401, endpoint: path }); }
+      if (!idToken) throw Object.assign(new Error("Firebase přihlášení po obnovení není dostupné."), { code: "token_refresh_failed", status: 401, endpoint: path });
+      attempt = await send(idToken);
+      if (attempt.response.status === 401 && ["invalid_auth", "firebase_token_expired"].includes(attempt.result.error)) {
+        throw Object.assign(new Error("Server odmítl obnovené Firebase přihlášení."), { code: "firebase_token_invalid", status: 401, endpoint: path });
+      }
+    }
+    if (!attempt.response.ok) throw photoEndpointError(path, attempt.response, attempt.result);
+    return attempt.result;
+  };
+}
+
+const callAuthenticatedPhotoEndpoint = createAuthenticatedPhotoEndpointCaller();
 
 export function createPhotoCloudService({
   provider = nonePhotoCloudProvider,
@@ -61,6 +87,7 @@ export function createPhotoCloudService({
   getCurrentOwnerId = () => null,
   now = () => Date.now(),
   prepare = (photo) => preparePhotoForCloud(photo),
+  authenticatedRequest = callAuthenticatedPhotoEndpoint,
 } = {}) {
   let inFlight = null;
 
@@ -140,8 +167,8 @@ export function createPhotoCloudService({
       sha256: job.sha256,
       contentType: job.contentType,
       size: job.size,
-      requestUploadGrant: (photo) => callAuthenticatedPhotoEndpoint("/api/cloudinary/sign", photo),
-      requestUploadVerification: (photo) => callAuthenticatedPhotoEndpoint("/api/cloudinary/verify-upload", photo),
+      requestUploadGrant: (photo) => authenticatedRequest("/api/cloudinary/sign", photo),
+      requestUploadVerification: (photo) => authenticatedRequest("/api/cloudinary/verify-upload", photo),
     });
     if (!isActive(getCurrentOwnerId, operation.ownerId)) return { uploaded: 0, deleted: 0, stopped: true };
     if (!await queue.isCurrent(operation.operationId, operation.localRevision)) return { uploaded: 1, deleted: 0 };
@@ -180,7 +207,7 @@ export function createPhotoCloudService({
       provider: job.provider,
       objectKey: job.objectKey,
       sha256: job.sha256,
-      requestDeleteGrant: (photo) => callAuthenticatedPhotoEndpoint("/api/cloudinary/delete", photo),
+      requestDeleteGrant: (photo) => authenticatedRequest("/api/cloudinary/delete", photo),
     });
     if (!isActive(getCurrentOwnerId, operation.ownerId)) return { uploaded: 0, deleted: 0, stopped: true };
     await queue.complete(operation.operationId, operation.localRevision);
@@ -212,6 +239,7 @@ export function createPhotoCloudService({
         await operationOutbox.markFailed(operation.operationId, failure?.message, {
           code: failure?.code,
           providerCode: failure?.providerCode,
+          endpoint: failure?.endpoint,
         });
         const job = operation.photoCloud;
         if (operation.operation === "photo-upload") {
@@ -225,7 +253,8 @@ export function createPhotoCloudService({
         break;
       }
     }
-    return { status: error ? "error" : "success", uploaded, deleted, queued, error: error?.message ?? "", errorCode: error?.code ?? "photo_cloud_failed" };
+    return { status: error ? "error" : "success", uploaded, deleted, queued, error: error?.message ?? "",
+      errorCode: error?.code ?? "photo_cloud_failed", errorEndpoint: error?.endpoint ?? "" };
   }
 
   return Object.freeze({
@@ -247,7 +276,7 @@ export function createPhotoCloudService({
         photoId: photo.id,
         objectKey: photo.cloud.objectKey,
         sha256: photo.cloud.sha256,
-        requestDownloadGrant: (photo) => callAuthenticatedPhotoEndpoint("/api/cloudinary/delivery", photo),
+        requestDownloadGrant: (photo) => authenticatedRequest("/api/cloudinary/delivery", photo),
       });
       if (!(blob instanceof Blob)) return null;
       if (blob.size !== photo.size || (photo.type && blob.type !== photo.type)

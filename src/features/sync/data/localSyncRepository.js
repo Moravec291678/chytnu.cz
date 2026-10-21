@@ -51,6 +51,7 @@ export async function readSyncSummary(ownerId) {
       conflicts: conflicts.filter((conflict) => conflict.status === "unresolved").length,
       lastError: lastFailed?.lastError ?? "",
       lastErrorCode: lastFailed?.lastErrorCode ?? "",
+      lastErrorEndpoint: lastFailed?.lastEndpoint ?? "",
       nextRetryAt: scoped
         .filter((operation) => operation.status === "failed" && operation.nextAttemptAt)
         .map((operation) => operation.nextAttemptAt)

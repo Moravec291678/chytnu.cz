@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { initializeBrowserAuth, runGoogleSignIn } from "./firebaseAuth.js";
+import { getFirebaseIdToken, initializeBrowserAuth, runGoogleSignIn } from "./firebaseAuth.js";
 
 function authApi(overrides = {}) {
   class GoogleAuthProvider {}
@@ -38,6 +38,15 @@ test("browser Auth initialization includes the resolver required by Google popup
 test("Google popup returns the authenticated Firebase user", async () => {
   const auth = {};
   assert.deepEqual(await runGoogleSignIn(auth, authApi()), { uid: "google-user" });
+});
+
+test("photo auth uses the current Firebase user ID token and forwards force refresh", async () => {
+  const calls = [];
+  const auth = { currentUser: { async getIdToken(forceRefresh) { calls.push(forceRefresh); return forceRefresh ? "fresh-id-token" : "current-id-token"; } } };
+  assert.equal(await getFirebaseIdToken(auth), "current-id-token");
+  assert.equal(await getFirebaseIdToken(auth, true), "fresh-id-token");
+  assert.deepEqual(calls, [false, true]);
+  assert.equal(await getFirebaseIdToken({ currentUser: null }, true), null);
 });
 
 test("a browser-blocked popup falls back to Firebase redirect on the same Auth instance", async () => {

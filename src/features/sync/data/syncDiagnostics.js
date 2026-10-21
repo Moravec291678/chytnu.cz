@@ -9,12 +9,23 @@ const USER_MESSAGES = Object.freeze({
   cloudinary_signing_failure: "Cloudové úložiště odmítlo připravit upload fotografie.",
   cloudinary_upload_failure: "Upload fotografie do cloudového úložiště selhal.",
   remote_delivery_failure: "Stažení fotografie z cloudového úložiště selhalo.",
+  missing_auth: "Cloudová fotografie vyžaduje přihlášení.",
+  invalid_auth_header: "Požadavek na fotografii neměl platnou autorizaci.",
+  missing_firebase_user: "Pro synchronizaci fotografií není dostupný přihlášený účet.",
+  token_refresh_failed: "Přihlášení k fotografiím se nepodařilo obnovit.",
+  firebase_token_invalid: "Server odmítl Firebase přihlášení k fotografiím.",
+  firebase_token_expired: "Firebase přihlášení k fotografiím vypršelo.",
+  firebase_admin_config_invalid: "Server nemá platnou konfiguraci ověřování fotografií.",
+  firebase_project_mismatch: "Server ověřuje fotografie proti nesprávnému Firebase projektu.",
+  ownership_denied: "Server odmítl přístup k fotografii tohoto účtu.",
   unknown: "Synchronizaci se nepodařilo dokončit. Místní změny zůstávají ve frontě.",
 });
 
 export function describeSyncFailure(error, operation = {}) {
   const raw = typeof error?.code === "string" ? error.code.toLowerCase() : "";
   const code = Object.prototype.hasOwnProperty.call(USER_MESSAGES, raw) ? raw
+    : raw === "invalid_auth" ? "firebase_token_invalid"
+      : raw === "invalid_owner" || raw === "photo_not_owned" ? "ownership_denied"
     : raw.includes("permission-denied") ? "permission_denied"
       : raw.includes("unauthenticated") || raw === "auth_required" ? "unauthenticated"
         : raw.includes("unavailable") || raw.includes("network") ? "network"

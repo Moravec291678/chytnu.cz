@@ -78,6 +78,11 @@ export function initializeBrowserAuth(app, authApi) {
   }
 }
 
+export async function getFirebaseIdToken(auth, forceRefresh = false) {
+  if (!auth?.currentUser) return null;
+  return auth.currentUser.getIdToken(forceRefresh);
+}
+
 export async function runGoogleSignIn(auth, authApi) {
   const provider = new authApi.GoogleAuthProvider();
   try {
@@ -97,10 +102,9 @@ export const firebaseAuth = {
   currentUserId() {
     return authInstance?.currentUser?.uid ?? null;
   },
-  async currentIdToken() {
+  async currentIdToken(forceRefresh = false) {
     const auth = await getAuthInstance();
-    if (!auth.currentUser) return null;
-    return auth.currentUser.getIdToken();
+    return getFirebaseIdToken(auth, forceRefresh);
   },
   observe(listener, onError) {
     let active = true;

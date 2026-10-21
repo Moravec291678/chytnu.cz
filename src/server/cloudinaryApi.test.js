@@ -81,9 +81,43 @@ test("sign endpoint denies absent/invalid tokens, foreign owner, extra uid/publi
   assert.equal((await request(harness.api.signUpload, { body: { catchId, photoId, size: 1024, contentType: "image/svg+xml", sha256 } })).statusCode, 400);
 });
 
+test("photo API distinguishes missing auth, malformed bearer headers, and expired Firebase tokens", async () => {
+  const malformed = createHarness();
+  const malformedResponse = await request(malformed.api.signUpload, { authorization: "Bearer token with spaces" });
+  assert.equal(malformedResponse.statusCode, 401);
+  assert.equal(malformedResponse.body.error, "invalid_auth_header");
+
+  const missing = createHarness();
+  const missingResponse = await request(missing.api.signUpload, { authorization: null });
+  assert.equal(missingResponse.statusCode, 401);
+  assert.equal(missingResponse.body.error, "missing_auth");
+
+  const expiredApi = createCloudinaryApi({
+    env: createEnabledTestEnvironment(),
+    verifyToken: async () => { throw Object.assign(new Error("private verifier detail"), { code: "auth/id-token-expired" }); },
+  });
+  const expiredResponse = await request(expiredApi.signUpload);
+  assert.equal(expiredResponse.statusCode, 401);
+  assert.equal(expiredResponse.body.error, "firebase_token_expired");
+  assert.doesNotMatch(JSON.stringify(expiredResponse.body), /private verifier detail/);
+});
+
+test("Firebase Admin project mismatches and unusable private keys receive safe config classifications", async () => {
+  const mismatchedCredentials = JSON.parse(createEnabledTestEnvironment().FIREBASE_SERVICE_ACCOUNT_JSON);
+  mismatchedCredentials.project_id = "wrong-project";
+  const mismatchApi = createCloudinaryApi({ env: createEnabledTestEnvironment({ FIREBASE_SERVICE_ACCOUNT_JSON: JSON.stringify(mismatchedCredentials) }) });
+  assert.deepEqual((await request(mismatchApi.capability, { method: "GET" })).body, { enabled: false, reason: "firebase_project_mismatch" });
+  assert.equal((await request(mismatchApi.signUpload)).body.error, "firebase_project_mismatch");
+
+  const invalidCredentials = JSON.parse(createEnabledTestEnvironment().FIREBASE_SERVICE_ACCOUNT_JSON);
+  invalidCredentials.private_key = "not a PEM key";
+  const invalidApi = createCloudinaryApi({ env: createEnabledTestEnvironment({ FIREBASE_SERVICE_ACCOUNT_JSON: JSON.stringify(invalidCredentials) }) });
+  assert.deepEqual((await request(invalidApi.capability, { method: "GET" })).body, { enabled: false, reason: "firebase_admin_config_invalid" });
+});
+
 test("sign endpoint rejects missing Cloudinary or Firebase Admin production configuration without touching providers", async () => {
   const api = createCloudinaryApi({ env: createEnabledTestEnvironment({ FIREBASE_SERVICE_ACCOUNT_JSON: undefined }), getCloudinary: async () => { throw new Error("must not run"); } });
-  assert.deepEqual((await request(api.capability, { method: "GET", authorization: null })).body, { enabled: false });
+  assert.deepEqual((await request(api.capability, { method: "GET", authorization: null })).body, { enabled: false, reason: "firebase_admin_config_invalid" });
   const response = await request(api.signUpload, { body: { catchId, photoId, size: 1024, contentType: "image/jpeg", sha256 } });
   assert.equal(response.statusCode, 503);
 });

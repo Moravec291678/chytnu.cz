@@ -11,7 +11,7 @@ import { getBackendConfiguration } from "../../auth/data/backendConfig.js";
 import { SyncContext } from "./syncContextValue.js";
 import { attachSyncLifecycle } from "./syncLifecycle.js";
 
-const initialState = { status: "idle", sent: 0, applied: 0, conflicts: 0, pending: 0, failed: 0, error: "", errorCode: "", nextRetryAt: null, lastResult: "never" };
+const initialState = { status: "idle", sent: 0, applied: 0, conflicts: 0, pending: 0, failed: 0, error: "", errorCode: "", errorEndpoint: "", nextRetryAt: null, lastResult: "never" };
 
 function online() {
   return typeof navigator === "undefined" || navigator.onLine !== false;
@@ -36,7 +36,7 @@ export function SyncProvider({ children }) {
   const userId = user?.uid ?? null;
 
   const updateSummary = useCallback(async (ownerId) => {
-    if (!ownerId) return { pending: 0, conflicts: 0, lastError: "", lastErrorCode: "", nextRetryAt: null };
+    if (!ownerId) return { pending: 0, conflicts: 0, lastError: "", lastErrorCode: "", lastErrorEndpoint: "", nextRetryAt: null };
     return readSyncSummary(ownerId);
   }, []);
 
@@ -84,6 +84,7 @@ export function SyncProvider({ children }) {
         finalResult.status = "error";
         finalResult.error = photoResult.error;
         finalResult.errorCode = describeSyncFailure({ code: photoResult.errorCode }).code;
+        finalResult.errorEndpoint = photoResult.errorEndpoint ?? "";
       }
       const summary = await updateSummary(userId);
       setState({
@@ -95,6 +96,7 @@ export function SyncProvider({ children }) {
         conflicts: Math.max(finalResult.conflicts ?? 0, summary.conflicts),
         error: finalResult.error ?? "",
         errorCode: finalResult.errorCode ?? "",
+        errorEndpoint: finalResult.errorEndpoint ?? summary.lastErrorEndpoint ?? "",
         lastResult: finalResult.status === "success" ? "success" : finalResult.status,
       });
       if ((result.applied ?? 0) > 0) window.dispatchEvent(new Event("chytnu:local-data-restored"));

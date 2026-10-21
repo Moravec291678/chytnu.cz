@@ -7,6 +7,8 @@ import { catchRepository, outboxRepository, photoCloudOutboxRepository } from ".
 import { getGalleryMissingMessage } from "./catchGallery.js";
 import { getPrimaryAvailablePhoto } from "./catchPhotos.js";
 import { createPhotoCloudService } from "./photoCloudService.js";
+import { createAuthenticatedPhotoEndpointCaller } from "./photoCloudService.js";
+import { createCloudinaryPhotoProvider } from "./cloudinaryPhotoProvider.js";
 import { createPhotoObjectKey, nonePhotoCloudProvider, PHOTO_CLOUD_STATE } from "./photoCloudProvider.js";
 
 const databaseName = "chytnu-local";
@@ -161,6 +163,94 @@ test("pending upload survives a service restart, retries, and uses the same obje
   assert.equal((await makeService(ownerId, provider).run(ownerId, { force: true })).status, "success");
   assert.equal(provider.objects.size, 1, "idempotent retry does not create another object");
   assert.equal(new Set(provider.calls.uploads.map((call) => call.objectKey)).size, 1);
+});
+
+test("photo upload refreshes an invalid Firebase token once and completes with the refreshed token", async () => {
+  await resetDatabase();
+  const ownerId = "auth-refresh-owner";
+  const scope = { ownerId, scopeKey: accountScopeKey(ownerId) };
+  const photo = makePhoto("p-auth", "auth refresh bytes");
+  await catchRepository.put(makeCatch(ownerId, "catch-auth-refresh", [photo]), scope);
+  const tokenCalls = [];
+  let refreshed = false;
+  const getIdToken = async (forceRefresh) => {
+    tokenCalls.push(forceRefresh);
+    if (forceRefresh) refreshed = true;
+    return refreshed ? "fresh-firebase-id-token" : "cached-firebase-id-token";
+  };
+  const authorizationHeaders = [];
+  const requestEndpoint = createAuthenticatedPhotoEndpointCaller({
+    getIdToken,
+    fetchImpl: async (path, options) => {
+      authorizationHeaders.push(options.headers.Authorization);
+      if (path === "/api/cloudinary/sign" && options.headers.Authorization.endsWith("cached-firebase-id-token")) {
+        return new Response(JSON.stringify({ error: "invalid_auth" }), { status: 401, headers: { "Content-Type": "application/json" } });
+      }
+      if (path === "/api/cloudinary/sign") {
+        const body = JSON.parse(options.body);
+        const objectKey = createPhotoObjectKey(ownerId, body.catchId, body.photoId);
+        return new Response(JSON.stringify({ cloudName: "test-cloud", apiKey: "1234567890", resourceType: "image",
+          timestamp: 1_800_000_000, signature: "a".repeat(64), params: { public_id: `chytnucz/${objectKey}`, type: "authenticated", overwrite: true } }),
+        { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      if (path === "/api/cloudinary/verify-upload") {
+        return new Response(JSON.stringify({ verified: true, bytes: photo.blob.size, format: "jpg" }),
+          { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      throw new Error(`Unexpected API endpoint: ${path}`);
+    },
+  });
+  const provider = createCloudinaryPhotoProvider({ fetchImpl: async (url, options) => {
+    if (String(url) === "/api/cloudinary/capability") {
+      return new Response(JSON.stringify({ enabled: true }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+    assert.match(String(url), /api\.cloudinary\.com\/v1_1\/test-cloud\/image\/upload$/);
+    assert.equal(options.method, "POST");
+    const form = options.body;
+    return new Response(JSON.stringify({
+      public_id: form.get("public_id"), resource_type: "image", type: "authenticated",
+      bytes: photo.blob.size, format: "jpg",
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  } });
+  const service = createPhotoCloudService({ provider, getCurrentOwnerId: () => ownerId, authenticatedRequest: requestEndpoint, now: () => fixedNow });
+  const result = await service.run(ownerId);
+  assert.equal(result.status, "success");
+  assert.deepEqual(tokenCalls, [false, true, false]);
+  assert.deepEqual(authorizationHeaders, ["Bearer cached-firebase-id-token", "Bearer fresh-firebase-id-token", "Bearer fresh-firebase-id-token"]);
+  const saved = await catchRepository.get("catch-auth-refresh", scope);
+  assert.equal(saved.photos[0].cloud.state, PHOTO_CLOUD_STATE.SYNCED);
+  assert.equal((await photoCloudOutboxRepository.list()).length, 0);
+});
+
+test("photo upload stops after exactly one forced refresh and retains a precise auth failure", async () => {
+  await resetDatabase();
+  const ownerId = "auth-repeat-owner";
+  const scope = { ownerId, scopeKey: accountScopeKey(ownerId) };
+  await catchRepository.put(makeCatch(ownerId, "catch-auth-repeat", [makePhoto("p-auth", "auth fails twice")]), scope);
+  const tokenCalls = [];
+  let requests = 0;
+  const requestEndpoint = createAuthenticatedPhotoEndpointCaller({
+    getIdToken: async (forceRefresh) => { tokenCalls.push(forceRefresh); return forceRefresh ? "fresh-token" : "old-token"; },
+    fetchImpl: async () => {
+      requests += 1;
+      return new Response(JSON.stringify({ error: "invalid_auth" }), { status: 401, headers: { "Content-Type": "application/json" } });
+    },
+  });
+  const provider = createFakeProvider();
+  const authenticatedProvider = { ...provider, async upload(input) { await input.requestUploadGrant({ catchId: input.catchId, photoId: input.photoId }); } };
+  const service = createPhotoCloudService({ provider: authenticatedProvider, getCurrentOwnerId: () => ownerId,
+    authenticatedRequest: requestEndpoint, now: () => fixedNow });
+  const result = await service.run(ownerId);
+  assert.equal(result.status, "error");
+  assert.equal(result.errorCode, "firebase_token_invalid");
+  assert.equal(result.errorEndpoint, "/api/cloudinary/sign");
+  assert.equal(requests, 2);
+  assert.deepEqual(tokenCalls, [false, true]);
+  const [job] = await photoCloudOutboxRepository.list();
+  assert.equal(job.status, "failed");
+  assert.equal(job.lastErrorCode, "firebase_token_invalid");
+  assert.equal(job.lastEndpoint, "/api/cloudinary/sign");
+  assert.equal((await catchRepository.get("catch-auth-repeat", scope)).photos[0].cloud.state, PHOTO_CLOUD_STATE.UPLOAD_FAILED);
 });
 
 test("download prefers local bytes, verifies remote bytes, caches per account, and rejects cross-account reads", async () => {
