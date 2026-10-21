@@ -17,9 +17,30 @@ export class SyncPortError extends Error {
     super(message, options);
     this.name = "SyncPortError";
     this.code = ERROR_CODES.has(code) ? code : "unknown";
-    this.retryable = code === "unavailable";
-    this.providerCode = typeof options.providerCode === "string" ? options.providerCode : null;
+    this.retryable = typeof options.retryable === "boolean" ? options.retryable : code === "unavailable" || code === "unknown";
+    this.providerCode = safeDiagnosticValue(options.providerCode ?? options.cause?.code, 100);
+    this.sourceName = safeDiagnosticValue(options.sourceName ?? options.cause?.name, 64) ?? "Error";
+    this.syncStage = safeDiagnosticValue(options.syncStage, 64);
+    this.firestoreStage = safeDiagnosticValue(options.firestoreStage, 64);
   }
+}
+
+function safeDiagnosticValue(value, maximum) {
+  if (typeof value !== "string" || !/^[A-Za-z0-9_./:-]+$/.test(value)) return null;
+  return value.slice(0, maximum);
+}
+
+export function withSyncStage(error, syncStage, firestoreStage = error?.firestoreStage) {
+  const wrapped = error instanceof SyncPortError
+    ? error
+    : new SyncPortError("unknown", "Synchronizaci se nepodařilo dokončit.", {
+      cause: error, providerCode: error?.providerCode ?? error?.code,
+      sourceName: error?.sourceName ?? error?.name, retryable: error?.retryable,
+      firestoreStage,
+    });
+  wrapped.syncStage = safeDiagnosticValue(syncStage, 64);
+  wrapped.firestoreStage = safeDiagnosticValue(firestoreStage, 64);
+  return wrapped;
 }
 
 function requireString(value, name) {
@@ -46,7 +67,10 @@ function requireRevision(revision, name = "revision") {
 function normalizeError(error) {
   if (error instanceof SyncPortError) return error;
   const code = ERROR_CODES.has(error?.code) ? error.code : "unknown";
-  return new SyncPortError(code, error?.message || "Synchronizační úložiště vrátilo chybu.", { cause: error });
+  return new SyncPortError(code, error?.message || "Synchronizační úložiště vrátilo chybu.", {
+    cause: error, providerCode: error?.providerCode ?? error?.code, sourceName: error?.name,
+    retryable: error?.retryable, syncStage: error?.syncStage, firestoreStage: error?.firestoreStage,
+  });
 }
 
 /**

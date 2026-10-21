@@ -137,8 +137,12 @@ function AddCatchPage() {
         const optimizedPhoto = preparedPhoto.blob;
         const previewUrl = URL.createObjectURL(optimizedPhoto);
         photoUrlsRef.current.add(previewUrl);
-        additions.push({ id: crypto.randomUUID(), blob: optimizedPhoto, name: selectedPhoto.name.replace(/\.[^.]+$/, ".jpg"), type: preparedPhoto.type,
-          size: preparedPhoto.size, contentSha256: preparedPhoto.sha256, previewUrl });
+        additions.push({ id: crypto.randomUUID(), blob: optimizedPhoto,
+          name: preparedPhoto.uploadReady === false ? selectedPhoto.name : selectedPhoto.name.replace(/\.[^.]+$/, ".jpg"),
+          type: preparedPhoto.type, size: preparedPhoto.size, contentSha256: preparedPhoto.sha256,
+          uploadReady: preparedPhoto.uploadReady !== false,
+          ...(preparedPhoto.uploadReady === false ? { cloud: { state: "unavailable", provider: null, objectKey: null, sha256: null } } : {}),
+          previewUrl });
       }
       const nextPhotos = [...catchData.photos, ...additions];
       setPhotos(nextPhotos);
@@ -549,6 +553,7 @@ function AddCatchPage() {
           {catchData.photos.length > 0 && <div className="catch-photo-manager">
             {catchData.photos.map((item) => <article className={`photo-preview-item${item.id === catchData.primaryPhotoId ? " photo-preview-primary" : ""}`} key={item.id}>
               {item.previewUrl ? <img src={item.previewUrl} alt={`Fotografie úlovku – ${item.name}`} style={photoFrameStyle(item)} /> : <p>Fotografie je dostupná pouze po načtení místního souboru.</p>}
+              {item.uploadReady === false && <p className="catch-form-hint" role="status">Původní soubor je uložený v tomto zařízení, ale nepodařilo se ho připravit pro synchronizaci. Zkus fotografii převést na JPG, PNG nebo WebP a nahradit ji.</p>}
               <div className="photo-actions">
                 <button type="button" className="photo-action-button" aria-pressed={item.id === catchData.primaryPhotoId} onClick={() => updateCatchData("primaryPhotoId", item.id)}>{item.id === catchData.primaryPhotoId ? "★ Hlavní" : "Nastavit hlavní"}</button>
                 {item.previewUrl && <button type="button" className="photo-action-button" onClick={() => { setEditingPhotoId(item.id); setPhotoEditorOpen(true); }}>Upravit výřez</button>}

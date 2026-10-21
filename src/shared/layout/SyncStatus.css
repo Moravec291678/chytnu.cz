@@ -1,0 +1,73 @@
+.sync-status-layer {
+  position: fixed;
+  z-index: 105;
+  inset: 0;
+  pointer-events: none;
+}
+
+.sync-status-layer > * {
+  pointer-events: auto;
+}
+
+.sync-status-card {
+  position: absolute;
+  right: 12px;
+  bottom: calc(90px + env(safe-area-inset-bottom) + 8px);
+  left: 12px;
+  width: min(calc(100% - 24px), 463px);
+  margin: 0 auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 28px rgb(0 0 0 / 30%);
+}
+
+.sync-status-card {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 11px 15px;
+  background: var(--surface-1);
+  color: var(--text-primary);
+  animation: sync-status-enter 180ms ease-out both;
+}
+
+.sync-status-card strong { font-size: 12px; }
+.sync-status-card p { margin: 3px 0 0; color: var(--text-secondary); font-size: 11px; line-height: 1.4; }
+.sync-status-success { border-color: rgb(var(--accent-green-rgb) / 45%); }
+.sync-status-success strong { color: var(--accent-green); }
+.sync-status-error { border-color: rgb(var(--accent-red-rgb) / 45%); background: var(--accent-red-soft); }
+.sync-status-error strong { color: var(--accent-red); }
+.sync-status-offline { border-color: rgb(var(--accent-blue-rgb) / 35%); background: var(--accent-blue-soft); }
+.sync-status-retry { min-height: 40px; flex: 0 0 auto; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface-1); color: var(--text-primary); font: inherit; font-size: 11px; font-weight: 800; }
+.sync-status-retry:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 2px; }
+.sync-status-spinner {
+  width: 17px;
+  height: 17px;
+  flex: 0 0 17px;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--accent-green);
+  border-radius: 50%;
+  animation: sync-status-spin 800ms linear infinite;
+}
+
+@keyframes sync-status-enter {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes sync-status-spin { to { transform: rotate(360deg); } }
+
+@media (min-width: 700px) {
+  .sync-status-card {
+    top: max(16px, env(safe-area-inset-top));
+    right: max(16px, calc((100vw - 1100px) / 2));
+    bottom: auto;
+    left: auto;
+    width: min(420px, calc(100% - 32px));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sync-status-card { animation: none; }
+  .sync-status-spinner { animation-duration: 2s; }
+}

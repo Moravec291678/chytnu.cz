@@ -2,6 +2,8 @@ import { sha256Blob } from "./photoCloudProvider.js";
 
 const HEIC_TYPES = new Set(["image/heic", "image/heif", "image/heic-sequence", "image/heif-sequence"]);
 const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/avif", ...HEIC_TYPES]);
+const EXTENSION_TYPES = Object.freeze({ jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp",
+  avif: "image/avif", heic: "image/heic", heif: "image/heif" });
 
 export function isHeicPhoto(file, fileName = "") {
   const type = String(file?.type ?? "").toLowerCase();
@@ -32,7 +34,7 @@ async function toSupportedSource(file, fileName, convertHeic) {
     file = file.slice(0, file.size, type);
   }
   if (!IMAGE_TYPES.has(type)) {
-    const extensionType = ({ jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp", avif: "image/avif" })[String(fileName).toLowerCase().split(".").pop()];
+    const extensionType = EXTENSION_TYPES[String(fileName).toLowerCase().split(".").pop()];
     if (!extensionType) throw new Error("Vyber platnou fotografii. Podporujeme JPG, PNG, WebP, AVIF, HEIC a HEIF.");
     type = extensionType;
     file = file.slice(0, file.size, type);
@@ -86,6 +88,19 @@ export async function normalizePhotoForUpload(file, { fileName = file?.name ?? "
 
 /** Canonical local photo payload; its metadata always describes its final normalized bytes. */
 export async function preparePhotoForStorageAndUpload(file, options = {}) {
-  const blob = await normalizePhotoForUpload(file, options);
-  return { blob, type: blob.type, size: blob.size, sha256: await sha256Blob(blob) };
+  try {
+    const blob = await normalizePhotoForUpload(file, options);
+    return { blob, type: blob.type, size: blob.size, sha256: await sha256Blob(blob), uploadReady: true };
+  } catch (error) {
+    const fileName = String(options.fileName || file?.name || "");
+    const extensionType = EXTENSION_TYPES[fileName.toLowerCase().split(".").pop()];
+    const sourceType = String(file?.type || extensionType || "").toLowerCase();
+    if (!(file instanceof Blob) || file.size < 1 || (!sourceType.startsWith("image/") && !isHeicPhoto(file, fileName))) throw error;
+    try {
+      const blob = new Blob([await file.arrayBuffer()], { type: sourceType });
+      return { blob, type: blob.type, size: blob.size, sha256: await sha256Blob(blob), uploadReady: false, errorCode: "photo_unsupported" };
+    } catch {
+      throw error;
+    }
+  }
 }

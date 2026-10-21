@@ -108,6 +108,38 @@ test("none provider stays local-only and never contacts cloud", async () => {
   assert.equal((await catchRepository.get("catch-none", scope)).photos[0].blob.size, photo.blob.size);
 });
 
+test("hidden app defers photo network work and keeps its durable job for foreground retry", async () => {
+  await resetDatabase();
+  const ownerId = "hidden-photo-owner";
+  const scope = { ownerId, scopeKey: accountScopeKey(ownerId) };
+  await catchRepository.put(makeCatch(ownerId, "catch-hidden-photo", [makePhoto("p1", "hidden bytes")]), scope);
+  const provider = createFakeProvider();
+  let visible = true;
+  let metadataSynced = false;
+  const service = createPhotoCloudService({ provider, getCurrentOwnerId: () => ownerId,
+    isCatchMetadataSynced: async () => metadataSynced, isVisible: () => visible, now: () => fixedNow });
+  const deferredMetadata = await service.run(ownerId);
+  assert.equal(deferredMetadata.status, "success");
+  assert.equal(provider.calls.uploads.length, 0);
+  const queued = await photoCloudOutboxRepository.list();
+  assert.equal(queued.length, 1, "upload job is durable before any network request");
+  assert.equal(queued[0].status, "pending");
+
+  visible = false;
+  const hiddenAttempt = await service.run(ownerId, { force: true });
+  assert.equal(hiddenAttempt.status, "deferred");
+  assert.equal(provider.calls.uploads.length, 0);
+  assert.equal((await photoCloudOutboxRepository.list()).length, 1);
+
+  await acknowledgeCatchOperations(ownerId);
+  metadataSynced = true;
+  visible = true;
+  const foreground = await service.run(ownerId, { force: true });
+  assert.equal(foreground.status, "success");
+  assert.equal(provider.calls.uploads.length, 1);
+  assert.equal((await photoCloudOutboxRepository.list()).length, 0);
+});
+
 test("multiple photos upload independently; primary and crop edits do not upload bytes again", async () => {
   await resetDatabase();
   const ownerId = "multi-owner";
@@ -208,6 +240,29 @@ test("legacy HEIC Blob is converted to JPEG before it enters the Cloudinary uplo
   assert.equal(saved.photos[0].blob.type, "image/jpeg");
   assert.equal(saved.photos[0].cloud.state, PHOTO_CLOUD_STATE.SYNCED);
   assert.equal(provider.calls.uploads[0].contentType, "image/jpeg");
+});
+
+test("legacy image that cannot be decoded is retained locally and excluded from normal upload jobs", async () => {
+  await resetDatabase();
+  const ownerId = "unsupported-legacy-photo-owner";
+  const scope = { ownerId, scopeKey: accountScopeKey(ownerId) };
+  const original = new Blob(["unsupported original HEIC bytes"], { type: "image/heic" });
+  await catchRepository.put(makeCatch(ownerId, "catch-unsupported-legacy", [
+    { id: "p1", name: "legacy.HEIC", type: original.type, size: original.size, blob: original },
+  ]), scope);
+  const provider = createFakeProvider();
+  const service = createPhotoCloudService({ provider, getCurrentOwnerId: () => ownerId,
+    isCatchMetadataSynced: async () => true, now: () => fixedNow,
+    normalizeLegacyPhoto: async (blob) => ({ blob: new Blob([await blob.arrayBuffer()], { type: "image/heic" }),
+      type: "image/heic", size: blob.size, sha256: await (await import("./photoCloudProvider.js")).sha256Blob(blob),
+      uploadReady: false, errorCode: "photo_unsupported" }) });
+  assert.equal((await service.run(ownerId)).status, "success");
+  const saved = await catchRepository.get("catch-unsupported-legacy", scope);
+  assert.equal(saved.photos[0].uploadReady, false);
+  assert.equal(saved.photos[0].cloud.state, PHOTO_CLOUD_STATE.UNAVAILABLE);
+  assert.deepEqual(new Uint8Array(await saved.photos[0].blob.arrayBuffer()), new Uint8Array(await original.arrayBuffer()));
+  assert.equal((await photoCloudOutboxRepository.list()).length, 0);
+  assert.equal(provider.calls.uploads.length, 0);
 });
 
 test("failed synced metadata persistence keeps upload job retryable", async () => {

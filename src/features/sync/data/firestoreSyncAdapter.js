@@ -40,22 +40,24 @@ function requireActiveOwner(ownerId, getCurrentUserId) {
   }
 }
 
-function normalizeFirebaseError(error) {
+export function normalizeFirebaseError(error) {
   if (error instanceof SyncPortError) return error;
-  const code = String(error?.code ?? "");
-  if (code.includes("unauthenticated")) {
-    return new SyncPortError("unauthenticated", "Přihlášení vypršelo.", { cause: error, providerCode: code });
+  const providerCode = String(error?.code ?? "").toLowerCase();
+  const errorOptions = { cause: error, providerCode, sourceName: error?.name };
+  if (providerCode.includes("unauthenticated")) {
+    return new SyncPortError("unauthenticated", "Přihlášení vypršelo.", { ...errorOptions, retryable: false });
   }
-  if (code.includes("permission-denied")) {
-    return new SyncPortError("permission_denied", "Účet už nemá oprávnění synchronizovat tyto záznamy.", { cause: error, providerCode: code });
+  if (providerCode.includes("permission-denied")) {
+    return new SyncPortError("permission_denied", "Účet už nemá oprávnění synchronizovat tyto záznamy.", { ...errorOptions, retryable: false });
   }
-  if (code.includes("invalid-argument") || code.includes("failed-precondition")) {
-    return new SyncPortError("rules_schema_rejection", "Server odmítl strukturu synchronizovaného záznamu.", { cause: error, providerCode: code });
+  if (providerCode.includes("invalid-argument") || providerCode.includes("failed-precondition")) {
+    return new SyncPortError("rules_schema_rejection", "Server odmítl strukturu synchronizovaného záznamu.", { ...errorOptions, retryable: false });
   }
-  if (code.includes("unavailable") || code.includes("deadline-exceeded") || code.includes("network-request-failed")) {
-    return new SyncPortError("unavailable", "Synchronizační server není dostupný.", { cause: error, providerCode: code });
+  if (["unavailable", "deadline-exceeded", "aborted", "internal", "resource-exhausted", "network-request-failed", "cancelled"]
+    .some((code) => providerCode.includes(code))) {
+    return new SyncPortError("unavailable", "Synchronizační server není dostupný.", { ...errorOptions, retryable: true });
   }
-  return new SyncPortError("unknown", "Synchronizaci se nepodařilo dokončit.", { cause: error, providerCode: code || null });
+  return new SyncPortError("unknown", "Synchronizaci se nepodařilo dokončit.", { ...errorOptions, retryable: true });
 }
 
 function entityRef(db, ownerId, entityType, entityId) {
@@ -189,7 +191,7 @@ export function toRemoteRecord(entityType, record, ownerId) {
   };
 }
 
-function fromRemoteDocument(entityType, data, photos = undefined) {
+function fromRemoteDocument(entityType, data, photos = undefined, photoMetadataError = null) {
   const record = { ...data };
   if (entityType === "catch") {
     const legacyPhotos = Array.isArray(record.photos) ? record.photos : [];
@@ -224,7 +226,76 @@ function fromRemoteDocument(entityType, data, photos = undefined) {
     deleted: Boolean(deleted),
     deletedAt: deletedAt ?? null,
     photoState: photoState ?? "none",
+    photoMetadataError,
   };
+}
+
+const PHOTO_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
+const PHOTO_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+
+function sanitizedRemotePhoto(photo, photoId, ownerId, catchId) {
+  if (!photo || typeof photo !== "object" || Array.isArray(photo) || !PHOTO_ID_PATTERN.test(photoId)
+    || photo.id !== photoId) return null;
+  if (photo.deleted === true) return null;
+  const type = PHOTO_TYPES.has(photo.type) ? photo.type : "image/jpeg";
+  const size = Number.isSafeInteger(photo.size) && photo.size >= 0 && photo.size <= 10 * 1024 * 1024 ? photo.size : 0;
+  const focalX = Number.isFinite(photo.focalX) && photo.focalX >= 0 && photo.focalX <= 1 ? photo.focalX : 0.5;
+  const focalY = Number.isFinite(photo.focalY) && photo.focalY >= 0 && photo.focalY <= 1 ? photo.focalY : 0.5;
+  const zoom = Number.isFinite(photo.zoom) && photo.zoom >= 1 && photo.zoom <= 2 ? photo.zoom : 1;
+  const objectKey = `users/${ownerId}/catches/${catchId}/photos/${photoId}/original`;
+  const cloud = photo.cloud;
+  const localOnly = !cloud || cloud.state === "localOnly";
+  const validSyncedCloud = cloud?.state === "synced"
+    && typeof cloud.provider === "string" && /^[a-z][a-z0-9_-]{0,31}$/.test(cloud.provider)
+    && cloud.objectKey === objectKey && typeof cloud.sha256 === "string" && /^[a-f0-9]{64}$/.test(cloud.sha256);
+  const structurallyValid = PHOTO_TYPES.has(photo.type)
+    && Number.isSafeInteger(photo.size) && photo.size >= 0 && photo.size <= 10 * 1024 * 1024
+    && (localOnly || validSyncedCloud);
+  return {
+    id: photoId,
+    name: typeof photo.name === "string" && photo.name.length <= 255 ? photo.name : "fotografie",
+    type,
+    size,
+    focalX,
+    focalY,
+    zoom,
+    ...(Number.isSafeInteger(photo.sortIndex) ? { sortIndex: photo.sortIndex } : {}),
+    cloud: structurallyValid && validSyncedCloud
+      ? { state: "synced", provider: cloud.provider, objectKey: cloud.objectKey, sha256: cloud.sha256 }
+      : structurallyValid ? { state: "localOnly", provider: null, objectKey: null, sha256: null }
+        : { state: "unavailable", provider: null, objectKey: null, sha256: null },
+    metadataInvalid: !structurallyValid,
+  };
+}
+
+export function sanitizeRemotePhotoMetadata(photos, ownerId, catchId, onDiagnostic = () => {}) {
+  if (!Array.isArray(photos)) return [];
+  const seen = new Set();
+  const sanitized = [];
+  for (const photo of photos) {
+    const photoId = typeof photo?.id === "string" ? photo.id : "";
+    const validId = PHOTO_ID_PATTERN.test(photoId);
+    if (!validId || seen.has(photoId)) {
+      onDiagnostic({ event: "invalid-photo-metadata", code: validId ? "duplicate_photo_id" : "invalid_photo_id",
+        entityType: "catch", operation: "pull", retryable: false,
+        syncStage: "pull:photos", firestoreStage: "validate-photo-metadata" });
+      continue;
+    }
+    seen.add(photoId);
+    const result = sanitizedRemotePhoto(photo, photoId, ownerId, catchId);
+    if (!result) {
+      onDiagnostic({ event: "invalid-photo-metadata", code: "invalid_photo_record", entityType: "catch",
+        operation: "pull", retryable: false, syncStage: "pull:photos", firestoreStage: "validate-photo-metadata" });
+      continue;
+    }
+    if (result.metadataInvalid) {
+      onDiagnostic({ event: "invalid-photo-metadata", code: "invalid_photo_record", entityType: "catch",
+        operation: "pull", retryable: false, syncStage: "pull:photos", firestoreStage: "validate-photo-metadata" });
+    }
+    delete result.metadataInvalid;
+    sanitized.push(result);
+  }
+  return sanitized;
 }
 
 function toRemotePhotoDocument(photo) {
@@ -247,33 +318,47 @@ function photoTombstone(photo, nowValue) {
   return { ...photo, deleted: true, deletedAt: nowValue };
 }
 
-async function readCatchPhotos(db, ownerId, catchId, data) {
-  if (Array.isArray(data.photos)) return data.photos;
-  const ids = data.photoRefs && typeof data.photoRefs === "object"
-    ? Object.keys(data.photoRefs).filter((photoId) => /^[A-Za-z0-9_-]{1,128}$/.test(photoId))
-    : Array.isArray(data.photoIds) ? data.photoIds : [];
-  const snapshots = await Promise.all(ids.map((photoId) => getDoc(catchPhotoRef(db, ownerId, catchId, photoId))));
-  return snapshots.flatMap((snapshot) => {
+async function readCatchPhotos(db, ownerId, catchId, data, onDiagnostic) {
+  if (Array.isArray(data.photos)) return { photos: sanitizeRemotePhotoMetadata(data.photos, ownerId, catchId, onDiagnostic), error: null };
+  const reportInvalidRefs = () => onDiagnostic({ event: "invalid-photo-metadata", code: "invalid_photo_refs",
+    entityType: "catch", operation: "pull", retryable: false,
+    syncStage: "pull:photos", firestoreStage: "validate-photo-refs" });
+  let ids = [];
+  if (data.photoRefs !== undefined) {
+    if (!data.photoRefs || typeof data.photoRefs !== "object" || Array.isArray(data.photoRefs)) reportInvalidRefs();
+    else {
+      const refs = Object.entries(data.photoRefs);
+      const validRefs = refs.filter(([photoId, enabled]) => /^[A-Za-z0-9_-]{1,128}$/.test(photoId) && enabled === true);
+      if (validRefs.length !== refs.length) reportInvalidRefs();
+      ids = validRefs.map(([photoId]) => photoId);
+    }
+  } else if (Array.isArray(data.photoIds)) {
+    const validIds = data.photoIds.filter((photoId) => typeof photoId === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(photoId));
+    if (validIds.length !== data.photoIds.length || new Set(validIds).size !== validIds.length) reportInvalidRefs();
+    ids = [...new Set(validIds)];
+  }
+  if (data.primaryPhotoId !== undefined && data.primaryPhotoId !== null
+    && (typeof data.primaryPhotoId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(data.primaryPhotoId)
+      || !ids.includes(data.primaryPhotoId))) reportInvalidRefs();
+  let snapshots;
+  try { snapshots = await Promise.all(ids.map((photoId) => getDoc(catchPhotoRef(db, ownerId, catchId, photoId)))); }
+  catch (error) {
+    const normalized = normalizeFirebaseError(error);
+    return { photos: [], error: normalized };
+  }
+  const photos = snapshots.flatMap((snapshot, index) => {
     if (!snapshot.exists()) return [];
     const photo = snapshot.data();
     if (photo.deleted) return [];
-    return [{
-      id: photo.id,
-      name: photo.name,
-      type: photo.type,
-      size: photo.size,
-      focalX: photo.focalX,
-      focalY: photo.focalY,
-      zoom: photo.zoom,
-      sortIndex: photo.sortIndex,
-      cloud: photo.cloud ?? { state: "localOnly", provider: null, objectKey: null, sha256: null },
-    }];
-  }).sort((left, right) => left.sortIndex - right.sortIndex || left.id.localeCompare(right.id))
+    return [{ ...photo, id: photo.id ?? ids[index] }];
+  });
+  return { photos: sanitizeRemotePhotoMetadata(photos, ownerId, catchId, onDiagnostic)
+    .sort((left, right) => (left.sortIndex ?? 0) - (right.sortIndex ?? 0) || left.id.localeCompare(right.id))
     .map((photo) => {
       const localPhoto = { ...photo };
       delete localPhoto.sortIndex;
       return localPhoto;
-    });
+    }), error: null };
 }
 
 function stableStringify(value) {
@@ -313,29 +398,37 @@ function minimalTombstone(entityType, ownerId, entityId, now) {
       : { ...common, entityType: "catch" };
 }
 
-function makePortError(error) {
-  throw normalizeFirebaseError(error);
+function makePortError(error, firestoreStage) {
+  const normalized = normalizeFirebaseError(error);
+  normalized.firestoreStage ??= firestoreStage;
+  throw normalized;
 }
 
-export function createFirestoreSyncAdapter({ now = () => new Date().toISOString(), db: suppliedDb, getCurrentUserId } = {}) {
+export function createFirestoreSyncAdapter({ now = () => new Date().toISOString(), db: suppliedDb, getCurrentUserId, onDiagnostic = () => {} } = {}) {
   const db = suppliedDb ?? getConfiguredFirestore();
   const currentUserId = getCurrentUserId ?? (() => firebaseAuth.currentUserId());
 
   return {
     async read({ ownerId, entityType, entityId }) {
       requireActiveOwner(ownerId, currentUserId);
+      let firestoreStage = entityType === "catch" ? "get-catch" : `get-${entityType}`;
       try {
         const snapshot = await getDoc(entityRef(db, ownerId, entityType, entityId));
         if (!snapshot.exists()) return null;
         const data = snapshot.data();
-        const photos = entityType === "catch" && !data.deleted
-          ? await readCatchPhotos(db, ownerId, entityId, data)
-          : undefined;
-        const remote = fromRemoteDocument(entityType, data, photos);
+        let photos;
+        let photoMetadataError = null;
+        if (entityType === "catch" && !data.deleted) {
+          firestoreStage = "get-catch-photo-metadata";
+          const photoResult = await readCatchPhotos(db, ownerId, entityId, data, onDiagnostic);
+          photos = photoResult.photos;
+          photoMetadataError = photoResult.error;
+        }
+        const remote = fromRemoteDocument(entityType, data, photos, photoMetadataError);
         return remote.deleted
           ? { ...remote, entityType, entityId }
           : remote;
-      } catch (error) { makePortError(error); }
+      } catch (error) { makePortError(error, firestoreStage); }
     },
 
     async write({ ownerId, entityType, entityId, record, expectedRevision, operationId, localRevision }) {
@@ -503,6 +596,7 @@ export function createFirestoreSyncAdapter({ now = () => new Date().toISOString(
 
     async list({ ownerId, entityType, cursor = null, limit: pageSize = 100 }) {
       requireActiveOwner(ownerId, currentUserId);
+      let firestoreStage = `list-${entityType}s`;
       try {
       const collectionName = entityType === "catch" ? "catches" : entityType === "trip" ? "trips" : "waters";
       const base = collection(db, "users", ownerId, collectionName);
@@ -520,18 +614,20 @@ export function createFirestoreSyncAdapter({ now = () => new Date().toISOString(
           cursor: documents.at(-1)?.id ?? cursor,
           hasMore,
         };
-      } catch (error) { makePortError(error); }
+      } catch (error) { makePortError(error, firestoreStage); }
     },
 
     async delta({ ownerId, cursor = null, limit: pageSize = 100 }) {
       requireActiveOwner(ownerId, currentUserId);
       const after = cursor === null ? 0 : Number(cursor);
       if (!Number.isSafeInteger(after) || after < 0) throw new SyncPortError("invalid_request", "Neplatný synchronizační kurzor.");
+      let firestoreStage = "query-sync-changes";
       try {
         const changes = collection(db, "users", ownerId, "syncChanges");
         const snapshot = await getDocs(query(changes, where("sequence", ">", after), orderBy("sequence"), limit(pageSize + 1)));
         const hasMore = snapshot.size > pageSize;
         const documents = snapshot.docs.slice(0, pageSize);
+        firestoreStage = "get-sync-state";
         const state = await getDoc(doc(db, "users", ownerId, "sync", "state"));
         return {
           items: documents.map((item) => ({ ...item.data(), cursor: String(item.data().sequence) })),
@@ -540,7 +636,7 @@ export function createFirestoreSyncAdapter({ now = () => new Date().toISOString(
             : String(state.exists() ? state.data().cursor : after),
           hasMore,
         };
-      } catch (error) { makePortError(error); }
+      } catch (error) { makePortError(error, firestoreStage); }
     },
   };
 }

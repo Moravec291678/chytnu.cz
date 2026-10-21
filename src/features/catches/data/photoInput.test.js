@@ -46,6 +46,20 @@ test("HEIC conversion failure falls back to native browser decoding before givin
   assert.equal(result.type, "image/jpeg");
 });
 
+test("HEIC decode failure preserves original bytes in a memory Blob and marks them unsupported", async () => {
+  const source = new File(["preserve original HEIC"], "IMG_2.HEIC", { type: "image/heic" });
+  const prepared = await preparePhotoForStorageAndUpload(source, {
+    convertHeic: async () => async () => { throw new Error("unsupported HEIC variant"); },
+    decode: async () => { throw new Error("browser decode failed"); },
+  });
+  assert.notEqual(prepared.blob, source);
+  assert.deepEqual(new Uint8Array(await prepared.blob.arrayBuffer()), new Uint8Array(await source.arrayBuffer()));
+  assert.equal(prepared.type, "image/heic");
+  assert.equal(prepared.uploadReady, false);
+  assert.equal(prepared.errorCode, "photo_unsupported");
+  assert.equal(prepared.sha256, await sha256Blob(prepared.blob));
+});
+
 test("ordinary JPEG uses the existing 1920px and 0.82 optimization without loading HEIC decoder", async () => {
   const source = new Blob(["jpeg source"], { type: "image/jpeg" });
   let decoderRequested = false;

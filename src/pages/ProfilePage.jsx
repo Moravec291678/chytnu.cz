@@ -35,6 +35,7 @@ import { readPreferences, savePreferences } from "../features/preferences/data/p
 import { DEFAULT_PRIVACY_SETTINGS } from "../features/privacy/data/privacyModel.js";
 import { privacyRepository } from "../features/privacy/data/privacyRepository.js";
 import { waterRepository } from "../features/waters/data/waterRepository.js";
+import { runManualSync } from "../shared/layout/syncStatusView.js";
 import "./ProfilePage.css";
 
 function formatCount(count, one, few, many) {
@@ -621,10 +622,10 @@ function ProfilePage() {
         </form>}
         {auth.error && auth.status === "ready" && <p className="profile-error" role="alert">{auth.error}</p>}
         {authMessage && <p className="profile-feedback" role="status">{authMessage}</p>}
-        {auth.user && <div aria-live="polite">
-          {sync.status === "syncing" && <p role="status">Synchronizuji úlovky a výpravy…</p>}
-          {sync.status === "offline" && <p className="profile-privacy-note" role="status">Bez připojení. Místní změny zůstaly bezpečně ve frontě.</p>}
-          {sync.status === "error" && <p className="profile-error" role="alert">Synchronizace se nepodařila: {sync.error} Změny zůstávají ve frontě.</p>}
+        {auth.user && <div>
+          <button className="profile-account-secondary" type="button" disabled={sync.status === "syncing"} onClick={() => runManualSync(sync)}>
+            {sync.status === "syncing" ? "Synchronizuji…" : "Synchronizovat"}
+          </button>
           {conflicts.length > 0 && <div className="profile-restore-preview" aria-live="polite">
             <p><strong>Konflikty synchronizace ({conflicts.length})</strong></p>
             <p className="profile-privacy-note">Stejný záznam se změnil na více zařízeních. Vyber verzi; bez volby se nic nepřepíše.</p>
@@ -638,10 +639,6 @@ function ProfilePage() {
               </div>
             </div>)}
           </div>}
-          {sync.status === "success" && sync.conflicts > 0 && conflicts.length === 0 && <p className="profile-error" role="status">Konflikty byly zachované. Obnovuji jejich seznam…</p>}
-          {sync.status === "success" && sync.conflicts === 0 && sync.pending > 0 && <p className="profile-privacy-note" role="status">Čeká {sync.pending} změn na opakování synchronizace.</p>}
-          {sync.status === "success" && sync.conflicts === 0 && sync.pending === 0 && <p className="profile-feedback" role="status">Úlovky a výpravy jsou synchronizované. Fotografie zůstávají pouze v tomto zařízení.</p>}
-          {(sync.status === "error" || sync.status === "offline") && <button className="profile-account-secondary" type="button" onClick={sync.retry}>Zkusit synchronizaci znovu</button>}
         </div>}
         <p className="profile-privacy-note">Odhlášení místní data nemaže. Starší deník bez účtu se přenese jen po výslovném potvrzení výše.</p>
       </section>

@@ -10,6 +10,7 @@ import { readLocalBackupSnapshot } from "../features/backup/data/localBackupRepo
 import { deleteLocalScopeData } from "../features/settings/data/localDataDeletion.js";
 import { useSync } from "../features/sync/context/syncContextValue.js";
 import { readPhotoSyncDiagnostics } from "../features/catches/data/photoSyncDiagnostics.js";
+import { getRuntimeLabel } from "../features/sync/data/runtimeDiagnostics.js";
 import "./SettingsPage.css";
 
 /* global __APP_BUILD_ID__ */
@@ -141,11 +142,13 @@ export default function SettingsPage() {
         <h2 id="settings-sync-debug-title">Diagnostika synchronizace</h2>
         <dl>
           <dt>Build</dt><dd>{typeof __APP_BUILD_ID__ === "string" ? __APP_BUILD_ID__ : "unknown"}</dd>
+          <dt>Runtime</dt><dd>{getRuntimeLabel()}</dd>
           <dt>Auth / scope</dt><dd>{auth.user ? "authenticated" : auth.status === "loading" ? "loading" : "guest"} / {scope.kind ?? "unknown"}</dd>
           <dt>Backend</dt><dd>{sync.backendMode}</dd>
           <dt>Sync enabled</dt><dd>{sync.syncEnabled ? "yes" : "no"}</dd>
           <dt>Photo provider</dt><dd>{sync.providerId}</dd>
           <dt>Outbox</dt><dd>{sync.pending} pending · {sync.failed} failed</dd>
+          <dt>Deferred pull retries</dt><dd>{sync.pullPending ?? 0}</dd>
           <dt>Last sync</dt><dd>{sync.lastResult} · sent {sync.sent} · pulled {sync.applied}</dd>
           <dt>Error classification</dt><dd>{sync.errorCode || sync.lastErrorCode || "none"}</dd>
           <dt>Photo API endpoint</dt><dd>{sync.errorEndpoint || sync.lastErrorEndpoint || "none"}</dd>

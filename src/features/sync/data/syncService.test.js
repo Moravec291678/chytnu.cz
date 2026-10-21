@@ -7,9 +7,12 @@ import { tripRepository } from "../../trips/data/tripRepository.js";
 import { createInMemorySyncAdapter } from "./inMemorySyncAdapter.js";
 import { createSyncPort, SyncPortError } from "./syncPort.js";
 import { createSyncService } from "./syncService.js";
+import { normalizeFirebaseError } from "./firestoreSyncAdapter.js";
 import {
   linkGuestData,
   listSyncConflicts,
+  readPendingPulls,
+  readSyncSummary,
   readGuestSummary,
   readSyncCursor,
   resolveSyncConflict,
@@ -336,4 +339,81 @@ test("local conflict snapshots do not advance the cursor if the IndexedDB transa
   // The service applies page and cursor in one transaction. A normal run commits both.
   await service.run("angler-a");
   assert.equal(await readSyncCursor("angler-a"), String(write.cursor));
+});
+
+test("transient photo metadata reads preserve Catch data and retry independently of the advancing cursor", async () => {
+  await resetDatabase();
+  let photoReadFails = true;
+  const record = makeCatch("photo-read-retry", "angler-a", {
+    notes: "Catch data remains available",
+    photos: [{ id: "photo-1", name: "one.jpg", type: "image/jpeg", size: 3,
+      cloud: { state: "synced", provider: "cloudinary", objectKey: "users/angler-a/catches/photo-read-retry/photos/photo-1/original", sha256: "a".repeat(64) } }],
+  });
+  const sibling = makeCatch("sibling-catch-pulled", "angler-a", { notes: "other Catch must continue" });
+  const adapter = {
+    async delta() { return { items: [
+      { entityType: "catch", entityId: record.id, revision: 1 },
+      { entityType: "catch", entityId: sibling.id, revision: 2 },
+    ], cursor: "2", hasMore: false }; },
+    async read({ entityId }) {
+      if (entityId === sibling.id) return { record: sibling, revision: 2, deleted: false };
+      if (photoReadFails) return { record: { ...record, photos: [] }, revision: 1, deleted: false,
+        photoMetadataError: normalizeFirebaseError(Object.assign(new Error("temporary photo read failure"), {
+          name: "FirebaseError", code: "firestore/unavailable",
+        })) };
+      return { record, revision: 1, deleted: false };
+    },
+    async write() { throw new Error("Unexpected write"); },
+    async delete() { throw new Error("Unexpected delete"); },
+    async list() { return { items: [], cursor: null, hasMore: false }; },
+  };
+  const service = createSyncService({ port: createSyncPort(adapter), getCurrentOwnerId: () => "angler-a" });
+  const firstAttempt = await service.run("angler-a");
+  assert.equal(firstAttempt.status, "error");
+  assert.equal(firstAttempt.errorCode, "unavailable");
+  assert.equal(firstAttempt.retryable, true);
+  assert.equal(firstAttempt.syncStage, "pull:photos");
+  assert.equal(firstAttempt.firestoreStage, "get-catch-photo-metadata");
+  assert.equal(firstAttempt.providerCode, "firestore/unavailable");
+  assert.equal(firstAttempt.errorName, "FirebaseError");
+  const localAfterTransientPhotoFailure = await catchRepository.get(record.id, accountScope());
+  assert.equal(localAfterTransientPhotoFailure.notes, "Catch data remains available");
+  assert.deepEqual(localAfterTransientPhotoFailure.photos, []);
+  assert.equal(await readSyncCursor("angler-a"), "2", "a broken photo record must not block other Catch records");
+  assert.equal((await catchRepository.get(sibling.id, accountScope())).notes, "other Catch must continue");
+  assert.equal((await readPendingPulls("angler-a")).length, 1, "photo metadata retry survives sync restarts in IndexedDB");
+  const summaryAfterFailure = await readSyncSummary("angler-a");
+  assert.equal(summaryAfterFailure.pullPending, 1);
+  assert.equal(summaryAfterFailure.pullRetryable, true);
+  assert.equal(summaryAfterFailure.pullErrorCode, "unavailable");
+  assert.ok(summaryAfterFailure.pullErrorMessage);
+  photoReadFails = false;
+  const recovered = await service.run("angler-a");
+  assert.equal(recovered.status, "success");
+  assert.equal((await catchRepository.get(record.id, accountScope())).photos[0].id, "photo-1");
+  assert.equal(await readSyncCursor("angler-a"), "2");
+  assert.equal((await readPendingPulls("angler-a")).length, 0, "successful retry clears its durable deferred pull");
+  assert.equal((await readSyncSummary("angler-a")).pullPending, 0);
+});
+
+test("account switch during a remote read prevents the old pull from writing local data", async () => {
+  await resetDatabase();
+  let currentOwner = "angler-a";
+  const remoteRecord = makeCatch("switch-during-pull", "angler-a", { notes: "must not be applied" });
+  const adapter = {
+    async delta() { return { items: [{ entityType: "catch", entityId: remoteRecord.id, revision: 1 }], cursor: "1", hasMore: false }; },
+    async read() {
+      currentOwner = "angler-b";
+      return { record: remoteRecord, revision: 1, deleted: false };
+    },
+    async write() { throw new Error("Unexpected write"); },
+    async delete() { throw new Error("Unexpected delete"); },
+    async list() { return { items: [], cursor: null, hasMore: false }; },
+  };
+  const service = createSyncService({ port: createSyncPort(adapter), getCurrentOwnerId: () => currentOwner });
+  const result = await service.run("angler-a");
+  assert.equal(result.status, "success");
+  assert.equal((await catchRepository.get(remoteRecord.id, accountScope("angler-a"))) ?? null, null);
+  assert.equal((await catchRepository.get(remoteRecord.id, accountScope("angler-b"))) ?? null, null);
+  assert.equal(await readSyncCursor("angler-a"), null);
 });

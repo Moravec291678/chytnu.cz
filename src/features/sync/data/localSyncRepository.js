@@ -35,27 +35,44 @@ export async function readSyncCursor(ownerId) {
   }
 }
 
+export async function readPendingPulls(ownerId) {
+  const db = await openLocalDatabase();
+  try {
+    const transaction = db.transaction(SYNC_STATE_STORE_NAME, "readonly");
+    const state = await requestResult(transaction.objectStore(SYNC_STATE_STORE_NAME).get(ownerId));
+    return Array.isArray(state?.pendingPulls) ? state.pendingPulls : [];
+  } finally { db.close(); }
+}
+
 export async function readSyncSummary(ownerId) {
   const db = await openLocalDatabase();
   try {
-    const transaction = db.transaction([OUTBOX_STORE_NAME, CONFLICT_STORE_NAME], "readonly");
-    const [operations, conflicts] = await Promise.all([
+    const transaction = db.transaction([OUTBOX_STORE_NAME, CONFLICT_STORE_NAME, SYNC_STATE_STORE_NAME], "readonly");
+    const [operations, conflicts, syncState] = await Promise.all([
       requestResult(transaction.objectStore(OUTBOX_STORE_NAME).getAll()),
       requestResult(transaction.objectStore(CONFLICT_STORE_NAME).index("ownerId").getAll(ownerId)),
+      requestResult(transaction.objectStore(SYNC_STATE_STORE_NAME).get(ownerId)),
     ]);
     const scoped = operations.filter((operation) => operation.ownerId === ownerId);
     const lastFailed = scoped.find((operation) => operation.lastError);
+    const pendingPulls = Array.isArray(syncState?.pendingPulls) ? syncState.pendingPulls : [];
+    const lastPendingPull = pendingPulls.at(-1);
+    const retryAt = [
+      ...scoped.filter((operation) => operation.status === "failed" && operation.nextAttemptAt).map((operation) => operation.nextAttemptAt),
+      ...pendingPulls.filter((operation) => operation.retryable && operation.nextAttemptAt).map((operation) => operation.nextAttemptAt),
+    ].sort()[0] ?? null;
     return {
       pending: scoped.filter((operation) => operation.status !== "conflict").length,
       failed: scoped.filter((operation) => operation.status === "failed").length,
+      pullPending: pendingPulls.length,
+      pullErrorMessage: lastPendingPull?.errorMessage ?? "",
+      pullErrorCode: lastPendingPull?.errorCode ?? "",
+      pullRetryable: lastPendingPull?.retryable === true,
       conflicts: conflicts.filter((conflict) => conflict.status === "unresolved").length,
       lastError: lastFailed?.lastError ?? "",
       lastErrorCode: lastFailed?.lastErrorCode ?? "",
       lastErrorEndpoint: lastFailed?.lastEndpoint ?? "",
-      nextRetryAt: scoped
-        .filter((operation) => operation.status === "failed" && operation.nextAttemptAt)
-        .map((operation) => operation.nextAttemptAt)
-        .sort()[0] ?? null,
+      nextRetryAt: retryAt,
     };
   } finally {
     db.close();
@@ -307,7 +324,9 @@ function metadataOnlyRecord(remote, local = null) {
     };
   }
   const localPhotos = new Map((local?.photos ?? []).filter((photo) => photo.blob).map((photo) => [photo.id, photo]));
-  const photos = (remote.record.photos ?? []).map((photo) => {
+  const photos = remote.photoMetadataError
+    ? (local?.photos ?? [])
+    : (remote.record.photos ?? []).map((photo) => {
     const localPhoto = localPhotos.get(photo.id);
     return localPhoto && !(photo.blob instanceof Blob)
       ? { ...localPhoto, ...photo, blob: localPhoto.blob, photoStatus: "local-only" }
@@ -325,6 +344,15 @@ function metadataOnlyRecord(remote, local = null) {
       photoStatus: photoSyncStatus(photos),
     },
   };
+}
+
+function catchPhotoMetadataDiffers(localPhotos, remotePhotos) {
+  const project = (photos) => (photos ?? []).map((photo) => ({
+    id: photo.id, name: photo.name, type: photo.type, size: photo.size,
+    focalX: photo.focalX, focalY: photo.focalY, zoom: photo.zoom,
+    cloud: photo.cloud ?? null,
+  }));
+  return JSON.stringify(project(localPhotos)) !== JSON.stringify(project(remotePhotos));
 }
 
 function makeConflict(ownerId, snapshot, localRecord) {
@@ -350,7 +378,7 @@ function makeConflict(ownerId, snapshot, localRecord) {
  * Apply one fully fetched delta page atomically. The cursor advances in the
  * same IndexedDB transaction as entity changes and conflict snapshots.
  */
-export async function applyRemotePage({ ownerId, snapshots, cursor }) {
+export async function applyRemotePage({ ownerId, snapshots, cursor, pendingPullUpdates = [] }) {
   const db = await openLocalDatabase();
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(
@@ -379,7 +407,22 @@ export async function applyRemotePage({ ownerId, snapshots, cursor }) {
 
     const processSnapshot = (index) => {
       if (index >= snapshots.length) {
-        transaction.objectStore(SYNC_STATE_STORE_NAME).put({ ownerId, cursor });
+        const stateStore = transaction.objectStore(SYNC_STATE_STORE_NAME);
+        const stateRequest = stateStore.get(ownerId);
+        stateRequest.onsuccess = () => {
+          const current = stateRequest.result ?? { ownerId, cursor: null };
+          const deferred = new Map((Array.isArray(current.pendingPulls) ? current.pendingPulls : [])
+            .map((item) => [JSON.stringify([item.entityType, item.entityId]), item]));
+          for (const item of pendingPullUpdates) {
+            const key = JSON.stringify([item.entityType, item.entityId]);
+            if (item.remove) deferred.delete(key);
+            else deferred.set(key, item);
+          }
+          const nextState = { ...current, ownerId, cursor,
+            ...(deferred.size ? { pendingPulls: [...deferred.values()] } : { pendingPulls: [] }) };
+          stateStore.put(nextState);
+        };
+        stateRequest.onerror = () => { failure = stateRequest.error; transaction.abort(); };
         return;
       }
       const snapshot = snapshots[index];
@@ -455,7 +498,9 @@ export async function applyRemotePage({ ownerId, snapshots, cursor }) {
         }
 
         const localServerRevision = localRecord?.sync?.serverRevision ?? 0;
-        if (localRecord && localServerRevision >= remote.revision) {
+        const recoveredPhotoMetadata = snapshot.entityType === "catch" && !remote.photoMetadataError
+          && catchPhotoMetadataDiffers(localRecord?.photos, remote.record.photos);
+        if (localRecord && localServerRevision >= remote.revision && !recoveredPhotoMetadata) {
           processSnapshot(index + 1);
           return;
         }

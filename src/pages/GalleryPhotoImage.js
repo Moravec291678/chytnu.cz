@@ -38,9 +38,12 @@ export default function GalleryPhotoImage({ item, scope = null, style, alt, load
     }
   }, [state.blob]);
   if (item?.cloud?.state === "unavailable") {
-    return createElement("span", { className: "gallery-missing" }, createElement(Link, { to: `/catch/${item.catchId}/edit` },
+    if (!(item.blob instanceof Blob)) return createElement("span", { className: "gallery-missing" }, createElement(Link, { to: `/catch/${item.catchId}/edit` },
       "Původní fotografie není dostupná. Přidej ji znovu."));
   }
+  if (state.status === "decode-error") return createElement("span", { className: "gallery-missing" },
+    item.uploadReady === false ? "Soubor je zachovaný, ale nepodporuje ho prohlížeč ani synchronizace. Převeď ho a nahraď." : "Fotografii se v tomto zařízení nepodařilo zobrazit.",
+    createElement("br"), createElement(Link, { to: `/catch/${item.catchId}/edit` }, "Upravit úlovek"));
   if (!state.blob) return createElement("span", { className: "gallery-missing" }, state.status === "loading" ? "Načítám fotografii…"
     : state.errorCode === "cloudinary_asset_missing" ? createElement(Link, { to: `/catch/${item.catchId}/edit` }, getGalleryMissingMessage(item, state.errorCode))
       : state.status === "error" && item?.cloud?.state === "synced"
@@ -53,5 +56,7 @@ export default function GalleryPhotoImage({ item, scope = null, style, alt, load
         : getGalleryMissingMessage(item, state.errorCode));
   // The callback ref only creates the object URL once the DOM image is mounted.
   // eslint-disable-next-line react-hooks/refs
-  return createElement("img", { ref: setImage, style, alt, loading });
+  return createElement("img", { ref: setImage, style, alt, loading, onError: () => {
+    setLoaded({ item, scopeKey, blob: null, status: "decode-error", errorCode: "" });
+  } });
 }

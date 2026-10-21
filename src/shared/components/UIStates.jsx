@@ -43,13 +43,13 @@ export function LoadingSkeleton({ label = "Načítám…", count = 3, className 
   </div>;
 }
 
-export function OfflineNotice({ pending = 0, onRetry, status = "offline", errorCode = "" }) {
+export function OfflineNotice({ pending = 0, onRetry, status = "offline", errorCode = "", errorMessage = "" }) {
   const failed = status === "error";
   const copy = getOfflineNoticeCopy(status, pending, errorCode);
-  return <aside className={`offline-notice${failed ? " offline-notice-error" : ""}`} role="status" aria-live="polite">
+  return <aside className={`offline-notice${failed ? " offline-notice-error" : ""}`} role={failed ? "alert" : "status"} aria-live={failed ? "assertive" : "polite"} aria-atomic="true">
     <div>
       <strong>{copy.title}</strong>
-      <p>{copy.description}</p>
+      <p>{failed && errorMessage ? `${errorMessage} Místní změny zůstávají uložené ve frontě.` : copy.description}</p>
     </div>
     {onRetry && <button type="button" onClick={onRetry}>{copy.retryLabel}</button>}
   </aside>;

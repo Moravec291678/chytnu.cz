@@ -213,7 +213,9 @@ function CatchDetailPage() {
         <figure className="photo-preview-item catch-detail-hero-photo"><img src={heroPhoto.url} style={photoFrameStyle(heroPhoto)} alt={`Hlavní fotografie úlovku – ${item.species}`} /><figcaption>Hlavní fotografie</figcaption></figure>
         {photos.length > 1 && <div className="catch-detail-photo-strip">{photos.filter((photo) => photo.id !== heroPhoto.id).map((photo) => <button type="button" key={photo.id} onClick={() => setPreviewPhoto(photo)} aria-label={`Zobrazit fotografii ${photo.name}`}><img src={photo.url} style={photoFrameStyle(photo)} alt="" /></button>)}</div>}
       </section>}
-      {missingCloudPhoto ? <p className="catch-photo-unavailable" role="status">Původní cloudová fotografie chybí. <Link to={`/catch/${item.id}/edit`}>Přidej ji znovu</Link>.</p>
+      {(item.photos ?? []).some((photo) => photo.uploadReady === false && photo.blob instanceof Blob)
+        ? <p className="catch-photo-unavailable" role="status">Původní fotografie zůstává uložená v tomto zařízení, ale není připravená k synchronizaci. Převeď ji na JPG, PNG nebo WebP a <Link to={`/catch/${item.id}/edit`}>nahraď ji</Link>.</p>
+        : missingCloudPhoto ? <p className="catch-photo-unavailable" role="status">Původní cloudová fotografie chybí. <Link to={`/catch/${item.id}/edit`}>Přidej ji znovu</Link>.</p>
         : (item.photos ?? []).some((photo) => photo.cloud?.state === "unavailable")
           ? <p className="catch-photo-unavailable" role="status">Fotografii nelze bezpečně obnovit z uložených dat. <Link to={`/catch/${item.id}/edit`}>Přidej ji znovu</Link>, případně ji ulož jako JPG, PNG nebo WebP.</p>
         : photoLoadFailed ? <p className="catch-photo-unavailable" role="status">Cloudovou fotografii se nepodařilo načíst. <button type="button" onClick={retryPhotoLoads}>Zkusit znovu</button></p>

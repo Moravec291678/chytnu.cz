@@ -1,0 +1,38 @@
+.pwa-update-layer {
+  position: fixed;
+  z-index: 105;
+  inset: 0;
+  pointer-events: none;
+}
+
+.pwa-update-card {
+  position: absolute;
+  top: max(12px, env(safe-area-inset-top));
+  right: 12px;
+  left: 12px;
+  display: flex;
+  width: min(calc(100% - 24px), 463px);
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 auto;
+  padding: 11px 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+  color: var(--text-primary);
+  box-shadow: 0 8px 28px rgb(0 0 0 / 30%);
+  pointer-events: auto;
+}
+
+.pwa-update-card strong { font-size: 12px; }
+.pwa-update-card p { margin: 3px 0 0; color: var(--text-secondary); font-size: 10px; line-height: 1.4; }
+.pwa-update-actions { display: flex; flex: 0 0 auto; gap: 6px; }
+.pwa-update-actions button { min-height: 38px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text-primary); font: inherit; font-size: 11px; font-weight: 800; }
+.pwa-update-actions button:last-child { border-color: rgb(var(--accent-green-rgb) / 50%); color: var(--accent-green); }
+.pwa-update-actions button:disabled { opacity: .55; }
+.pwa-update-actions button:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 2px; }
+
+@media (min-width: 700px) {
+  .pwa-update-card { right: auto; left: max(16px, calc((100vw - 1100px) / 2)); width: min(420px, calc(100% - 32px)); }
+}

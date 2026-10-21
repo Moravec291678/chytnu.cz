@@ -23,23 +23,38 @@ const USER_MESSAGES = Object.freeze({
 
 export function describeSyncFailure(error, operation = {}) {
   const raw = typeof error?.code === "string" ? error.code.toLowerCase() : "";
-  const code = Object.prototype.hasOwnProperty.call(USER_MESSAGES, raw) ? raw
-    : raw === "invalid_auth" ? "firebase_token_invalid"
-      : raw === "invalid_owner" || raw === "photo_not_owned" ? "ownership_denied"
-    : raw.includes("permission-denied") ? "permission_denied"
-      : raw.includes("unauthenticated") || raw === "auth_required" ? "unauthenticated"
-        : raw.includes("unavailable") || raw.includes("network") ? "network"
-          : raw.includes("invalid-argument") || raw.includes("invalid_request") ? "rules_schema_rejection"
-            : raw.includes("cloudinary") && (raw.includes("sign") || raw.includes("grant")) ? "cloudinary_signing_failure"
-              : raw.includes("cloudinary") && raw.includes("download") ? "remote_delivery_failure"
-                : raw.includes("cloudinary") || raw.includes("photo_cloud") ? "cloudinary_upload_failure"
+  const provider = typeof error?.providerCode === "string" ? error.providerCode.toLowerCase()
+    : typeof error?.cause?.code === "string" ? error.cause.code.toLowerCase() : "";
+  const classificationCode = raw === "unknown" && provider ? provider : raw;
+  const code = classificationCode.includes("network") ? "network"
+    : Object.prototype.hasOwnProperty.call(USER_MESSAGES, classificationCode) ? classificationCode
+    : classificationCode === "invalid_auth" ? "firebase_token_invalid"
+      : classificationCode === "invalid_owner" || classificationCode === "photo_not_owned" ? "ownership_denied"
+    : classificationCode.includes("permission-denied") ? "permission_denied"
+      : classificationCode.includes("unauthenticated") || classificationCode === "auth_required" ? "unauthenticated"
+        : ["unavailable", "deadline-exceeded", "aborted", "internal", "resource-exhausted", "cancelled"]
+          .some((value) => classificationCode.includes(value)) || classificationCode.includes("network") ? "unavailable"
+          : classificationCode.includes("invalid-argument") || classificationCode.includes("failed-precondition") || classificationCode.includes("invalid_request") ? "rules_schema_rejection"
+            : classificationCode.includes("cloudinary") && (classificationCode.includes("sign") || classificationCode.includes("grant")) ? "cloudinary_signing_failure"
+              : classificationCode.includes("cloudinary") && classificationCode.includes("download") ? "remote_delivery_failure"
+                : classificationCode.includes("cloudinary") || classificationCode.includes("photo_cloud") ? "cloudinary_upload_failure"
                   : "unknown";
+  const sourceName = typeof error?.sourceName === "string" ? error.sourceName
+    : typeof error?.cause?.name === "string" ? error.cause.name
+      : typeof error?.name === "string" ? error.name : "Error";
+  const safeName = /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(sourceName) ? sourceName : "Error";
+  const providerCode = provider && /^[A-Za-z0-9_./:-]{1,100}$/.test(provider) ? provider : null;
+  const retryable = typeof error?.retryable === "boolean" ? error.retryable
+    : code !== "permission_denied" && code !== "unauthenticated" && code !== "rules_schema_rejection";
   return Object.freeze({
     code,
     message: USER_MESSAGES[code],
-    retryable: Boolean(error?.retryable || code === "unavailable" || code === "network" || code.startsWith("cloudinary_") || code === "remote_delivery_failure"),
-    entityType: operation.entityType ?? "sync",
-    operation: operation.operation ?? "pull",
-    providerCode: typeof error?.providerCode === "string" ? error.providerCode : null,
+    retryable,
+    entityType: operation.entityType ?? error?.entityType ?? "sync",
+    operation: operation.operation ?? error?.operation ?? "pull",
+    errorName: safeName,
+    providerCode,
+    firestoreStage: typeof error?.firestoreStage === "string" ? error.firestoreStage : null,
+    syncStage: typeof error?.syncStage === "string" ? error.syncStage : null,
   });
 }

@@ -51,6 +51,10 @@ async function normalizeLegacyPhotoIds(catches, ownerId, now, normalizeLegacyPho
     const normalizedPhotos = [];
     for (const photo of photos) {
       const type = photo.blob?.type || photo.type || "";
+      if (photo.uploadReady === false) {
+        normalizedPhotos.push(photo);
+        continue;
+      }
       if (!(photo.blob instanceof Blob) || ["image/jpeg", "image/png", "image/webp"].includes(type)) {
         normalizedPhotos.push(photo);
         continue;
@@ -59,14 +63,22 @@ async function normalizeLegacyPhotoIds(catches, ownerId, now, normalizeLegacyPho
         const prepared = await normalizeLegacyPhoto(photo.blob, { fileName: photo.name });
         const blob = prepared instanceof Blob ? prepared : prepared?.blob;
         if (!(blob instanceof Blob)) throw new TypeError("Příprava legacy fotografie nevrátila Blob.");
-        normalizedPhotos.push({ ...photo, blob, type: "image/jpeg", size: blob.size,
-          contentSha256: prepared.sha256 ?? await sha256Blob(blob),
-          name: String(photo.name || "fotografie").replace(/\.[^.]+$/, ".jpg"),
-          cloud: { state: PHOTO_CLOUD_STATE.LOCAL_ONLY, provider: null, objectKey: null, sha256: null } });
+        if (prepared?.uploadReady === false) {
+          normalizedPhotos.push({ ...photo, blob, type: prepared.type || blob.type || type, size: blob.size,
+            contentSha256: prepared.sha256 ?? await sha256Blob(blob), uploadReady: false,
+            cloud: { state: PHOTO_CLOUD_STATE.UNAVAILABLE, provider: null, objectKey: null, sha256: null } });
+        } else {
+          normalizedPhotos.push({ ...photo, blob, type: "image/jpeg", size: blob.size,
+            contentSha256: prepared.sha256 ?? await sha256Blob(blob), uploadReady: true,
+            name: String(photo.name || "fotografie").replace(/\.[^.]+$/, ".jpg"),
+            cloud: { state: PHOTO_CLOUD_STATE.LOCAL_ONLY, provider: null, objectKey: null, sha256: null } });
+        }
         changed = true;
       } catch {
-        // Retain the original bytes. The regular upload path reports a retryable error without deleting them.
-        normalizedPhotos.push(photo);
+        // Preserve the original local bytes and explicitly keep them out of normal uploads.
+        normalizedPhotos.push({ ...photo, uploadReady: false,
+          cloud: { state: PHOTO_CLOUD_STATE.UNAVAILABLE, provider: null, objectKey: null, sha256: null } });
+        changed = true;
       }
     }
     photos = normalizedPhotos;
@@ -144,6 +156,7 @@ export function createPhotoCloudService({
     return !operations.some((item) => item.ownerId === ownerId && item.entityType === "catch" && item.entityId === catchId);
   },
   now = () => Date.now(),
+  isVisible = () => typeof document === "undefined" || document.visibilityState !== "hidden",
   prepare = (photo) => preparePhotoForCloud(photo),
   normalizeLegacyPhoto = preparePhotoForStorageAndUpload,
   authenticatedRequest = callAuthenticatedPhotoEndpoint,
@@ -168,6 +181,7 @@ export function createPhotoCloudService({
       if (!isActive(getCurrentOwnerId, ownerId)) return queued;
       for (const photo of record.photos ?? []) {
         if (!(photo.blob instanceof Blob)) continue;
+        if (photo.uploadReady === false) continue;
         const sha256 = await sha256Blob(photo.blob);
         const objectKey = createPhotoObjectKey(ownerId, record.id, photo.id);
         const cloud = safePhotoCloud(photo);
@@ -302,6 +316,7 @@ export function createPhotoCloudService({
 
   async function runOnce(ownerId, { force = false } = {}) {
     if (!ownerId || !isActive(getCurrentOwnerId, ownerId)) return { status: "signed-out", uploaded: 0, deleted: 0, queued: 0 };
+    if (!isVisible()) return { status: "deferred", uploaded: 0, deleted: 0, queued: 0 };
     if (preflightOwnerId !== ownerId) await prepareLegacyPhotoIds(ownerId);
     preflightOwnerId = null;
     if (!await provider.isAvailable({ ownerId })) return { status: "local-only", uploaded: 0, deleted: 0, queued: 0 };
@@ -311,6 +326,7 @@ export function createPhotoCloudService({
     let error = null;
     const operations = await queue.list();
     for (const operation of operations) {
+      if (!isVisible()) break;
       if (operation.ownerId !== ownerId || !due(operation, now(), force)) continue;
       if (!isActive(getCurrentOwnerId, ownerId)) break;
       try {
@@ -350,7 +366,7 @@ export function createPhotoCloudService({
         break;
       }
     }
-    return { status: error ? "error" : "success", uploaded, deleted, queued, error: error?.message ?? "",
+    return { status: error ? "error" : isVisible() ? "success" : "deferred", uploaded, deleted, queued, error: error?.message ?? "",
       errorCode: error?.code ?? "photo_cloud_failed", errorEndpoint: error?.endpoint ?? "" };
   }
 

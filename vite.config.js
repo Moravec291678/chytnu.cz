@@ -6,7 +6,7 @@ import { execFileSync } from 'node:child_process'
 /* global process */
 
 function appBuildId() {
-  const deployed = process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA || process.env.VITE_BUILD_ID;
+  const deployed = process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA || process.env.VITE_BUILD_ID || process.env.VERCEL_DEPLOYMENT_ID;
   if (deployed) return deployed.slice(0, 12);
   try {
     const gitOptions = { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] };

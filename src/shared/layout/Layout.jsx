@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useOptionalSync } from "../../features/sync/context/syncContextValue.js";
-import { OfflineNotice } from "../components/UIStates.jsx";
+import SyncStatus from "./SyncStatus.js";
+import PwaUpdateNotice from "./PwaUpdateNotice.jsx";
 import "./Layout.css";
+import "./SyncStatus.css";
 
 function NavIcon({ name }) {
   const common = {
@@ -37,7 +39,8 @@ function Layout({ children }) {
   const tripsActive = pathname === "/trips" || pathname.startsWith("/trips/");
   return (
         <div className={pathname === "/gallery" ? "layout layout-gallery" : "layout"}>
-      {(!isOnline || sync?.status === "offline" || sync?.status === "error") && <OfflineNotice pending={sync?.pending} status={sync?.status === "error" ? "error" : "offline"} errorCode={sync?.errorCode} onRetry={sync?.retry} />}
+      <SyncStatus sync={sync} isOnline={isOnline} />
+      <PwaUpdateNotice syncing={sync?.status === "syncing"} />
       <main className="layout-main">{children}</main>
       <nav className="bottom-nav" aria-label="Hlavní navigace">
         <Link to="/" className={itemClass(homeActive)} aria-current={homeActive ? "page" : undefined}>

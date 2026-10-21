@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { describeSyncFailure } from "./syncDiagnostics.js";
+import { normalizeFirebaseError } from "./firestoreSyncAdapter.js";
 
 test("sync diagnostics distinguish permission and connectivity without leaking provider messages", () => {
   const denied = describeSyncFailure({ code: "permission_denied", message: "secret backend detail", providerCode: "firestore/permission-denied" }, { entityType: "catch", operation: "upsert" });
@@ -34,4 +35,30 @@ test("sync diagnostics distinguish auth, rules, network, and Cloudinary failures
   assert.equal(describeSyncFailure({ code: "firebase_admin_config_invalid" }).code, "firebase_admin_config_invalid");
   assert.equal(describeSyncFailure({ code: "firebase_project_mismatch" }).code, "firebase_project_mismatch");
   assert.equal(describeSyncFailure({ code: "photo_not_owned" }).code, "ownership_denied");
+});
+
+test("Firestore transient provider codes are preserved and retryable while permission failures are terminal", () => {
+  for (const code of ["unavailable", "deadline-exceeded", "aborted", "internal", "resource-exhausted", "network-request-failed"]) {
+    const normalized = normalizeFirebaseError(Object.assign(new Error("private details"), { name: "FirebaseError", code: `firestore/${code}` }));
+    const failure = describeSyncFailure(normalized);
+    assert.equal(failure.retryable, true, code);
+    assert.equal(failure.providerCode, `firestore/${code}`);
+    assert.equal(failure.errorName, "FirebaseError");
+  }
+  const denied = describeSyncFailure(normalizeFirebaseError(Object.assign(new Error("sensitive"), {
+    name: "FirebaseError", code: "firestore/permission-denied",
+  })), { entityType: "catch", operation: "pull" });
+  assert.equal(denied.code, "permission_denied");
+  assert.equal(denied.retryable, false);
+  assert.equal(denied.providerCode, "firestore/permission-denied");
+});
+
+test("provider errors without a recognized code stay retryable and expose only safe diagnostic fields", () => {
+  const raw = Object.assign(new Error("token=must-not-leak"), { name: "FirebaseError", privateData: "secret" });
+  const failure = describeSyncFailure(normalizeFirebaseError(raw), { entityType: "catch", operation: "pull" });
+  assert.equal(failure.code, "unknown");
+  assert.equal(failure.retryable, true);
+  assert.equal(failure.providerCode, null);
+  assert.equal(failure.errorName, "FirebaseError");
+  assert.doesNotMatch(JSON.stringify(failure), /token|must-not-leak|secret/);
 });

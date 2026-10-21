@@ -10,10 +10,10 @@ import { getPhotoCloudProvider } from "../../catches/data/photoCloudProvider.js"
 import { getBackendConfiguration } from "../../auth/data/backendConfig.js";
 import { SyncContext } from "./syncContextValue.js";
 import { attachSyncLifecycle } from "./syncLifecycle.js";
-import { mergeSyncForce } from "./syncRetry.js";
+import { getPullRetryAt, mergeSyncForce } from "./syncRetry.js";
 import { preparePhotoSyncService } from "./photoSyncPreparation.js";
 
-const initialState = { status: "idle", sent: 0, applied: 0, conflicts: 0, pending: 0, failed: 0, error: "", errorCode: "", errorEndpoint: "", nextRetryAt: null, lastResult: "never" };
+const initialState = { status: "idle", sent: 0, applied: 0, conflicts: 0, pending: 0, failed: 0, pullPending: 0, error: "", errorCode: "", errorEndpoint: "", nextRetryAt: null, lastResult: "never", showSyncStatus: false };
 
 function online() {
   return typeof navigator === "undefined" || navigator.onLine !== false;
@@ -22,7 +22,7 @@ function online() {
 function reportSyncDiagnostic(diagnostic) {
   let mode = "unknown";
   try { mode = getBackendConfiguration().mode; } catch { /* Auth reports invalid configuration separately. */ }
-  if (!["emulator", "staging"].includes(mode)) return;
+  if (!["emulator", "staging", "production"].includes(mode)) return;
   console.error("[ChytnuCz sync]", diagnostic);
 }
 
@@ -35,6 +35,7 @@ export function SyncProvider({ children }) {
   const runningRef = useRef(false);
   const rerunRef = useRef(false);
   const rerunForceRef = useRef(false);
+  const deferredForceRef = useRef(false);
   const runSyncRef = useRef(null);
   const userId = user?.uid ?? null;
 
@@ -43,11 +44,18 @@ export function SyncProvider({ children }) {
     return readSyncSummary(ownerId);
   }, []);
 
-  const runSync = useCallback(async (force = false) => {
+  const runSync = useCallback(async (force = false, manual = false) => {
     if (authStatus !== "ready" || !userId) return;
+    if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+      deferredForceRef.current = deferredForceRef.current || force;
+      return;
+    }
+    force = mergeSyncForce(force, deferredForceRef.current);
+    deferredForceRef.current = false;
     if (runningRef.current) {
       rerunRef.current = true;
       rerunForceRef.current = mergeSyncForce(rerunForceRef.current, force);
+      if (manual) setState((previous) => ({ ...previous, showSyncStatus: true }));
       return;
     }
     if (!online()) {
@@ -60,11 +68,16 @@ export function SyncProvider({ children }) {
       return;
     }
     runningRef.current = true;
-    setState((previous) => ({ ...previous, status: "syncing", error: "" }));
+    const startingSummary = await updateSummary(userId).catch(() => null);
+    setState((previous) => ({ ...previous, ...(startingSummary ?? {}), status: "syncing",
+      error: startingSummary?.pullErrorMessage || previous.error,
+      errorCode: startingSummary?.pullErrorCode || previous.errorCode,
+      showSyncStatus: manual || previous.status === "error" || previous.status === "offline"
+        || (startingSummary?.pending ?? previous.pending) > 0 || (startingSummary?.pullPending ?? 0) > 0 }));
     try {
       if (!serviceRef.current) {
         const { createFirestoreSyncAdapter } = await import("../data/firestoreSyncAdapter.js");
-        const port = createSyncPort(createFirestoreSyncAdapter());
+        const port = createSyncPort(createFirestoreSyncAdapter({ onDiagnostic: reportSyncDiagnostic }));
         serviceRef.current = createSyncService({ port, getCurrentOwnerId: () => {
           try { return firebaseAuth.currentUserId(); } catch { return null; }
         }, onDiagnostic: reportSyncDiagnostic });
@@ -80,7 +93,15 @@ export function SyncProvider({ children }) {
         } }),
         });
       const result = await serviceRef.current.run(userId, { force });
-      const photoResult = await photoService.run(userId, { force });
+      if (result.status === "error" && result.errorCode) reportSyncDiagnostic({ event: "pull-failed", code: result.errorCode,
+        message: result.error, retryable: result.retryable, entityType: result.entityType ?? "sync",
+        operation: result.operation ?? "pull", errorName: result.errorName ?? "Error", providerCode: result.providerCode ?? null,
+        syncStage: result.syncStage ?? null, firestoreStage: result.firestoreStage ?? null });
+      const hiddenBeforePhotoSync = typeof document !== "undefined" && document.visibilityState === "hidden";
+      if (hiddenBeforePhotoSync) deferredForceRef.current = deferredForceRef.current || force;
+      const photoResult = hiddenBeforePhotoSync
+        ? { status: "deferred", uploaded: 0, deleted: 0, queued: 0 }
+        : await photoService.run(userId, { force });
       if (photoResult.uploaded > 0) window.dispatchEvent(new Event("chytnu:local-data-restored"));
       const finalResult = photoResult.uploaded > 0
         ? await serviceRef.current.run(userId, { force })
@@ -92,24 +113,36 @@ export function SyncProvider({ children }) {
         finalResult.errorEndpoint = photoResult.errorEndpoint ?? "";
       }
       const summary = await updateSummary(userId);
+      const deferredPullFailure = summary.pullPending > 0;
+      const finalStatus = finalResult.status === "success" && deferredPullFailure ? "error" : finalResult.status;
+      const finalError = finalResult.error || (deferredPullFailure ? summary.pullErrorMessage : "");
+      const finalErrorCode = finalResult.errorCode || (deferredPullFailure ? summary.pullErrorCode : "");
+      const finalRetryable = finalResult.status === "error" ? finalResult.retryable !== false : summary.pullRetryable;
+      const meaningful = manual || result.status === "error" || photoResult.status === "error"
+        || (finalResult.sent ?? 0) > 0 || (finalResult.applied ?? 0) > 0
+        || (photoResult.uploaded ?? 0) > 0 || (photoResult.deleted ?? 0) > 0
+        || summary.pending > 0 || summary.failed > 0 || summary.pullPending > 0;
       setState({
         ...initialState,
         ...summary,
-        status: finalResult.status === "success" ? "success" : finalResult.status,
+        status: finalStatus,
         sent: (finalResult.sent ?? 0) + (photoResult.uploaded ?? 0) + (photoResult.deleted ?? 0),
         applied: finalResult.applied ?? 0,
         conflicts: Math.max(finalResult.conflicts ?? 0, summary.conflicts),
-        error: finalResult.error ?? "",
-        errorCode: finalResult.errorCode ?? "",
+        error: finalError,
+        errorCode: finalErrorCode,
         errorEndpoint: finalResult.errorEndpoint ?? summary.lastErrorEndpoint ?? "",
-        lastResult: finalResult.status === "success" ? "success" : finalResult.status,
+        nextRetryAt: finalStatus === "error" ? summary.nextRetryAt ?? getPullRetryAt(finalRetryable) : summary.nextRetryAt,
+        lastResult: finalStatus,
+        showSyncStatus: finalStatus === "error" || finalStatus === "offline" || meaningful,
       });
       if ((result.applied ?? 0) > 0) window.dispatchEvent(new Event("chytnu:local-data-restored"));
     } catch (error) {
       const summary = await updateSummary(userId).catch(() => initialState);
       const failure = describeSyncFailure(error);
       reportSyncDiagnostic({ event: "pull-failed", ...failure });
-      setState((previous) => ({ ...previous, ...summary, status: "error", error: failure.message, errorCode: failure.code }));
+      setState((previous) => ({ ...previous, ...summary, status: "error", error: failure.message,
+        errorCode: failure.code, nextRetryAt: getPullRetryAt(failure.retryable) }));
     } finally {
       runningRef.current = false;
       if (rerunRef.current) {
@@ -148,8 +181,15 @@ export function SyncProvider({ children }) {
     return () => window.clearTimeout(timer);
   }, [runSync, state.nextRetryAt, state.status, userId]);
 
-  const retry = useCallback(() => runSync(true), [runSync]);
+  const retry = useCallback(() => runSync(true, true), [runSync]);
+  const syncNow = useCallback(() => runSync(true, true), [runSync]);
+  useEffect(() => {
+    if (state.status !== "success" || !state.showSyncStatus) return undefined;
+    const timer = window.setTimeout(() => setState((previous) => previous.status === "success"
+      ? { ...previous, showSyncStatus: false } : previous), 3_500);
+    return () => window.clearTimeout(timer);
+  }, [state.status, state.showSyncStatus]);
   const backendMode = (() => { try { return getBackendConfiguration().mode; } catch { return "unavailable"; } })();
   const providerId = getPhotoCloudProvider()?.id ?? "none";
-  return <SyncContext.Provider value={{ ...state, retry, backendMode, providerId, syncEnabled: Boolean(userId && authStatus === "ready") }}>{children}</SyncContext.Provider>;
+  return <SyncContext.Provider value={{ ...state, retry, syncNow, backendMode, providerId, syncEnabled: Boolean(userId && authStatus === "ready") }}>{children}</SyncContext.Provider>;
 }
