@@ -6,11 +6,12 @@ import { execFileSync } from 'node:child_process'
 /* global process */
 
 function appBuildId() {
-  const deployed = process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA;
+  const deployed = process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA || process.env.VITE_BUILD_ID;
   if (deployed) return deployed.slice(0, 12);
   try {
-    const commit = execFileSync('git', ['rev-parse', '--short=12', 'HEAD'], { encoding: 'utf8' }).trim();
-    const dirty = execFileSync('git', ['status', '--porcelain'], { encoding: 'utf8' }).trim();
+    const gitOptions = { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] };
+    const commit = execFileSync('git', ['rev-parse', '--short=12', 'HEAD'], gitOptions).trim();
+    const dirty = execFileSync('git', ['status', '--porcelain'], gitOptions).trim();
     return `${commit}${dirty ? '-dirty' : ''}`;
   }
   catch { return 'local'; }
