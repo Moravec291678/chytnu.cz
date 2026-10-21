@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { classifyFirebaseAuthFailure, cloudinaryPublicId, createCloudinaryApi, createEnabledTestEnvironment, MAX_PHOTO_BYTES } from "./cloudinaryApi.js";
+import { classifyFirebaseAuthFailure, cloudinaryPublicId, createCloudinaryApi, createEnabledTestEnvironment, initializeFirebaseAdminContext, MAX_PHOTO_BYTES, readFirebaseServiceAccount, verifyFirebaseIdToken } from "./cloudinaryApi.js";
 
 const ownerId = "owner-a";
 const otherOwnerId = "owner-b";
@@ -25,7 +25,7 @@ function createHarness({ access = makePhotoAccess(), resource = null, deleteResu
   const api = createCloudinaryApi({
     env: createEnabledTestEnvironment(),
     verifyToken: async (token) => {
-      if (token === "invalid-token") throw new Error("private verifier details");
+      if (token === "invalid-token") throw Object.assign(new Error("private verifier details"), { code: "auth/invalid-id-token" });
       return { uid: token === "owner-b-token" ? otherOwnerId : ownerId };
     },
     getPhotoAccess: async (uid, receivedCatchId, receivedPhotoId) => {
@@ -102,7 +102,7 @@ test("photo API distinguishes missing auth, malformed bearer headers, and expire
   assert.doesNotMatch(JSON.stringify(expiredResponse.body), /private verifier detail/);
 });
 
-test("Firebase auth diagnostics log only an allowlisted class and action", async () => {
+test("Firebase auth diagnostics log only a safe route, class, step, and HTTP status", async () => {
   const logged = [];
   const api = createCloudinaryApi({
     env: createEnabledTestEnvironment(),
@@ -111,9 +111,8 @@ test("Firebase auth diagnostics log only an allowlisted class and action", async
   });
   const response = await request(api.signUpload);
   assert.equal(response.statusCode, 401);
-  assert.deepEqual(logged, [{ action: "sign", errorClass: "firebase_token_revoked" }]);
-  assert.equal(classifyFirebaseAuthFailure({ code: "unexpected-sensitive-code", message: "private" }), "firebase_unknown_auth_error");
-  assert.equal(classifyFirebaseAuthFailure({ code: "unexpected-sensitive-code", message: "private" }, "admin_init"), "firebase_admin_init_error");
+  assert.deepEqual(logged, [{ route: "/api/cloudinary/sign", errorClass: "firebase_token_revoked", step: "verifyIdToken", httpStatus: 401 }]);
+  assert.equal(classifyFirebaseAuthFailure({ code: "unexpected-sensitive-code", message: "private" }), "firebase_token_verify_error");
   assert.doesNotMatch(JSON.stringify(logged), /private|token and credential detail|unexpected-sensitive-code/);
 });
 
@@ -122,19 +121,116 @@ test("Firebase Admin project mismatches and unusable private keys receive safe c
   mismatchedCredentials.project_id = "wrong-project";
   const mismatchApi = createCloudinaryApi({ env: createEnabledTestEnvironment({ FIREBASE_SERVICE_ACCOUNT_JSON: JSON.stringify(mismatchedCredentials) }) });
   assert.deepEqual((await request(mismatchApi.capability, { method: "GET" })).body, { enabled: false, reason: "firebase_project_mismatch" });
-  assert.equal((await request(mismatchApi.signUpload)).body.error, "firebase_project_mismatch");
+  assert.equal((await request(mismatchApi.signUpload)).body.error, "server_auth_unavailable");
 
   const invalidCredentials = JSON.parse(createEnabledTestEnvironment().FIREBASE_SERVICE_ACCOUNT_JSON);
   invalidCredentials.private_key = "not a PEM key";
   const invalidApi = createCloudinaryApi({ env: createEnabledTestEnvironment({ FIREBASE_SERVICE_ACCOUNT_JSON: JSON.stringify(invalidCredentials) }) });
-  assert.deepEqual((await request(invalidApi.capability, { method: "GET" })).body, { enabled: false, reason: "firebase_admin_config_invalid" });
+  assert.deepEqual((await request(invalidApi.capability, { method: "GET" })).body, { enabled: false, reason: "firebase_admin_service_account_invalid" });
 });
 
 test("sign endpoint rejects missing Cloudinary or Firebase Admin production configuration without touching providers", async () => {
   const api = createCloudinaryApi({ env: createEnabledTestEnvironment({ FIREBASE_SERVICE_ACCOUNT_JSON: undefined }), getCloudinary: async () => { throw new Error("must not run"); } });
-  assert.deepEqual((await request(api.capability, { method: "GET", authorization: null })).body, { enabled: false, reason: "firebase_admin_config_invalid" });
+  assert.deepEqual((await request(api.capability, { method: "GET", authorization: null })).body, { enabled: false, reason: "firebase_admin_env_missing" });
   const response = await request(api.signUpload, { body: { catchId, photoId, size: 1024, contentType: "image/jpeg", sha256 } });
   assert.equal(response.statusCode, 503);
+});
+
+test("service account loading distinguishes missing env, JSON parsing, and structure failures", async () => {
+  const valid = createEnabledTestEnvironment();
+  for (const [value, code, step] of [
+    [undefined, "firebase_admin_env_missing", "env_load"],
+    ["{invalid", "firebase_admin_json_parse_error", "json_parse"],
+    ["{}", "firebase_admin_service_account_invalid", "service_account_validation"],
+  ]) {
+    const env = { ...valid, FIREBASE_SERVICE_ACCOUNT_JSON: value };
+    assert.throws(() => readFirebaseServiceAccount(env), (error) => error.code === code && error.step === step && error.statusCode === 503);
+    const logged = [];
+    const api = createCloudinaryApi({ env, logAuthFailure: (entry) => logged.push(entry) });
+    const response = await request(api.signUpload);
+    assert.equal(response.statusCode, 503);
+    assert.deepEqual(response.body, { error: "server_auth_unavailable", message: "Authentication service is temporarily unavailable." });
+    assert.deepEqual(logged, [{ route: "/api/cloudinary/sign", errorClass: code, step, httpStatus: 503 }]);
+  }
+});
+
+test("Firebase Admin initialization identifies each failing import and SDK call", async () => {
+  const account = readFirebaseServiceAccount(createEnabledTestEnvironment());
+  const app = { name: "chytnucz-cloudinary-server" };
+  const modules = {
+    importApp: async () => ({ getApps: () => [], cert: () => ({}), initializeApp: () => app }),
+    importAuth: async () => ({ getAuth: () => ({ verifyIdToken: async () => ({ uid: ownerId }) }) }),
+    importFirestore: async () => ({ getFirestore: () => ({}), Timestamp: {} }),
+  };
+  const failures = [
+    ["importApp", "firebase_admin_import_app_error", "import_app", "importApp"],
+    ["importAuth", "firebase_admin_import_auth_error", "import_auth", "importAuth"],
+    ["importFirestore", "firebase_admin_import_firestore_error", "import_firestore", "importFirestore"],
+    ["getApps", "firebase_admin_initialize_app_error", "initializeApp", "importApp"],
+    ["cert", "firebase_admin_cert_error", "cert", "importApp"],
+    ["initializeApp", "firebase_admin_initialize_app_error", "initializeApp", "importApp"],
+    ["getAuth", "firebase_admin_get_auth_error", "getAuth", "importAuth"],
+    ["getFirestore", "firebase_admin_get_firestore_error", "getFirestore", "importFirestore"],
+  ];
+  for (const [failure, code, step, moduleName] of failures) {
+    const override = { ...modules };
+    if (failure.startsWith("import")) override[moduleName] = async () => { throw new Error("private credential detail"); };
+    else {
+      const original = await modules[moduleName]();
+      override[moduleName] = async () => ({ ...original, [failure]: () => { throw new Error("private credential detail"); } });
+    }
+    await assert.rejects(initializeFirebaseAdminContext(account, override), (error) => {
+      assert.equal(error.code, code);
+      assert.equal(error.step, step);
+      assert.equal(error.statusCode, 503);
+      assert.doesNotMatch(error.message, /private credential detail/);
+      return true;
+    }, failure);
+  }
+  assert.ok((await initializeFirebaseAdminContext(account, modules)).auth);
+});
+
+test("existing named Firebase app is reused without another cert or initializeApp", async () => {
+  const account = readFirebaseServiceAccount(createEnabledTestEnvironment());
+  const existing = { name: "chytnucz-cloudinary-server" };
+  const context = await initializeFirebaseAdminContext(account, {
+    importApp: async () => ({ getApps: () => [existing], cert: () => { throw new Error("unexpected cert"); }, initializeApp: () => { throw new Error("unexpected init"); } }),
+    importAuth: async () => ({ getAuth: (app) => { assert.equal(app, existing); return {}; } }),
+    importFirestore: async () => ({ getFirestore: (app) => { assert.equal(app, existing); return {}; }, Timestamp: {} }),
+  });
+  assert.ok(context.auth);
+  assert.ok(context.db);
+});
+
+test("unknown Firebase token verification errors return 503 without leaking SDK details", async () => {
+  const logged = [];
+  const api = createCloudinaryApi({
+    env: createEnabledTestEnvironment(),
+    verifyToken: async () => { throw Object.assign(new Error("private Firebase SDK detail"), { step: "private credential path" }); },
+    logAuthFailure: (entry) => logged.push(entry),
+  });
+  const response = await request(api.signUpload);
+  assert.equal(response.statusCode, 503);
+  assert.deepEqual(response.body, { error: "server_auth_unavailable", message: "Authentication service is temporarily unavailable." });
+  assert.deepEqual(logged, [{ route: "/api/cloudinary/sign", errorClass: "firebase_token_verify_error", step: "verifyIdToken", httpStatus: 503 }]);
+  assert.doesNotMatch(JSON.stringify({ logged, response: response.body }), /private Firebase SDK detail|private credential path/);
+});
+
+test("production token verifier accepts valid tokens, keeps invalid tokens at 401, and maps SDK failures to 503", async () => {
+  const calls = [];
+  const identity = await verifyFirebaseIdToken({ verifyIdToken: async (token, checkRevoked) => {
+    calls.push({ token, checkRevoked });
+    return { uid: ownerId };
+  } }, "test-token");
+  assert.deepEqual(identity, { uid: ownerId });
+  assert.deepEqual(calls, [{ token: "test-token", checkRevoked: true }]);
+
+  for (const code of ["auth/id-token-expired", "auth/id-token-revoked", "auth/argument-error", "auth/invalid-id-token"]) {
+    await assert.rejects(verifyFirebaseIdToken({ verifyIdToken: async () => { throw Object.assign(new Error("private"), { code }); } }, "test-token"),
+      (error) => error.code === code && error.step === "verifyIdToken" && error.statusCode === 401 && error.message !== "private");
+  }
+  await assert.rejects(verifyFirebaseIdToken({ verifyIdToken: async () => { throw new Error("private credential detail"); } }, "test-token"),
+    (error) => error.code === "firebase_token_verify_error" && error.step === "verifyIdToken" && error.statusCode === 503 && !error.message.includes("private"));
 });
 
 test("Cloudinary upload response is verified against actual authenticated image metadata", async () => {

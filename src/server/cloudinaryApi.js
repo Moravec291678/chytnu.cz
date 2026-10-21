@@ -61,22 +61,55 @@ function deletePhotoAccess(access, uid, catchId, photoId) {
       || access.catchRecord.photoRefs?.[photoId] !== true);
 }
 
-function configurationError(env) {
+const AUTH_ROUTES = Object.freeze({
+  sign: "/api/cloudinary/sign", verify: "/api/cloudinary/verify-upload",
+  delivery: "/api/cloudinary/delivery", delete: "/api/cloudinary/delete",
+  metadata: "/api/cloudinary/metadata",
+});
+const TOKEN_REJECTION_CODES = new Set([
+  "auth/id-token-expired", "auth/id-token-revoked", "auth/argument-error", "auth/invalid-id-token",
+]);
+const ADMIN_ERROR_CODES = new Set([
+  "firebase_admin_env_missing", "firebase_admin_json_parse_error", "firebase_admin_service_account_invalid",
+  "firebase_project_mismatch", "firebase_admin_import_app_error", "firebase_admin_import_auth_error",
+  "firebase_admin_import_firestore_error", "firebase_admin_cert_error", "firebase_admin_initialize_app_error",
+  "firebase_admin_get_auth_error", "firebase_admin_get_firestore_error", "firebase_token_verify_error",
+]);
+const AUTH_STEPS = new Set([
+  "env_load", "json_parse", "service_account_validation", "import_app", "import_auth", "import_firestore",
+  "cert", "initializeApp", "getAuth", "getFirestore", "verifyIdToken",
+]);
+
+function adminError(code, step) {
+  return Object.assign(new Error("Authentication service is temporarily unavailable."), { code, step, statusCode: 503 });
+}
+
+function cloudinaryConfigurationError(env) {
   if (env.PHOTO_CLOUD_PROVIDER !== "cloudinary"
     || !env.CLOUDINARY_CLOUD_NAME || !env.CLOUDINARY_API_KEY || !env.CLOUDINARY_API_SECRET
     || !/^[a-z0-9-]{1,64}$/i.test(env.CLOUDINARY_CLOUD_NAME)
     || !/^[0-9]{5,32}$/.test(env.CLOUDINARY_API_KEY)) return "photo_cloud_unavailable";
-  let firebaseCredentials;
-  try { firebaseCredentials = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT_JSON ?? ""); }
-  catch { return "firebase_admin_config_invalid"; }
-  if (!firebaseCredentials || typeof firebaseCredentials !== "object" || Array.isArray(firebaseCredentials)
-    || typeof firebaseCredentials.private_key !== "string" || typeof firebaseCredentials.client_email !== "string") {
-    return "firebase_admin_config_invalid";
-  }
-  if (firebaseCredentials.project_id !== FIREBASE_PROJECT_ID) return "firebase_project_mismatch";
-  try { createPrivateKey(firebaseCredentials.private_key); }
-  catch { return "firebase_admin_config_invalid"; }
   return null;
+}
+
+export function readFirebaseServiceAccount(env) {
+  const raw = env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  if (typeof raw !== "string" || !raw.trim()) throw adminError("firebase_admin_env_missing", "env_load");
+  let serviceAccount;
+  try { serviceAccount = JSON.parse(raw); }
+  catch { throw adminError("firebase_admin_json_parse_error", "json_parse"); }
+  if (!serviceAccount || typeof serviceAccount !== "object" || Array.isArray(serviceAccount)
+    || serviceAccount.type !== "service_account"
+    || typeof serviceAccount.client_email !== "string" || !serviceAccount.client_email.trim()
+    || typeof serviceAccount.private_key !== "string" || !serviceAccount.private_key.trim()) {
+    throw adminError("firebase_admin_service_account_invalid", "service_account_validation");
+  }
+  if (serviceAccount.project_id !== FIREBASE_PROJECT_ID) {
+    throw adminError("firebase_project_mismatch", "service_account_validation");
+  }
+  try { createPrivateKey(serviceAccount.private_key); }
+  catch { throw adminError("firebase_admin_service_account_invalid", "service_account_validation"); }
+  return serviceAccount;
 }
 
 function disabledResponse(res) {
@@ -89,17 +122,13 @@ function safeError(res, error) {
   return send(res, status, { error: code, message: status === 401 ? "Authentication is required." : status === 403 ? "Photo access is not allowed." : status === 429 ? "Photo cloud request limit reached." : "Photo cloud request could not be completed." });
 }
 
-export function classifyFirebaseAuthFailure(error, phase = "token_verification") {
-  if (error?.code === "firebase_admin_not_configured") return "firebase_admin_config_missing";
-  if (error?.code === "firebase_admin_config_invalid") return "firebase_admin_config_invalid";
-  if (error?.code === "firebase_project_mismatch") return "firebase_project_mismatch";
-  if (["app/invalid-credential", "auth/invalid-credential"].includes(error?.code)) return "firebase_invalid_credential";
-  if (phase === "admin_init") return "firebase_admin_init_error";
+export function classifyFirebaseAuthFailure(error) {
+  if (ADMIN_ERROR_CODES.has(error?.code)) return error.code;
   if (error?.code === "auth/id-token-expired") return "firebase_token_expired";
   if (error?.code === "auth/id-token-revoked") return "firebase_token_revoked";
   if (error?.code === "auth/argument-error") return "firebase_argument_error";
   if (error?.code === "auth/invalid-id-token") return "firebase_token_invalid";
-  return "firebase_unknown_auth_error";
+  return "firebase_token_verify_error";
 }
 
 export function createCloudinaryApi({
@@ -117,10 +146,15 @@ export function createCloudinaryApi({
       send(res, 405, { error: "method_not_allowed", message: "Use POST." });
       return null;
     }
-    const configError = configurationError(env);
-    if (configError) {
-      if (configError === "photo_cloud_unavailable") disabledResponse(res);
-      else send(res, 503, { error: configError, message: "Photo cloud service is temporarily unavailable." });
+    if (cloudinaryConfigurationError(env)) {
+      disabledResponse(res);
+      return null;
+    }
+    let serviceAccount;
+    try { serviceAccount = readFirebaseServiceAccount(env); }
+    catch (error) {
+      logAuthFailure({ route: AUTH_ROUTES[action], errorClass: classifyFirebaseAuthFailure(error), step: AUTH_STEPS.has(error?.step) ? error.step : "service_account_validation", httpStatus: 503 });
+      send(res, 503, { error: "server_auth_unavailable", message: "Authentication service is temporarily unavailable." });
       return null;
     }
     const authorization = req.headers?.authorization ?? req.headers?.Authorization;
@@ -134,18 +168,17 @@ export function createCloudinaryApi({
       return null;
     }
     let identity;
-    try { identity = await verifyToken(bearer[1], action); } catch (error) {
-      logAuthFailure({ action, errorClass: classifyFirebaseAuthFailure(error) });
-      if (["auth/id-token-expired", "auth/id-token-revoked", "auth/argument-error"].includes(error?.code)) {
+    try { identity = await verifyToken(bearer[1], action, serviceAccount); } catch (error) {
+      const rejectedToken = TOKEN_REJECTION_CODES.has(error?.code);
+      const status = rejectedToken ? 401 : 503;
+      const errorClass = classifyFirebaseAuthFailure(error);
+      logAuthFailure({ route: AUTH_ROUTES[action], errorClass, step: AUTH_STEPS.has(error?.step) ? error.step : "verifyIdToken", httpStatus: status });
+      if (rejectedToken) {
         const code = error.code === "auth/id-token-expired" ? "firebase_token_expired" : "invalid_auth";
         send(res, 401, { error: code, message: "Authentication is required." });
         return null;
       }
-      if (error?.statusCode === 503 || error?.code === "app/invalid-credential" || error?.code === "auth/invalid-credential") {
-        send(res, 503, { error: error?.statusCode === 503 ? error.code : "firebase_admin_config_invalid", message: "Photo cloud service is temporarily unavailable." });
-        return null;
-      }
-      send(res, 401, { error: "invalid_auth", message: "Authentication is required." });
+      send(res, 503, { error: "server_auth_unavailable", message: "Authentication service is temporarily unavailable." });
       return null;
     }
     if (typeof identity?.uid !== "string" || !identity.uid || identity.uid.length > 128 || identity.uid.includes("/")) {
@@ -311,39 +344,54 @@ export function createCloudinaryApi({
       res.setHeader?.("Allow", "GET");
       return send(res, 405, { error: "method_not_allowed", message: "Use GET." });
     }
-    const error = configurationError(env);
-    return send(res, 200, { enabled: error === null, ...(error && error !== "photo_cloud_unavailable" ? { reason: error } : {}) });
+    const cloudError = cloudinaryConfigurationError(env);
+    if (cloudError) return send(res, 200, { enabled: false });
+    try { readFirebaseServiceAccount(env); }
+    catch (error) { return send(res, 200, { enabled: false, reason: classifyFirebaseAuthFailure(error) }); }
+    return send(res, 200, { enabled: true });
   }
 
   return { signUpload, verifyUpload, delivery, remove, metadata, capability };
 }
 
 let adminContextPromise;
-async function getAdminContext(env) {
-  if (!env.FIREBASE_SERVICE_ACCOUNT_JSON) throw Object.assign(new Error("Firebase Admin credentials are not configured."), { statusCode: 503, code: "firebase_admin_not_configured" });
-  adminContextPromise ??= (async () => {
-    let serviceAccount;
-    try { serviceAccount = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT_JSON); }
-    catch { throw Object.assign(new Error("Firebase Admin credentials are invalid."), { statusCode: 503, code: "firebase_admin_config_invalid" }); }
-    if (!serviceAccount || typeof serviceAccount !== "object" || Array.isArray(serviceAccount)) {
-      throw Object.assign(new Error("Firebase Admin credentials are invalid."), { statusCode: 503, code: "firebase_admin_config_invalid" });
-    }
-    if (serviceAccount.project_id !== FIREBASE_PROJECT_ID || typeof serviceAccount.private_key !== "string"
-      || typeof serviceAccount.client_email !== "string") {
-      const projectMismatch = serviceAccount.project_id !== FIREBASE_PROJECT_ID;
-      throw Object.assign(new Error(projectMismatch ? "Firebase Admin credentials do not match the configured project." : "Firebase Admin credentials are invalid."), {
-        statusCode: 503, code: projectMismatch ? "firebase_project_mismatch" : "firebase_admin_config_invalid",
-      });
-    }
-    const [appApi, authApi, firestoreApi] = await Promise.all([
-      import("firebase-admin/app"), import("firebase-admin/auth"), import("firebase-admin/firestore"),
-    ]);
-    const appName = "chytnucz-cloudinary-server";
-    const app = appApi.getApps().find((candidate) => candidate.name === appName)
-      ?? appApi.initializeApp({ credential: appApi.cert(serviceAccount), projectId: FIREBASE_PROJECT_ID }, appName);
-    return { auth: authApi.getAuth(app), db: firestoreApi.getFirestore(app), Timestamp: firestoreApi.Timestamp };
-  })();
+async function adminStep(code, step, operation) {
+  try { return await operation(); }
+  catch { throw adminError(code, step); }
+}
+
+export async function initializeFirebaseAdminContext(serviceAccount, {
+  importApp = () => import("firebase-admin/app"),
+  importAuth = () => import("firebase-admin/auth"),
+  importFirestore = () => import("firebase-admin/firestore"),
+} = {}) {
+  const appApi = await adminStep("firebase_admin_import_app_error", "import_app", importApp);
+  const authApi = await adminStep("firebase_admin_import_auth_error", "import_auth", importAuth);
+  const firestoreApi = await adminStep("firebase_admin_import_firestore_error", "import_firestore", importFirestore);
+  const appName = "chytnucz-cloudinary-server";
+  let app = await adminStep("firebase_admin_initialize_app_error", "initializeApp", () => appApi.getApps().find((candidate) => candidate.name === appName));
+  if (!app) {
+    const credential = await adminStep("firebase_admin_cert_error", "cert", () => appApi.cert(serviceAccount));
+    app = await adminStep("firebase_admin_initialize_app_error", "initializeApp", () => appApi.initializeApp({ credential, projectId: FIREBASE_PROJECT_ID }, appName));
+  }
+  const auth = await adminStep("firebase_admin_get_auth_error", "getAuth", () => authApi.getAuth(app));
+  const db = await adminStep("firebase_admin_get_firestore_error", "getFirestore", () => firestoreApi.getFirestore(app));
+  return { auth, db, Timestamp: firestoreApi.Timestamp };
+}
+
+async function getAdminContext(env, serviceAccount) {
+  adminContextPromise ??= initializeFirebaseAdminContext(serviceAccount ?? readFirebaseServiceAccount(env));
   try { return await adminContextPromise; } catch (error) { adminContextPromise = null; throw error; }
+}
+
+export async function verifyFirebaseIdToken(auth, token) {
+  try { return await auth.verifyIdToken(token, true); }
+  catch (error) {
+    if (TOKEN_REJECTION_CODES.has(error?.code)) {
+      throw Object.assign(adminError("firebase_token_verify_error", "verifyIdToken"), { code: error.code, statusCode: 401 });
+    }
+    throw adminError("firebase_token_verify_error", "verifyIdToken");
+  }
 }
 
 async function getCloudinarySdk(env) {
@@ -384,23 +432,15 @@ async function consumeDistributedRateLimit(env, uid, action, limit, windowMs, no
 export function createProductionCloudinaryApi({ env = globalThis.process?.env ?? {}, now = () => Date.now() } = {}) {
   return createCloudinaryApi({
     env,
-    verifyToken: async (token, action) => {
-      let auth;
-      try { auth = (await getAdminContext(env)).auth; }
-      catch (error) {
-        console.warn("cloudinary_auth_failure", { action, errorClass: classifyFirebaseAuthFailure(error, "admin_init") });
-        throw error;
-      }
-      try { return await auth.verifyIdToken(token, true); }
-      catch (error) {
-        console.warn("cloudinary_auth_failure", { action, errorClass: classifyFirebaseAuthFailure(error) });
-        throw error;
-      }
+    verifyToken: async (token, _action, serviceAccount) => {
+      const { auth } = await getAdminContext(env, serviceAccount);
+      return verifyFirebaseIdToken(auth, token);
     },
     getPhotoAccess: (uid, catchId, photoId) => getPhotoAccess(env, uid, catchId, photoId),
     consumeRateLimit: (uid, action, limit, windowMs, nowValue) => consumeDistributedRateLimit(env, uid, action, limit, windowMs, nowValue),
     getCloudinary: getCloudinarySdk,
     now,
+    logAuthFailure: (diagnostic) => console.warn("cloudinary_auth_failure", diagnostic),
   });
 }
 
@@ -413,7 +453,7 @@ export function createEnabledTestEnvironment(overrides = {}) {
     CLOUDINARY_API_KEY: "1234567890",
     CLOUDINARY_API_SECRET: "test-only-secret",
     FIREBASE_SERVICE_ACCOUNT_JSON: JSON.stringify({
-      project_id: FIREBASE_PROJECT_ID, private_key: testPrivateKey, client_email: "test@example.test",
+      type: "service_account", project_id: FIREBASE_PROJECT_ID, private_key: testPrivateKey, client_email: "test@example.test",
     }),
     ...overrides,
   };
