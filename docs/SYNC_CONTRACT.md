@@ -18,7 +18,11 @@ Po přihlášení se synchronizují pouze záznamy se stejným `ownerId`. Ownerl
 
 ## Fotografie
 
-Fotografie jsou local-only. Blob zůstává v IndexedDB a v uživatelem vytvořené lokální záloze. Firestore projekce obsahuje pouze `id`, `name`, `type`, `size` a volitelně `focalX`, `focalY`, `zoom`. Adapter neodesílá Blob, `storagePath` ani `sha256`.
+IndexedDB zůstává zdrojem pravdy a obsahuje originální Blob. Výchozí provider `none` nic nenahrává a zachovává dosavadní local-only chování. Volitelný provider je oddělený od uložení Catch: lokální zápis doběhne první a upload běží později. Jeden Catch stále používá jednu outbox operaci a jeden transakční zápis synchronizátoru. Firestore ukládá odkazy `photoRefs` a `primaryPhotoId` na dokumentu Catch; každé foto metadata je v `catches/{catchId}/photos/{photoId}` se stabilním `sortIndex`. Limit deseti odkazů kontrolují pravidla na Catch.
+
+Pravidla validují u každého foto dokumentu přesnou cestu, ID shodné s ID dokumentu, MIME, velikost do 10 MB, rámování, pořadí, tombstone a uzavřená pole včetně provider-independent `cloud` bloku. Po úspěšném uploadu obsahuje soukromý Firestore dokument pouze ID provideru, deterministický object key a SHA-256; žádnou URL, podpis ani secret. Vlastník i Catch jsou svázány cestou dokumentu pod UID přihlášeného uživatele a rodičovským Catch; tato pole se v payloadu neduplikují. Rodič omezuje primary ID na některý ze svých odkazů. Pravidla neprovádějí pro každý photo zápis samostatný `existsAfter` na fyzický primární dokument, protože by se jeho opakované vyhodnocování nevešlo do limitu výrazů Firestore při dávce deseti fotek. Adapter vytváří dokumenty a odkazy společně v jedné transakci.
+
+Legacy Catch dokumenty s vloženým polem `photos` se při čtení dál podporují. Při dalším Catch zápisu adapter převede fotografie na samostatné dokumenty a z rodiče odstraní vložené pole. Blob se neposílá. Odstraněné fotografie zůstávají jako tombstones; smazání Catch zapisuje tombstones fotografií ve stejné operaci. Object-store upload/delete úlohy jsou samostatné trvalé operace ve stávající IndexedDB outbox; nejsou součástí Firestore entity sync workeru.
 
 Pokud má zařízení Blob stejné fotografie, remote metadata update jej zachová. Nové zařízení bez bytes zachová metadata-only stav a UI použije fallback. Firebase Storage není součástí runtime, konfigurace emulátoru ani testů.
 
@@ -30,5 +34,5 @@ Development a staging zapisují do konzole pouze bezpečný kontext: typ entity,
 
 - `npm test`: lokální repository, retry, idempotence, konflikt, scope a UI copy.
 - `npm run test:rules`: Firestore pravidla a default deny.
-- `npm run test:sync`: SDK/Auth/Firestore transakce pro Catch, Trip, Water a framing metadata.
+- `npm run test:sync`: SDK/Auth/Firestore transakce pro Catch, Trip, Water, deset dokumentů fotografií, framing, primary změnu a tombstones.
 - `npm run test:photos`: local-only Blob, metadata projekce, druhé zařízení bez bytes a absence Storage runtime.

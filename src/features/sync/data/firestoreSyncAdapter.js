@@ -57,6 +57,14 @@ function entityRef(db, ownerId, entityType, entityId) {
   return doc(db, "users", ownerId, collectionName, entityId);
 }
 
+function catchPhotoCollectionRef(db, ownerId, catchId) {
+  return collection(db, "users", ownerId, "catches", catchId, "photos");
+}
+
+function catchPhotoRef(db, ownerId, catchId, photoId) {
+  return doc(catchPhotoCollectionRef(db, ownerId, catchId), photoId);
+}
+
 function requireValue(value, fallback) {
   return value === undefined ? fallback : value;
 }
@@ -122,6 +130,26 @@ export function toRemoteRecord(entityType, record, ownerId) {
       moderationStatus: requireValue(record.moderationStatus, "pending"),
     };
   }
+  const photos = (record.photos ?? []).map((photo) => ({
+    id: photo.id,
+    name: photo.name ?? "fotografie",
+    type: photo.type ?? photo.blob?.type ?? "image/jpeg",
+    size: photo.blob?.size ?? photo.size ?? 0,
+    focalX: Number.isFinite(photo.focalX) ? photo.focalX : 0.5,
+    focalY: Number.isFinite(photo.focalY) ? photo.focalY : 0.5,
+    zoom: Number.isFinite(photo.zoom) ? photo.zoom : 1,
+    cloud: photo.cloud?.state === "synced" && typeof photo.cloud.provider === "string"
+      && typeof photo.cloud.objectKey === "string" && typeof photo.cloud.sha256 === "string"
+      ? { state: "synced", provider: photo.cloud.provider, objectKey: photo.cloud.objectKey, sha256: photo.cloud.sha256 }
+      : { state: "localOnly", provider: null, objectKey: null, sha256: null },
+  }));
+  if (photos.length > 10 || photos.some((photo) => typeof photo.id !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(photo.id))
+    || new Set(photos.map((photo) => photo.id)).size !== photos.length) {
+    throw new SyncPortError("invalid_request", "Fotografie úlovku nemají platná nebo jedinečná ID, případně překračují limit 10 položek.");
+  }
+  const primaryPhotoId = photos.some((photo) => photo.id === record.primaryPhotoId)
+    ? record.primaryPhotoId
+    : photos[0]?.id ?? null;
   return {
     ...common,
     caughtAt: requireValue(record.caughtAt, record.createdAt),
@@ -146,23 +174,24 @@ export function toRemoteRecord(entityType, record, ownerId) {
     method: requireValue(record.method, null),
     baits: requireValue(record.baits, []),
     result: requireValue(record.result, "unspecified"),
-    photos: (record.photos ?? []).map((photo) => ({
-      id: photo.id,
-      name: photo.name ?? "fotografie",
-      type: photo.type ?? photo.blob?.type ?? "image/jpeg",
-      size: photo.blob?.size ?? photo.size ?? 0,
-      ...(Number.isFinite(photo.focalX) ? { focalX: photo.focalX } : {}),
-      ...(Number.isFinite(photo.focalY) ? { focalY: photo.focalY } : {}),
-      ...(Number.isFinite(photo.zoom) ? { zoom: photo.zoom } : {}),
-    })),
+    photos,
+    photoRefs: Object.fromEntries(photos.map((photo) => [photo.id, true])),
+    primaryPhotoId,
     notes: requireValue(record.notes, ""),
     isFavorite: Boolean(record.isFavorite),
     privacy: normalizeCatchPrivacy(record.privacy),
   };
 }
 
-function fromRemoteDocument(entityType, data) {
+function fromRemoteDocument(entityType, data, photos = undefined) {
   const record = { ...data };
+  if (entityType === "catch") {
+    const legacyPhotos = Array.isArray(record.photos) ? record.photos : [];
+    record.photos = photos ?? legacyPhotos;
+    record.primaryPhotoId = record.primaryPhotoId ?? legacyPhotos[0]?.id ?? record.photos[0]?.id ?? null;
+    delete record.photoIds;
+    delete record.photoRefs;
+  }
   const serverRevision = record.serverRevision;
   const lastOperationId = record.lastOperationId;
   const clientLocalRevision = record.clientLocalRevision;
@@ -190,6 +219,55 @@ function fromRemoteDocument(entityType, data) {
     deletedAt: deletedAt ?? null,
     photoState: photoState ?? "none",
   };
+}
+
+function toRemotePhotoDocument(photo) {
+  return {
+    id: photo.id,
+    name: photo.name,
+    type: photo.type,
+    size: photo.size,
+    focalX: photo.focalX,
+    focalY: photo.focalY,
+    zoom: photo.zoom,
+    sortIndex: photo.sortIndex,
+    deleted: false,
+    deletedAt: null,
+    cloud: photo.cloud ?? { state: "localOnly", provider: null, objectKey: null, sha256: null },
+  };
+}
+
+function photoTombstone(photo, nowValue) {
+  return { ...photo, deleted: true, deletedAt: nowValue };
+}
+
+async function readCatchPhotos(db, ownerId, catchId, data) {
+  if (Array.isArray(data.photos)) return data.photos;
+  const ids = data.photoRefs && typeof data.photoRefs === "object"
+    ? Object.keys(data.photoRefs).filter((photoId) => /^[A-Za-z0-9_-]{1,128}$/.test(photoId))
+    : Array.isArray(data.photoIds) ? data.photoIds : [];
+  const snapshots = await Promise.all(ids.map((photoId) => getDoc(catchPhotoRef(db, ownerId, catchId, photoId))));
+  return snapshots.flatMap((snapshot) => {
+    if (!snapshot.exists()) return [];
+    const photo = snapshot.data();
+    if (photo.deleted) return [];
+    return [{
+      id: photo.id,
+      name: photo.name,
+      type: photo.type,
+      size: photo.size,
+      focalX: photo.focalX,
+      focalY: photo.focalY,
+      zoom: photo.zoom,
+      sortIndex: photo.sortIndex,
+      cloud: photo.cloud ?? { state: "localOnly", provider: null, objectKey: null, sha256: null },
+    }];
+  }).sort((left, right) => left.sortIndex - right.sortIndex || left.id.localeCompare(right.id))
+    .map((photo) => {
+      const localPhoto = { ...photo };
+      delete localPhoto.sortIndex;
+      return localPhoto;
+    });
 }
 
 function stableStringify(value) {
@@ -243,7 +321,11 @@ export function createFirestoreSyncAdapter({ now = () => new Date().toISOString(
       try {
         const snapshot = await getDoc(entityRef(db, ownerId, entityType, entityId));
         if (!snapshot.exists()) return null;
-        const remote = fromRemoteDocument(entityType, snapshot.data());
+        const data = snapshot.data();
+        const photos = entityType === "catch" && !data.deleted
+          ? await readCatchPhotos(db, ownerId, entityId, data)
+          : undefined;
+        const remote = fromRemoteDocument(entityType, data, photos);
         return remote.deleted
           ? { ...remote, entityType, entityId }
           : remote;
@@ -253,6 +335,9 @@ export function createFirestoreSyncAdapter({ now = () => new Date().toISOString(
     async write({ ownerId, entityType, entityId, record, expectedRevision, operationId, localRevision }) {
       requireActiveOwner(ownerId, currentUserId);
       const projected = toRemoteRecord(entityType, record, ownerId);
+      const photos = entityType === "catch" ? projected.photos : [];
+      const parentContent = { ...projected };
+      delete parentContent.photos;
       const requestDigest = await digest({ entityType, entityId, ownerId, operationId, localRevision, operation: "upsert", record: projected });
       const ref = entityRef(db, ownerId, entityType, entityId);
       const receipt = doc(db, "users", ownerId, "syncOperations", receiptId(operationId, localRevision));
@@ -285,6 +370,16 @@ export function createFirestoreSyncAdapter({ now = () => new Date().toISOString(
             throw new SyncPortError("conflict", "Starší lokální změna nemůže přepsat novější stav.");
           }
 
+          const previousPhotoIds = entityType === "catch"
+            ? (current?.photoRefs && typeof current.photoRefs === "object"
+              ? Object.keys(current.photoRefs)
+              : Array.isArray(current?.photoIds) ? current.photoIds : (current?.photos ?? []).map((photo) => photo.id).filter(Boolean))
+            : [];
+          const photoIdsToRead = [...new Set([...previousPhotoIds, ...photos.map((photo) => photo.id)])];
+          const photoRefs = photoIdsToRead.map((photoId) => catchPhotoRef(db, ownerId, entityId, photoId));
+          const photoSnapshots = await Promise.all(photoRefs.map((photoRef) => transaction.get(photoRef)));
+          const currentPhotos = new Map(photoIdsToRead.map((photoId, index) => [photoId, photoSnapshots[index]]));
+
           const revision = (currentRevision ?? 0) + 1;
           const sequence = (stateSnapshot.exists() ? stateSnapshot.data().cursor : 0) + 1;
           const receiptDocument = {
@@ -293,7 +388,7 @@ export function createFirestoreSyncAdapter({ now = () => new Date().toISOString(
             kind: "upsert", createdAt: now(),
           };
           const remoteDocument = {
-            ...projected,
+            ...parentContent,
             entityType,
             serverRevision: revision,
             syncSequence: sequence,
@@ -303,8 +398,20 @@ export function createFirestoreSyncAdapter({ now = () => new Date().toISOString(
             lastReceiptId: receipt.id,
             deleted: false,
             deletedAt: null,
-            photoState: entityType === "catch" && projected.photos.length > 0 ? "metadata-only" : "none",
+            photoState: entityType === "catch" && photos.length > 0 ? "metadata-only" : "none",
           };
+          if (entityType === "catch") {
+            const desiredPhotoIds = new Set(photos.map((photo) => photo.id));
+            for (const [sortIndex, photo] of photos.entries()) {
+                transaction.set(catchPhotoRef(db, ownerId, entityId, photo.id), toRemotePhotoDocument({ ...photo, sortIndex }));
+            }
+            for (const previousPhotoId of previousPhotoIds) {
+              if (desiredPhotoIds.has(previousPhotoId)) continue;
+              const previousSnapshot = currentPhotos.get(previousPhotoId);
+              if (!previousSnapshot?.exists() || previousSnapshot.data().deleted) continue;
+              transaction.set(catchPhotoRef(db, ownerId, entityId, previousPhotoId), photoTombstone(previousSnapshot.data(), now()));
+            }
+          }
           transaction.set(ref, remoteDocument);
           transaction.set(receipt, receiptDocument);
           transaction.set(changeRef, receiptDocument);
@@ -345,6 +452,11 @@ export function createFirestoreSyncAdapter({ now = () => new Date().toISOString(
           if (current && isDeletedTombstone(current)) {
             throw new SyncPortError("conflict", "Záznam byl již smazán.");
           }
+          const photoIds = entityType === "catch"
+            ? (current?.photoRefs && typeof current.photoRefs === "object" ? Object.keys(current.photoRefs) : [])
+            : [];
+          const photoRefs = photoIds.map((photoId) => catchPhotoRef(db, ownerId, entityId, photoId));
+          const photoSnapshots = await Promise.all(photoRefs.map((photoRef) => transaction.get(photoRef)));
           const revision = (currentRevision ?? 0) + 1;
           const sequence = (stateSnapshot.exists() ? stateSnapshot.data().cursor : 0) + 1;
           const tombstone = {
@@ -367,6 +479,11 @@ export function createFirestoreSyncAdapter({ now = () => new Date().toISOString(
             serverRevision: revision, sequence, localRevision, operationDigest: requestDigest,
             kind: "delete", createdAt: now(),
           };
+          photoSnapshots.forEach((photoSnapshot, index) => {
+            if (photoSnapshot.exists() && !photoSnapshot.data().deleted) {
+              transaction.set(photoRefs[index], photoTombstone(photoSnapshot.data(), now()));
+            }
+          });
           transaction.set(ref, tombstone);
           transaction.set(receipt, receiptDocument);
           transaction.set(changeRef, receiptDocument);
@@ -389,8 +506,10 @@ export function createFirestoreSyncAdapter({ now = () => new Date().toISOString(
         const hasMore = snapshot.size > pageSize;
         const documents = snapshot.docs.slice(0, pageSize);
         return {
-          items: documents.filter((item) => !item.data().deleted).map((item) => ({
-            ...fromRemoteDocument(entityType, item.data()), entityType, entityId: item.id,
+          items: await Promise.all(documents.filter((item) => !item.data().deleted).map(async (item) => {
+            const data = item.data();
+            const photos = entityType === "catch" ? await readCatchPhotos(db, ownerId, item.id, data) : undefined;
+            return { ...fromRemoteDocument(entityType, data, photos), entityType, entityId: item.id };
           })),
           cursor: documents.at(-1)?.id ?? cursor,
           hasMore,

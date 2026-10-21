@@ -9,6 +9,8 @@ import { waterRepository } from "../features/waters/data/waterRepository.js";
 import { progressionLedger } from "../features/progression/data/progressionLedger.js";
 import { getEntitlementState } from "../features/entitlements/data/entitlementAccess.js";
 import { normalizePhotoFrame, photoFrameStyle } from "../features/catches/data/photoFraming.js";
+import { getPrimaryAvailablePhoto } from "../features/catches/data/catchPhotos.js";
+import { getPhotoBlobForDisplay } from "../features/catches/data/photoCloudService.js";
 import "./ProgressionPages.css";
 
 function imageDimensions(image) {
@@ -221,20 +223,8 @@ function downloadBlob(blob, fileName) {
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-async function getPhotoBlob(photo) {
-  if (photo?.blob instanceof Blob) return photo.blob;
-  const storedUrl = photo?.downloadUrl ?? photo?.downloadURL ?? photo?.storageUrl ?? photo?.objectUrl ?? photo?.previewUrl ?? photo?.url;
-  if (typeof storedUrl === "string" && storedUrl.trim()) {
-    const url = new URL(storedUrl, globalThis.location?.origin);
-    const sameOrigin = url.origin === globalThis.location?.origin;
-    if (url.protocol !== "blob:" && url.protocol !== "https:" && !sameOrigin) throw new Error("Adresa fotografie není bezpečná.");
-    const response = await fetch(url.href, { credentials: sameOrigin ? "same-origin" : "omit" });
-    if (!response.ok) throw new Error("Fotografii úlovku se nepodařilo načíst.");
-    const blob = await response.blob();
-    if (blob.type && !blob.type.startsWith("image/")) throw new Error("Soubor není fotografie.");
-    return blob;
-  }
-  throw new Error("Místní fotografie není dostupná.");
+async function getPhotoBlob(photo, record, scope) {
+  return getPhotoBlobForDisplay({ photo, ownerId: scope.ownerId, catchId: record.id, scopeKey: scope.scopeKey });
 }
 
 function CatchFishIcon() {
@@ -251,7 +241,7 @@ export default function CatchSharePage() {
   const [photoState, setPhotoState] = useState({ scopeKey: null, source: null, blob: null, url: "", status: "idle" });
   const [waterState, setWaterState] = useState({ scopeKey: null, catchId: null, water: null, status: "idle" });
   const record = state.catches.find((item) => item.id === id);
-  const photo = record?.photos?.[0] ?? null;
+  const photo = record ? getPrimaryAvailablePhoto(record) : null;
   const photoMatchesScope = photoState.scopeKey === scope.scopeKey && photoState.source === photo;
   const displayedPhoto = photo && photoMatchesScope && photoState.status === "ready" ? photoState : null;
   const photoBroken = photo && photoMatchesScope && photoState.status === "broken";
@@ -271,7 +261,7 @@ export default function CatchSharePage() {
     let objectUrl = "";
     const load = async () => {
       try {
-        const blob = await getPhotoBlob(photo);
+        const blob = await getPhotoBlob(photo, record, scope);
         const decoded = await decodePhoto(blob);
         decoded?.close?.();
         objectUrl = URL.createObjectURL(blob);

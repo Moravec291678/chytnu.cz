@@ -6,7 +6,7 @@ import {
   inMemoryPersistence,
   initializeAuth,
 } from "firebase/auth";
-import { connectFirestoreEmulator, doc, getDoc, getFirestore } from "firebase/firestore";
+import { collection, connectFirestoreEmulator, doc, getDoc, getDocs, getFirestore } from "firebase/firestore";
 import "fake-indexeddb/auto";
 import { catchRepository, outboxRepository } from "../src/features/catches/data/catchRepository.js";
 import { createFirestoreSyncAdapter, toRemoteRecord } from "../src/features/sync/data/firestoreSyncAdapter.js";
@@ -59,7 +59,7 @@ try {
     conditions: { airTempC: 11, moonPhase: "full" },
     conditionSources: { airTempC: "auto", moonPhase: "auto" },
     waterDepthM: null, bottomType: null, tripId, method: null, baits: [], result: "released",
-    photos: [{ id: "photo-1", name: "kapr.jpg", type: "image/jpeg", blob: photoBlob, focalX: 0.2, focalY: 0.8, zoom: 1.4 }],
+    photos: Array.from({ length: 10 }, (_, index) => ({ id: `photo-${index + 1}`, name: `kapr-${index + 1}.jpg`, type: "image/jpeg", blob: photoBlob, focalX: 0.2, focalY: 0.8, zoom: 1.4 })),
     notes: "emulator integration fixture", isFavorite: false, sync: { status: "local", revision: 1 },
   }, accountScope);
 
@@ -80,10 +80,20 @@ try {
   assert.deepEqual(remoteCatch.data().coordinates, { latitude: 50.087, longitude: 14.421 });
   assert.deepEqual(remoteCatch.data().conditions, { airTempC: 11, moonPhase: "full" });
   assert.deepEqual(remoteCatch.data().conditionSources, { airTempC: "auto", moonPhase: "auto" });
-  assert.deepEqual(remoteCatch.data().photos, [{
-    id: "photo-1", name: "kapr.jpg", type: "image/jpeg", size: 3,
+  assert.equal("photos" in remoteCatch.data(), false, "Photo metadata must not share the Catch document");
+  assert.equal(Object.keys(remoteCatch.data().photoRefs).length, 10, "Catch retains at most ten stable photo references");
+  assert.equal("photoIds" in remoteCatch.data(), false);
+  assert.equal(remoteCatch.data().primaryPhotoId, "photo-1");
+  const remotePhotos = await getDocs(collection(db, "users", ownerId, "catches", catchId, "photos"));
+  assert.equal(remotePhotos.size, 10, "each photo is stored and validated as its own document");
+  const firstRemotePhoto = remotePhotos.docs.find((photo) => photo.id === "photo-1").data();
+  assert.deepEqual({ id: firstRemotePhoto.id, name: firstRemotePhoto.name, type: firstRemotePhoto.type, size: firstRemotePhoto.size, focalX: firstRemotePhoto.focalX, focalY: firstRemotePhoto.focalY, zoom: firstRemotePhoto.zoom }, {
+    id: "photo-1", name: "kapr-1.jpg", type: "image/jpeg", size: 3,
     focalX: 0.2, focalY: 0.8, zoom: 1.4,
-  }]);
+  });
+  assert.equal(firstRemotePhoto.sortIndex, 0);
+  assert.ok(remotePhotos.docs.every((photo) => !("blob" in photo.data())));
+  assert.deepEqual(firstRemotePhoto.cloud, { state: "localOnly", provider: null, objectKey: null, sha256: null });
   assert.equal(JSON.stringify(remoteCatch.data()).includes("blob"), false);
 
   const local = await catchRepository.get(catchId, accountScope);
@@ -95,17 +105,36 @@ try {
   });
   assert.equal(replay.revision, remoteCatch.data().serverRevision, "same operation replay must not create a new revision");
 
+  const changedCatch = await catchRepository.get(catchId, accountScope);
+  await catchRepository.put({
+    ...changedCatch,
+    updatedAt: new Date().toISOString(),
+    photos: changedCatch.photos.slice(0, 9).map((photo, index) => index === 0 ? { ...photo, focalX: 0.3 } : photo),
+    primaryPhotoId: "photo-2",
+    sync: { ...changedCatch.sync, status: "local", revision: changedCatch.sync.revision + 1 },
+  }, accountScope);
+  const photoMutationSync = await firestoreService.run(ownerId);
+  assert.equal(photoMutationSync.status, "success", photoMutationSync.error);
+  const updatedRemoteCatch = await getDoc(doc(db, "users", ownerId, "catches", catchId));
+  const updatedRemotePhoto = await getDoc(doc(db, "users", ownerId, "catches", catchId, "photos", "photo-1"));
+  const removedRemotePhoto = await getDoc(doc(db, "users", ownerId, "catches", catchId, "photos", "photo-10"));
+  assert.equal(updatedRemoteCatch.data().primaryPhotoId, "photo-2", "primary selection is synced with the Catch");
+  assert.deepEqual(Object.keys(updatedRemoteCatch.data().photoRefs), Array.from({ length: 9 }, (_, index) => `photo-${index + 1}`));
+  assert.equal(updatedRemotePhoto.data().focalX, 0.3, "per-photo crop changes are synced to the photo document");
+  assert.equal(removedRemotePhoto.data().deleted, true, "photo removal leaves a durable child tombstone");
+
+  const latestLocalForValidation = await catchRepository.get(catchId, accountScope);
   await assert.rejects(() => firestoreAdapter.write({
     ownerId, entityType: "catch", entityId: catchId,
-    record: { ...local, coordinates: { latitude: 91, longitude: 14.421 } },
-    expectedRevision: remoteCatch.data().serverRevision,
+    record: { ...latestLocalForValidation, coordinates: { latitude: 91, longitude: 14.421 } },
+    expectedRevision: updatedRemoteCatch.data().serverRevision,
     operationId: `invalid-coordinates-${crypto.randomUUID()}`, localRevision: 2,
   }), /nepodařilo|oprávnění|permission/i, "out-of-range coordinates must be rejected by Firestore rules");
 
   await assert.rejects(() => firestoreAdapter.write({
     ownerId, entityType: "catch", entityId: catchId,
-    record: { ...local, photos: [{ ...local.photos[0], focalX: 1.1, focalY: 0.5, zoom: 1 }] },
-    expectedRevision: remoteCatch.data().serverRevision,
+    record: { ...latestLocalForValidation, photos: [{ ...latestLocalForValidation.photos[0], focalX: 1.1, focalY: 0.5, zoom: 1 }] },
+    expectedRevision: updatedRemoteCatch.data().serverRevision,
     operationId: `invalid-frame-${crypto.randomUUID()}`, localRevision: 2,
   }), /nepodařilo|oprávnění|permission/i, "out-of-range framing must be rejected by Firestore rules");
 
@@ -127,9 +156,10 @@ try {
     "invalid automatic/manual condition provenance must be removed before a remote write",
   );
 
+  const latestLocalCatch = await catchRepository.get(catchId, accountScope);
   await firestoreAdapter.write({
     ownerId, entityType: "catch", entityId: catchId,
-    record: { ...local, notes: "změna z druhého zařízení" }, expectedRevision: remoteCatch.data().serverRevision,
+    record: { ...latestLocalCatch, notes: "změna z druhého zařízení" }, expectedRevision: updatedRemoteCatch.data().serverRevision,
     operationId: `other-device-${crypto.randomUUID()}`, localRevision: 1,
   });
   const pulled = await firestoreService.run(ownerId);
@@ -147,13 +177,15 @@ try {
   assert.equal(deleted.status, "success", deleted.error);
   const tombstone = await getDoc(doc(db, "users", ownerId, "catches", catchId));
   assert.equal(tombstone.data().deleted, true);
+  const deletedPhotoDocs = await getDocs(collection(db, "users", ownerId, "catches", catchId, "photos"));
+  assert.ok(deletedPhotoDocs.docs.every((photo) => photo.data().deleted), "deleting Catch tombstones all of its photo documents");
   assert.equal((await outboxRepository.list()).length, 0);
 
   await waterRepository.delete(waterId, accountScope);
   await firestoreService.run(ownerId);
   assert.equal((await getDoc(doc(db, "users", ownerId, "waters", waterId))).data().deleted, true);
 
-  console.log("Firestore sync emulator passed: authenticated Trip/Catch/Water writes, trip linkage, photo metadata-only projection, retained local Blob, exact operation replay, remote delta pull, idempotent resync, durable deletion tombstones, and clean outbox.");
+  console.log("Firestore sync emulator passed: authenticated Trip/Catch/Water writes, ten separately validated ordered photo documents, crop/primary/photo-delete synchronization, retained local Blob, exact operation replay, remote delta pull, idempotent resync, Catch/photo tombstones, and clean outbox.");
 } finally {
   await deleteApp(app);
 }

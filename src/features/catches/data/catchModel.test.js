@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { catchToForm, createCatchRecord, updateCatchFormField, validateCatchForm } from "./catchModel.js";
 import { getBiggestCatch } from "../../home/utils/profileStats.js";
 import { estimateFishWeight } from "./lengthWeightRelationships.js";
+import { MAX_PHOTOS_PER_CATCH } from "./catchPhotos.js";
 
 const minimalForm = {
   speciesKey: "carp", catchDate: "2026-10-16", catchTime: "12:30",
@@ -148,6 +149,20 @@ test("editing preserves forward-compatible fields, custom choices, and remote ph
   assert.equal(updated.photos[0].sha256, "a".repeat(64));
   assert.equal(updated.photos[0].previewUrl, undefined);
   assert.equal(updated.photos[0].blob, blob);
+});
+
+test("legacy photo becomes primary, primary selection stays stable, and photo limits are enforced", () => {
+  const photos = Array.from({ length: MAX_PHOTOS_PER_CATCH }, (_, index) => ({ id: `photo-${index}`, name: `fish-${index}.jpg`, type: "image/jpeg", blob: new Blob([String(index)]) }));
+  const legacy = createCatchRecord({ ...minimalForm, photos: [photos[0]] }, { key: "carp", label: "Kapr" }, []);
+  assert.equal(legacy.primaryPhotoId, photos[0].id);
+  const selected = createCatchRecord({ ...minimalForm, photos, primaryPhotoId: photos[7].id }, { key: "carp", label: "Kapr" }, []);
+  assert.equal(selected.primaryPhotoId, photos[7].id);
+  const framed = createCatchRecord({ ...minimalForm, photos: [{ ...photos[0], focalX: 0.1, focalY: 0.9, zoom: 1.8 }, { ...photos[1], focalX: 0.7, focalY: 0.2, zoom: 1.2 }], primaryPhotoId: photos[1].id }, { key: "carp", label: "Kapr" }, []);
+  assert.deepEqual(framed.photos.map(({ focalX, focalY, zoom }) => ({ focalX, focalY, zoom })), [
+    { focalX: 0.1, focalY: 0.9, zoom: 1.8 }, { focalX: 0.7, focalY: 0.2, zoom: 1.2 },
+  ]);
+  assert.equal(catchToForm(framed).photos.length, 2);
+  assert.throws(() => createCatchRecord({ ...minimalForm, photos: [...photos, { ...photos[0], id: "photo-over" }] }, { key: "carp", label: "Kapr" }, []), /nejvýše 10/);
 });
 
 test("missing weight is not presented as a zero kilogram record", () => {

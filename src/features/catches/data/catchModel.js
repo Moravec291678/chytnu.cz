@@ -2,6 +2,7 @@ import { normalizeCoordinates, parseCoordinateText } from "./coordinates.js";
 import { normalizeCatchPrivacy } from "../../privacy/data/privacyModel.js";
 import { estimateFishWeight, formatEstimatedWeight } from "./lengthWeightRelationships.js";
 import { hasCustomPhotoFrame, normalizePhotoFrame } from "./photoFraming.js";
+import { MAX_PHOTOS_PER_CATCH, normalizePrimaryPhotoId } from "./catchPhotos.js";
 
 const CONDITION_SOURCE_FIELDS = ["airTempC", "waterTempC", "pressureHpa", "windKmh", "moonPhase"];
 
@@ -59,6 +60,9 @@ export function validateCatchForm(data) {
 }
 
 export function createCatchRecord(data, species, methods, existing = null, baitCatalog = []) {
+  if (!Array.isArray(data.photos) || data.photos.length > MAX_PHOTOS_PER_CATCH) {
+    throw new RangeError(`Úlovek může mít nejvýše ${MAX_PHOTOS_PER_CATCH} fotografií.`);
+  }
   const numeric = (value) => {
     if (value === null || value === undefined || String(value).trim() === "") return null;
     const parsed = Number(String(value).trim().replace(",", "."));
@@ -82,6 +86,22 @@ export function createCatchRecord(data, species, methods, existing = null, baitC
   const method = methods.find((item) => item.key === data.fishingMethod);
   const existingMethod = existing?.method?.key === data.fishingMethod ? existing.method : null;
   const existingBaits = new Map((existing?.baits ?? []).map((bait) => [bait.key, bait]));
+  const photos = data.photos.map((photo) => {
+    const storedPhoto = { ...photo };
+    const file = storedPhoto.file;
+    delete storedPhoto.previewUrl;
+    delete storedPhoto.file;
+    const frame = hasCustomPhotoFrame(photo) ? normalizePhotoFrame(photo) : {};
+    return {
+      ...storedPhoto,
+      ...frame,
+      id: photo.id ?? crypto.randomUUID(),
+      blob: photo.blob ?? file,
+      name: photo.name ?? file?.name ?? "fotografie",
+      type: photo.type ?? file?.type ?? "image/jpeg",
+        cloud: photo.cloud ?? { state: "localOnly", provider: null, objectKey: null, sha256: null },
+    };
+  });
   return {
     ...(existing ?? {}),
     schemaVersion: 1,
@@ -113,21 +133,8 @@ export function createCatchRecord(data, species, methods, existing = null, baitC
     method: method ? { key: method.key, label: method.label, isCustom: false } : existingMethod,
     baits: data.baits.map((key) => existingBaits.get(key) ?? ({ key, label: baitCatalog.find((bait) => bait.key === key)?.label ?? key, isCustom: !baitCatalog.some((bait) => bait.key === key) })),
     result: data.resultKey || "unspecified",
-    photos: data.photos.map((photo) => {
-      const storedPhoto = { ...photo };
-      const file = storedPhoto.file;
-      delete storedPhoto.previewUrl;
-      delete storedPhoto.file;
-      const frame = hasCustomPhotoFrame(photo) ? normalizePhotoFrame(photo) : {};
-      return {
-        ...storedPhoto,
-        ...frame,
-        id: photo.id ?? crypto.randomUUID(),
-        blob: photo.blob ?? file,
-        name: photo.name ?? file?.name ?? "fotografie",
-        type: photo.type ?? file?.type ?? "image/jpeg",
-      };
-    }),
+    photos,
+    primaryPhotoId: normalizePrimaryPhotoId(photos, data.primaryPhotoId ?? existing?.primaryPhotoId),
     notes: data.notes.trim(),
     isFavorite: Boolean(data.isFavorite),
     privacy: normalizeCatchPrivacy(data.privacy ?? existing?.privacy),
@@ -160,6 +167,7 @@ export function catchToForm(record) {
     conditions,
     conditionSources: normalizeConditionSources(record.conditionSources, conditions),
     photos: record.photos ?? [], baits: (record.baits ?? []).map((bait) => bait.key),
+    primaryPhotoId: normalizePrimaryPhotoId(record.photos ?? [], record.primaryPhotoId),
     notes: record.notes ?? "", isFavorite: Boolean(record.isFavorite), tripId: record.tripId ?? "",
     privacy: normalizeCatchPrivacy(record.privacy),
   };

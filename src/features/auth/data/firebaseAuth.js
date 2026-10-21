@@ -97,6 +97,11 @@ export const firebaseAuth = {
   currentUserId() {
     return authInstance?.currentUser?.uid ?? null;
   },
+  async currentIdToken() {
+    const auth = await getAuthInstance();
+    if (!auth.currentUser) return null;
+    return auth.currentUser.getIdToken();
+  },
   observe(listener, onError) {
     let active = true;
     let unsubscribe = () => {};

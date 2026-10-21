@@ -5,6 +5,8 @@ import { createSyncPort } from "../data/syncPort.js";
 import { createSyncService } from "../data/syncService.js";
 import { readSyncSummary } from "../data/localSyncRepository.js";
 import { describeSyncFailure } from "../data/syncDiagnostics.js";
+import { createPhotoCloudService } from "../../catches/data/photoCloudService.js";
+import { getPhotoCloudProvider } from "../../catches/data/photoCloudProvider.js";
 import { getBackendConfiguration } from "../../auth/data/backendConfig.js";
 import { SyncContext } from "./syncContextValue.js";
 
@@ -25,6 +27,8 @@ export function SyncProvider({ children }) {
   const { user, status: authStatus } = useAuth();
   const [state, setState] = useState(initialState);
   const serviceRef = useRef(null);
+  const photoCloudServiceRef = useRef(null);
+  const photoCloudProviderRef = useRef(null);
   const runningRef = useRef(false);
   const rerunRef = useRef(false);
   const runSyncRef = useRef(null);
@@ -61,16 +65,35 @@ export function SyncProvider({ children }) {
         }, onDiagnostic: reportSyncDiagnostic });
       }
       const result = await serviceRef.current.run(userId, { force });
+      const photoCloudProvider = getPhotoCloudProvider();
+      if (!photoCloudServiceRef.current || photoCloudProviderRef.current !== photoCloudProvider) {
+        photoCloudProviderRef.current = photoCloudProvider;
+        photoCloudServiceRef.current = createPhotoCloudService({
+        provider: photoCloudProvider,
+        getCurrentOwnerId: () => {
+          try { return firebaseAuth.currentUserId(); } catch { return null; }
+        },
+        });
+      }
+      const photoResult = await photoCloudServiceRef.current.run(userId, { force });
+      const finalResult = photoResult.uploaded > 0
+        ? await serviceRef.current.run(userId, { force })
+        : result;
+      if (photoResult.status === "error" && finalResult.status === "success") {
+        finalResult.status = "error";
+        finalResult.error = photoResult.error;
+        finalResult.errorCode = "photo_cloud_failed";
+      }
       const summary = await updateSummary(userId);
       setState({
         ...initialState,
         ...summary,
-        status: result.status === "success" ? "success" : result.status,
-        sent: result.sent ?? 0,
-        applied: result.applied ?? 0,
-        conflicts: Math.max(result.conflicts ?? 0, summary.conflicts),
-        error: result.error ?? "",
-        errorCode: result.errorCode ?? "",
+        status: finalResult.status === "success" ? "success" : finalResult.status,
+        sent: (finalResult.sent ?? 0) + (photoResult.uploaded ?? 0) + (photoResult.deleted ?? 0),
+        applied: finalResult.applied ?? 0,
+        conflicts: Math.max(finalResult.conflicts ?? 0, summary.conflicts),
+        error: finalResult.error ?? "",
+        errorCode: finalResult.errorCode ?? "",
       });
       if ((result.applied ?? 0) > 0) window.dispatchEvent(new Event("chytnu:local-data-restored"));
     } catch (error) {
@@ -91,6 +114,8 @@ export function SyncProvider({ children }) {
 
   useEffect(() => {
     serviceRef.current = null;
+    photoCloudServiceRef.current = null;
+    photoCloudProviderRef.current = null;
     if (authStatus !== "ready" || !userId) {
       setState({ ...initialState, status: authStatus === "loading" ? "idle" : "signed-out" });
       return undefined;

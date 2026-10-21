@@ -88,6 +88,75 @@ export function queueOutboxOperation(transaction, {
   };
 }
 
+function queuePhotoCloudOperation(transaction, {
+  ownerId, catchId, photoId, operation, provider = null, objectKey, sha256 = null,
+  size = null, contentType = null, dependsOnCatchOperationId = null,
+  dependsOnCatchRevision = null, now = new Date().toISOString(),
+}) {
+  if (!ownerId || !catchId || !photoId || !["upload", "delete"].includes(operation)) {
+    throw new TypeError("Photo cloud operace nemá platný účet, Catch, fotografii nebo typ.");
+  }
+  const scopeKey = accountScopeKey(ownerId);
+  const entityId = `${catchId}/${photoId}`;
+  const entityKey = outboxEntityKey(scopeKey, "photoCloud", entityId);
+  const store = transaction.objectStore(OUTBOX_STORE_NAME);
+  const request = store.index("entityKey").get(entityKey);
+  request.onerror = () => { try { transaction.abort(); } catch { /* transaction has finished */ } };
+  request.onsuccess = () => {
+    try {
+      const existing = request.result;
+      const sameJob = existing?.operation === `photo-${operation}`
+        && existing.photoCloud?.objectKey === objectKey
+        && existing.photoCloud?.sha256 === sha256
+        && existing.photoCloud?.dependsOnCatchOperationId === dependsOnCatchOperationId
+        && existing.photoCloud?.dependsOnCatchRevision === dependsOnCatchRevision;
+      if (sameJob) return;
+      const entry = {
+        ...(existing ?? {}),
+        operationId: createOperationId(),
+        ownerId,
+        scopeKey,
+        entityType: "photoCloud",
+        entityId,
+        entityKey,
+        operation: `photo-${operation}`,
+        localRevision: (existing?.localRevision ?? 0) + 1,
+        baseServerRevision: null,
+        photoCloud: {
+          ownerId, catchId, photoId, provider, objectKey, sha256, size, contentType,
+          dependsOnCatchOperationId, dependsOnCatchRevision,
+          state: operation === "delete" ? "pendingDelete" : "pendingUpload",
+        },
+        status: "pending",
+        attemptCount: 0,
+        lastError: null,
+        lastErrorCode: null,
+        lastProviderCode: null,
+        nextAttemptAt: null,
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+      };
+      if (existing) store.put(entry);
+      else store.add(entry);
+    } catch {
+      try { transaction.abort(); } catch { /* transaction has finished */ }
+    }
+  };
+}
+
+function requestValue(request) {
+  return new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function transactionResult(transaction, db, resolve, reject, onComplete = () => {}) {
+  transaction.oncomplete = () => { db.close(); resolve(onComplete()); };
+  transaction.onerror = () => { db.close(); reject(transaction.error ?? new Error("Photo cloud frontu se nepodařilo uložit.")); };
+  transaction.onabort = () => { db.close(); reject(transaction.error ?? new Error("Zápis photo cloud fronty byl přerušen.")); };
+}
+
 export function openLocalDatabase() {
   return new Promise((resolve, reject) => {
     if (!globalThis.indexedDB) {
@@ -198,13 +267,6 @@ export function openLocalDatabase() {
   });
 }
 
-function requestValue(request) {
-  return new Promise((resolve, reject) => {
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-}
-
 export async function getActiveGuestScopeKey() {
   const db = await openLocalDatabase();
   try {
@@ -280,6 +342,7 @@ export const catchRepository = {
         }
         const effectiveOwnerId = existing ? (existing.ownerId ?? null) : requestedScope.ownerId;
         const effectiveScopeKey = existing ? recordScopeKey(existing) : requestedScope.scopeKey;
+        const nextPhotoIds = new Set((record.photos ?? []).map((photo) => photo.id));
         const queueWrite = () => {
           storedRecord = { ...record, ownerId: effectiveOwnerId, scopeKey: effectiveScopeKey };
           queueOutboxOperation(transaction, {
@@ -290,7 +353,7 @@ export const catchRepository = {
             ownerId: effectiveOwnerId,
             scopeKey: effectiveScopeKey,
             baseServerRevision: existing?.sync?.serverRevision ?? record.sync?.serverRevision ?? null,
-          }, (revision) => {
+          }, (revision, entry) => {
             storedRecord = {
               ...storedRecord,
               sync: {
@@ -303,6 +366,22 @@ export const catchRepository = {
                 ...(existing?.sync?.serverRevision !== undefined ? { serverRevision: existing.sync.serverRevision } : {}),
               },
             };
+            for (const photo of existing?.photos ?? []) {
+              if (nextPhotoIds.has(photo.id) || !photo.cloud?.provider || !photo.cloud?.objectKey || !effectiveOwnerId) continue;
+              queuePhotoCloudOperation(transaction, {
+                ownerId: effectiveOwnerId,
+                catchId: existing.id,
+                photoId: photo.id,
+                operation: "delete",
+                provider: photo.cloud.provider,
+                objectKey: photo.cloud.objectKey,
+                sha256: photo.cloud.sha256 ?? null,
+                size: photo.blob?.size ?? photo.size ?? null,
+                contentType: photo.type ?? photo.blob?.type ?? null,
+                dependsOnCatchOperationId: entry.operationId,
+                dependsOnCatchRevision: revision,
+              });
+            }
             catchStore.put(storedRecord);
           });
         };
@@ -361,13 +440,127 @@ export const catchRepository = {
           ownerId: existing.ownerId ?? null,
           scopeKey: recordScopeKey(existing),
           baseServerRevision: existing.sync?.serverRevision ?? null,
-        }, () => store.delete(id));
+        }, (revision, entry) => {
+          for (const photo of existing.photos ?? []) {
+            if (!existing.ownerId || !photo.cloud?.provider || !photo.cloud?.objectKey) continue;
+            queuePhotoCloudOperation(transaction, {
+              ownerId: existing.ownerId,
+              catchId: existing.id,
+              photoId: photo.id,
+              operation: "delete",
+              provider: photo.cloud.provider,
+              objectKey: photo.cloud.objectKey,
+              sha256: photo.cloud.sha256 ?? null,
+              size: photo.blob?.size ?? photo.size ?? null,
+              contentType: photo.type ?? photo.blob?.type ?? null,
+              dependsOnCatchOperationId: entry.operationId,
+              dependsOnCatchRevision: revision,
+            });
+          }
+          store.delete(id);
+        });
       };
       request.onerror = () => { failure = request.error; transaction.abort(); };
       transaction.oncomplete = () => { db.close(); resolve(id); };
       transaction.onerror = () => { db.close(); reject(failure ?? transaction.error ?? new Error("Úlovek se nepodařilo smazat.")); };
       transaction.onabort = () => { db.close(); reject(failure ?? transaction.error ?? new Error("Mazání úlovku bylo přerušeno.")); };
     });
+  },
+  cachePhotoBlob: async (catchId, photoId, blob, options) => {
+    const requestedScope = requireRepositoryScope(options);
+    if (!(blob instanceof Blob)) throw new TypeError("Do místní cache lze uložit pouze Blob fotografie.");
+    const db = await openLocalDatabase();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(CATCH_STORE_NAME, "readwrite");
+      const store = transaction.objectStore(CATCH_STORE_NAME);
+      const request = store.get(catchId);
+      let result = null;
+      request.onsuccess = () => {
+        const record = request.result;
+        if (!record || recordScopeKey(record) !== requestedScope.scopeKey) {
+          transaction.abort();
+          return;
+        }
+        const photo = (record.photos ?? []).find((item) => item.id === photoId);
+        if (!photo) { result = null; return; }
+        if (photo.blob instanceof Blob) { result = photo.blob; return; }
+        store.put({ ...record, photos: record.photos.map((item) => item.id === photoId ? { ...item, blob } : item) });
+        result = blob;
+      };
+      request.onerror = () => transaction.abort();
+      transaction.oncomplete = () => { db.close(); resolve(result); };
+      transaction.onerror = () => { db.close(); reject(transaction.error ?? new Error("Fotografii se nepodařilo uložit do místní cache.")); };
+      transaction.onabort = () => { db.close(); reject(transaction.error ?? new Error("Cache fotografie byla přerušena.")); };
+    });
+  },
+  setPhotoCloudState: async (catchId, photoId, cloud, options) => {
+    const requestedScope = requireRepositoryScope(options);
+    const db = await openLocalDatabase();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(CATCH_STORE_NAME, "readwrite");
+      const store = transaction.objectStore(CATCH_STORE_NAME);
+      const request = store.get(catchId);
+      let updated = false;
+      request.onsuccess = () => {
+        const record = request.result;
+        if (!record || recordScopeKey(record) !== requestedScope.scopeKey) { transaction.abort(); return; }
+        const photos = record.photos ?? [];
+        if (!photos.some((photo) => photo.id === photoId)) return;
+        store.put({ ...record, photos: photos.map((photo) => photo.id === photoId ? { ...photo, cloud } : photo) });
+        updated = true;
+      };
+      request.onerror = () => transaction.abort();
+      transaction.oncomplete = () => { db.close(); resolve(updated); };
+      transaction.onerror = () => { db.close(); reject(transaction.error ?? new Error("Stav cloud fotografie se nepodařilo uložit.")); };
+      transaction.onabort = () => { db.close(); reject(transaction.error ?? new Error("Zápis stavu fotografie byl přerušen.")); };
+    });
+  },
+};
+
+export const photoCloudOutboxRepository = {
+  enqueue: async (operation) => {
+    const db = await openLocalDatabase();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(OUTBOX_STORE_NAME, "readwrite");
+      let accepted = false;
+      try {
+        queuePhotoCloudOperation(transaction, operation);
+        accepted = true;
+      } catch (error) {
+        db.close();
+        reject(error);
+        return;
+      }
+      transactionResult(transaction, db, resolve, reject, () => accepted);
+    });
+  },
+  list: async () => (await outboxRepository.list()).filter((operation) => operation.entityType === "photoCloud"),
+  complete: async (operationId, expectedLocalRevision) => {
+    const db = await openLocalDatabase();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(OUTBOX_STORE_NAME, "readwrite");
+      const store = transaction.objectStore(OUTBOX_STORE_NAME);
+      const request = store.index("operationId").get(operationId);
+      let completed = false;
+      request.onsuccess = () => {
+        const operation = request.result;
+        if (!operation || operation.entityType !== "photoCloud" || operation.localRevision !== expectedLocalRevision) return;
+        store.delete(operation.sequence);
+        completed = true;
+      };
+      request.onerror = () => transaction.abort();
+      transaction.oncomplete = () => { db.close(); resolve(completed); };
+      transaction.onerror = () => { db.close(); reject(transaction.error ?? new Error("Photo cloud operaci se nepodařilo potvrdit.")); };
+      transaction.onabort = () => { db.close(); reject(transaction.error ?? new Error("Potvrzení photo cloud operace bylo přerušeno.")); };
+    });
+  },
+  isCurrent: async (operationId, expectedLocalRevision) => {
+    const db = await openLocalDatabase();
+    try {
+      const transaction = db.transaction(OUTBOX_STORE_NAME, "readonly");
+      const operation = await requestValue(transaction.objectStore(OUTBOX_STORE_NAME).index("operationId").get(operationId));
+      return operation?.entityType === "photoCloud" && operation.localRevision === expectedLocalRevision;
+    } finally { db.close(); }
   },
 };
 

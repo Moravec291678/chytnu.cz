@@ -3,6 +3,9 @@ import { Link, useNavigate, useParams, useLocation } from "react-router-dom";
 import Layout from "../shared/layout/Layout";
 import { useCatches } from "../features/catches/context/useCatches";
 import { photoFrameStyle } from "../features/catches/data/photoFraming.js";
+import { getPrimaryAvailablePhoto } from "../features/catches/data/catchPhotos.js";
+import { getPhotoBlobForDisplay } from "../features/catches/data/photoCloudService.js";
+import { useDataScope } from "../features/auth/context/dataScopeContextValue.js";
 import { useTrips } from "../features/trips/context/useTrips";
 import { formatBottomType } from "../features/catches/data/catchFormatting";
 import { getCatchRecognition, isNewLengthRecord } from "../features/catches/data/catchDetail.js";
@@ -47,11 +50,15 @@ function CatchDetailPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { state, deleteCatch, toggleFavorite, refresh } = useCatches();
+  const scope = useDataScope();
   const { state: tripState } = useTrips();
   const item = state.catches.find((record) => record.id === id);
   const trip = tripState.trips.find((record) => record.id === item?.tripId);
   const catchDateLabel = item ? formatDate(item.caughtAt) : null;
   const [photos, setPhotos] = useState([]);
+  const [previewPhoto, setPreviewPhoto] = useState(null);
+  const primaryPhoto = item ? getPrimaryAvailablePhoto(item) : null;
+  const heroPhoto = photos.find((photo) => photo.id === primaryPhoto?.id) ?? photos[0] ?? null;
   const [error, setError] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [savingFavorite, setSavingFavorite] = useState(false);
@@ -61,14 +68,23 @@ function CatchDetailPage() {
 
   useEffect(() => {
     if (!item) return undefined;
-    const entries = (item.photos ?? []).filter((photo) => photo.blob).map((photo) => ({ ...photo, url: URL.createObjectURL(photo.blob) }));
     let active = true;
-    Promise.resolve().then(() => { if (active) setPhotos(entries); });
+    const entries = [];
+    Promise.all((item.photos ?? []).map(async (photo) => {
+      try {
+        const blob = await getPhotoBlobForDisplay({ photo, ownerId: scope.ownerId, catchId: item.id, scopeKey: scope.scopeKey });
+        return blob ? { ...photo, blob, url: URL.createObjectURL(blob) } : null;
+      } catch { return null; }
+    })).then((loaded) => {
+      if (!active) { loaded.filter(Boolean).forEach((photo) => URL.revokeObjectURL(photo.url)); return; }
+      entries.push(...loaded.filter(Boolean));
+      setPhotos(entries);
+    });
     return () => {
       active = false;
       entries.forEach((photo) => URL.revokeObjectURL(photo.url));
     };
-  }, [item]);
+  }, [item, scope.ownerId, scope.scopeKey]);
 
   const handleDelete = async () => {
     if (deletingRef.current) return;
@@ -176,7 +192,12 @@ function CatchDetailPage() {
       {error && <p role="alert" className="catch-form-error">{error}</p>}
       {tripState.error && item.tripId && <p role="alert" className="catch-form-error">Přiřazenou výpravu se nepodařilo načíst: {tripState.error}</p>}
       {tripState.loading && item.tripId && <p role="status">Načítám přiřazenou výpravu…</p>}
-      {photos.map((photo) => <figure className="photo-preview-item" key={photo.id}><img src={photo.url} style={photoFrameStyle(photo)} alt={`Fotografie úlovku – ${item.species}`} /></figure>)}
+      {heroPhoto && <section className="catch-detail-photo-gallery" aria-label="Fotografie úlovku">
+        <figure className="photo-preview-item catch-detail-hero-photo"><img src={heroPhoto.url} style={photoFrameStyle(heroPhoto)} alt={`Hlavní fotografie úlovku – ${item.species}`} /><figcaption>Hlavní fotografie</figcaption></figure>
+        {photos.length > 1 && <div className="catch-detail-photo-strip">{photos.filter((photo) => photo.id !== heroPhoto.id).map((photo) => <button type="button" key={photo.id} onClick={() => setPreviewPhoto(photo)} aria-label={`Zobrazit fotografii ${photo.name}`}><img src={photo.url} style={photoFrameStyle(photo)} alt="" /></button>)}</div>}
+      </section>}
+      {(item.photos ?? []).some((photo) => !photo.blob) && <p className="catch-photo-unavailable" role="status">Některé fotografie jsou dostupné pouze jako metadata na tomto zařízení.</p>}
+      {previewPhoto && <div className="catch-photo-lightbox" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPreviewPhoto(null); }}><section role="dialog" aria-modal="true" aria-label="Náhled fotografie"><button type="button" onClick={() => setPreviewPhoto(null)} aria-label="Zavřít náhled">Zavřít</button><img src={previewPhoto.url} style={photoFrameStyle(previewPhoto)} alt={`Fotografie úlovku – ${item.species}`} /></section></div>}
       <section className="catch-detail-measures" aria-label="Míry úlovku">
         <div><strong>{Number.isFinite(item.weightKg) ? formatCatchWeight(item) : "—"}</strong><span>kg</span><small>{item.weightSource === "estimated" ? "ODHAD HMOTNOSTI" : "HMOTNOST"}</small>{isPersonalBest && <em>{recognition.personalBestDelta > 0 ? `+${formatNumber(recognition.personalBestDelta, 2)} kg rekord` : "Osobní rekord"}</em>}</div>
         <div><strong>{Number.isFinite(item.lengthCm) ? formatNumber(item.lengthCm) : "—"}</strong><span>cm</span><small>DÉLKA</small>{isLengthRecord && <em>Nový rekord</em>}</div>

@@ -89,23 +89,53 @@ service cloud.firestore {
         ));
     }
 
-    function validPhotoMetadata(value) {
-      let focalX = value.get('focalX', 0.5);
-      let focalY = value.get('focalY', 0.5);
-      let zoom = value.get('zoom', 1);
-      return value.keys().hasOnly(['id', 'name', 'type', 'size', 'focalX', 'focalY', 'zoom'])
-        && value.id is string
-        && value.name is string
-        && value.type in ['image/jpeg', 'image/png', 'image/webp']
-        && value.size is int
-        && value.size >= 0
-        && value.size <= 10485760
-        && focalX >= 0
-        && focalX <= 1
-        && focalY >= 0
-        && focalY <= 1
-        && zoom >= 1
-        && zoom <= 2;
+    function validPhotoId(value) {
+      return value is string && value.matches('^[A-Za-z0-9_-]{1,128}$');
+    }
+
+    function validPhotoMetadata(data, userId, catchId, photoId) {
+      return data.keys().hasOnly([
+          'id', 'name', 'type', 'size', 'focalX', 'focalY', 'zoom', 'sortIndex',
+          'deleted', 'deletedAt', 'cloud'
+        ])
+        && data.id == photoId
+        && validPhotoId(data.id)
+        && data.name is string
+        && data.name.size() <= 255
+        && data.type in ['image/jpeg', 'image/png', 'image/webp']
+        && data.size is int
+        && data.size >= 0
+        && data.size <= 10485760
+        && data.focalX is number && data.focalX >= 0 && data.focalX <= 1
+        && data.focalY is number && data.focalY >= 0 && data.focalY <= 1
+        && data.zoom is number && data.zoom >= 1 && data.zoom <= 2
+        && data.sortIndex is int && data.sortIndex >= 0 && data.sortIndex <= 9
+        && data.deleted is bool
+        && (data.deleted ? data.deletedAt is string : data.deletedAt == null)
+        && data.cloud is map
+        && data.cloud.keys().hasOnly(['provider', 'objectKey', 'sha256', 'state'])
+        && data.cloud.state in ['localOnly', 'synced']
+        && (data.cloud.state == 'localOnly'
+          ? (data.cloud.provider == null && data.cloud.objectKey == null && data.cloud.sha256 == null)
+          : (data.cloud.provider is string
+            && data.cloud.provider.matches('^[a-z][a-z0-9_-]{0,31}$')
+            && data.cloud.objectKey == 'users/' + userId + '/catches/' + catchId + '/photos/' + photoId + '/original'
+            && data.cloud.sha256 is string
+            && data.cloud.sha256.matches('^[a-f0-9]{64}$')));
+    }
+
+    function validPhotoMutationParent(userId, catchId, photoId, deleted) {
+      let parent = /databases/$(database)/documents/users/$(userId)/catches/$(catchId);
+      let after = getAfter(parent).data;
+      return existsAfter(parent)
+        && after.ownerId == userId
+        && after.id == catchId
+        && ((!exists(parent) && after.serverRevision == 1)
+          || (exists(parent) && after.serverRevision == get(parent).data.serverRevision + 1))
+        && (deleted
+          ? (after.deleted == true
+            || (after.deleted == false && after.photoRefs.get(photoId, false) != true))
+          : (after.deleted == false && after.photoRefs.get(photoId, false) == true));
     }
 
     function validEnvelope(data, userId, entityType, entityId) {
@@ -148,7 +178,7 @@ service cloud.firestore {
         && optionalNumber(data.fightMinutes, 10000)
         && data.locationName is string
         && optionalNumber(data.waterNumber, 99999999)
-        && optionalString(data.waterId)
+        && (!data.keys().hasAny(['waterId']) || optionalString(data.waterId))
         && data.gpsLocation is string
         && (!data.keys().hasAny(['coordinates']) || validCoordinates(data.coordinates))
         && optionalNumber(data.waterDepthM, 2000)
@@ -164,9 +194,15 @@ service cloud.firestore {
         && data.baits is list
         && data.baits.size() <= 20
         && data.result is string
-        && data.photos is list
-        && data.photos.size() <= 1
-        && (data.photos.size() == 0 || validPhotoMetadata(data.photos[0]))
+        && data.photoRefs is map
+        && data.photoRefs.size() <= 10
+        && ((data.photoRefs.size() == 0 && data.primaryPhotoId == null)
+          || (data.photoRefs.size() > 0
+            && data.primaryPhotoId is string
+            && validPhotoId(data.primaryPhotoId)
+            && data.photoRefs.get(data.primaryPhotoId, false) == true
+            ))
+        && data.photoState == (data.photoRefs.size() > 0 ? 'metadata-only' : 'none')
         && data.notes is string
         && data.isFavorite is bool
         && validCatchPrivacy(data.privacy)
@@ -176,7 +212,7 @@ service cloud.firestore {
           'schemaVersion', 'id', 'ownerId', 'entityType', 'createdAt', 'updatedAt', 'caughtAt',
           'species', 'speciesKey', 'speciesLatin', 'weightKg', 'weightSource', 'lengthCm', 'girthCm', 'fightMinutes',
           'locationName', 'waterNumber', 'waterId', 'gpsLocation', 'coordinates', 'waterDepthM', 'bottomType', 'conditions', 'conditionSources', 'tripId', 'method',
-          'baits', 'result', 'photos', 'notes', 'isFavorite', 'privacy', 'deleted', 'deletedAt', 'serverRevision',
+          'baits', 'result', 'photoRefs', 'primaryPhotoId', 'notes', 'isFavorite', 'privacy', 'deleted', 'deletedAt', 'serverRevision',
           'syncSequence', 'lastOperationId', 'clientLocalRevision', 'operationDigest', 'lastReceiptId', 'photoState'
         ]);
     }
@@ -248,17 +284,13 @@ service cloud.firestore {
         && request.resource.data.serverRevision == 1;
       allow update: if resource.data.deleted == false
         && validSyncWrite(userId, 'catch', catchId, request.resource.data)
-        && request.resource.data.deleted == false
-        && validCatchContent(request.resource.data, userId, catchId)
         && request.resource.data.serverRevision == resource.data.serverRevision + 1
         && request.resource.data.ownerId == resource.data.ownerId
-        && request.resource.data.createdAt == resource.data.createdAt;
-      allow update: if resource.data.deleted == false
-        && validSyncWrite(userId, 'catch', catchId, request.resource.data)
-        && request.resource.data.deleted == true
-        && validTombstone(request.resource.data, userId, 'catch', catchId)
-        && request.resource.data.serverRevision == resource.data.serverRevision + 1
-        && request.resource.data.ownerId == resource.data.ownerId;
+        && (request.resource.data.deleted == false
+          ? (validCatchContent(request.resource.data, userId, catchId)
+            && request.resource.data.createdAt == resource.data.createdAt)
+          : (request.resource.data.deleted == true
+            && validTombstone(request.resource.data, userId, 'catch', catchId)));
       allow delete: if false;
     }
 
@@ -312,6 +344,21 @@ service cloud.firestore {
         && validTombstone(request.resource.data, userId, 'water', waterId)
         && request.resource.data.serverRevision == resource.data.serverRevision + 1
         && request.resource.data.ownerId == resource.data.ownerId;
+      allow delete: if false;
+    }
+
+    match /users/{userId}/catches/{catchId}/photos/{photoId} {
+      allow get, list: if signedInAs(userId);
+      allow create: if signedInAs(userId)
+        && validPhotoMetadata(request.resource.data, userId, catchId, photoId)
+        && request.resource.data.deleted == false
+        && validPhotoMutationParent(userId, catchId, photoId, false);
+      allow update: if signedInAs(userId)
+        && resource.data.deleted == false
+        && resource.data.id is string
+        && resource.data.id == photoId
+        && validPhotoMetadata(request.resource.data, userId, catchId, photoId)
+        && validPhotoMutationParent(userId, catchId, photoId, request.resource.data.deleted);
       allow delete: if false;
     }
 

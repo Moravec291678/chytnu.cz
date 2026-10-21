@@ -7,6 +7,7 @@ import {
 } from "../../../shared/utils/formatters";
 import { formatCatchWeight } from "../data/catchWeight.js";
 import { photoFrameStyle } from "../data/photoFraming.js";
+import { getPrimaryAvailablePhoto } from "../data/catchPhotos.js";
 
 import "./CatchCard.css";
 
@@ -35,6 +36,7 @@ export function FishMark({ speciesKey = "" }) {
 }
 
 function CatchCard({ catchedFish, isPersonalRecord = false }) {
+  const primaryPhoto = getPrimaryAvailablePhoto(catchedFish);
   const weight = formatCatchWeight(catchedFish);
   const length = Number.isFinite(catchedFish.lengthCm)
     ? catchedFish.lengthCm.toLocaleString("cs-CZ", { maximumFractionDigits: 1 })
@@ -44,7 +46,7 @@ function CatchCard({ catchedFish, isPersonalRecord = false }) {
     <Link to={`/catch/${catchedFish.id}`} className={`catch-card-link${isPersonalRecord ? " catch-card-link-record" : ""}`}>
       <article className={`catch-card${isPersonalRecord ? " catch-card-record" : ""}`}>
         <div className="catch-card-main">
-          {catchedFish.photos?.[0]?.blob ? <CatchPhoto blob={catchedFish.photos[0].blob} species={catchedFish.species} photo={catchedFish.photos[0]} /> : <FishMark speciesKey={catchedFish.speciesKey} />}
+          {primaryPhoto?.blob ? <CatchPhoto blob={primaryPhoto.blob} species={catchedFish.species} photo={primaryPhoto} /> : <FishMark speciesKey={catchedFish.speciesKey} />}
 
           <div className="catch-card-info">
             <h2>{catchedFish.species}</h2>

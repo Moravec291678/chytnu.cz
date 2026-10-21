@@ -36,6 +36,7 @@ import {
 } from "../features/preferences/data/quickSpeciesPreferences.js";
 import PhotoFrameEditor from "../features/catches/components/PhotoFrameEditor.jsx";
 import { photoFrameStyle } from "../features/catches/data/photoFraming.js";
+import { MAX_PHOTOS_PER_CATCH, normalizePrimaryPhotoId } from "../features/catches/data/catchPhotos.js";
 
 const MOON_PHASES = [
   ["new", "Nov"],
@@ -105,6 +106,7 @@ function AddCatchPage() {
   }, [scope]);
   const [photoProcessing, setPhotoProcessing] = useState(false);
   const [photoEditorOpen, setPhotoEditorOpen] = useState(false);
+  const [editingPhotoId, setEditingPhotoId] = useState(null);
   const [showSpeciesPicker, setShowSpeciesPicker] = useState(() => readPreferences(globalThis.localStorage, scope.scopeKey).detailMode === "detailed");
   const [selectedSpeciesCategoryKey, setSelectedSpeciesCategoryKey] = useState("");
   const [quickSpeciesOverride, setQuickSpeciesOverride] = useState(null);
@@ -125,51 +127,43 @@ function AddCatchPage() {
     fileInputRef.current.click();
   };
 
-  const removePhoto = () => {
-    catchData.photos.forEach((item) => {
-      if (item.previewUrl) {
-        URL.revokeObjectURL(item.previewUrl);
-        photoUrlsRef.current.delete(item.previewUrl);
-      }
-    });
-    updateCatchData("photos", []);
+  const removePhoto = (photoId) => {
+    const photos = catchData.photos.filter((item) => item.id !== photoId);
+    const removed = catchData.photos.find((item) => item.id === photoId);
+    if (removed?.previewUrl) {
+      URL.revokeObjectURL(removed.previewUrl);
+      photoUrlsRef.current.delete(removed.previewUrl);
+    }
+    updateCatchData("photos", photos);
+    updateCatchData("primaryPhotoId", normalizePrimaryPhotoId(photos, catchData.primaryPhotoId === photoId ? null : catchData.primaryPhotoId));
   };
 
   const handleFileChange = async (event) => {
-    const selectedPhoto = event.target.files[0];
-    if (!selectedPhoto) return;
-
-    if (!["image/jpeg", "image/png", "image/webp"].includes(selectedPhoto.type)) {
-      setFormError("Podporované jsou fotografie JPG, PNG a WebP.");
-      return;
-    }
-    if (selectedPhoto.size > 10 * 1024 * 1024) {
-      setFormError("Fotografie může mít nejvýše 10 MB.");
-      return;
-    }
+    const selectedPhotos = [...(event.target.files ?? [])];
+    if (!selectedPhotos.length) return;
     setPhotoProcessing(true);
+    const additions = [];
     try {
-      const optimizedPhoto = await optimizePhoto(selectedPhoto);
-      const previewUrl = URL.createObjectURL(optimizedPhoto);
-      photoUrlsRef.current.add(previewUrl);
-      catchData.photos.forEach((item) => {
-        if (item.previewUrl) {
-          URL.revokeObjectURL(item.previewUrl);
-          photoUrlsRef.current.delete(item.previewUrl);
-        }
-      });
-
-      const photo = {
-        id: crypto.randomUUID(),
-        blob: optimizedPhoto,
-        name: selectedPhoto.name,
-        type: optimizedPhoto.type || selectedPhoto.type,
-        previewUrl,
-      };
-
-      setPhotos([photo]);
-      setFormError("");
+      const room = MAX_PHOTOS_PER_CATCH - catchData.photos.length;
+      if (room <= 0) throw new Error(`Můžeš přidat nejvýše ${MAX_PHOTOS_PER_CATCH} fotografií.`);
+      for (const selectedPhoto of selectedPhotos.slice(0, room)) {
+        if (!["image/jpeg", "image/png", "image/webp"].includes(selectedPhoto.type)) throw new Error("Podporované jsou fotografie JPG, PNG a WebP.");
+        if (selectedPhoto.size > 10 * 1024 * 1024) throw new Error("Každá fotografie může mít nejvýše 10 MB.");
+        const optimizedPhoto = await optimizePhoto(selectedPhoto);
+        const previewUrl = URL.createObjectURL(optimizedPhoto);
+        photoUrlsRef.current.add(previewUrl);
+        additions.push({ id: crypto.randomUUID(), blob: optimizedPhoto, name: selectedPhoto.name, type: optimizedPhoto.type || selectedPhoto.type, previewUrl });
+      }
+      const nextPhotos = [...catchData.photos, ...additions];
+      setPhotos(nextPhotos);
+      if (!catchData.primaryPhotoId && nextPhotos[0]) updateCatchData("primaryPhotoId", nextPhotos[0].id);
+      if (selectedPhotos.length > room) setFormError(`Přidáno ${room} fotografií. Limit je ${MAX_PHOTOS_PER_CATCH}.`);
+      else setFormError("");
     } catch (error) {
+      additions.forEach((item) => {
+        URL.revokeObjectURL(item.previewUrl);
+        photoUrlsRef.current.delete(item.previewUrl);
+      });
       setFormError(error.message || "Fotografii se nepodařilo připravit.");
     } finally {
       setPhotoProcessing(false);
@@ -407,7 +401,7 @@ function AddCatchPage() {
     }
   };
 
-  const photo = catchData.photos[0];
+  const editingPhoto = catchData.photos.find((item) => item.id === editingPhotoId);
   const selectedSpecies = DEFAULT_SPECIES.find(
     (species) => catchData.speciesKey === species.key,
   );
@@ -509,8 +503,9 @@ function AddCatchPage() {
   };
 
   const savePhotoFrame = (frame) => {
-    setPhotos(catchData.photos.map((item) => item === photo ? { ...item, ...frame } : item));
+    setPhotos(catchData.photos.map((item) => item.id === editingPhotoId ? { ...item, ...frame } : item));
     setPhotoEditorOpen(false);
+    setEditingPhotoId(null);
   };
 
   if (id && !state.loading && !existingCatch) {
@@ -562,38 +557,25 @@ function AddCatchPage() {
             hidden
             onChange={handleFileChange}
             accept="image/jpeg,image/png,image/webp"
+            multiple
           />
 
-          {photo ? (
-            <>
-              <div className="photo-preview-item">
-                {photo.previewUrl ? <img src={photo.previewUrl} alt="Fotka úlovku" style={photoFrameStyle(photo)} /> : <p>Fotografie je dostupná po dokončení synchronizace.</p>}
-              </div>
-
+          {catchData.photos.length > 0 && <div className="catch-photo-manager">
+            {catchData.photos.map((item) => <article className={`photo-preview-item${item.id === catchData.primaryPhotoId ? " photo-preview-primary" : ""}`} key={item.id}>
+              {item.previewUrl ? <img src={item.previewUrl} alt={`Fotografie úlovku – ${item.name}`} style={photoFrameStyle(item)} /> : <p>Fotografie je dostupná pouze po načtení místního souboru.</p>}
               <div className="photo-actions">
-                <button className="photo-action-button" onClick={removePhoto}>
-                  🗑 Smazat
-                </button>
-
-                <button
-                  className="photo-action-button"
-                  onClick={handleAddPhoto}
-                >
-                  ✏️ Změnit
-                </button>
-                {photo.previewUrl && <button type="button" className="photo-action-button" onClick={() => setPhotoEditorOpen(true)}>
-                  Upravit výřez
-                </button>}
+                <button type="button" className="photo-action-button" aria-pressed={item.id === catchData.primaryPhotoId} onClick={() => updateCatchData("primaryPhotoId", item.id)}>{item.id === catchData.primaryPhotoId ? "★ Hlavní" : "Nastavit hlavní"}</button>
+                {item.previewUrl && <button type="button" className="photo-action-button" onClick={() => { setEditingPhotoId(item.id); setPhotoEditorOpen(true); }}>Upravit výřez</button>}
+                <button type="button" className="photo-action-button" onClick={() => removePhoto(item.id)}>Odebrat</button>
               </div>
-            </>
-          ) : (
-            <button onClick={handleAddPhoto} className="photo-upload-button">
+            </article>)}
+          </div>}
+          {catchData.photos.length < MAX_PHOTOS_PER_CATCH && <button type="button" onClick={handleAddPhoto} className="photo-upload-button">
               <span className="photo-upload-icon" aria-hidden="true">⌑</span>
-              <span>Přidat fotku{existingCatch ? "" : " · +5 XP"}</span>
-            </button>
-          )}
+              <span>{catchData.photos.length ? "Přidat fotografie" : `Přidat fotografie${existingCatch ? "" : " · +5 XP"}`}</span>
+            </button>}
         </section>
-        {photoEditorOpen && photo?.previewUrl && <PhotoFrameEditor photo={photo} onSave={savePhotoFrame} onCancel={() => setPhotoEditorOpen(false)} />}
+        {photoEditorOpen && editingPhoto?.previewUrl && <PhotoFrameEditor photo={editingPhoto} onSave={savePhotoFrame} onCancel={() => { setPhotoEditorOpen(false); setEditingPhotoId(null); }} />}
         <section className="add-catch-section">
           <h2>Druh ryby *</h2>
 
@@ -729,28 +711,6 @@ function AddCatchPage() {
             }
           >
             <label className="input-group">
-              <span>Váha (kg)</span>
-
-              <input
-                  type="text"
-                inputMode="decimal"
-                step="0.01"
-                min="0"
-                placeholder="Např. 4.70"
-                value={catchData.weightKg}
-                onChange={(e) => {
-                  const value = e.target.value;
-
-                  updateCatchData("weightKg", value);
-                }}
-              />
-              {catchData.weightSource === "estimated" && String(catchData.weightKg).trim() !== ""
-                && Number.isFinite(Number(String(catchData.weightKg).replace(",", ".")))
-                ? <span className="weight-estimate-note">Odhad podle délky a druhu</span>
-                : <span className="weight-estimate-note" aria-hidden="true">&nbsp;</span>}
-            </label>
-
-            <label className="input-group">
               <span>Délka (cm)</span>
 
               <input
@@ -766,6 +726,12 @@ function AddCatchPage() {
                 }}
               />
               <span className="weight-estimate-note" aria-hidden="true">&nbsp;</span>
+            </label>
+
+            <label className="input-group">
+              <span>Váha (kg)</span>
+              <input type="text" inputMode="decimal" step="0.01" min="0" placeholder="Např. 4.70" value={catchData.weightKg} onChange={(e) => updateCatchData("weightKg", e.target.value)} />
+              <span className="weight-estimate-note">{catchData.weightSource === "estimated" && String(catchData.weightKg).trim() !== "" && Number.isFinite(Number(String(catchData.weightKg).replace(",", "."))) ? "Odhad podle délky a druhu" : "\u00a0"}</span>
             </label>
 
             {displayFull && (

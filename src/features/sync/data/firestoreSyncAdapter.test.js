@@ -39,7 +39,7 @@ test("Firestore catch projection writes null when conditions were not recorded",
   assert.equal(toRemoteRecord("catch", record, "angler-1").conditionSources, null);
 });
 
-test("Firestore catch projection keeps local-only photo framing and never emits cloud object fields", () => {
+test("Firestore catch projection keeps ordered local-only photo metadata and crop fields", () => {
   const record = {
     id: "catch-photo",
     ownerId: "angler-1",
@@ -49,8 +49,23 @@ test("Firestore catch projection keeps local-only photo framing and never emits 
       storagePath: "legacy/cloud/path", sha256: "a".repeat(64),
     }],
   };
-  assert.deepEqual(toRemoteRecord("catch", record, "angler-1").photos, [{
+  const projected = toRemoteRecord("catch", record, "angler-1");
+  assert.deepEqual(projected.photos, [{
     id: "photo-1", name: "kapr.jpg", type: "image/jpeg", size: 123,
     focalX: 0.2, focalY: 0.8, zoom: 1.4,
+    cloud: { state: "localOnly", provider: null, objectKey: null, sha256: null },
   }]);
+  assert.deepEqual(projected.photoRefs, { "photo-1": true });
+  assert.equal(projected.primaryPhotoId, "photo-1");
+  const synced = toRemoteRecord("catch", { ...record, photos: [{ ...record.photos[0], cloud: {
+    state: "synced", provider: "fake", objectKey: "users/angler-1/catches/catch-photo/photos/photo-1/original",
+    sha256: "b".repeat(64), signedUrl: "must-not-leak",
+  } }] }, "angler-1");
+  assert.deepEqual(synced.photos[0].cloud, {
+    state: "synced", provider: "fake",
+    objectKey: "users/angler-1/catches/catch-photo/photos/photo-1/original", sha256: "b".repeat(64),
+  });
+  assert.equal("blob" in toRemoteRecord("catch", { ...record, photos: [{ ...record.photos[0], blob: new Blob(["bytes"]) }] }, "angler-1").photos[0], false);
+  assert.throws(() => toRemoteRecord("catch", { ...record, photos: [{ ...record.photos[0], id: "bad/id" }] }, "angler-1"), /platná|jedinečná/);
+  assert.throws(() => toRemoteRecord("catch", { ...record, photos: Array.from({ length: 11 }, (_, index) => ({ id: `photo-${index}` })) }, "angler-1"), /limit 10/);
 });

@@ -4,6 +4,7 @@ import {
 import { isGuestScope, recordScopeKey } from "../../auth/data/localDataScope.js";
 import { normalizePrivacySettings } from "../../privacy/data/privacyModel.js";
 import { LOCAL_BACKUP_FORMAT, LOCAL_BACKUP_VERSION } from "./backupFormat.js";
+import { MAX_PHOTOS_PER_CATCH, normalizePrimaryPhotoId } from "../../catches/data/catchPhotos.js";
 
 export const MAX_BACKUP_FILE_BYTES = 100 * 1024 * 1024;
 const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
@@ -126,13 +127,14 @@ function decodeCatch(record, tripIds) {
   if (!isRecord(record.sync) || !ALLOWED_SYNC_STATUSES.has(record.sync.status) || !Number.isSafeInteger(record.sync.revision) || record.sync.revision < 0) {
     fail(`Úlovek ${record.id} obsahuje neplatná synchronizační metadata.`);
   }
-  if (!Array.isArray(record.photos) || record.photos.length > 1) fail(`Úlovek ${record.id} obsahuje nepodporovaný počet fotografií.`);
+  if (!Array.isArray(record.photos) || record.photos.length > MAX_PHOTOS_PER_CATCH) fail(`Úlovek ${record.id} obsahuje nepodporovaný počet fotografií.`);
   const photos = record.photos.map((photo) => decodePhoto(photo, record.id));
   requireUniqueIds(photos, `fotografií u úlovku ${record.id}`);
   return {
     ...record,
     ownerId: null,
     photos: photos.map((photo) => ({ ...photo, photoStatus: "local-only" })),
+    primaryPhotoId: normalizePrimaryPhotoId(photos, record.primaryPhotoId),
     sync: { status: "local", revision: Math.max(1, record.sync.revision), photoStatus: photos.length ? "local-only" : "none" },
   };
 }
@@ -242,9 +244,11 @@ export async function recordsAreEqual(left, right) {
 }
 
 function normalizeCatchForBackupComparison(record) {
+  const photos = record.photos ?? [];
   return {
     ...record,
-    photos: (record.photos ?? []).map((photo) => ({
+    primaryPhotoId: normalizePrimaryPhotoId(photos, record.primaryPhotoId),
+    photos: photos.map((photo) => ({
       ...photo,
       photoStatus: photo.photoStatus ?? (photo.blob ? "local-only" : "metadata-only"),
     })),

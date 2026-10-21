@@ -36,7 +36,7 @@ function Layout({ children }) {
   const journalActive = pathname.startsWith("/journal") || pathname.startsWith("/catch/") || pathname.startsWith("/species/") || pathname === "/gallery" || pathname === "/album" || pathname === "/map";
   const tripsActive = pathname === "/trips" || pathname.startsWith("/trips/");
   return (
-    <div className="layout">
+        <div className={pathname === "/gallery" ? "layout layout-gallery" : "layout"}>
       {(!isOnline || sync?.status === "offline" || sync?.status === "error") && <OfflineNotice pending={sync?.pending} status={sync?.status === "error" ? "error" : "offline"} errorCode={sync?.errorCode} onRetry={sync?.retry} />}
       <main className="layout-main">{children}</main>
       <nav className="bottom-nav" aria-label="Hlavní navigace">

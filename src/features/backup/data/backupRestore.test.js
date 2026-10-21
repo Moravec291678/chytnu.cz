@@ -223,6 +223,17 @@ test("photo bytes are decoded and size, type, or base64 corruption is rejected",
   assert.throws(() => makeBackup(makeDocument({ catches: [{ ...makeCatch(), photos: [{ ...photo, type: "image/jpeg" }] }] })), /neodpovídá deklarovanému typu/);
 });
 
+test("multi-photo backup restores each blob, crop, and the primary photo", () => {
+  const photoData = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jCioAAAAASUVORK5CYII=";
+  const photoSize = atob(photoData).length;
+  const photo = { name: "kapr.png", type: "image/png", blobSize: photoSize, dataBase64: photoData, focalX: 0.2, focalY: 0.8, zoom: 1.4 };
+  const restored = makeBackup(makeDocument({ catches: [{ ...makeCatch(), primaryPhotoId: "photo-2", photos: [{ ...photo, id: "photo-1" }, { ...photo, id: "photo-2" }] }] }));
+  assert.equal(restored.catches[0].photos.length, 2);
+  assert.equal(restored.catches[0].primaryPhotoId, "photo-2");
+  assert.equal(restored.catches[0].photos[1].zoom, 1.4);
+  assert.equal(restored.catches[0].photos[1].blob.size, photoSize);
+});
+
 test("same IDs with equal or different content are summarized separately", async () => {
   const backup = makeBackup();
   const exact = makeBackup();

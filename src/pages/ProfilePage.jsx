@@ -423,6 +423,7 @@ function ProfilePage() {
 
       <nav className="profile-quick-links" aria-label="Osobní přehledy">
         <Link className="profile-stats-link" to="/stats"><span><strong>Statistiky</strong><small>Analýza úlovků a výprav</small></span><b aria-hidden="true">→</b></Link>
+        <Link className="profile-secondary-link" to="/gallery"><span aria-hidden="true">▦ </span>Galerie <span aria-hidden="true">→</span></Link>
         <Link className="profile-secondary-link" to="/insights">Osobní přehledy <span aria-hidden="true">→</span></Link>
         <Link className="profile-secondary-link" to="/season-story">Příběh sezóny <span aria-hidden="true">→</span></Link>
         <Link className="profile-secondary-link" to="/year-summary">Roční souhrn <span aria-hidden="true">→</span></Link>
