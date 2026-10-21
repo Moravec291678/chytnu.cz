@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { readFile } from "node:fs/promises";
-import { buildGalleryItems, countActiveGalleryFilters, filterAndSortGallery, getGalleryOptions, getGalleryPhotoLoadRequest } from "./catchGallery.js";
+import { buildGalleryItems, countActiveGalleryFilters, filterAndSortGallery, getGalleryMissingMessage, getGalleryOptions, getGalleryPhotoLoadRequest } from "./catchGallery.js";
 import GalleryPhotoImage from "../../../pages/GalleryPhotoImage.js";
 
 const catches = [
@@ -90,6 +90,11 @@ test("GalleryPhotoImage renders safely without scope, nested Catch, or local pho
   const local = { ...item, blob: new Blob(["photo"], { type: "image/jpeg" }) };
   assert.match(renderToStaticMarkup(createElement(GalleryPhotoImage, { item: local })), /<img/);
   assert.doesNotThrow(() => renderToStaticMarkup(createElement(GalleryPhotoImage, { item: null })));
+});
+
+test("confirmed missing Cloudinary asset offers re-add guidance without deleting photo metadata", () => {
+  assert.match(getGalleryMissingMessage({ cloud: { state: "synced" } }, "cloudinary_asset_missing"), /přidej ji znovu/);
+  assert.match(getGalleryMissingMessage({ cloud: { state: "synced" } }), /úložiště není dostupné/);
 });
 
 test("date periods and custom ranges use catch dates", () => {

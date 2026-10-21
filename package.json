@@ -19,6 +19,7 @@
     "cloudinary": "^2.11.0",
     "firebase": "12.8.0",
     "firebase-admin": "^14.5.0",
+    "heic2any": "^0.0.4",
     "leaflet": "^1.9.4",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

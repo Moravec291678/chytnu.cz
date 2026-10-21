@@ -51,7 +51,8 @@ export function getGalleryPhotoLoadRequest(item, scope) {
   };
 }
 
-export function getGalleryMissingMessage(item) {
+export function getGalleryMissingMessage(item, errorCode = "") {
+  if (errorCode === "cloudinary_asset_missing") return "Cloudová fotografie chybí. Otevři úlovek a přidej ji znovu.";
   return item?.cloud?.state === "synced"
     ? "Tato fotografie má cloudová metadata, ale úložiště není dostupné."
     : "Fotografie není na tomto zařízení dostupná.";

@@ -129,6 +129,68 @@ test("multiple photos upload independently; primary and crop edits do not upload
   assert.equal(provider.calls.uploads.length, 2, "primary and crop metadata changes do not re-upload unchanged bytes");
 });
 
+test("legacy local Blob without a valid photo ID gets a stable ID before it is queued and uploaded", async () => {
+  await resetDatabase();
+  const ownerId = "legacy-photo-owner";
+  const scope = { ownerId, scopeKey: accountScopeKey(ownerId) };
+  await catchRepository.put(makeCatch(ownerId, "catch-legacy-id", [{ ...makePhoto("", "legacy bytes"), id: "../bad id" }], null), scope);
+  const provider = createFakeProvider();
+  const service = makeService(ownerId, provider);
+  await service.normalizeLegacyPhotoIds(ownerId);
+  const normalized = await catchRepository.get("catch-legacy-id", scope);
+  assert.match(normalized.photos[0].id, /^[A-Za-z0-9_-]{1,128}$/);
+  assert.equal(normalized.primaryPhotoId, normalized.photos[0].id);
+  assert.equal((await service.run(ownerId)).status, "success");
+  assert.equal(provider.calls.uploads[0].photoId, normalized.photos[0].id);
+  assert.equal((await catchRepository.get("catch-legacy-id", scope)).photos[0].cloud.state, PHOTO_CLOUD_STATE.SYNCED);
+});
+
+test("legacy HEIC Blob is converted to JPEG before it enters the Cloudinary upload queue", async () => {
+  await resetDatabase();
+  const ownerId = "legacy-heic-owner";
+  const scope = { ownerId, scopeKey: accountScopeKey(ownerId) };
+  const heic = new Blob(["legacy HEIC bytes"], { type: "image/heic" });
+  await catchRepository.put(makeCatch(ownerId, "catch-legacy-heic", [{ id: "p1", name: "IMG_1.HEIC", type: heic.type, size: heic.size, blob: heic }]), scope);
+  const provider = createFakeProvider();
+  const service = createPhotoCloudService({ provider, getCurrentOwnerId: () => ownerId, now: () => fixedNow,
+    normalizeLegacyPhoto: async () => new Blob(["normalized JPEG bytes"], { type: "image/jpeg" }) });
+  assert.equal((await service.run(ownerId)).status, "success");
+  const saved = await catchRepository.get("catch-legacy-heic", scope);
+  assert.equal(saved.photos[0].type, "image/jpeg");
+  assert.equal(saved.photos[0].blob.type, "image/jpeg");
+  assert.equal(saved.photos[0].cloud.state, PHOTO_CLOUD_STATE.SYNCED);
+  assert.equal(provider.calls.uploads[0].contentType, "image/jpeg");
+});
+
+test("failed synced metadata persistence keeps upload job retryable", async () => {
+  await resetDatabase();
+  const ownerId = "metadata-write-owner";
+  const scope = { ownerId, scopeKey: accountScopeKey(ownerId) };
+  await catchRepository.put(makeCatch(ownerId, "catch-metadata-write", [makePhoto("p1", "metadata write")]), scope);
+  const provider = createFakeProvider();
+  let failPhotoWrite = true;
+  const catches = {
+    list: (options) => catchRepository.list(options), get: (id, options) => catchRepository.get(id, options),
+    put: (record, options) => catchRepository.put(record, options),
+    setPhotoCloudState: (catchId, photoId, cloud, options) => catchRepository.setPhotoCloudState(catchId, photoId, cloud, options),
+  };
+  const originalPut = catches.put;
+  catches.put = async (record, options) => {
+    if (failPhotoWrite && record.photos?.some((photo) => photo.cloud?.state === PHOTO_CLOUD_STATE.SYNCED)) {
+      failPhotoWrite = false;
+      throw new Error("temporary local write failure");
+    }
+    return originalPut(record, options);
+  };
+  const service = createPhotoCloudService({ provider, catches, getCurrentOwnerId: () => ownerId, now: () => fixedNow });
+  assert.equal((await service.run(ownerId)).status, "error");
+  assert.equal((await photoCloudOutboxRepository.list()).length, 1);
+  assert.equal((await service.run(ownerId, { force: true })).status, "success");
+  assert.equal((await photoCloudOutboxRepository.list()).length, 0);
+  assert.equal((await catchRepository.get("catch-metadata-write", scope)).photos[0].cloud.state, PHOTO_CLOUD_STATE.SYNCED);
+  assert.equal(provider.objects.size, 1);
+});
+
 test("pending upload survives a service restart, retries, and uses the same object key after an ambiguous success", async () => {
   await resetDatabase();
   const ownerId = "retry-owner";
@@ -163,6 +225,43 @@ test("pending upload survives a service restart, retries, and uses the same obje
   assert.equal((await makeService(ownerId, provider).run(ownerId, { force: true })).status, "success");
   assert.equal(provider.objects.size, 1, "idempotent retry does not create another object");
   assert.equal(new Set(provider.calls.uploads.map((call) => call.objectKey)).size, 1);
+});
+
+test("forced retry requested during an in-flight photo sync runs after the current failure", async () => {
+  await resetDatabase();
+  const ownerId = "concurrent-force-owner";
+  const scope = { ownerId, scopeKey: accountScopeKey(ownerId) };
+  await catchRepository.put(makeCatch(ownerId, "catch-concurrent-force", [makePhoto("p1", "force retry bytes")]), scope);
+  const provider = createFakeProvider();
+  let enterUpload;
+  let releaseUpload;
+  const entered = new Promise((resolve) => { enterUpload = resolve; });
+  const blocked = new Promise((resolve) => { releaseUpload = resolve; });
+  let first = true;
+  let uploadAttempts = 0;
+  const originalUpload = provider.upload.bind(provider);
+  provider.upload = async (input) => {
+    uploadAttempts += 1;
+    if (first) {
+      first = false;
+      enterUpload();
+      await blocked;
+      throw new Error("transient first failure");
+    }
+    return originalUpload(input);
+  };
+  const service = makeService(ownerId, provider);
+  const initial = service.run(ownerId);
+  await entered;
+  const forced = service.run(ownerId, { force: true });
+  releaseUpload();
+  const result = await forced;
+  await initial;
+  assert.equal(result.status, "success");
+  assert.equal(uploadAttempts, 2);
+  assert.equal(provider.calls.uploads.length, 1);
+  assert.equal((await photoCloudOutboxRepository.list()).length, 0);
+  assert.equal((await catchRepository.get("catch-concurrent-force", scope)).photos[0].cloud.state, PHOTO_CLOUD_STATE.SYNCED);
 });
 
 test("photo upload refreshes an invalid Firebase token once and completes with the refreshed token", async () => {

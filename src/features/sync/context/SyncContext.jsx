@@ -10,6 +10,7 @@ import { getPhotoCloudProvider } from "../../catches/data/photoCloudProvider.js"
 import { getBackendConfiguration } from "../../auth/data/backendConfig.js";
 import { SyncContext } from "./syncContextValue.js";
 import { attachSyncLifecycle } from "./syncLifecycle.js";
+import { mergeSyncForce } from "./syncRetry.js";
 
 const initialState = { status: "idle", sent: 0, applied: 0, conflicts: 0, pending: 0, failed: 0, error: "", errorCode: "", errorEndpoint: "", nextRetryAt: null, lastResult: "never" };
 
@@ -32,6 +33,7 @@ export function SyncProvider({ children }) {
   const photoCloudProviderRef = useRef(null);
   const runningRef = useRef(false);
   const rerunRef = useRef(false);
+  const rerunForceRef = useRef(false);
   const runSyncRef = useRef(null);
   const userId = user?.uid ?? null;
 
@@ -44,6 +46,7 @@ export function SyncProvider({ children }) {
     if (authStatus !== "ready" || !userId) return;
     if (runningRef.current) {
       rerunRef.current = true;
+      rerunForceRef.current = mergeSyncForce(rerunForceRef.current, force);
       return;
     }
     if (!online()) {
@@ -65,6 +68,7 @@ export function SyncProvider({ children }) {
           try { return firebaseAuth.currentUserId(); } catch { return null; }
         }, onDiagnostic: reportSyncDiagnostic });
       }
+      await photoCloudServiceRef.current.normalizeLegacyPhotoIds(userId);
       const result = await serviceRef.current.run(userId, { force });
       const photoCloudProvider = getPhotoCloudProvider();
       if (!photoCloudServiceRef.current || photoCloudProviderRef.current !== photoCloudProvider) {
@@ -77,6 +81,7 @@ export function SyncProvider({ children }) {
         });
       }
       const photoResult = await photoCloudServiceRef.current.run(userId, { force });
+      if (photoResult.uploaded > 0) window.dispatchEvent(new Event("chytnu:local-data-restored"));
       const finalResult = photoResult.uploaded > 0
         ? await serviceRef.current.run(userId, { force })
         : result;
@@ -108,8 +113,10 @@ export function SyncProvider({ children }) {
     } finally {
       runningRef.current = false;
       if (rerunRef.current) {
+        const rerunForce = rerunForceRef.current;
         rerunRef.current = false;
-        queueMicrotask(() => runSyncRef.current?.());
+        rerunForceRef.current = false;
+        queueMicrotask(() => runSyncRef.current?.(rerunForce));
       }
     }
   }, [authStatus, updateSummary, userId]);

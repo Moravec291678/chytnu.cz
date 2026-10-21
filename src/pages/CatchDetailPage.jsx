@@ -56,6 +56,8 @@ function CatchDetailPage() {
   const trip = tripState.trips.find((record) => record.id === item?.tripId);
   const catchDateLabel = item ? formatDate(item.caughtAt) : null;
   const [photos, setPhotos] = useState([]);
+  const [missingCloudPhotoId, setMissingCloudPhotoId] = useState(null);
+  const missingCloudPhoto = missingCloudPhotoId === item?.id;
   const [previewPhoto, setPreviewPhoto] = useState(null);
   const primaryPhoto = item ? getPrimaryAvailablePhoto(item) : null;
   const heroPhoto = photos.find((photo) => photo.id === primaryPhoto?.id) ?? photos[0] ?? null;
@@ -74,7 +76,10 @@ function CatchDetailPage() {
       try {
         const blob = await getPhotoBlobForDisplay({ photo, ownerId: scope.ownerId, catchId: item.id, scopeKey: scope.scopeKey });
         return blob ? { ...photo, blob, url: URL.createObjectURL(blob) } : null;
-      } catch { return null; }
+      } catch (photoError) {
+        if (photoError?.code === "cloudinary_asset_missing") setMissingCloudPhotoId(item.id);
+        return null;
+      }
     })).then((loaded) => {
       if (!active) { loaded.filter(Boolean).forEach((photo) => URL.revokeObjectURL(photo.url)); return; }
       entries.push(...loaded.filter(Boolean));
@@ -196,7 +201,8 @@ function CatchDetailPage() {
         <figure className="photo-preview-item catch-detail-hero-photo"><img src={heroPhoto.url} style={photoFrameStyle(heroPhoto)} alt={`Hlavní fotografie úlovku – ${item.species}`} /><figcaption>Hlavní fotografie</figcaption></figure>
         {photos.length > 1 && <div className="catch-detail-photo-strip">{photos.filter((photo) => photo.id !== heroPhoto.id).map((photo) => <button type="button" key={photo.id} onClick={() => setPreviewPhoto(photo)} aria-label={`Zobrazit fotografii ${photo.name}`}><img src={photo.url} style={photoFrameStyle(photo)} alt="" /></button>)}</div>}
       </section>}
-      {(item.photos ?? []).some((photo) => !photo.blob) && <p className="catch-photo-unavailable" role="status">Některé fotografie jsou dostupné pouze jako metadata na tomto zařízení.</p>}
+      {missingCloudPhoto ? <p className="catch-photo-unavailable" role="status">Původní cloudová fotografie chybí. <Link to={`/catch/${item.id}/edit`}>Přidej ji znovu</Link>.</p>
+        : (item.photos ?? []).some((photo) => !photo.blob) && <p className="catch-photo-unavailable" role="status">Některé fotografie jsou dostupné pouze jako metadata na tomto zařízení.</p>}
       {previewPhoto && <div className="catch-photo-lightbox" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPreviewPhoto(null); }}><section role="dialog" aria-modal="true" aria-label="Náhled fotografie"><button type="button" onClick={() => setPreviewPhoto(null)} aria-label="Zavřít náhled">Zavřít</button><img src={previewPhoto.url} style={photoFrameStyle(previewPhoto)} alt={`Fotografie úlovku – ${item.species}`} /></section></div>}
       <section className="catch-detail-measures" aria-label="Míry úlovku">
         <div><strong>{Number.isFinite(item.weightKg) ? formatCatchWeight(item) : "—"}</strong><span>kg</span><small>{item.weightSource === "estimated" ? "ODHAD HMOTNOSTI" : "HMOTNOST"}</small>{isPersonalBest && <em>{recognition.personalBestDelta > 0 ? `+${formatNumber(recognition.personalBestDelta, 2)} kg rekord` : "Osobní rekord"}</em>}</div>

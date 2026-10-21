@@ -1,6 +1,7 @@
 import { accountScopeKey, validateDataScope } from "../../auth/data/localDataScope.js";
 import { firebaseAuth } from "../../auth/data/firebaseAuth.js";
 import { catchRepository, outboxRepository, photoCloudOutboxRepository } from "./catchRepository.js";
+import { normalizePhotoForUpload } from "./photoInput.js";
 import {
   createPhotoObjectKey,
   getPhotoCloudProvider,
@@ -22,6 +23,52 @@ function isActive(getCurrentOwnerId, ownerId) {
 
 function safePhotoCloud(photo) {
   return photo?.cloud ?? { state: PHOTO_CLOUD_STATE.LOCAL_ONLY, provider: null, objectKey: null, sha256: null };
+}
+
+async function normalizeLegacyPhotoIds(catches, ownerId, now, normalizeLegacyPhoto = normalizePhotoForUpload) {
+  const scope = { ownerId, scopeKey: accountScopeKey(ownerId) };
+  const records = await catches.list(scope);
+  let normalized = 0;
+  for (const record of records) {
+    const used = new Set();
+    let changed = false;
+    let photos = (record.photos ?? []).map((photo) => {
+      const valid = typeof photo.id === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(photo.id);
+      if (valid && !used.has(photo.id)) { used.add(photo.id); return photo; }
+      if (!(photo.blob instanceof Blob)) return photo;
+      if (!globalThis.crypto?.randomUUID) throw new Error("Toto zařízení neumí bezpečně vytvořit ID starší fotografie.");
+      let id;
+      do { id = globalThis.crypto.randomUUID(); } while (used.has(id));
+      used.add(id);
+      changed = true;
+      normalized += 1;
+      return { ...photo, id };
+    });
+    const primaryPhotoId = photos.some((photo) => photo.id === record.primaryPhotoId) ? record.primaryPhotoId : photos[0]?.id ?? null;
+    if (primaryPhotoId !== record.primaryPhotoId) changed = true;
+    const normalizedPhotos = [];
+    for (const photo of photos) {
+      const type = photo.blob?.type || photo.type || "";
+      if (!(photo.blob instanceof Blob) || ["image/jpeg", "image/png", "image/webp"].includes(type)) {
+        normalizedPhotos.push(photo);
+        continue;
+      }
+      try {
+        const blob = await normalizeLegacyPhoto(photo.blob, { fileName: photo.name });
+        normalizedPhotos.push({ ...photo, blob, type: "image/jpeg", size: blob.size,
+          name: String(photo.name || "fotografie").replace(/\.[^.]+$/, ".jpg"),
+          cloud: { state: PHOTO_CLOUD_STATE.LOCAL_ONLY, provider: null, objectKey: null, sha256: null } });
+        changed = true;
+      } catch {
+        // Retain the original bytes. The regular upload path reports a retryable error without deleting them.
+        normalizedPhotos.push(photo);
+      }
+    }
+    photos = normalizedPhotos;
+    if (changed) await catches.put({ ...record, photos, primaryPhotoId, updatedAt: new Date(now()).toISOString(),
+      sync: { ...(record.sync ?? {}), status: "local", revision: (record.sync?.revision ?? 0) + 1 } }, scope);
+  }
+  return normalized;
 }
 
 function photoEndpointError(path, response, result) {
@@ -87,9 +134,20 @@ export function createPhotoCloudService({
   getCurrentOwnerId = () => null,
   now = () => Date.now(),
   prepare = (photo) => preparePhotoForCloud(photo),
+  normalizeLegacyPhoto = normalizePhotoForUpload,
   authenticatedRequest = callAuthenticatedPhotoEndpoint,
 } = {}) {
   let inFlight = null;
+  let rerunRequested = false;
+  let rerunForce = false;
+  let rerunOwnerId = null;
+  let preflightOwnerId = null;
+
+  async function prepareLegacyPhotoIds(ownerId) {
+    const result = await normalizeLegacyPhotoIds(catches, ownerId, now, normalizeLegacyPhoto);
+    preflightOwnerId = ownerId;
+    return result;
+  }
 
   async function reconcileUploads(ownerId) {
     const scope = { ownerId, scopeKey: accountScopeKey(ownerId) };
@@ -178,9 +236,9 @@ export function createPhotoCloudService({
       objectKey: job.objectKey,
       sha256: job.sha256,
     });
-    if (saved) await queue.complete(operation.operationId, operation.localRevision);
-    else await queue.complete(operation.operationId, operation.localRevision);
-    return { uploaded: saved ? 1 : 0, deleted: 0 };
+    if (!saved) throw new Error("Cloudinary upload proběhl, ale metadata fotografie se nepodařilo potvrdit místně.");
+    await queue.complete(operation.operationId, operation.localRevision);
+    return { uploaded: 1, deleted: 0 };
   }
 
   async function processDelete(operation) {
@@ -216,6 +274,8 @@ export function createPhotoCloudService({
 
   async function runOnce(ownerId, { force = false } = {}) {
     if (!ownerId || !isActive(getCurrentOwnerId, ownerId)) return { status: "signed-out", uploaded: 0, deleted: 0, queued: 0 };
+    if (preflightOwnerId !== ownerId) await prepareLegacyPhotoIds(ownerId);
+    preflightOwnerId = null;
     if (!await provider.isAvailable({ ownerId })) return { status: "local-only", uploaded: 0, deleted: 0, queued: 0 };
     const queued = await reconcileUploads(ownerId);
     let uploaded = 0;
@@ -258,9 +318,30 @@ export function createPhotoCloudService({
   }
 
   return Object.freeze({
+    normalizeLegacyPhotoIds: prepareLegacyPhotoIds,
     run(ownerId, options) {
-      if (inFlight) return inFlight;
-      inFlight = runOnce(ownerId, options ?? {}).finally(() => { inFlight = null; });
+      if (inFlight) {
+        rerunRequested = true;
+        rerunForce = rerunForce || Boolean(options?.force);
+        rerunOwnerId = ownerId;
+        return inFlight;
+      }
+      inFlight = (async () => {
+        let activeOwnerId = ownerId;
+        let activeForce = Boolean(options?.force);
+        let result;
+        do {
+          rerunRequested = false;
+          rerunForce = false;
+          rerunOwnerId = null;
+          result = await runOnce(activeOwnerId, { force: activeForce });
+          if (rerunRequested) {
+            activeOwnerId = rerunOwnerId;
+            activeForce = rerunForce;
+          }
+        } while (rerunRequested && isActive(getCurrentOwnerId, activeOwnerId));
+        return result;
+      })().finally(() => { inFlight = null; });
       return inFlight;
     },
     async getPhotoBlob({ photo, ownerId, catchId, scopeKey }) {

@@ -3,6 +3,7 @@ import { CatchContext } from "./catchContextValue";
 import { catchRepository } from "../data/catchRepository";
 import { useDataScope } from "../../auth/context/dataScopeContextValue.js";
 import { getCatchRewardEventIds, progressionLedger } from "../../progression/data/progressionLedger.js";
+import { preserveSyncedPhotoMetadata } from "../data/photoMetadata.js";
 const initialState = {
   catches: [],
   sortBy: "vse",
@@ -95,7 +96,9 @@ export function CatchProvider({ children }) {
   }, [scope]);
   const updateCatch = useCallback(async (record) => {
     if (scope.status !== "ready") throw new Error("Místní profil se ještě načítá.");
-    const storedRecord = await catchRepository.put(record, scope);
+    const latestRecord = await catchRepository.get(record.id, scope);
+    const safeRecord = latestRecord ? await preserveSyncedPhotoMetadata(record, latestRecord) : record;
+    const storedRecord = await catchRepository.put(safeRecord, scope);
     await progressionLedger.reconcileCatch(storedRecord, scope);
     if (activeScopeKey.current !== scope.scopeKey) return;
     dispatch({ type: "UPDATE_CATCH", payload: storedRecord });
@@ -106,11 +109,13 @@ export function CatchProvider({ children }) {
   const toggleFavorite = useCallback(async (id) => {
     const record = state.catches.find((item) => item.id === id);
     if (!record) throw new Error("Úlovek už není dostupný. Obnov deník a zkus to znovu.");
+    const latestRecord = await catchRepository.get(id, scope);
+    const safeRecord = latestRecord ? await preserveSyncedPhotoMetadata(record, latestRecord) : record;
     const storedRecord = await catchRepository.put({
-      ...record,
+      ...safeRecord,
       isFavorite: !record.isFavorite,
       sync: {
-        ...(record.sync ?? {}),
+        ...(safeRecord.sync ?? {}),
         status: "local",
         revision: (record.sync?.revision ?? 0) + 1,
       },

@@ -37,6 +37,7 @@ import {
 import PhotoFrameEditor from "../features/catches/components/PhotoFrameEditor.jsx";
 import { photoFrameStyle } from "../features/catches/data/photoFraming.js";
 import { MAX_PHOTOS_PER_CATCH, normalizePrimaryPhotoId } from "../features/catches/data/catchPhotos.js";
+import { normalizePhotoForUpload } from "../features/catches/data/photoInput.js";
 
 const MOON_PHASES = [
   ["new", "Nov"],
@@ -53,22 +54,6 @@ function localDateTime() {
   const now = new Date();
   const pad = (value) => String(value).padStart(2, "0");
   return { date: `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`, time: `${pad(now.getHours())}:${pad(now.getMinutes())}` };
-}
-
-async function optimizePhoto(file) {
-  if (typeof createImageBitmap !== "function") return file;
-  const bitmap = await createImageBitmap(file);
-  try {
-    const scale = Math.min(1, 1920 / Math.max(bitmap.width, bitmap.height));
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
-    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
-    canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    const optimized = await new Promise((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("Fotografii se nepodařilo připravit.")), "image/jpeg", 0.82));
-    return optimized;
-  } finally {
-    bitmap.close();
-  }
 }
 
 function SpeciesManagementRow({ species, selected, pinned, onSelect, onTogglePin }) {
@@ -147,12 +132,11 @@ function AddCatchPage() {
       const room = MAX_PHOTOS_PER_CATCH - catchData.photos.length;
       if (room <= 0) throw new Error(`Můžeš přidat nejvýše ${MAX_PHOTOS_PER_CATCH} fotografií.`);
       for (const selectedPhoto of selectedPhotos.slice(0, room)) {
-        if (!["image/jpeg", "image/png", "image/webp"].includes(selectedPhoto.type)) throw new Error("Podporované jsou fotografie JPG, PNG a WebP.");
         if (selectedPhoto.size > 10 * 1024 * 1024) throw new Error("Každá fotografie může mít nejvýše 10 MB.");
-        const optimizedPhoto = await optimizePhoto(selectedPhoto);
+        const optimizedPhoto = await normalizePhotoForUpload(selectedPhoto);
         const previewUrl = URL.createObjectURL(optimizedPhoto);
         photoUrlsRef.current.add(previewUrl);
-        additions.push({ id: crypto.randomUUID(), blob: optimizedPhoto, name: selectedPhoto.name, type: optimizedPhoto.type || selectedPhoto.type, previewUrl });
+        additions.push({ id: crypto.randomUUID(), blob: optimizedPhoto, name: selectedPhoto.name.replace(/\.[^.]+$/, ".jpg"), type: "image/jpeg", previewUrl });
       }
       const nextPhotos = [...catchData.photos, ...additions];
       setPhotos(nextPhotos);
@@ -556,7 +540,7 @@ function AddCatchPage() {
             ref={fileInputRef}
             hidden
             onChange={handleFileChange}
-            accept="image/jpeg,image/png,image/webp"
+            accept="image/*,.heic,.heif"
             multiple
           />
 
