@@ -4,6 +4,7 @@ import { catchRepository } from "../data/catchRepository";
 import { useDataScope } from "../../auth/context/dataScopeContextValue.js";
 import { getCatchRewardEventIds, progressionLedger } from "../../progression/data/progressionLedger.js";
 import { preserveSyncedPhotoMetadata } from "../data/photoMetadata.js";
+import { requestPhotoStorageDurability } from "../data/photoStorageDurability.js";
 const initialState = {
   catches: [],
   sortBy: "vse",
@@ -65,6 +66,9 @@ export function CatchProvider({ children }) {
     try {
       const catches = await catchRepository.list(scope);
       if (activeScopeKey.current !== requestedScopeKey) return;
+      if (catches.some((record) => (record.photos ?? []).some((photo) => photo.blob instanceof Blob))) {
+        void requestPhotoStorageDurability();
+      }
       catches.sort((a, b) => new Date(b.caughtAt) - new Date(a.caughtAt));
       dispatch({ type: "LOAD_CATCHES", payload: catches });
     } catch (error) {
@@ -87,6 +91,7 @@ export function CatchProvider({ children }) {
   const createCatch = useCallback(async (record) => {
     if (scope.status !== "ready") throw new Error("Místní profil se ještě načítá.");
     const storedRecord = await catchRepository.put(record, scope);
+    if ((storedRecord.photos ?? []).some((photo) => photo.blob instanceof Blob)) void requestPhotoStorageDurability();
     const progression = await progressionLedger.reconcile(scope);
     if (activeScopeKey.current !== scope.scopeKey) return;
     dispatch({ type: "ADD_CATCH", payload: storedRecord });
@@ -99,6 +104,7 @@ export function CatchProvider({ children }) {
     const latestRecord = await catchRepository.get(record.id, scope);
     const safeRecord = latestRecord ? await preserveSyncedPhotoMetadata(record, latestRecord) : record;
     const storedRecord = await catchRepository.put(safeRecord, scope);
+    if ((storedRecord.photos ?? []).some((photo) => photo.blob instanceof Blob)) void requestPhotoStorageDurability();
     await progressionLedger.reconcileCatch(storedRecord, scope);
     if (activeScopeKey.current !== scope.scopeKey) return;
     dispatch({ type: "UPDATE_CATCH", payload: storedRecord });

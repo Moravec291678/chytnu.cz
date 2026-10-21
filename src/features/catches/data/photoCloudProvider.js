@@ -4,6 +4,7 @@ export const PHOTO_CLOUD_STATE = Object.freeze({
   UPLOAD_FAILED: "uploadFailed",
   SYNCED: "synced",
   PENDING_DELETE: "pendingDelete",
+  UNAVAILABLE: "unavailable",
 });
 
 export const nonePhotoCloudProvider = Object.freeze({

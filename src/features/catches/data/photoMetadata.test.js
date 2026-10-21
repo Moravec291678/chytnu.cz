@@ -21,5 +21,10 @@ test("catch edit does not keep synced metadata for changed photo bytes", async (
     cloud: { provider: "cloudinary", state: "synced", objectKey: "key", sha256: await sha256Blob(blob) } }] };
   const incoming = { ...latest, photos: [{ id: "p", blob: new Blob(["new"], { type: "image/jpeg" }), type: blob.type, size: 3,
     cloud: { provider: "cloudinary", state: "pending" } }] };
-  assert.equal((await preserveSyncedPhotoMetadata(incoming, latest)).photos[0].cloud.state, "pending");
+  assert.equal((await preserveSyncedPhotoMetadata(incoming, latest)).photos[0].cloud.state, "localOnly");
+
+  const staleReactSnapshot = { ...incoming, photos: [{ ...incoming.photos[0], cloud: latest.photos[0].cloud }] };
+  assert.deepEqual((await preserveSyncedPhotoMetadata(staleReactSnapshot, latest)).photos[0].cloud,
+    { state: "localOnly", provider: null, objectKey: null, sha256: null },
+    "a stale React snapshot must not claim the new bytes are already synced");
 });

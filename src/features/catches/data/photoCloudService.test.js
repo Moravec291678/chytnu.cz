@@ -43,16 +43,22 @@ function makeCatch(ownerId, id, photos, primaryPhotoId = photos[0]?.id ?? null) 
 
 function createFakeProvider(id = "fake") {
   const objects = new Map();
-  const calls = { uploads: [], downloads: [], deletes: [] };
+  const calls = { uploads: [], downloads: [], deletes: [], stages: [] };
   const failures = { upload: 0, uploadAfterWrite: 0, download: 0, delete: 0 };
   return {
     id, objects, calls, failures, available: true,
     async isAvailable() { return this.available; },
     async upload(input) {
       calls.uploads.push(input);
+      for (const stage of ["signing", "uploading"]) {
+        await input.onStage?.(stage);
+        calls.stages.push(stage);
+      }
       if (failures.upload > 0) { failures.upload -= 1; throw new Error("network upload failed"); }
       objects.set(input.objectKey, { blob: input.blob, sha256: input.sha256, contentType: input.contentType });
       if (failures.uploadAfterWrite > 0) { failures.uploadAfterWrite -= 1; throw new Error("upload response lost"); }
+      await input.onStage?.("verifying");
+      calls.stages.push("verifying");
       return { objectKey: input.objectKey };
     },
     async download(input) {
@@ -77,6 +83,7 @@ function makeService(ownerId, provider) {
   return createPhotoCloudService({
     provider,
     getCurrentOwnerId: () => ownerId,
+    isCatchMetadataSynced: async () => true,
     now: () => fixedNow,
   });
 }
@@ -145,6 +152,47 @@ test("legacy local Blob without a valid photo ID gets a stable ID before it is q
   assert.equal((await catchRepository.get("catch-legacy-id", scope)).photos[0].cloud.state, PHOTO_CLOUD_STATE.SYNCED);
 });
 
+test("photo upload waits until Catch metadata and its photo reference are acknowledged", async () => {
+  await resetDatabase();
+  const ownerId = "metadata-order-owner";
+  const scope = { ownerId, scopeKey: accountScopeKey(ownerId) };
+  await catchRepository.put(makeCatch(ownerId, "catch-order", [makePhoto("p1", "ordered bytes")]), scope);
+  const provider = createFakeProvider();
+  const service = createPhotoCloudService({ provider, getCurrentOwnerId: () => ownerId, now: () => fixedNow });
+  assert.equal((await service.run(ownerId)).status, "success");
+  assert.equal(provider.calls.uploads.length, 0, "unacknowledged Catch/photo metadata must not reach /sign");
+  assert.equal((await photoCloudOutboxRepository.list()).length, 1, "the logical photo job remains queued");
+  await acknowledgeCatchOperations(ownerId);
+  assert.equal((await service.run(ownerId)).uploaded, 1);
+  assert.equal(provider.calls.uploads.length, 1);
+});
+
+test("missing local bytes stay preserved and become terminal with a re-add state, not an infinite retry", async () => {
+  await resetDatabase();
+  const ownerId = "missing-photo-owner";
+  const scope = { ownerId, scopeKey: accountScopeKey(ownerId) };
+  const original = makePhoto("p1", "bytes no longer present");
+  const sha256 = await (await import("./photoCloudProvider.js")).sha256Blob(original.blob);
+  const catchRecord = makeCatch(ownerId, "catch-missing", [{ ...original, blob: undefined, cloud: original.cloud }]);
+  await catchRepository.put(catchRecord, scope);
+  await acknowledgeCatchOperations(ownerId);
+  await photoCloudOutboxRepository.enqueue({ ownerId, catchId: catchRecord.id, photoId: "p1", operation: "upload",
+    provider: "fake", objectKey: createPhotoObjectKey(ownerId, catchRecord.id, "p1"), sha256,
+    size: original.size, contentType: original.type });
+  const provider = createFakeProvider();
+  const service = createPhotoCloudService({ provider, getCurrentOwnerId: () => ownerId, now: () => fixedNow });
+  assert.equal((await service.run(ownerId)).status, "error");
+  let [job] = await photoCloudOutboxRepository.list();
+  assert.equal(job.status, "conflict");
+  assert.equal(job.lastErrorCode, "photo_blob_missing");
+  assert.equal(job.photoCloud.state, "failed_terminal");
+  assert.equal((await catchRepository.get(catchRecord.id, scope)).photos[0].cloud.state, PHOTO_CLOUD_STATE.UNAVAILABLE);
+  assert.equal((await service.run(ownerId, { force: true })).status, "success");
+  [job] = await photoCloudOutboxRepository.list();
+  assert.equal(job.status, "conflict", "force retry does not spin a job without local bytes");
+  assert.equal(provider.calls.uploads.length, 0);
+});
+
 test("legacy HEIC Blob is converted to JPEG before it enters the Cloudinary upload queue", async () => {
   await resetDatabase();
   const ownerId = "legacy-heic-owner";
@@ -152,7 +200,7 @@ test("legacy HEIC Blob is converted to JPEG before it enters the Cloudinary uplo
   const heic = new Blob(["legacy HEIC bytes"], { type: "image/heic" });
   await catchRepository.put(makeCatch(ownerId, "catch-legacy-heic", [{ id: "p1", name: "IMG_1.HEIC", type: heic.type, size: heic.size, blob: heic }]), scope);
   const provider = createFakeProvider();
-  const service = createPhotoCloudService({ provider, getCurrentOwnerId: () => ownerId, now: () => fixedNow,
+  const service = createPhotoCloudService({ provider, getCurrentOwnerId: () => ownerId, isCatchMetadataSynced: async () => true, now: () => fixedNow,
     normalizeLegacyPhoto: async () => new Blob(["normalized JPEG bytes"], { type: "image/jpeg" }) });
   assert.equal((await service.run(ownerId)).status, "success");
   const saved = await catchRepository.get("catch-legacy-heic", scope);
@@ -182,7 +230,7 @@ test("failed synced metadata persistence keeps upload job retryable", async () =
     }
     return originalPut(record, options);
   };
-  const service = createPhotoCloudService({ provider, catches, getCurrentOwnerId: () => ownerId, now: () => fixedNow });
+  const service = createPhotoCloudService({ provider, catches, isCatchMetadataSynced: async () => true, getCurrentOwnerId: () => ownerId, now: () => fixedNow });
   assert.equal((await service.run(ownerId)).status, "error");
   assert.equal((await photoCloudOutboxRepository.list()).length, 1);
   assert.equal((await service.run(ownerId, { force: true })).status, "success");
@@ -311,7 +359,7 @@ test("photo upload refreshes an invalid Firebase token once and completes with t
       bytes: photo.blob.size, format: "jpg",
     }), { status: 200, headers: { "Content-Type": "application/json" } });
   } });
-  const service = createPhotoCloudService({ provider, getCurrentOwnerId: () => ownerId, authenticatedRequest: requestEndpoint, now: () => fixedNow });
+  const service = createPhotoCloudService({ provider, isCatchMetadataSynced: async () => true, getCurrentOwnerId: () => ownerId, authenticatedRequest: requestEndpoint, now: () => fixedNow });
   const result = await service.run(ownerId);
   assert.equal(result.status, "success");
   assert.deepEqual(tokenCalls, [false, true, false]);
@@ -337,7 +385,7 @@ test("photo upload stops after exactly one forced refresh and retains a precise 
   });
   const provider = createFakeProvider();
   const authenticatedProvider = { ...provider, async upload(input) { await input.requestUploadGrant({ catchId: input.catchId, photoId: input.photoId }); } };
-  const service = createPhotoCloudService({ provider: authenticatedProvider, getCurrentOwnerId: () => ownerId,
+  const service = createPhotoCloudService({ provider: authenticatedProvider, getCurrentOwnerId: () => ownerId, isCatchMetadataSynced: async () => true,
     authenticatedRequest: requestEndpoint, now: () => fixedNow });
   const result = await service.run(ownerId);
   assert.equal(result.status, "error");
@@ -372,12 +420,15 @@ test("download prefers local bytes, verifies remote bytes, caches per account, a
   assert.equal(await service.getPhotoBlob({ photo: { ...remotePhoto, blob: new Blob(["local"], { type: "image/jpeg" }) }, ownerId, catchId: "catch-download", scopeKey: scope.scopeKey }).then((cached) => cached.text()), "local");
   assert.equal(provider.calls.downloads.length, 1, "local cache avoids another network read");
   const missingPhoto = { ...remotePhoto, id: "missing", cloud: { ...remotePhoto.cloud, objectKey: createPhotoObjectKey(ownerId, "catch-download", "missing") } };
-  assert.equal(await service.getPhotoBlob({ photo: missingPhoto, ownerId, catchId: "catch-download", scopeKey: scope.scopeKey }), null);
+  await assert.rejects(() => service.getPhotoBlob({ photo: missingPhoto, ownerId, catchId: "catch-download", scopeKey: scope.scopeKey }), { code: "cloudinary_asset_missing" });
 
   const otherOwner = "other-account";
   const otherService = createPhotoCloudService({ provider, getCurrentOwnerId: () => otherOwner });
   assert.equal(await otherService.getPhotoBlob({ photo: remotePhoto, ownerId, catchId: "catch-download", scopeKey: accountScopeKey(ownerId) }), null);
   assert.equal(provider.calls.downloads.length, 2, "cross-account access is rejected before provider access");
+  assert.equal(await otherService.getPhotoBlob({ photo: { ...remotePhoto, blob }, ownerId, catchId: "catch-download", scopeKey: accountScopeKey(ownerId) }), null,
+    "cached local bytes are also rejected after an account switch");
+  assert.equal(provider.calls.downloads.length, 2);
 });
 
 test("photo metadata moves between isolated devices; remote download caches and crop edit avoids reupload", async () => {
@@ -460,6 +511,7 @@ test("photo and Catch deletion are local-first with durable cloud delete retries
   assert.equal((await service.run(ownerId)).status, "error");
   assert.equal(provider.objects.has(catchPhotoKey), true);
   assert.equal((await photoCloudOutboxRepository.list())[0].status, "failed");
+  assert.equal((await photoCloudOutboxRepository.list())[0].photoCloud.state, "failed_retryable");
   const retryService = makeService(ownerId, provider);
   assert.equal((await retryService.run(ownerId, { force: true })).status, "success");
   assert.equal(provider.objects.has(catchPhotoKey), false);

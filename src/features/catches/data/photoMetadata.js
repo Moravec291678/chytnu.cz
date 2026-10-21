@@ -7,8 +7,12 @@ export async function preserveSyncedPhotoMetadata(incoming, current) {
     const latest = currentById.get(photo?.id);
     if (latest?.cloud?.state !== "synced" || latest.cloud.provider !== "cloudinary") return photo;
     if (photo.blob instanceof Blob) {
-      if (await sha256Blob(photo.blob) !== latest.cloud.sha256) return photo;
-    } else if (photo.size !== latest.size || photo.type !== latest.type) return photo;
+      if (await sha256Blob(photo.blob) !== latest.cloud.sha256) {
+        return { ...photo, cloud: { state: "localOnly", provider: null, objectKey: null, sha256: null } };
+      }
+    } else if (photo.size !== latest.size || photo.type !== latest.type) {
+      return { ...photo, cloud: { state: "localOnly", provider: null, objectKey: null, sha256: null } };
+    }
     return { ...photo, cloud: latest.cloud };
   }));
   return { ...incoming, photos };

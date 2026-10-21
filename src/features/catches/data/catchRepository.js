@@ -535,6 +535,30 @@ export const photoCloudOutboxRepository = {
     });
   },
   list: async () => (await outboxRepository.list()).filter((operation) => operation.entityType === "photoCloud"),
+  setStage: async (operationId, expectedLocalRevision, stage) => {
+    if (!["preparing", "signing", "uploading", "verifying", "persisting"].includes(stage)) {
+      throw new TypeError("Photo upload stage is not supported.");
+    }
+    const db = await openLocalDatabase();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(OUTBOX_STORE_NAME, "readwrite");
+      const store = transaction.objectStore(OUTBOX_STORE_NAME);
+      const request = store.index("operationId").get(operationId);
+      let updated = false;
+      request.onsuccess = () => {
+        const operation = request.result;
+        if (!operation || operation.entityType !== "photoCloud" || operation.localRevision !== expectedLocalRevision) return;
+        store.put({ ...operation, status: stage,
+          ...(stage === "preparing" ? { lastError: null, lastErrorCode: null, lastProviderCode: null, lastEndpoint: null, nextAttemptAt: null } : {}),
+          photoCloud: { ...operation.photoCloud, state: stage }, updatedAt: new Date().toISOString() });
+        updated = true;
+      };
+      request.onerror = () => transaction.abort();
+      transaction.oncomplete = () => { db.close(); resolve(updated); };
+      transaction.onerror = () => { db.close(); reject(transaction.error ?? new Error("Stav photo uploadu se nepodařilo uložit.")); };
+      transaction.onabort = () => { db.close(); reject(transaction.error ?? new Error("Stav photo uploadu byl přerušen.")); };
+    });
+  },
   complete: async (operationId, expectedLocalRevision) => {
     const db = await openLocalDatabase();
     return new Promise((resolve, reject) => {
@@ -580,6 +604,7 @@ export const outboxRepository = {
         if (!request.result) return;
         const operation = request.result;
         operation.status = "failed";
+        if (operation.entityType === "photoCloud" && operation.photoCloud) operation.photoCloud.state = "failed_retryable";
         operation.attemptCount += 1;
         operation.lastError = String(message || "Operaci se nepodařilo synchronizovat.");
         operation.lastErrorCode = typeof details.code === "string" ? details.code : "unknown";
@@ -597,7 +622,7 @@ export const outboxRepository = {
       transaction.onabort = () => { db.close(); reject(transaction.error ?? new Error("Změna stavu operace byla přerušena.")); };
     });
   },
-  markConflict: async (operationId, message) => {
+  markConflict: async (operationId, message, errorCode = "conflict") => {
     const db = await openLocalDatabase();
     return new Promise((resolve, reject) => {
       const transaction = db.transaction(OUTBOX_STORE_NAME, "readwrite");
@@ -606,7 +631,10 @@ export const outboxRepository = {
       let result = false;
       request.onsuccess = () => {
         if (!request.result) return;
-        store.put({ ...request.result, status: "conflict", lastError: String(message), updatedAt: new Date().toISOString() });
+        const operation = request.result;
+        store.put({ ...operation, status: "conflict", lastError: String(message), lastErrorCode: errorCode,
+          ...(operation.entityType === "photoCloud" && operation.photoCloud
+            ? { photoCloud: { ...operation.photoCloud, state: "failed_terminal" } } : {}), updatedAt: new Date().toISOString() });
         result = true;
       };
       request.onerror = () => transaction.abort();

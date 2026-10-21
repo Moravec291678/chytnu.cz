@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Layout from "../shared/layout/Layout";
 import ConfirmDialog from "../shared/components/ConfirmDialog";
@@ -9,6 +9,7 @@ import { getLocalBackupFileName, serializeLocalBackupJson } from "../features/ba
 import { readLocalBackupSnapshot } from "../features/backup/data/localBackupRepository.js";
 import { deleteLocalScopeData } from "../features/settings/data/localDataDeletion.js";
 import { useSync } from "../features/sync/context/syncContextValue.js";
+import { readPhotoSyncDiagnostics } from "../features/catches/data/photoSyncDiagnostics.js";
 import "./SettingsPage.css";
 
 /* global __APP_BUILD_ID__ */
@@ -33,6 +34,20 @@ export default function SettingsPage() {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [photoDiagnostics, setPhotoDiagnostics] = useState({ scopeKey: null, rows: [] });
+
+  useEffect(() => {
+    let active = true;
+    if (!debugMode || scope.status !== "ready") return undefined;
+    const diagnosticScope = { ownerId: scope.ownerId, scopeKey: scope.scopeKey };
+    readPhotoSyncDiagnostics({ scope: diagnosticScope }).then((result) => {
+      if (active) setPhotoDiagnostics({ scopeKey: scope.scopeKey, rows: result.slice(0, 100) });
+    }).catch(() => {
+      if (active) setPhotoDiagnostics({ scopeKey: scope.scopeKey, rows: [] });
+    });
+    return () => { active = false; };
+  }, [debugMode, scope.ownerId, scope.scopeKey, scope.status]);
+  const photoDiagnosticRows = photoDiagnostics.scopeKey === scope.scopeKey ? photoDiagnostics.rows : [];
 
   const update = (patch) => {
     if (scope.status !== "ready") return;
@@ -127,7 +142,6 @@ export default function SettingsPage() {
         <dl>
           <dt>Build</dt><dd>{typeof __APP_BUILD_ID__ === "string" ? __APP_BUILD_ID__ : "unknown"}</dd>
           <dt>Auth / scope</dt><dd>{auth.user ? "authenticated" : auth.status === "loading" ? "loading" : "guest"} / {scope.kind ?? "unknown"}</dd>
-          <dt>UID</dt><dd>{auth.user?.uid ? `…${auth.user.uid.slice(-6)}` : "—"}</dd>
           <dt>Backend</dt><dd>{sync.backendMode}</dd>
           <dt>Sync enabled</dt><dd>{sync.syncEnabled ? "yes" : "no"}</dd>
           <dt>Photo provider</dt><dd>{sync.providerId}</dd>
@@ -136,6 +150,11 @@ export default function SettingsPage() {
           <dt>Error classification</dt><dd>{sync.errorCode || sync.lastErrorCode || "none"}</dd>
           <dt>Photo API endpoint</dt><dd>{sync.errorEndpoint || sync.lastErrorEndpoint || "none"}</dd>
         </dl>
+        <h3>Photo jobs (bez ID a obsahu)</h3>
+        {photoDiagnosticRows.length ? <ul>{photoDiagnosticRows.map((photo, index) => <li key={index}>
+          Blob {photo.blobPresent ? "YES" : "NO"} · {photo.size ?? "unknown"} bytes · {photo.type} · job {photo.jobState} · attempts {photo.attempts} · retry {photo.nextRetryAt ?? "none"} · error {photo.errorClass} · cloud {photo.cloudState} · remote {photo.remoteAvailability}
+        </li>)}</ul> : <p>Žádné místní photo záznamy pro tento profil.</p>}
+        {photoDiagnosticRows.length === 100 && <p>Zobrazeno maximálně 100 fotografií.</p>}
       </section>}
 
       <section className="settings-card" aria-labelledby="settings-display-title">

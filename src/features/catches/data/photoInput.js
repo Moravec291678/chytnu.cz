@@ -1,3 +1,5 @@
+import { sha256Blob } from "./photoCloudProvider.js";
+
 const HEIC_TYPES = new Set(["image/heic", "image/heif", "image/heic-sequence", "image/heif-sequence"]);
 const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/avif", ...HEIC_TYPES]);
 
@@ -13,13 +15,22 @@ function defaultHeicConverter() {
 
 async function toSupportedSource(file, fileName, convertHeic) {
   if (isHeicPhoto(file, fileName)) {
-    const converter = await convertHeic();
-    const converted = await converter({ blob: file, toType: "image/png" });
-    const blob = Array.isArray(converted) ? converted[0] : converted;
-    if (!(blob instanceof Blob) || blob.type !== "image/png" || blob.size < 1) throw new Error("HEIC fotografii se nepodařilo dekódovat.");
-    return blob;
+    try {
+      const converter = await convertHeic();
+      const converted = await converter({ blob: file, toType: "image/png" });
+      const blob = Array.isArray(converted) ? converted[0] : converted;
+      if (blob instanceof Blob && blob.type === "image/png" && blob.size > 0) return blob;
+    } catch {
+      // Fall through to native browser decoding below. Some newer HEIC variants
+      // may not yet be recognized by the bundled converter.
+    }
+    return file;
   }
   let type = String(file?.type ?? "").toLowerCase();
+  if (type === "image/jpg") {
+    type = "image/jpeg";
+    file = file.slice(0, file.size, type);
+  }
   if (!IMAGE_TYPES.has(type)) {
     const extensionType = ({ jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp", avif: "image/avif" })[String(fileName).toLowerCase().split(".").pop()];
     if (!extensionType) throw new Error("Vyber platnou fotografii. Podporujeme JPG, PNG, WebP, AVIF, HEIC a HEIF.");
@@ -30,7 +41,9 @@ async function toSupportedSource(file, fileName, convertHeic) {
 }
 
 async function decodeImage(blob) {
-  if (typeof createImageBitmap === "function") return createImageBitmap(blob);
+  if (typeof createImageBitmap === "function") {
+    try { return await createImageBitmap(blob); } catch { /* Try the browser's Image decoder. */ }
+  }
   if (typeof Image === "undefined" || typeof URL?.createObjectURL !== "function") throw new Error("Toto zařízení neumí připravit fotografii pro synchronizaci.");
   const url = URL.createObjectURL(blob);
   try {
@@ -67,6 +80,12 @@ export async function normalizePhotoForUpload(file, { fileName = file?.name ?? "
     if (error?.message?.startsWith("Fotografii") || error?.message?.startsWith("HEIC") || error?.message?.startsWith("Vyber") || error?.message?.startsWith("Toto zařízení")) throw error;
     throw new Error(isHeicPhoto(file, fileName)
       ? "HEIC fotografii se nepodařilo převést. Zkus ji prosím uložit nebo sdílet jako JPEG."
-      : "Fotografii se nepodařilo načíst. Zkus ji prosím uložit jako JPG nebo PNG.", { cause: error });
+      : "Fotografii se nepodařilo načíst. Zkus ji prosím uložit jako JPG, PNG nebo WebP.", { cause: error });
   }
+}
+
+/** Canonical local photo payload; its metadata always describes its final normalized bytes. */
+export async function preparePhotoForStorageAndUpload(file, options = {}) {
+  const blob = await normalizePhotoForUpload(file, options);
+  return { blob, type: blob.type, size: blob.size, sha256: await sha256Blob(blob) };
 }

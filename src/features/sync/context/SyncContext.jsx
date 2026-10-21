@@ -11,6 +11,7 @@ import { getBackendConfiguration } from "../../auth/data/backendConfig.js";
 import { SyncContext } from "./syncContextValue.js";
 import { attachSyncLifecycle } from "./syncLifecycle.js";
 import { mergeSyncForce } from "./syncRetry.js";
+import { preparePhotoSyncService } from "./photoSyncPreparation.js";
 
 const initialState = { status: "idle", sent: 0, applied: 0, conflicts: 0, pending: 0, failed: 0, error: "", errorCode: "", errorEndpoint: "", nextRetryAt: null, lastResult: "never" };
 
@@ -68,19 +69,18 @@ export function SyncProvider({ children }) {
           try { return firebaseAuth.currentUserId(); } catch { return null; }
         }, onDiagnostic: reportSyncDiagnostic });
       }
-      await photoCloudServiceRef.current.normalizeLegacyPhotoIds(userId);
-      const result = await serviceRef.current.run(userId, { force });
       const photoCloudProvider = getPhotoCloudProvider();
-      if (!photoCloudServiceRef.current || photoCloudProviderRef.current !== photoCloudProvider) {
-        photoCloudProviderRef.current = photoCloudProvider;
-        photoCloudServiceRef.current = createPhotoCloudService({
+      const photoService = await preparePhotoSyncService({
+        serviceRef: photoCloudServiceRef,
+        providerRef: photoCloudProviderRef,
         provider: photoCloudProvider,
-        getCurrentOwnerId: () => {
+        ownerId: userId,
+        createService: (provider) => createPhotoCloudService({ provider, getCurrentOwnerId: () => {
           try { return firebaseAuth.currentUserId(); } catch { return null; }
-        },
+        } }),
         });
-      }
-      const photoResult = await photoCloudServiceRef.current.run(userId, { force });
+      const result = await serviceRef.current.run(userId, { force });
+      const photoResult = await photoService.run(userId, { force });
       if (photoResult.uploaded > 0) window.dispatchEvent(new Event("chytnu:local-data-restored"));
       const finalResult = photoResult.uploaded > 0
         ? await serviceRef.current.run(userId, { force })

@@ -37,7 +37,7 @@ import {
 import PhotoFrameEditor from "../features/catches/components/PhotoFrameEditor.jsx";
 import { photoFrameStyle } from "../features/catches/data/photoFraming.js";
 import { MAX_PHOTOS_PER_CATCH, normalizePrimaryPhotoId } from "../features/catches/data/catchPhotos.js";
-import { normalizePhotoForUpload } from "../features/catches/data/photoInput.js";
+import { preparePhotoForStorageAndUpload } from "../features/catches/data/photoInput.js";
 
 const MOON_PHASES = [
   ["new", "Nov"],
@@ -133,10 +133,12 @@ function AddCatchPage() {
       if (room <= 0) throw new Error(`Můžeš přidat nejvýše ${MAX_PHOTOS_PER_CATCH} fotografií.`);
       for (const selectedPhoto of selectedPhotos.slice(0, room)) {
         if (selectedPhoto.size > 10 * 1024 * 1024) throw new Error("Každá fotografie může mít nejvýše 10 MB.");
-        const optimizedPhoto = await normalizePhotoForUpload(selectedPhoto);
+        const preparedPhoto = await preparePhotoForStorageAndUpload(selectedPhoto);
+        const optimizedPhoto = preparedPhoto.blob;
         const previewUrl = URL.createObjectURL(optimizedPhoto);
         photoUrlsRef.current.add(previewUrl);
-        additions.push({ id: crypto.randomUUID(), blob: optimizedPhoto, name: selectedPhoto.name.replace(/\.[^.]+$/, ".jpg"), type: "image/jpeg", previewUrl });
+        additions.push({ id: crypto.randomUUID(), blob: optimizedPhoto, name: selectedPhoto.name.replace(/\.[^.]+$/, ".jpg"), type: preparedPhoto.type,
+          size: preparedPhoto.size, contentSha256: preparedPhoto.sha256, previewUrl });
       }
       const nextPhotos = [...catchData.photos, ...additions];
       setPhotos(nextPhotos);

@@ -1,7 +1,7 @@
 import { accountScopeKey, validateDataScope } from "../../auth/data/localDataScope.js";
 import { firebaseAuth } from "../../auth/data/firebaseAuth.js";
 import { catchRepository, outboxRepository, photoCloudOutboxRepository } from "./catchRepository.js";
-import { normalizePhotoForUpload } from "./photoInput.js";
+import { preparePhotoForStorageAndUpload } from "./photoInput.js";
 import {
   createPhotoObjectKey,
   getPhotoCloudProvider,
@@ -21,11 +21,13 @@ function isActive(getCurrentOwnerId, ownerId) {
   return getCurrentOwnerId() === ownerId;
 }
 
+const TERMINAL_UPLOAD_ERRORS = new Set(["photo_blob_missing", "photo_content_mismatch", "invalid_photo", "invalid_photo_identity"]);
+
 function safePhotoCloud(photo) {
   return photo?.cloud ?? { state: PHOTO_CLOUD_STATE.LOCAL_ONLY, provider: null, objectKey: null, sha256: null };
 }
 
-async function normalizeLegacyPhotoIds(catches, ownerId, now, normalizeLegacyPhoto = normalizePhotoForUpload) {
+async function normalizeLegacyPhotoIds(catches, ownerId, now, normalizeLegacyPhoto = preparePhotoForStorageAndUpload) {
   const scope = { ownerId, scopeKey: accountScopeKey(ownerId) };
   const records = await catches.list(scope);
   let normalized = 0;
@@ -54,8 +56,11 @@ async function normalizeLegacyPhotoIds(catches, ownerId, now, normalizeLegacyPho
         continue;
       }
       try {
-        const blob = await normalizeLegacyPhoto(photo.blob, { fileName: photo.name });
+        const prepared = await normalizeLegacyPhoto(photo.blob, { fileName: photo.name });
+        const blob = prepared instanceof Blob ? prepared : prepared?.blob;
+        if (!(blob instanceof Blob)) throw new TypeError("Příprava legacy fotografie nevrátila Blob.");
         normalizedPhotos.push({ ...photo, blob, type: "image/jpeg", size: blob.size,
+          contentSha256: prepared.sha256 ?? await sha256Blob(blob),
           name: String(photo.name || "fotografie").replace(/\.[^.]+$/, ".jpg"),
           cloud: { state: PHOTO_CLOUD_STATE.LOCAL_ONLY, provider: null, objectKey: null, sha256: null } });
         changed = true;
@@ -132,9 +137,15 @@ export function createPhotoCloudService({
   queue = photoCloudOutboxRepository,
   operationOutbox = outboxRepository,
   getCurrentOwnerId = () => null,
+  isCatchMetadataSynced = async (ownerId, catchId) => {
+    const record = await catches.get(catchId, { ownerId, scopeKey: accountScopeKey(ownerId) });
+    if (record?.sync?.status !== "metadata-synced") return false;
+    const operations = await operationOutbox.list();
+    return !operations.some((item) => item.ownerId === ownerId && item.entityType === "catch" && item.entityId === catchId);
+  },
   now = () => Date.now(),
   prepare = (photo) => preparePhotoForCloud(photo),
-  normalizeLegacyPhoto = normalizePhotoForUpload,
+  normalizeLegacyPhoto = preparePhotoForStorageAndUpload,
   authenticatedRequest = callAuthenticatedPhotoEndpoint,
 } = {}) {
   let inFlight = null;
@@ -160,6 +171,7 @@ export function createPhotoCloudService({
         const sha256 = await sha256Blob(photo.blob);
         const objectKey = createPhotoObjectKey(ownerId, record.id, photo.id);
         const cloud = safePhotoCloud(photo);
+        if (cloud.state === PHOTO_CLOUD_STATE.UNAVAILABLE && cloud.objectKey === objectKey && cloud.sha256 === sha256) continue;
         if (cloud.state === PHOTO_CLOUD_STATE.SYNCED
           && cloud.provider === provider.id
           && cloud.objectKey === objectKey
@@ -206,12 +218,26 @@ export function createPhotoCloudService({
   async function processUpload(operation) {
     const job = operation.photoCloud;
     const scope = { ownerId: operation.ownerId, scopeKey: operation.scopeKey };
-    const record = await catches.get(job.catchId, scope);
-    const photo = record?.photos?.find((item) => item.id === job.photoId);
-    if (!photo?.blob || await sha256Blob(photo.blob) !== job.sha256) {
-      await queue.complete(operation.operationId, operation.localRevision);
-      return { uploaded: 0, deleted: 0 };
+    if (!await isCatchMetadataSynced(job.ownerId, job.catchId)) {
+      return { uploaded: 0, deleted: 0, deferred: true };
     }
+    const catchRecord = await catches.get(job.catchId, scope);
+    const photo = catchRecord?.photos?.find((item) => item.id === job.photoId);
+    if (!(photo?.blob instanceof Blob)) {
+      if (photo?.cloud?.state === PHOTO_CLOUD_STATE.SYNCED && photo.cloud.provider === job.provider
+        && photo.cloud.objectKey === job.objectKey && photo.cloud.sha256 === job.sha256) {
+        await queue.complete(operation.operationId, operation.localRevision);
+        return { uploaded: 0, deleted: 0 };
+      }
+      throw Object.assign(new Error("Lokální data fotografie už nejsou dostupná."), { code: "photo_blob_missing" });
+    }
+    const stage = async (value) => {
+      if (!await queue.setStage(operation.operationId, operation.localRevision, value)) {
+        throw Object.assign(new Error("Photo upload job byl mezitím nahrazen novější verzí."), { code: "photo_job_superseded" });
+      }
+    };
+    await stage("preparing");
+    if (await sha256Blob(photo.blob) !== job.sha256) throw Object.assign(new Error("Lokální data fotografie neodpovídají upload jobu."), { code: "photo_content_mismatch" });
     const prepared = await prepare(photo);
     const blob = prepared.original;
     const actualHash = await sha256Blob(blob);
@@ -225,11 +251,13 @@ export function createPhotoCloudService({
       sha256: job.sha256,
       contentType: job.contentType,
       size: job.size,
+      onStage: stage,
       requestUploadGrant: (photo) => authenticatedRequest("/api/cloudinary/sign", photo),
       requestUploadVerification: (photo) => authenticatedRequest("/api/cloudinary/verify-upload", photo),
     });
     if (!isActive(getCurrentOwnerId, operation.ownerId)) return { uploaded: 0, deleted: 0, stopped: true };
     if (!await queue.isCurrent(operation.operationId, operation.localRevision)) return { uploaded: 1, deleted: 0 };
+    await stage("persisting");
     const saved = await saveSyncedPhotoMetadata(job, {
       state: PHOTO_CLOUD_STATE.SYNCED,
       provider: provider.id,
@@ -295,20 +323,29 @@ export function createPhotoCloudService({
         deleted += result?.deleted ?? 0;
         if (result?.stopped) break;
       } catch (failure) {
+        if (failure?.code === "photo_job_superseded") continue;
         error = failure;
-        await operationOutbox.markFailed(operation.operationId, failure?.message, {
+        const job = operation.photoCloud;
+        const terminal = operation.operation === "photo-upload" && TERMINAL_UPLOAD_ERRORS.has(failure?.code);
+        if (terminal) await operationOutbox.markConflict(operation.operationId, failure?.message, failure.code);
+        else await operationOutbox.markFailed(operation.operationId, failure?.message, {
           code: failure?.code,
           providerCode: failure?.providerCode,
           endpoint: failure?.endpoint,
         });
-        const job = operation.photoCloud;
         if (operation.operation === "photo-upload") {
-          await catches.setPhotoCloudState(job.catchId, job.photoId, {
-            state: PHOTO_CLOUD_STATE.UPLOAD_FAILED,
-            provider: job.provider,
-            objectKey: job.objectKey,
-            sha256: job.sha256,
-          }, { ownerId, scopeKey: accountScopeKey(ownerId) }).catch(() => {});
+          const scope = { ownerId, scopeKey: accountScopeKey(ownerId) };
+          const latest = terminal ? await catches.get(job.catchId, scope).catch(() => null) : null;
+          const latestPhoto = latest?.photos?.find((photo) => photo.id === job.photoId);
+          if (!terminal || latestPhoto?.cloud?.state !== PHOTO_CLOUD_STATE.SYNCED) {
+            await catches.setPhotoCloudState(job.catchId, job.photoId, {
+              state: terminal ? PHOTO_CLOUD_STATE.UNAVAILABLE : PHOTO_CLOUD_STATE.UPLOAD_FAILED,
+              provider: job.provider,
+              objectKey: job.objectKey,
+              sha256: job.sha256,
+              ...(terminal ? { errorCode: failure.code } : {}),
+            }, scope).catch(() => {});
+          }
         }
         break;
       }
@@ -346,6 +383,7 @@ export function createPhotoCloudService({
     },
     async getPhotoBlob({ photo, ownerId, catchId, scopeKey }) {
       const scope = validateDataScope({ scopeKey, ownerId });
+      if (!isActive(getCurrentOwnerId, ownerId)) return null;
       if (photo?.blob instanceof Blob) return photo.blob;
       const downloadProvider = resolveProvider(photo?.cloud?.provider);
       if (!photo?.cloud || photo.cloud.state !== PHOTO_CLOUD_STATE.SYNCED
@@ -359,7 +397,10 @@ export function createPhotoCloudService({
         sha256: photo.cloud.sha256,
         requestDownloadGrant: (photo) => authenticatedRequest("/api/cloudinary/delivery", photo),
       });
-      if (!(blob instanceof Blob)) return null;
+      if (!(blob instanceof Blob)) {
+        if (blob === null) throw Object.assign(new Error("Cloudinary asset is missing."), { code: "cloudinary_asset_missing" });
+        return null;
+      }
       if (blob.size !== photo.size || (photo.type && blob.type !== photo.type)
         || await sha256Blob(blob) !== photo.cloud.sha256) {
         throw new Error("Stažená fotografie neodpovídá uloženým metadatům.");

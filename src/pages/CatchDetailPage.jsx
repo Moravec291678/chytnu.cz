@@ -56,6 +56,8 @@ function CatchDetailPage() {
   const trip = tripState.trips.find((record) => record.id === item?.tripId);
   const catchDateLabel = item ? formatDate(item.caughtAt) : null;
   const [photos, setPhotos] = useState([]);
+  const [photoLoadFailed, setPhotoLoadFailed] = useState(false);
+  const [photoRetryVersion, setPhotoRetryVersion] = useState(0);
   const [missingCloudPhotoId, setMissingCloudPhotoId] = useState(null);
   const missingCloudPhoto = missingCloudPhotoId === item?.id;
   const [previewPhoto, setPreviewPhoto] = useState(null);
@@ -72,24 +74,34 @@ function CatchDetailPage() {
     if (!item) return undefined;
     let active = true;
     const entries = [];
+    let loadFailed = false;
     Promise.all((item.photos ?? []).map(async (photo) => {
+      if (photo.cloud?.state === "unavailable") return null;
       try {
         const blob = await getPhotoBlobForDisplay({ photo, ownerId: scope.ownerId, catchId: item.id, scopeKey: scope.scopeKey });
         return blob ? { ...photo, blob, url: URL.createObjectURL(blob) } : null;
       } catch (photoError) {
-        if (photoError?.code === "cloudinary_asset_missing") setMissingCloudPhotoId(item.id);
+        if (active && photoError?.code === "cloudinary_asset_missing") setMissingCloudPhotoId(item.id);
+        else if (active) loadFailed = true;
         return null;
       }
     })).then((loaded) => {
       if (!active) { loaded.filter(Boolean).forEach((photo) => URL.revokeObjectURL(photo.url)); return; }
       entries.push(...loaded.filter(Boolean));
       setPhotos(entries);
+      setPhotoLoadFailed(loadFailed);
     });
     return () => {
       active = false;
       entries.forEach((photo) => URL.revokeObjectURL(photo.url));
     };
-  }, [item, scope.ownerId, scope.scopeKey]);
+  }, [item, scope.ownerId, scope.scopeKey, photoRetryVersion]);
+
+  const retryPhotoLoads = () => {
+    setPhotoLoadFailed(false);
+    setMissingCloudPhotoId(null);
+    setPhotoRetryVersion((version) => version + 1);
+  };
 
   const handleDelete = async () => {
     if (deletingRef.current) return;
@@ -202,7 +214,12 @@ function CatchDetailPage() {
         {photos.length > 1 && <div className="catch-detail-photo-strip">{photos.filter((photo) => photo.id !== heroPhoto.id).map((photo) => <button type="button" key={photo.id} onClick={() => setPreviewPhoto(photo)} aria-label={`Zobrazit fotografii ${photo.name}`}><img src={photo.url} style={photoFrameStyle(photo)} alt="" /></button>)}</div>}
       </section>}
       {missingCloudPhoto ? <p className="catch-photo-unavailable" role="status">Původní cloudová fotografie chybí. <Link to={`/catch/${item.id}/edit`}>Přidej ji znovu</Link>.</p>
-        : (item.photos ?? []).some((photo) => !photo.blob) && <p className="catch-photo-unavailable" role="status">Některé fotografie jsou dostupné pouze jako metadata na tomto zařízení.</p>}
+        : (item.photos ?? []).some((photo) => photo.cloud?.state === "unavailable")
+          ? <p className="catch-photo-unavailable" role="status">Fotografii nelze bezpečně obnovit z uložených dat. <Link to={`/catch/${item.id}/edit`}>Přidej ji znovu</Link>, případně ji ulož jako JPG, PNG nebo WebP.</p>
+        : photoLoadFailed ? <p className="catch-photo-unavailable" role="status">Cloudovou fotografii se nepodařilo načíst. <button type="button" onClick={retryPhotoLoads}>Zkusit znovu</button></p>
+          : (item.photos ?? []).some((photo) => !photo.blob && photo.cloud?.state !== "synced")
+            ? <p className="catch-photo-unavailable" role="status">Původní fotografie není dostupná. <Link to={`/catch/${item.id}/edit`}>Přidej ji znovu</Link>.</p>
+            : (item.photos ?? []).some((photo) => !photo.blob) && <p className="catch-photo-unavailable" role="status">Některé fotografie se načítají ze synchronizovaného úložiště.</p>}
       {previewPhoto && <div className="catch-photo-lightbox" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPreviewPhoto(null); }}><section role="dialog" aria-modal="true" aria-label="Náhled fotografie"><button type="button" onClick={() => setPreviewPhoto(null)} aria-label="Zavřít náhled">Zavřít</button><img src={previewPhoto.url} style={photoFrameStyle(previewPhoto)} alt={`Fotografie úlovku – ${item.species}`} /></section></div>}
       <section className="catch-detail-measures" aria-label="Míry úlovku">
         <div><strong>{Number.isFinite(item.weightKg) ? formatCatchWeight(item) : "—"}</strong><span>kg</span><small>{item.weightSource === "estimated" ? "ODHAD HMOTNOSTI" : "HMOTNOST"}</small>{isPersonalBest && <em>{recognition.personalBestDelta > 0 ? `+${formatNumber(recognition.personalBestDelta, 2)} kg rekord` : "Osobní rekord"}</em>}</div>

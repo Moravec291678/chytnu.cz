@@ -1,14 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { IDBFactory } from "fake-indexeddb";
 import { cloudinaryPhotoProvider, createCloudinaryPhotoProvider } from "./cloudinaryPhotoProvider.js";
-import { createPhotoObjectKey } from "./photoCloudProvider.js";
+import { createPhotoObjectKey, sha256Blob } from "./photoCloudProvider.js";
 
 const ownerId = "user-abc";
 const catchId = "catch-123";
 const photoId = "photo-456";
 const objectKey = createPhotoObjectKey(ownerId, catchId, photoId);
 const blob = new Blob(["fake-jpeg-bytes"], { type: "image/jpeg" });
-const sha256 = "a".repeat(64);
+const sha256 = await sha256Blob(blob);
 
 function jsonResponse(body, status = 200) {
   return { ok: status >= 200 && status < 300, status, async json() { return body; }, async blob() { return blob; } };
@@ -28,8 +29,10 @@ test("signed upload uses only the server grant, fixed image endpoint, and verifi
     return jsonResponse({ public_id: `chytnucz/${objectKey}`, resource_type: "image", type: "authenticated", bytes: blob.size, format: "jpg" });
   } });
   let verified = false;
+  const stages = [];
   const result = await provider.upload({
     ownerId, catchId, photoId, objectKey, blob, size: blob.size, contentType: blob.type, sha256,
+    onStage: async (stage) => stages.push(stage),
     async requestUploadGrant(body) {
       assert.deepEqual(body, { catchId, photoId, size: blob.size, contentType: blob.type, sha256 });
       return { cloudName: "test-cloud", apiKey: "1234567890", resourceType: "image", timestamp: 1_800_000_000,
@@ -42,6 +45,7 @@ test("signed upload uses only the server grant, fixed image endpoint, and verifi
     },
   });
   assert.deepEqual(result, { objectKey });
+  assert.deepEqual(stages, ["signing", "uploading", "verifying"]);
   assert.equal(verified, true);
   assert.equal(seen[0].url, "https://api.cloudinary.com/v1_1/test-cloud/image/upload");
   assert.equal(seen[0].options.method, "POST");
@@ -49,7 +53,87 @@ test("signed upload uses only the server grant, fixed image endpoint, and verifi
   assert.equal(form.get("type"), "authenticated");
   assert.equal(form.get("public_id"), `chytnucz/${objectKey}`);
   assert.equal(form.get("file").size, blob.size);
+  assert.ok(form.get("file") instanceof Blob);
+  assert.notEqual(form.get("file"), blob);
+  assert.equal(form.get("file").type, "image/jpeg");
+  assert.equal(await sha256Blob(form.get("file")), sha256);
+  assert.deepEqual(new Uint8Array(await form.get("file").arrayBuffer()), new Uint8Array(await blob.arrayBuffer()));
   assert.equal(form.has("api_secret"), false);
+});
+
+test("upload copies IndexedDB Blob and File bytes into typed memory Blobs for supported formats", async () => {
+  const cases = [
+    { type: "image/jpeg", format: "jpg", name: "legacy.jpg", source: new File(["legacy jpeg"], "legacy.jpg", { type: "image/jpeg" }) },
+    { type: "image/png", format: "png", name: "photo.png", source: new File(["png bytes"], "photo.png", { type: "image/png" }) },
+    { type: "image/webp", format: "webp", name: "photo.webp", source: new File(["webp bytes"], "photo.webp", { type: "image/webp" }) },
+    { type: "image/jpeg", format: "jpg", name: "normalized-heic.jpg", source: new Blob(["normalized HEIC pixels"], { type: "image/jpeg" }) },
+  ];
+  for (const [index, item] of cases.entries()) {
+    const id = `copy-${index}`;
+    const key = createPhotoObjectKey(ownerId, catchId, id);
+    let appended;
+    const provider = createCloudinaryPhotoProvider({ fetchImpl: async (_url, options) => {
+      appended = options.body.get("file");
+      return jsonResponse({ public_id: `chytnucz/${key}`, resource_type: "image", type: "authenticated", bytes: item.source.size, format: item.format });
+    } });
+    const digest = await sha256Blob(item.source);
+    await provider.upload({
+      ownerId, catchId, photoId: id, objectKey: key, blob: item.source,
+      size: item.source.size, contentType: item.type, sha256: digest,
+      requestUploadGrant: async () => ({ cloudName: "test-cloud", apiKey: "1234567890", resourceType: "image", timestamp: 1_800_000_000,
+        signature: "b".repeat(64), params: { public_id: `chytnucz/${key}`, type: "authenticated", overwrite: true } }),
+      requestUploadVerification: async ({ bytes, format }) => ({ verified: true, bytes, format }),
+    });
+    assert.notEqual(appended, item.source);
+    assert.equal(appended.type, item.type);
+    assert.equal(appended.size, item.source.size);
+    assert.equal(await sha256Blob(appended), digest);
+    assert.deepEqual(new Uint8Array(await appended.arrayBuffer()), new Uint8Array(await item.source.arrayBuffer()));
+  }
+});
+
+test("File restored from IndexedDB is copied before it enters Cloudinary FormData", async () => {
+  const indexedDB = new IDBFactory();
+  const open = indexedDB.open(`photo-file-${crypto.randomUUID()}`, 1);
+  open.onupgradeneeded = () => open.result.createObjectStore("photos");
+  const db = await new Promise((resolve, reject) => {
+    open.onsuccess = () => resolve(open.result);
+    open.onerror = () => reject(open.error);
+  });
+  const source = new File([new Uint8Array([0xff, 0xd8, 0x01, 0x02])], "photo.jpg", { type: "image/jpeg" });
+  const write = db.transaction("photos", "readwrite");
+  write.objectStore("photos").put(source, "legacy");
+  await new Promise((resolve, reject) => {
+    write.oncomplete = resolve;
+    write.onerror = () => reject(write.error);
+  });
+  const read = db.transaction("photos", "readonly");
+  const restored = await new Promise((resolve, reject) => {
+    const request = read.objectStore("photos").get("legacy");
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+  db.close();
+  assert.ok(restored instanceof Blob);
+  assert.equal(restored.size, source.size);
+  const digest = await sha256Blob(restored);
+  const key = createPhotoObjectKey(ownerId, catchId, "indexeddb-file");
+  let uploaded;
+  const provider = createCloudinaryPhotoProvider({ fetchImpl: async (_url, options) => {
+    uploaded = options.body.get("file");
+    return jsonResponse({ public_id: `chytnucz/${key}`, resource_type: "image", type: "authenticated", bytes: restored.size, format: "jpg" });
+  } });
+  await provider.upload({ ownerId, catchId, photoId: "indexeddb-file", objectKey: key, blob: restored,
+    size: restored.size, contentType: "image/jpeg", sha256: digest,
+    requestUploadGrant: async () => ({ cloudName: "test-cloud", apiKey: "1234567890", resourceType: "image", timestamp: 1_800_000_000,
+      signature: "b".repeat(64), params: { public_id: `chytnucz/${key}`, type: "authenticated", overwrite: true } }),
+    requestUploadVerification: async ({ bytes, format }) => ({ verified: true, bytes, format }),
+  });
+  assert.notEqual(uploaded, restored);
+  assert.equal(uploaded.size, restored.size);
+  assert.equal(uploaded.type, "image/jpeg");
+  assert.equal(await sha256Blob(uploaded), digest);
+  assert.deepEqual(new Uint8Array(await uploaded.arrayBuffer()), new Uint8Array(await source.arrayBuffer()));
 });
 
 test("ten photos in one Catch receive independent deterministic signed uploads", async () => {
@@ -110,4 +194,22 @@ test("authenticated delivery grant is fetched then downloaded; delete delegates 
   assert.deepEqual(deleteRequest, { catchId, photoId });
   assert.deepEqual(deleted, { deleted: true });
   assert.equal(calls[0].options.credentials, "omit");
+});
+
+test("expired delivery URL is replaced with one fresh authenticated grant", async () => {
+  let grants = 0;
+  const urls = [];
+  const provider = createCloudinaryPhotoProvider({ fetchImpl: async (url) => {
+    urls.push(url);
+    return urls.length === 1 ? jsonResponse({}, 401) : jsonResponse({}, 200);
+  } });
+  const result = await provider.download({ ownerId, catchId, photoId, objectKey,
+    requestDownloadGrant: async () => {
+      grants += 1;
+      return { url: `https://api.cloudinary.com/v1_1/test-cloud/image/download?grant=${grants}` };
+    },
+  });
+  assert.equal(result.size, blob.size);
+  assert.equal(grants, 2);
+  assert.notEqual(urls[0], urls[1]);
 });

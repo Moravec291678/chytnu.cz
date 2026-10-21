@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 
 export default function GalleryPhotoImage({ item, scope = null, style, alt, loading, enabled = true }) {
   const [loaded, setLoaded] = useState(null);
+  const [retryVersion, setRetryVersion] = useState(0);
   const objectUrlRef = useRef(null);
   const scopeKey = scope?.scopeKey ?? null;
   const initialRequest = getGalleryPhotoLoadRequest(item, scope);
@@ -21,13 +22,13 @@ export default function GalleryPhotoImage({ item, scope = null, style, alt, load
         const request = getGalleryPhotoLoadRequest(item, scope);
         const blob = request.kind === "local" ? request.blob
           : request.kind === "remote" ? await getPhotoBlobForDisplay(request.options) : null;
-        if (active) setLoaded({ item, scopeKey, blob, status: blob ? "ready" : "missing", errorCode: "" });
+        if (active) setLoaded({ item, scopeKey, blob, status: blob ? "ready" : request.kind === "remote" ? "error" : "missing", errorCode: "" });
       } catch (error) {
-        if (active) setLoaded({ item, scopeKey, blob: null, status: "missing", errorCode: error?.code ?? "" });
+        if (active) setLoaded({ item, scopeKey, blob: null, status: "error", errorCode: error?.code ?? "" });
       }
     });
     return () => { active = false; };
-  }, [enabled, item, scope, scopeKey]);
+  }, [enabled, item, scope, scopeKey, retryVersion]);
   const setImage = useCallback((image) => {
     if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
     objectUrlRef.current = null;
@@ -36,9 +37,20 @@ export default function GalleryPhotoImage({ item, scope = null, style, alt, load
       image.src = objectUrlRef.current;
     }
   }, [state.blob]);
+  if (item?.cloud?.state === "unavailable") {
+    return createElement("span", { className: "gallery-missing" }, createElement(Link, { to: `/catch/${item.catchId}/edit` },
+      "Původní fotografie není dostupná. Přidej ji znovu."));
+  }
   if (!state.blob) return createElement("span", { className: "gallery-missing" }, state.status === "loading" ? "Načítám fotografii…"
     : state.errorCode === "cloudinary_asset_missing" ? createElement(Link, { to: `/catch/${item.catchId}/edit` }, getGalleryMissingMessage(item, state.errorCode))
-      : getGalleryMissingMessage(item, state.errorCode));
+      : state.status === "error" && item?.cloud?.state === "synced"
+        ? createElement("span", null, "Fotografii se nepodařilo načíst. ", createElement("button", { type: "button", onClick: () => {
+          setLoaded({ item, scopeKey, blob: null, status: "loading", errorCode: "" });
+          setRetryVersion((version) => version + 1);
+        } }, "Zkusit znovu"))
+        : item?.cloud?.state !== "synced" && item?.catchId
+          ? createElement(Link, { to: `/catch/${item.catchId}/edit` }, "Původní fotografie není dostupná. Přidej ji znovu.")
+        : getGalleryMissingMessage(item, state.errorCode));
   // The callback ref only creates the object URL once the DOM image is mounted.
   // eslint-disable-next-line react-hooks/refs
   return createElement("img", { ref: setImage, style, alt, loading });

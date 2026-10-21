@@ -1,4 +1,4 @@
-import { createPhotoObjectKey } from "./photoCloudProvider.js";
+import { createPhotoObjectKey, sha256Blob } from "./photoCloudProvider.js";
 
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
@@ -43,6 +43,13 @@ export function createCloudinaryPhotoProvider({ fetchImpl = globalThis.fetch } =
         || input.blob.size < 1 || input.blob.size > MAX_PHOTO_BYTES || input.blob.size !== input.size) {
         throw providerError("Fotografie nesplňuje limity pro bezpečný upload.", "invalid_photo");
       }
+      // IndexedDB may restore a persisted File. Copy its bytes into a fresh in-memory
+      // Blob before FormData/fetch; WebKit can otherwise upload an empty body.
+      const uploadBlob = new Blob([await input.blob.arrayBuffer()], { type: input.contentType });
+      if (uploadBlob.size !== input.size || await sha256Blob(uploadBlob) !== input.sha256) {
+        throw providerError("Obsah fotografie neodpovídá ověřeným metadatům.", "photo_content_mismatch");
+      }
+      await input.onStage?.("signing");
       const expectedKey = createPhotoObjectKey(input.ownerId, input.catchId, input.photoId);
       if (input.objectKey !== expectedKey || !/^[a-f0-9]{64}$/.test(input.sha256 ?? "")) {
         throw providerError("Photo cloud key does not match the authenticated photo.", "invalid_photo_identity");
@@ -56,13 +63,14 @@ export function createCloudinaryPhotoProvider({ fetchImpl = globalThis.fetch } =
         throw providerError("Cloudinary authorization targets a different asset.", "invalid_photo_identity");
       }
       const form = new FormData();
-      form.append("file", input.blob, `${input.photoId}.${input.contentType === "image/jpeg" ? "jpg" : input.contentType.slice(6)}`);
+      form.append("file", uploadBlob, `${input.photoId}.${input.contentType === "image/jpeg" ? "jpg" : input.contentType.slice(6)}`);
       for (const [key, value] of Object.entries(grant.params)) form.append(key, String(value));
       form.append("api_key", grant.apiKey);
       form.append("timestamp", String(grant.timestamp));
       form.append("signature", grant.signature);
       let uploadResponse;
       let result;
+      await input.onStage?.("uploading");
       try {
         uploadResponse = await fetchImpl(`${CLOUDINARY_API_ORIGIN}/v1_1/${encodeURIComponent(grant.cloudName)}/image/upload`, {
           method: "POST", body: form,
@@ -80,6 +88,7 @@ export function createCloudinaryPhotoProvider({ fetchImpl = globalThis.fetch } =
         || result.type !== "authenticated" || result.bytes !== input.size || result.format !== expectedFormat) {
         throw providerError("Cloudinary returned metadata that does not match this photo.", "cloudinary_response_mismatch");
       }
+      await input.onStage?.("verifying");
       const verified = await input.requestUploadVerification({
         catchId: input.catchId, photoId: input.photoId, bytes: result.bytes, format: result.format,
       });
@@ -91,21 +100,24 @@ export function createCloudinaryPhotoProvider({ fetchImpl = globalThis.fetch } =
     async download(input) {
       const expectedKey = createPhotoObjectKey(input.ownerId, input.catchId, input.photoId);
       if (input.objectKey !== expectedKey) throw providerError("Photo cloud key is invalid.", "invalid_photo_identity");
-      const grant = await input.requestDownloadGrant({ catchId: input.catchId, photoId: input.photoId });
-      let url;
-      try { url = new URL(grant?.url); } catch { throw providerError("Cloudinary download authorization is invalid.", "cloudinary_invalid_grant"); }
-      if (url.protocol !== "https:" || url.origin !== CLOUDINARY_API_ORIGIN
-        || !url.pathname.includes("/image/download")) {
-        throw providerError("Cloudinary download authorization is invalid.", "cloudinary_invalid_grant");
-      }
-      let response;
-      try { response = await fetchImpl(url.href, { method: "GET", credentials: "omit" }); }
-      catch { throw providerError("Cloudinary image download failed because of a network error.", "cloudinary_network_error"); }
-      if (!response.ok) {
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const grant = await input.requestDownloadGrant({ catchId: input.catchId, photoId: input.photoId });
+        let url;
+        try { url = new URL(grant?.url); } catch { throw providerError("Cloudinary download authorization is invalid.", "cloudinary_invalid_grant"); }
+        if (url.protocol !== "https:" || url.origin !== CLOUDINARY_API_ORIGIN
+          || !url.pathname.includes("/image/download")) {
+          throw providerError("Cloudinary download authorization is invalid.", "cloudinary_invalid_grant");
+        }
+        let response;
+        try { response = await fetchImpl(url.href, { method: "GET", credentials: "omit" }); }
+        catch { throw providerError("Cloudinary image download failed because of a network error.", "cloudinary_network_error"); }
+        if (response.ok) return response.blob();
         if (response.status === 404) return null;
-        throw providerError("Cloudinary image download failed.", response.status === 429 ? "cloudinary_rate_limited" : "cloudinary_download_failed");
+        if ((response.status === 401 || response.status === 403) && attempt === 0) continue;
+        throw providerError("Cloudinary image download failed.", response.status === 429 ? "cloudinary_rate_limited"
+          : response.status === 401 || response.status === 403 ? "cloudinary_download_expired" : "cloudinary_download_failed");
       }
-      return response.blob();
+      return null;
     },
     async delete(input) {
       const expectedKey = createPhotoObjectKey(input.ownerId, input.catchId, input.photoId);
