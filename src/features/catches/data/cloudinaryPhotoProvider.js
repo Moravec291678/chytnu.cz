@@ -71,23 +71,29 @@ export function createCloudinaryPhotoProvider({ fetchImpl = globalThis.fetch } =
       let uploadResponse;
       let result;
       await input.onStage?.("uploading");
+      input.onDiagnostic?.("cloud_upload_started", { bytes: uploadBlob.size, mimeType: uploadBlob.type });
       try {
         uploadResponse = await fetchImpl(`${CLOUDINARY_API_ORIGIN}/v1_1/${encodeURIComponent(grant.cloudName)}/image/upload`, {
           method: "POST", body: form,
         });
         result = await readJson(uploadResponse);
       } catch {
+        input.onDiagnostic?.("cloud_upload_fail", { errorCode: "cloudinary_network_error" });
         throw providerError("Cloudinary image upload failed because of a network error.", "cloudinary_network_error");
       }
       if (!uploadResponse.ok) {
         const status = uploadResponse.status === 420 || uploadResponse.status === 429 ? "cloudinary_rate_limited" : "cloudinary_upload_failed";
-        throw providerError("Cloudinary did not accept the image upload.", status);
+        input.onDiagnostic?.("cloud_upload_fail", { errorCode: status, httpStatus: uploadResponse.status });
+        throw Object.assign(providerError("Cloudinary did not accept the image upload.", status), { status: uploadResponse.status });
       }
       const expectedFormat = ({ "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" })[input.contentType];
+      input.onDiagnostic?.("cloud_upload_response", { httpStatus: uploadResponse.status, bytes: result.bytes, format: result.format, resourceType: result.resource_type });
       if (result.public_id !== expectedPublicId || result.resource_type !== "image"
         || result.type !== "authenticated" || result.bytes !== input.size || result.format !== expectedFormat) {
+        input.onDiagnostic?.("cloud_upload_fail", { errorCode: "cloudinary_response_mismatch" });
         throw providerError("Cloudinary returned metadata that does not match this photo.", "cloudinary_response_mismatch");
       }
+      input.onDiagnostic?.("cloud_upload_pass", { bytes: result.bytes, format: result.format });
       await input.onStage?.("verifying");
       const verified = await input.requestUploadVerification({
         catchId: input.catchId, photoId: input.photoId, bytes: result.bytes, format: result.format,

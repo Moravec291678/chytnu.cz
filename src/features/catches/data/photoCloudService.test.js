@@ -242,27 +242,66 @@ test("legacy HEIC Blob is converted to JPEG before it enters the Cloudinary uplo
   assert.equal(provider.calls.uploads[0].contentType, "image/jpeg");
 });
 
-test("legacy image that cannot be decoded is retained locally and excluded from normal upload jobs", async () => {
+test("legacy preparation failure is durable, preserves bytes, allows healthy uploads and recovers on forced retry", async () => {
   await resetDatabase();
   const ownerId = "unsupported-legacy-photo-owner";
   const scope = { ownerId, scopeKey: accountScopeKey(ownerId) };
   const original = new Blob(["unsupported original HEIC bytes"], { type: "image/heic" });
   await catchRepository.put(makeCatch(ownerId, "catch-unsupported-legacy", [
-    { id: "p1", name: "legacy.HEIC", type: original.type, size: original.size, blob: original },
+    { id: "p1", name: "legacy.HEIC", type: original.type, size: original.size, blob: original, uploadReady: false },
+    makePhoto("p2", "healthy JPEG"),
   ]), scope);
   const provider = createFakeProvider();
-  const service = createPhotoCloudService({ provider, getCurrentOwnerId: () => ownerId,
+  let conversions = 0;
+  let canDecode = false;
+  const createService = () => createPhotoCloudService({ provider, getCurrentOwnerId: () => ownerId,
     isCatchMetadataSynced: async () => true, now: () => fixedNow,
-    normalizeLegacyPhoto: async (blob) => ({ blob: new Blob([await blob.arrayBuffer()], { type: "image/heic" }),
-      type: "image/heic", size: blob.size, sha256: await (await import("./photoCloudProvider.js")).sha256Blob(blob),
-      uploadReady: false, errorCode: "photo_unsupported" }) });
-  assert.equal((await service.run(ownerId)).status, "success");
-  const saved = await catchRepository.get("catch-unsupported-legacy", scope);
+    normalizeLegacyPhoto: async () => {
+      conversions += 1;
+      if (!canDecode) throw new Error("Decoder unavailable");
+      return new Blob(["normalized JPEG"], { type: "image/jpeg" });
+    } });
+  const first = await createService().run(ownerId);
+  assert.equal(first.status, "error");
+  assert.equal(first.uploaded, 1, "a bad legacy photo must not block a healthy photo");
+  assert.equal(first.errorCode, "photo_prepare_failed");
+  let saved = await catchRepository.get("catch-unsupported-legacy", scope);
   assert.equal(saved.photos[0].uploadReady, false);
-  assert.equal(saved.photos[0].cloud.state, PHOTO_CLOUD_STATE.UNAVAILABLE);
-  assert.deepEqual(new Uint8Array(await saved.photos[0].blob.arrayBuffer()), new Uint8Array(await original.arrayBuffer()));
+  assert.equal(saved.photos[0].cloud.state, PHOTO_CLOUD_STATE.UPLOAD_FAILED);
+  assert.deepEqual(await saved.photos[0].blob.arrayBuffer(), await original.arrayBuffer());
+  const [job] = await photoCloudOutboxRepository.list();
+  assert.equal(job.status, "failed");
+  assert.equal(job.lastErrorCode, "photo_prepare_failed");
+  assert.equal((await createService().run(ownerId)).uploaded, 0);
+  assert.equal(conversions, 0, "ordinary resume does not repeatedly decode known unsupported bytes");
+  assert.equal((await createService().run(ownerId, { force: true })).status, "error");
+  assert.equal(conversions, 1);
+  assert.deepEqual((await catchRepository.get("catch-unsupported-legacy", scope)).photos[0].blob.size, original.size);
+  canDecode = true;
+  assert.equal((await createService().run(ownerId, { force: true })).uploaded, 1);
+  assert.equal(conversions, 2);
+  saved = await catchRepository.get("catch-unsupported-legacy", scope);
+  assert.equal(saved.photos[0].uploadReady, true);
+  assert.equal(saved.photos[0].cloud.state, PHOTO_CLOUD_STATE.SYNCED);
+  assert.equal(saved.photos[0].blob.type, "image/jpeg");
   assert.equal((await photoCloudOutboxRepository.list()).length, 0);
-  assert.equal(provider.calls.uploads.length, 0);
+  assert.equal((await createService().run(ownerId)).uploaded, 0);
+  assert.equal(conversions, 2);
+});
+
+test("iPhone-like File restored from IndexedDB preserves its bytes through upload", async () => {
+  await resetDatabase();
+  const ownerId = "restored-file-owner";
+  const scope = { ownerId, scopeKey: accountScopeKey(ownerId) };
+  const file = new File([new Uint8Array([255, 216, 255, 224, 1, 2, 3, 255, 217])], "IMG_1234.JPG", { type: "image/jpeg" });
+  await catchRepository.put(makeCatch(ownerId, "catch-file", [{ ...makePhoto("p-file"), blob: file, size: file.size, name: file.name }]), scope);
+  const restored = (await catchRepository.get("catch-file", scope)).photos[0].blob;
+  assert.notEqual(restored, file);
+  assert.equal(restored.type, file.type);
+  assert.deepEqual(await restored.arrayBuffer(), await file.arrayBuffer());
+  const provider = createFakeProvider();
+  assert.equal((await makeService(ownerId, provider).run(ownerId)).uploaded, 1);
+  assert.deepEqual(await provider.calls.uploads[0].blob.arrayBuffer(), await file.arrayBuffer());
 });
 
 test("failed synced metadata persistence keeps upload job retryable", async () => {

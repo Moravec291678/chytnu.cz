@@ -21,7 +21,8 @@ test("HEIC is converted then normalized to a browser and Cloudinary compatible J
   let converted = false;
   const result = await normalizePhotoForUpload(source, {
     convertHeic: async () => async ({ blob, toType }) => {
-      assert.equal(blob, source);
+      assert.notEqual(blob, source);
+      assert.equal(await blob.text(), await source.text());
       assert.equal(toType, "image/png");
       converted = true;
       return new Blob(["decoded pixels"], { type: "image/png" });
@@ -42,22 +43,17 @@ test("HEIC conversion failure falls back to native browser decoding before givin
     decode: async (blob) => { decodedSource = blob; return { width: 800, height: 600, close() {} }; },
     canvasFactory,
   });
-  assert.equal(decodedSource, source);
+  assert.notEqual(decodedSource, source);
+  assert.equal(await decodedSource.text(), await source.text());
   assert.equal(result.type, "image/jpeg");
 });
 
-test("HEIC decode failure preserves original bytes in a memory Blob and marks them unsupported", async () => {
-  const source = new File(["preserve original HEIC"], "IMG_2.HEIC", { type: "image/heic" });
-  const prepared = await preparePhotoForStorageAndUpload(source, {
+test("HEIC decode failure rejects with recoverable error instead of silently storing unsyncable photo", async () => {
+  const source = new File(["original HEIC"], "IMG_2.HEIC", { type: "image/heic" });
+  await assert.rejects(preparePhotoForStorageAndUpload(source, {
     convertHeic: async () => async () => { throw new Error("unsupported HEIC variant"); },
     decode: async () => { throw new Error("browser decode failed"); },
-  });
-  assert.notEqual(prepared.blob, source);
-  assert.deepEqual(new Uint8Array(await prepared.blob.arrayBuffer()), new Uint8Array(await source.arrayBuffer()));
-  assert.equal(prepared.type, "image/heic");
-  assert.equal(prepared.uploadReady, false);
-  assert.equal(prepared.errorCode, "photo_unsupported");
-  assert.equal(prepared.sha256, await sha256Blob(prepared.blob));
+  }), (error) => error.code === "photo_unsupported" && /HEIC.*JPEG/.test(error.message));
 });
 
 test("ordinary JPEG uses the existing 1920px and 0.82 optimization without loading HEIC decoder", async () => {
@@ -111,3 +107,66 @@ test("canonical photo preparation returns hash, size, type, and the final stored
 test("unrecognized image formats fail with a clear supported-format message", async () => {
   await assert.rejects(() => normalizePhotoForUpload(new Blob(["x"], { type: "application/octet-stream" })), /JPG, PNG, WebP, AVIF, HEIC a HEIF/);
 });
+
+test("picker JPEG File is detached before decoding and stored with final metadata", async () => {
+  const file = new File(["camera bytes"], "camera.jpg", { type: "image/jpeg" });
+  const prepared = await preparePhotoForStorageAndUpload(file, {
+    decode: async (source) => {
+      assert.equal(source instanceof File, false);
+      assert.notEqual(source, file);
+      assert.equal(await source.text(), "camera bytes");
+      return { width: 100, height: 100 };
+    }, canvasFactory,
+  });
+  assert.equal(prepared.blob instanceof File, false);
+  assert.equal(prepared.uploadReady, true);
+  assert.equal(prepared.sha256, await sha256Blob(prepared.blob));
+});
+
+test("source over 10 MB normalizes successfully to a small JPEG", async () => {
+  const file = new File([new Uint8Array(11 * 1024 * 1024)], "large.jpg", { type: "image/jpeg" });
+  const prepared = await preparePhotoForStorageAndUpload(file, {
+    decode: async () => ({ width: 4000, height: 3000 }), canvasFactory,
+  });
+  assert.equal(prepared.size, 10);
+});
+
+test("50 MB source safety limit rejects before reading bytes", async () => {
+  await assert.rejects(preparePhotoForStorageAndUpload({ size: 51 * 1024 * 1024,
+    arrayBuffer: () => assert.fail("must not read oversized input") }), { code: "photo_too_large" });
+});
+
+test("final output over 10 MB is rejected and decoder released", async () => {
+  let closed = false;
+  await assert.rejects(preparePhotoForStorageAndUpload(new File(["jpg"], "photo.jpg", { type: "image/jpeg" }), {
+    decode: async () => ({ width: 4000, height: 3000, close() { closed = true; } }),
+    canvasFactory: () => ({ getContext: () => ({ drawImage() {} }),
+      toBlob(callback, type) { callback(new Blob([new Uint8Array(11 * 1024 * 1024)], { type })); } }),
+  }), { code: "photo_too_large" });
+  assert.equal(closed, true);
+});
+
+for (const bitmapAvailable of [true, false]) {
+  test(`native Image decoder fallback works when ImageBitmap is ${bitmapAvailable ? "rejecting" : "missing"}`, async (t) => {
+    const originalBitmap = Object.getOwnPropertyDescriptor(globalThis, "createImageBitmap");
+    const originalImage = Object.getOwnPropertyDescriptor(globalThis, "Image");
+    let revoked = 0;
+    Object.defineProperty(globalThis, "createImageBitmap", { configurable: true, value: bitmapAvailable ? async () => { throw new Error("unsupported"); } : undefined });
+    Object.defineProperty(globalThis, "Image", { configurable: true, value: class {
+      naturalWidth = 100;
+      naturalHeight = 100;
+      set src(_value) { this.onload(); }
+    } });
+    t.mock.method(URL, "createObjectURL", () => "blob:test");
+    t.mock.method(URL, "revokeObjectURL", () => { revoked++; });
+    t.after(() => {
+      if (originalBitmap) Object.defineProperty(globalThis, "createImageBitmap", originalBitmap);
+      else delete globalThis.createImageBitmap;
+      if (originalImage) Object.defineProperty(globalThis, "Image", originalImage);
+      else delete globalThis.Image;
+    });
+    const result = await normalizePhotoForUpload(new File(["jpeg"], "photo.jpg", { type: "image/jpeg" }), { canvasFactory });
+    assert.equal(result.type, "image/jpeg");
+    assert.equal(revoked, 1);
+  });
+}

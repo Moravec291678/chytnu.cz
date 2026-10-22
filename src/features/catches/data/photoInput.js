@@ -1,5 +1,8 @@
 import { sha256Blob } from "./photoCloudProvider.js";
 
+export const MAX_SOURCE_PHOTO_BYTES = 50 * 1024 * 1024;
+export const MAX_NORMALIZED_PHOTO_BYTES = 10 * 1024 * 1024;
+
 const HEIC_TYPES = new Set(["image/heic", "image/heif", "image/heic-sequence", "image/heif-sequence"]);
 const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/avif", ...HEIC_TYPES]);
 const EXTENSION_TYPES = Object.freeze({ jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp",
@@ -50,9 +53,8 @@ async function decodeImage(blob) {
   const url = URL.createObjectURL(blob);
   try {
     const image = new Image();
-    image.src = url;
-    if (typeof image.decode === "function") await image.decode();
-    else await new Promise((resolve, reject) => { image.onload = resolve; image.onerror = reject; });
+    if (typeof image.decode === "function") { image.src = url; await image.decode(); }
+    else await new Promise((resolve, reject) => { image.onload = resolve; image.onerror = reject; image.src = url; });
     return { width: image.naturalWidth, height: image.naturalHeight, image, close: () => URL.revokeObjectURL(url) };
   } catch (error) {
     URL.revokeObjectURL(url);
@@ -62,9 +64,13 @@ async function decodeImage(blob) {
 
 export async function normalizePhotoForUpload(file, { fileName = file?.name ?? "", convertHeic = defaultHeicConverter, decode = decodeImage, canvasFactory = () => document.createElement("canvas") } = {}) {
   try {
-    const source = await toSupportedSource(file, fileName, convertHeic);
+    if (file.size > MAX_SOURCE_PHOTO_BYTES) throw Object.assign(new Error("Fotografii větší než 50 MB nelze zpracovat. Vyber menší soubor."), { code: "photo_too_large" });
+    // Read picker-backed Files now, while access is available; decoding and storage use owned bytes.
+    const memoryFile = new Blob([await file.arrayBuffer()], { type: file.type });
+    const source = await toSupportedSource(memoryFile, fileName, convertHeic);
     const bitmap = await decode(source);
     try {
+      if (!(bitmap.width > 0 && bitmap.height > 0)) throw new Error("Fotografii se nepodařilo načíst: neplatné rozměry.");
       const scale = Math.min(1, 1920 / Math.max(bitmap.width, bitmap.height));
       const canvas = canvasFactory();
       canvas.width = Math.max(1, Math.round(bitmap.width * scale));
@@ -74,7 +80,8 @@ export async function normalizePhotoForUpload(file, { fileName = file?.name ?? "
       context.drawImage(bitmap.image ?? bitmap, 0, 0, canvas.width, canvas.height);
       const jpeg = await new Promise((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("Fotografii se nepodařilo připravit.")), "image/jpeg", 0.82));
       if (jpeg.type !== "image/jpeg" || jpeg.size < 1) throw new Error("Fotografii se nepodařilo převést na podporovaný JPEG.");
-      return jpeg;
+      if (jpeg.size > MAX_NORMALIZED_PHOTO_BYTES) throw Object.assign(new Error("Fotografii se nepodařilo zmenšit pod 10 MB. Vyber menší fotografii."), { code: "photo_too_large" });
+      return new Blob([await jpeg.arrayBuffer()], { type: "image/jpeg" });
     } finally {
       bitmap.close?.();
     }
@@ -88,19 +95,12 @@ export async function normalizePhotoForUpload(file, { fileName = file?.name ?? "
 
 /** Canonical local photo payload; its metadata always describes its final normalized bytes. */
 export async function preparePhotoForStorageAndUpload(file, options = {}) {
+  let blob;
   try {
-    const blob = await normalizePhotoForUpload(file, options);
-    return { blob, type: blob.type, size: blob.size, sha256: await sha256Blob(blob), uploadReady: true };
+    blob = await normalizePhotoForUpload(file, options);
   } catch (error) {
-    const fileName = String(options.fileName || file?.name || "");
-    const extensionType = EXTENSION_TYPES[fileName.toLowerCase().split(".").pop()];
-    const sourceType = String(file?.type || extensionType || "").toLowerCase();
-    if (!(file instanceof Blob) || file.size < 1 || (!sourceType.startsWith("image/") && !isHeicPhoto(file, fileName))) throw error;
-    try {
-      const blob = new Blob([await file.arrayBuffer()], { type: sourceType });
-      return { blob, type: blob.type, size: blob.size, sha256: await sha256Blob(blob), uploadReady: false, errorCode: "photo_unsupported" };
-    } catch {
-      throw error;
-    }
+    if (!error.code) error.code = "photo_unsupported";
+    throw error;
   }
+  return { blob, type: blob.type, size: blob.size, sha256: await sha256Blob(blob), uploadReady: true };
 }

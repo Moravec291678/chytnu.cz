@@ -30,9 +30,11 @@ test("signed upload uses only the server grant, fixed image endpoint, and verifi
   } });
   let verified = false;
   const stages = [];
+  const diagnostics = [];
   const result = await provider.upload({
     ownerId, catchId, photoId, objectKey, blob, size: blob.size, contentType: blob.type, sha256,
     onStage: async (stage) => stages.push(stage),
+    onDiagnostic: (stage, details) => diagnostics.push({ stage, ...details }),
     async requestUploadGrant(body) {
       assert.deepEqual(body, { catchId, photoId, size: blob.size, contentType: blob.type, sha256 });
       return { cloudName: "test-cloud", apiKey: "1234567890", resourceType: "image", timestamp: 1_800_000_000,
@@ -46,6 +48,10 @@ test("signed upload uses only the server grant, fixed image endpoint, and verifi
   });
   assert.deepEqual(result, { objectKey });
   assert.deepEqual(stages, ["signing", "uploading", "verifying"]);
+  assert.deepEqual(diagnostics.map((item) => item.stage), ["cloud_upload_started", "cloud_upload_response", "cloud_upload_pass"]);
+  assert.equal(diagnostics[1].bytes, blob.size);
+  assert.equal(diagnostics[1].httpStatus, 200);
+  assert.doesNotMatch(JSON.stringify(diagnostics), /signature|public_id|user-abc|apiKey/);
   assert.equal(verified, true);
   assert.equal(seen[0].url, "https://api.cloudinary.com/v1_1/test-cloud/image/upload");
   assert.equal(seen[0].options.method, "POST");
@@ -212,4 +218,20 @@ test("expired delivery URL is replaced with one fresh authenticated grant", asyn
   assert.equal(result.size, blob.size);
   assert.equal(grants, 2);
   assert.notEqual(urls[0], urls[1]);
+});
+
+test("empty or mismatched Cloudinary response cannot reach verification", async () => {
+  for (const bytes of [0, blob.size + 1]) {
+    let verified = false;
+    const provider = createCloudinaryPhotoProvider({ fetchImpl: async () => jsonResponse({
+      public_id: `chytnucz/${objectKey}`, resource_type: "image", type: "authenticated", bytes, format: "jpg",
+    }) });
+    await assert.rejects(provider.upload({ ownerId, catchId, photoId, objectKey, blob,
+      size: blob.size, contentType: blob.type, sha256,
+      requestUploadGrant: async () => ({ cloudName: "test-cloud", apiKey: "1234567890", resourceType: "image", timestamp: 1_800_000_000,
+        signature: "b".repeat(64), params: { public_id: `chytnucz/${objectKey}`, type: "authenticated", overwrite: true } }),
+      requestUploadVerification: async () => { verified = true; },
+    }), { code: "cloudinary_response_mismatch" });
+    assert.equal(verified, false);
+  }
 });

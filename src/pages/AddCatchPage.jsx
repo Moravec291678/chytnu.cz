@@ -38,6 +38,7 @@ import PhotoFrameEditor from "../features/catches/components/PhotoFrameEditor.js
 import { photoFrameStyle } from "../features/catches/data/photoFraming.js";
 import { MAX_PHOTOS_PER_CATCH, normalizePrimaryPhotoId } from "../features/catches/data/catchPhotos.js";
 import { preparePhotoForStorageAndUpload } from "../features/catches/data/photoInput.js";
+import { recordPhotoUploadTrace } from "../features/catches/data/photoUploadTrace.js";
 
 const MOON_PHASES = [
   ["new", "Nov"],
@@ -132,16 +133,22 @@ function AddCatchPage() {
       const room = MAX_PHOTOS_PER_CATCH - catchData.photos.length;
       if (room <= 0) throw new Error(`Můžeš přidat nejvýše ${MAX_PHOTOS_PER_CATCH} fotografií.`);
       for (const selectedPhoto of selectedPhotos.slice(0, room)) {
-        if (selectedPhoto.size > 10 * 1024 * 1024) throw new Error("Každá fotografie může mít nejvýše 10 MB.");
+        const photoId = crypto.randomUUID();
+        recordPhotoUploadTrace(photoId, "photo_selected", {
+          sourceMimeType: selectedPhoto.type, sourceBytes: selectedPhoto.size,
+          originalExtension: selectedPhoto.name.split(".").pop().toLowerCase(),
+        });
         const preparedPhoto = await preparePhotoForStorageAndUpload(selectedPhoto);
+        recordPhotoUploadTrace(photoId, "blob_created", {
+          preparedMimeType: preparedPhoto.type, preparedBytes: preparedPhoto.size, conversion: "jpeg",
+        });
         const optimizedPhoto = preparedPhoto.blob;
         const previewUrl = URL.createObjectURL(optimizedPhoto);
         photoUrlsRef.current.add(previewUrl);
-        additions.push({ id: crypto.randomUUID(), blob: optimizedPhoto,
-          name: preparedPhoto.uploadReady === false ? selectedPhoto.name : selectedPhoto.name.replace(/\.[^.]+$/, ".jpg"),
+        additions.push({ id: photoId, blob: optimizedPhoto,
+          name: selectedPhoto.name.replace(/\.[^.]+$/, ".jpg"),
           type: preparedPhoto.type, size: preparedPhoto.size, contentSha256: preparedPhoto.sha256,
-          uploadReady: preparedPhoto.uploadReady !== false,
-          ...(preparedPhoto.uploadReady === false ? { cloud: { state: "unavailable", provider: null, objectKey: null, sha256: null } } : {}),
+          uploadReady: true,
           previewUrl });
       }
       const nextPhotos = [...catchData.photos, ...additions];

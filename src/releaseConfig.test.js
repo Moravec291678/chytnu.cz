@@ -18,6 +18,12 @@ test("Vercel config builds Vite into dist and preserves SPA routes", async () =>
   assert.ok(baselineHeaders.some((header) => header.key === "Permissions-Policy" && header.value.includes("geolocation=(self)")));
 });
 
+test("generated service worker bypasses every non-GET request without cloning or replaying it", async () => {
+  const config = await readFile(new URL("../vite.config.js", import.meta.url), "utf8");
+  assert.match(config, /if \(request\.method !== 'GET' \|\| url\.origin !== self\.location\.origin\) return;/);
+  assert.doesNotMatch(config, /event\.respondWith\(fetch\(event\.request\)\)/);
+});
+
 test("environment example declares public client variables without server credentials", async () => {
   const content = await readFile(new URL(".env.example", projectUrl), "utf8");
   for (const variable of [

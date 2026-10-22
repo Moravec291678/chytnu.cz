@@ -5,6 +5,9 @@ import { createSyncPort } from "../data/syncPort.js";
 import { createSyncService } from "../data/syncService.js";
 import { readSyncSummary } from "../data/localSyncRepository.js";
 import { describeSyncFailure } from "../data/syncDiagnostics.js";
+import { catchRepository } from "../../catches/data/catchRepository.js";
+import { accountScopeKey } from "../../auth/data/localDataScope.js";
+import { recordSyncedPhotoTraces } from "../../catches/data/photoUploadTrace.js";
 import { createPhotoCloudService } from "../../catches/data/photoCloudService.js";
 import { getPhotoCloudProvider } from "../../catches/data/photoCloudProvider.js";
 import { getBackendConfiguration } from "../../auth/data/backendConfig.js";
@@ -92,6 +95,7 @@ export function SyncProvider({ children }) {
           try { return firebaseAuth.currentUserId(); } catch { return null; }
         } }),
         });
+      await photoService.normalizeLegacyPhotoIds(userId, { force });
       const result = await serviceRef.current.run(userId, { force });
       if (result.status === "error" && result.errorCode) reportSyncDiagnostic({ event: "pull-failed", code: result.errorCode,
         message: result.error, retryable: result.retryable, entityType: result.entityType ?? "sync",
@@ -106,6 +110,10 @@ export function SyncProvider({ children }) {
       const finalResult = photoResult.uploaded > 0
         ? await serviceRef.current.run(userId, { force })
         : result;
+      // A successful aggregate run alone cannot prove a particular photo was acknowledged.
+      await catchRepository.list({ ownerId: userId, scopeKey: accountScopeKey(userId) }).then((records) => {
+        if (firebaseAuth.currentUserId() === userId) recordSyncedPhotoTraces(records);
+      }).catch(() => {});
       if (photoResult.status === "error" && finalResult.status === "success") {
         finalResult.status = "error";
         finalResult.error = photoResult.error;

@@ -1,3 +1,4 @@
+import PhotoUploadTracePanel from "./PhotoUploadTracePanel.jsx";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Layout from "../shared/layout/Layout";
@@ -153,6 +154,7 @@ export default function SettingsPage() {
           <dt>Error classification</dt><dd>{sync.errorCode || sync.lastErrorCode || "none"}</dd>
           <dt>Photo API endpoint</dt><dd>{sync.errorEndpoint || sync.lastErrorEndpoint || "none"}</dd>
         </dl>
+        <PhotoUploadTracePanel />
         <h3>Photo jobs (bez ID a obsahu)</h3>
         {photoDiagnosticRows.length ? <ul>{photoDiagnosticRows.map((photo, index) => <li key={index}>
           Blob {photo.blobPresent ? "YES" : "NO"} · {photo.size ?? "unknown"} bytes · {photo.type} · job {photo.jobState} · attempts {photo.attempts} · retry {photo.nextRetryAt ?? "none"} · error {photo.errorClass} · cloud {photo.cloudState} · remote {photo.remoteAvailability}
