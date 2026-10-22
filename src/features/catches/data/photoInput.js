@@ -1,4 +1,5 @@
 import { sha256Blob } from "./photoCloudProvider.js";
+import { photoBlobErrorCode, readPhotoBlob } from "./photoLocalBlob.js";
 
 export const MAX_SOURCE_PHOTO_BYTES = 50 * 1024 * 1024;
 export const MAX_NORMALIZED_PHOTO_BYTES = 10 * 1024 * 1024;
@@ -66,7 +67,7 @@ export async function normalizePhotoForUpload(file, { fileName = file?.name ?? "
   try {
     if (file.size > MAX_SOURCE_PHOTO_BYTES) throw Object.assign(new Error("Fotografii větší než 50 MB nelze zpracovat. Vyber menší soubor."), { code: "photo_too_large" });
     // Read picker-backed Files now, while access is available; decoding and storage use owned bytes.
-    const memoryFile = new Blob([await file.arrayBuffer()], { type: file.type });
+    const memoryFile = new Blob([await readPhotoBlob(file, "photo-prepare-source-read")], { type: file.type });
     const source = await toSupportedSource(memoryFile, fileName, convertHeic);
     const bitmap = await decode(source);
     try {
@@ -81,11 +82,12 @@ export async function normalizePhotoForUpload(file, { fileName = file?.name ?? "
       const jpeg = await new Promise((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("Fotografii se nepodařilo připravit.")), "image/jpeg", 0.82));
       if (jpeg.type !== "image/jpeg" || jpeg.size < 1) throw new Error("Fotografii se nepodařilo převést na podporovaný JPEG.");
       if (jpeg.size > MAX_NORMALIZED_PHOTO_BYTES) throw Object.assign(new Error("Fotografii se nepodařilo zmenšit pod 10 MB. Vyber menší fotografii."), { code: "photo_too_large" });
-      return new Blob([await jpeg.arrayBuffer()], { type: "image/jpeg" });
+      return new Blob([await readPhotoBlob(jpeg, "photo-prepare-canonical-read")], { type: "image/jpeg" });
     } finally {
       bitmap.close?.();
     }
   } catch (error) {
+    if (photoBlobErrorCode(error) === "photo_local_blob_unreadable") throw error;
     if (error?.message?.startsWith("Fotografii") || error?.message?.startsWith("HEIC") || error?.message?.startsWith("Vyber") || error?.message?.startsWith("Toto zařízení")) throw error;
     throw new Error(isHeicPhoto(file, fileName)
       ? "HEIC fotografii se nepodařilo převést. Zkus ji prosím uložit nebo sdílet jako JPEG."

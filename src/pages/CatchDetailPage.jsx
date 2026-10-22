@@ -76,7 +76,7 @@ function CatchDetailPage() {
     const entries = [];
     let loadFailed = false;
     Promise.all((item.photos ?? []).map(async (photo) => {
-      if (photo.cloud?.state === "unavailable") return null;
+      if (photo.cloud?.state === "unavailable") { if (photo.localError?.code === "photo_local_blob_unreadable") loadFailed = true; return null; }
       try {
         const blob = await getPhotoBlobForDisplay({ photo, ownerId: scope.ownerId, catchId: item.id, scopeKey: scope.scopeKey });
         return blob ? { ...photo, blob, url: URL.createObjectURL(blob) } : null;
@@ -215,10 +215,13 @@ function CatchDetailPage() {
       </section>}
       {(item.photos ?? []).some((photo) => photo.uploadReady === false && photo.blob instanceof Blob)
         ? <p className="catch-photo-unavailable" role="status">Původní fotografie zůstává uložená v tomto zařízení, ale není připravená k synchronizaci. Převeď ji na JPG, PNG nebo WebP a <Link to={`/catch/${item.id}/edit`}>nahraď ji</Link>.</p>
+        : (item.photos ?? []).some((photo) => photo.localError?.code === "photo_local_blob_unreadable")
+          ? <p className="catch-photo-unavailable" role="status">Fotografii se na tomto zařízení nepodařilo přečíst. <Link to={`/catch/${item.id}/edit`}>Nahraď fotografii</Link>.</p>
         : missingCloudPhoto ? <p className="catch-photo-unavailable" role="status">Původní cloudová fotografie chybí. <Link to={`/catch/${item.id}/edit`}>Přidej ji znovu</Link>.</p>
         : (item.photos ?? []).some((photo) => photo.cloud?.state === "unavailable")
           ? <p className="catch-photo-unavailable" role="status">Fotografii nelze bezpečně obnovit z uložených dat. <Link to={`/catch/${item.id}/edit`}>Přidej ji znovu</Link>, případně ji ulož jako JPG, PNG nebo WebP.</p>
-        : photoLoadFailed ? <p className="catch-photo-unavailable" role="status">Cloudovou fotografii se nepodařilo načíst. <button type="button" onClick={retryPhotoLoads}>Zkusit znovu</button></p>
+        : photoLoadFailed ? <p className="catch-photo-unavailable" role="status">{item.photos?.some((photo) => photo.localError?.code === "photo_local_blob_unreadable")
+          ? "Fotografii se na tomto zařízení nepodařilo přečíst. " : "Cloudovou fotografii se nepodařilo načíst. "}<button type="button" onClick={retryPhotoLoads}>Zkusit znovu</button></p>
           : (item.photos ?? []).some((photo) => !photo.blob && photo.cloud?.state !== "synced")
             ? <p className="catch-photo-unavailable" role="status">Původní fotografie není dostupná. <Link to={`/catch/${item.id}/edit`}>Přidej ji znovu</Link>.</p>
             : (item.photos ?? []).some((photo) => !photo.blob) && <p className="catch-photo-unavailable" role="status">Některé fotografie se načítají ze synchronizovaného úložiště.</p>}

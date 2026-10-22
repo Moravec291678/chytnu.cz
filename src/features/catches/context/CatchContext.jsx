@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useReducer, useRef } from "react";
 import { CatchContext } from "./catchContextValue";
-import { catchRepository } from "../data/catchRepository";
+import { catchRepository, retainSessionPhotoBlob } from "../data/catchRepository";
 import { useDataScope } from "../../auth/context/dataScopeContextValue.js";
 import { getCatchRewardEventIds, progressionLedger } from "../../progression/data/progressionLedger.js";
 import { preserveSyncedPhotoMetadata } from "../data/photoMetadata.js";
 import { requestPhotoStorageDurability } from "../data/photoStorageDurability.js";
+import { sha256Blob } from "../data/photoCloudProvider.js";
+import { verifyPhotoBlobReadback } from "../data/photoLocalBlob.js";
+import { recordPhotoUploadTrace } from "../data/photoUploadTrace.js";
 const initialState = {
   catches: [],
   sortBy: "vse",
@@ -60,6 +63,31 @@ export function CatchProvider({ children }) {
   const [state, dispatch] = useReducer(catchReducer, initialState);
   const scope = useDataScope();
   const activeScopeKey = useRef(null);
+  const persistAndVerifyPhotos = useCallback(async (record, storedRecord) => {
+    for (const photo of record.photos ?? []) {
+      if (!(photo.blob instanceof Blob)) continue;
+      try {
+        const readback = await catchRepository.get(record.id, scope);
+        const storedPhoto = readback?.photos?.find((item) => item.id === photo.id);
+        if (!(storedPhoto?.blob instanceof Blob)) throw Object.assign(new Error("Fotografii se po uložení nepodařilo znovu načíst."), {
+          name: "NotFoundError", code: "photo_local_blob_unreadable", photoStage: "photo-readback-local-blob",
+        });
+        const expectedHash = photo.contentSha256 || await sha256Blob(photo.blob);
+        const verified = await verifyPhotoBlobReadback(photo.blob, storedPhoto.blob, expectedHash, sha256Blob);
+        recordPhotoUploadTrace(photo.id, "indexeddb_saved", { bytes: verified.size, mimeType: photo.type || photo.blob.type });
+        await catchRepository.setPhotoLocalError?.(record.id, photo.id, null, scope);
+      } catch (error) {
+        retainSessionPhotoBlob(scope.scopeKey, record.id, photo.id, photo.blob);
+        recordPhotoUploadTrace(photo.id, "local_blob_failure", { errorCode: error.code === "photo_local_blob_unreadable" || error.name === "NotFoundError"
+          ? "photo_local_blob_unreadable" : error.code, errorName: error.name,
+        operationStage: error.photoStage || "photo-readback-local-blob", retryable: false });
+        await catchRepository.setPhotoLocalError?.(record.id, photo.id, { code: error.code === "photo_local_blob_unreadable" || error.name === "NotFoundError"
+          ? "photo_local_blob_unreadable" : "photo_local_blob_readback_failed", errorName: error.name,
+        stage: error.photoStage || "photo-readback-local-blob" }, scope).catch(() => {});
+      }
+    }
+    return storedRecord;
+  }, [scope]);
   const refresh = useCallback(async () => {
     if (scope.status !== "ready") return;
     const requestedScopeKey = scope.scopeKey;
@@ -91,6 +119,7 @@ export function CatchProvider({ children }) {
   const createCatch = useCallback(async (record) => {
     if (scope.status !== "ready") throw new Error("Místní profil se ještě načítá.");
     const storedRecord = await catchRepository.put(record, scope);
+    await persistAndVerifyPhotos(record, storedRecord);
     if ((storedRecord.photos ?? []).some((photo) => photo.blob instanceof Blob)) void requestPhotoStorageDurability();
     const progression = await progressionLedger.reconcile(scope);
     if (activeScopeKey.current !== scope.scopeKey) return;
@@ -98,12 +127,13 @@ export function CatchProvider({ children }) {
     window.dispatchEvent(new Event("chytnu:outbox-changed"));
     window.dispatchEvent(new Event("chytnu:progression-changed"));
     return { record: storedRecord, progressionEventIds: getCatchRewardEventIds(progression.events, storedRecord.id) };
-  }, [scope]);
+  }, [persistAndVerifyPhotos, scope]);
   const updateCatch = useCallback(async (record) => {
     if (scope.status !== "ready") throw new Error("Místní profil se ještě načítá.");
     const latestRecord = await catchRepository.get(record.id, scope);
     const safeRecord = latestRecord ? await preserveSyncedPhotoMetadata(record, latestRecord) : record;
     const storedRecord = await catchRepository.put(safeRecord, scope);
+    await persistAndVerifyPhotos(safeRecord, storedRecord);
     if ((storedRecord.photos ?? []).some((photo) => photo.blob instanceof Blob)) void requestPhotoStorageDurability();
     await progressionLedger.reconcileCatch(storedRecord, scope);
     if (activeScopeKey.current !== scope.scopeKey) return;
@@ -111,7 +141,7 @@ export function CatchProvider({ children }) {
     window.dispatchEvent(new Event("chytnu:outbox-changed"));
     window.dispatchEvent(new Event("chytnu:progression-changed"));
     return storedRecord;
-  }, [scope]);
+  }, [persistAndVerifyPhotos, scope]);
   const toggleFavorite = useCallback(async (id) => {
     const record = state.catches.find((item) => item.id === id);
     if (!record) throw new Error("Úlovek už není dostupný. Obnov deník a zkus to znovu.");

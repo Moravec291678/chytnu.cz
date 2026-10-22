@@ -1,3 +1,5 @@
+import { readPhotoBlob } from "./photoLocalBlob.js";
+
 export const PHOTO_CLOUD_STATE = Object.freeze({
   LOCAL_ONLY: "localOnly",
   PENDING_UPLOAD: "pendingUpload",
@@ -55,7 +57,7 @@ export function createPhotoObjectKey(ownerId, catchId, photoId) {
 export async function sha256Blob(blob) {
   if (!(blob instanceof Blob)) throw new TypeError("Pro hashování fotografie jsou potřeba lokální Blob bytes.");
   if (!globalThis.crypto?.subtle) throw new Error("Toto zařízení neumí bezpečně ověřit fotografii.");
-  const digest = await globalThis.crypto.subtle.digest("SHA-256", await blob.arrayBuffer());
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", await readPhotoBlob(blob, "photo-hash-local-blob"));
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 

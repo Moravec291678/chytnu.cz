@@ -1,7 +1,8 @@
 import "fake-indexeddb/auto";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { openLocalDatabase, getActiveGuestScopeKey, catchRepository, outboxRepository } from "./catchRepository.js";
+import { openLocalDatabase, getActiveGuestScopeKey, catchRepository, outboxRepository, PHOTO_BINARY_STORE_NAME, CATCH_STORE_NAME } from "./catchRepository.js";
+import { sha256Blob } from "./photoCloudProvider.js";
 import { tripRepository } from "../../trips/data/tripRepository.js";
 
 const DATABASE_NAME = "chytnu-local";
@@ -68,14 +69,53 @@ test("v2 to v4 upgrade preserves existing catches, trips, photos, and starts wit
   const catches = await catchRepository.list(scope);
   const trips = await tripRepository.list(scope);
   const db = await openLocalDatabase();
-  assert.equal(db.version, 6);
-  assert.deepEqual([...db.objectStoreNames].sort(), ["appMeta", "catches", "localProfiles", "outbox", "privacySettings", "progressionEvents", "syncConflicts", "syncState", "trips", "waterChat", "waters"]);
+  assert.equal(db.version, 7);
+  assert.deepEqual([...db.objectStoreNames].sort(), ["appMeta", "catches", "localProfiles", "outbox", "photoBinaries", "privacySettings", "progressionEvents", "syncConflicts", "syncState", "trips", "waterChat", "waters"]);
   db.close();
   assert.equal(catches[0].id, "old-catch");
   assert.equal(catches[0].tripId, "old-trip");
   assert.equal(catches[0].photos[0].blob.size, 3);
   assert.equal(trips[0].id, "old-trip");
   assert.deepEqual(await outboxRepository.list(), []);
+});
+
+test("photo bytes persist separately as ArrayBuffer and metadata writes leave the binary payload untouched", async () => {
+  await deleteDatabase();
+  const scope = await guestScope();
+  const photo = new Blob([new Uint8Array([0xff, 0xd8, 1, 2, 3, 0xff, 0xd9])], { type: "image/jpeg" });
+  const hash = await sha256Blob(photo);
+  await catchRepository.put(makeCatch("binary-photo-catch", { photos: [{ id: "binary-photo", type: photo.type,
+    size: photo.size, contentSha256: hash, blob: photo }] }), scope);
+  const db = await openLocalDatabase();
+  const transaction = db.transaction([CATCH_STORE_NAME, PHOTO_BINARY_STORE_NAME], "readonly");
+  const storedCatch = await new Promise((resolve, reject) => {
+    const request = transaction.objectStore(CATCH_STORE_NAME).get("binary-photo-catch");
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+  const binary = await new Promise((resolve, reject) => {
+    const request = transaction.objectStore(PHOTO_BINARY_STORE_NAME).getAll();
+    request.onsuccess = () => resolve(request.result[0]);
+    request.onerror = () => reject(request.error);
+  });
+  db.close();
+  assert.equal(storedCatch.photos[0].blob, undefined);
+  assert.ok(binary.bytes instanceof ArrayBuffer);
+  assert.equal(binary.size, photo.size);
+  assert.equal(await sha256Blob(new Blob([binary.bytes], { type: binary.type })), hash);
+
+  await catchRepository.setPhotoCloudState("binary-photo-catch", "binary-photo", {
+    state: "synced", provider: "cloudinary", objectKey: "users/u/catches/c/photos/p/original", sha256: hash,
+  }, scope);
+  const hydrated = await catchRepository.get("binary-photo-catch", scope);
+  assert.equal(await sha256Blob(hydrated.photos[0].blob), hash);
+  const afterDb = await openLocalDatabase();
+  const after = afterDb.transaction([CATCH_STORE_NAME, PHOTO_BINARY_STORE_NAME], "readonly");
+  const afterCatch = await new Promise((resolve) => { const request = after.objectStore(CATCH_STORE_NAME).get("binary-photo-catch"); request.onsuccess = () => resolve(request.result); });
+  const afterBinary = await new Promise((resolve) => { const request = after.objectStore(PHOTO_BINARY_STORE_NAME).get(binary.key); request.onsuccess = () => resolve(request.result); });
+  afterDb.close();
+  assert.equal(afterCatch.photos[0].blob, undefined, "cloud metadata updates do not rewrite a Blob into the Catch record");
+  assert.deepEqual(new Uint8Array(afterBinary.bytes), new Uint8Array(binary.bytes));
 });
 
 test("catch create, edit, and delete commit an ordered coalesced operation and retain photo/trip data", async () => {

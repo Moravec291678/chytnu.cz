@@ -6,9 +6,10 @@ import {
   recordScopeKey,
   validateDataScope,
 } from "../../auth/data/localDataScope.js";
+import { readPhotoBlob } from "./photoLocalBlob.js";
 
 const DATABASE_NAME = "chytnu-local";
-export const DATABASE_VERSION = 6;
+export const DATABASE_VERSION = 7;
 export const CATCH_STORE_NAME = "catches";
 export const TRIP_STORE_NAME = "trips";
 export const WATER_STORE_NAME = "waters";
@@ -21,6 +22,23 @@ export const APP_META_STORE_NAME = "appMeta";
 export const PRIVACY_STORE_NAME = "privacySettings";
 export const PROGRESSION_EVENT_STORE_NAME = "progressionEvents";
 export const ACTIVE_GUEST_SCOPE_KEY = "activeGuestScope";
+export const PHOTO_BINARY_STORE_NAME = "photoBinaries";
+
+const sessionPhotoBlobs = new Map();
+function sessionPhotoBlobKey(scopeKey, catchId, photoId) { return JSON.stringify([scopeKey, catchId, photoId]); }
+function photoBinaryKey(scopeKey, catchId, photoId) { return JSON.stringify([scopeKey, catchId, photoId]); }
+function equalBinary(left, right) {
+  if (!(left instanceof ArrayBuffer || ArrayBuffer.isView(left))) return false;
+  const a = new Uint8Array(left instanceof ArrayBuffer ? left : left.buffer, left instanceof ArrayBuffer ? 0 : left.byteOffset,
+    left instanceof ArrayBuffer ? left.byteLength : left.byteLength);
+  const b = new Uint8Array(right);
+  return a.byteLength === b.byteLength && a.every((byte, index) => byte === b[index]);
+}
+
+/** Keep readable bytes alive for this page session if Safari's IndexedDB copy cannot be read back. */
+export function retainSessionPhotoBlob(scopeKey, catchId, photoId, blob) {
+  if (blob instanceof Blob) sessionPhotoBlobs.set(sessionPhotoBlobKey(scopeKey, catchId, photoId), blob);
+}
 
 export function outboxEntityKey(scopeOrOwnerId, entityType, entityId) {
   const scopeKey = isGuestScope(scopeOrOwnerId) || isAccountScope(scopeOrOwnerId)
@@ -180,6 +198,11 @@ export function openLocalDatabase() {
       const waterChat = db.objectStoreNames.contains(WATER_CHAT_STORE_NAME)
         ? transaction.objectStore(WATER_CHAT_STORE_NAME)
         : db.createObjectStore(WATER_CHAT_STORE_NAME, { keyPath: "id" });
+      const photoBinaries = db.objectStoreNames.contains(PHOTO_BINARY_STORE_NAME)
+        ? transaction.objectStore(PHOTO_BINARY_STORE_NAME)
+        : db.createObjectStore(PHOTO_BINARY_STORE_NAME, { keyPath: "key" });
+      if (!photoBinaries.indexNames.contains("scopeKey")) photoBinaries.createIndex("scopeKey", "scopeKey", { unique: false });
+      if (!photoBinaries.indexNames.contains("catchPhoto")) photoBinaries.createIndex("catchPhoto", ["scopeKey", "catchId"], { unique: false });
       if (!catches.indexNames.contains("scopeKey")) catches.createIndex("scopeKey", "scopeKey", { unique: false });
       if (!trips.indexNames.contains("scopeKey")) trips.createIndex("scopeKey", "scopeKey", { unique: false });
       if (!waters.indexNames.contains("scopeKey")) waters.createIndex("scopeKey", "scopeKey", { unique: false });
@@ -285,19 +308,44 @@ function requireRepositoryScope(options = {}) {
 
 async function listScopedRecords(storeName, scopeKey) {
   const db = await openLocalDatabase();
+  let records;
   try {
     const transaction = db.transaction(storeName, "readonly");
-    return await requestValue(transaction.objectStore(storeName).index("scopeKey").getAll(scopeKey));
+    records = await requestValue(transaction.objectStore(storeName).index("scopeKey").getAll(scopeKey));
   } finally {
     db.close();
   }
+  return storeName === CATCH_STORE_NAME ? hydratePhotoBinaryRecords(records, scopeKey) : records;
 }
 
 async function getScopedRecord(storeName, id, scopeKey) {
-  const record = await runStoreOperation(storeName, "get", "readonly", id);
+  let record = await runStoreOperation(storeName, "get", "readonly", id);
   if (!record) return undefined;
   if (recordScopeKey(record) !== scopeKey) throw new Error("Záznam nepatří do aktivního profilu.");
+  if (storeName === CATCH_STORE_NAME) [record] = await hydratePhotoBinaryRecords([record], scopeKey);
   return record;
+}
+
+async function hydratePhotoBinaryRecords(records, scopeKey) {
+  const db = await openLocalDatabase();
+  let binaryGroups;
+  try {
+    const transaction = db.transaction(PHOTO_BINARY_STORE_NAME, "readonly");
+    const index = transaction.objectStore(PHOTO_BINARY_STORE_NAME).index("catchPhoto");
+    binaryGroups = await Promise.all(records.map((record) => requestValue(index.getAll([scopeKey, record.id]))));
+  } finally { db.close(); }
+  return records.map((record, recordIndex) => {
+    const byKey = new Map(binaryGroups[recordIndex].map((item) => [item.key, item]));
+    const photos = (record.photos ?? []).map((photo) => {
+      const sessionBlob = sessionPhotoBlobs.get(sessionPhotoBlobKey(scopeKey, record.id, photo.id));
+      if (sessionBlob) return { ...photo, blob: sessionBlob };
+      if (photo.blob instanceof Blob) return photo;
+      const saved = byKey.get(photoBinaryKey(scopeKey, record.id, photo.id));
+      if (!saved || !(saved.bytes instanceof ArrayBuffer || ArrayBuffer.isView(saved.bytes))) return photo;
+      return { ...photo, blob: new Blob([saved.bytes], { type: saved.type || photo.type || "application/octet-stream" }) };
+    });
+    return { ...record, photos };
+  });
 }
 
 export async function runStoreOperation(storeName, operation, mode, record) {
@@ -326,10 +374,23 @@ export const catchRepository = {
   },
   put: async (record, options) => {
     const requestedScope = requireRepositoryScope(options);
+    const preparedPhotoBytes = new Map();
+    for (const photo of record.photos ?? []) {
+      if (!(photo.blob instanceof Blob)) continue;
+      try { preparedPhotoBytes.set(photo.id, await readPhotoBlob(photo.blob, "photo-store-write-source")); }
+      catch { /* Preserve the original object in the Catch record if its bytes cannot be copied. */ }
+    }
     const db = await openLocalDatabase();
+    let existingPhotoBinaries = [];
+    if (preparedPhotoBytes.size) {
+      const readTransaction = db.transaction(PHOTO_BINARY_STORE_NAME, "readonly");
+      existingPhotoBinaries = await requestValue(readTransaction.objectStore(PHOTO_BINARY_STORE_NAME).index("catchPhoto").getAll([requestedScope.scopeKey, record.id]));
+    }
+    const existingPhotoBinaryByKey = new Map(existingPhotoBinaries.map((item) => [item.key, item]));
     return new Promise((resolve, reject) => {
-      const transaction = db.transaction([CATCH_STORE_NAME, TRIP_STORE_NAME, WATER_STORE_NAME, OUTBOX_STORE_NAME], "readwrite");
+      const transaction = db.transaction([CATCH_STORE_NAME, TRIP_STORE_NAME, WATER_STORE_NAME, OUTBOX_STORE_NAME, PHOTO_BINARY_STORE_NAME], "readwrite");
       const catchStore = transaction.objectStore(CATCH_STORE_NAME);
+      const photoBinaryStore = transaction.objectStore(PHOTO_BINARY_STORE_NAME);
       let failure;
       let storedRecord = record;
       const existingRequest = catchStore.get(record.id);
@@ -345,6 +406,21 @@ export const catchRepository = {
         const nextPhotoIds = new Set((record.photos ?? []).map((photo) => photo.id));
         const queueWrite = () => {
           storedRecord = { ...record, ownerId: effectiveOwnerId, scopeKey: effectiveScopeKey };
+          const persistedPhotos = (record.photos ?? []).map((photo) => {
+            const bytes = preparedPhotoBytes.get(photo.id);
+            if (!bytes) return photo;
+            const key = photoBinaryKey(effectiveScopeKey, record.id, photo.id);
+            const type = photo.blob.type || photo.type || "application/octet-stream";
+            const existingBinary = existingPhotoBinaryByKey.get(key);
+            if (!existingBinary || existingBinary.type !== type || !equalBinary(existingBinary.bytes, bytes)) {
+              photoBinaryStore.put({ key, scopeKey: effectiveScopeKey, catchId: record.id, photoId: photo.id,
+                type, size: bytes.byteLength, bytes });
+            }
+            const metadata = { ...photo };
+            delete metadata.blob;
+            return metadata;
+          });
+          const persistedRecord = { ...storedRecord, photos: persistedPhotos };
           queueOutboxOperation(transaction, {
             entityType: "catch",
             entityId: record.id,
@@ -362,7 +438,7 @@ export const catchRepository = {
                 revision,
                 photoStatus: (storedRecord.photos ?? []).length === 0
                   ? "none"
-                  : (storedRecord.photos ?? []).some((photo) => photo.blob) ? "local-only" : "metadata-only",
+                  : (storedRecord.photos ?? []).some((photo) => photo.blob || preparedPhotoBytes.has(photo.id)) ? "local-only" : "metadata-only",
                 ...(existing?.sync?.serverRevision !== undefined ? { serverRevision: existing.sync.serverRevision } : {}),
               },
             };
@@ -382,7 +458,7 @@ export const catchRepository = {
                 dependsOnCatchRevision: revision,
               });
             }
-            catchStore.put(storedRecord);
+            catchStore.put({ ...persistedRecord, sync: storedRecord.sync });
           });
         };
 
@@ -469,10 +545,12 @@ export const catchRepository = {
   cachePhotoBlob: async (catchId, photoId, blob, options) => {
     const requestedScope = requireRepositoryScope(options);
     if (!(blob instanceof Blob)) throw new TypeError("Do místní cache lze uložit pouze Blob fotografie.");
+    const bytes = await readPhotoBlob(blob, "photo-cache-write-source");
     const db = await openLocalDatabase();
     return new Promise((resolve, reject) => {
-      const transaction = db.transaction(CATCH_STORE_NAME, "readwrite");
+      const transaction = db.transaction([CATCH_STORE_NAME, PHOTO_BINARY_STORE_NAME], "readwrite");
       const store = transaction.objectStore(CATCH_STORE_NAME);
+      const photoBinaryStore = transaction.objectStore(PHOTO_BINARY_STORE_NAME);
       const request = store.get(catchId);
       let result = null;
       request.onsuccess = () => {
@@ -483,8 +561,16 @@ export const catchRepository = {
         }
         const photo = (record.photos ?? []).find((item) => item.id === photoId);
         if (!photo) { result = null; return; }
-        if (photo.blob instanceof Blob) { result = photo.blob; return; }
-        store.put({ ...record, photos: record.photos.map((item) => item.id === photoId ? { ...item, blob } : item) });
+        // This path is only used after a verified Cloudinary fetch; replacing a
+        // broken local Blob is safe because the remote bytes were hash-checked.
+        photoBinaryStore.put({ key: photoBinaryKey(requestedScope.scopeKey, catchId, photoId), scopeKey: requestedScope.scopeKey,
+          catchId, photoId, type: blob.type || photo.type || "application/octet-stream", size: bytes.byteLength, bytes });
+        store.put({ ...record, photos: record.photos.map((item) => {
+          if (item.id !== photoId) return item;
+          const metadata = { ...item };
+          delete metadata.blob;
+          return metadata;
+        }) });
         result = blob;
       };
       request.onerror = () => transaction.abort();
@@ -513,6 +599,38 @@ export const catchRepository = {
       transaction.oncomplete = () => { db.close(); resolve(updated); };
       transaction.onerror = () => { db.close(); reject(transaction.error ?? new Error("Stav cloud fotografie se nepodařilo uložit.")); };
       transaction.onabort = () => { db.close(); reject(transaction.error ?? new Error("Zápis stavu fotografie byl přerušen.")); };
+    });
+  },
+  setPhotoLocalError: async (catchId, photoId, localError, options) => {
+    const requestedScope = requireRepositoryScope(options);
+    const db = await openLocalDatabase();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(CATCH_STORE_NAME, "readwrite");
+      const store = transaction.objectStore(CATCH_STORE_NAME);
+      const request = store.get(catchId);
+      let updated = false;
+      request.onsuccess = () => {
+        const record = request.result;
+        if (!record || recordScopeKey(record) !== requestedScope.scopeKey) { transaction.abort(); return; }
+        const photos = record.photos ?? [];
+        if (!photos.some((photo) => photo.id === photoId)) return;
+        const safeError = localError ? {
+          code: typeof localError.code === "string" && /^[a-z0-9_:-]{1,64}$/i.test(localError.code) ? localError.code : "unknown",
+          errorName: ["NotFoundError", "DataError", "TypeError", "InvalidStateError", "AbortError", "SecurityError"].includes(localError.errorName) ? localError.errorName : "Error",
+          stage: typeof localError.stage === "string" && /^[a-z0-9-]{1,64}$/.test(localError.stage) ? localError.stage : "photo-read-local-blob",
+        } : null;
+        const existingPhoto = photos.find((photo) => photo.id === photoId);
+        if (!safeError && !existingPhoto?.localError) return;
+        if (safeError && existingPhoto?.localError?.code === safeError.code
+          && existingPhoto.localError.errorName === safeError.errorName && existingPhoto.localError.stage === safeError.stage) return;
+        store.put({ ...record, photos: photos.map((photo) => photo.id === photoId
+          ? { ...photo, ...(safeError ? { localError: safeError } : { localError: undefined }) } : photo) });
+        updated = true;
+      };
+      request.onerror = () => transaction.abort();
+      transaction.oncomplete = () => { db.close(); resolve(updated); };
+      transaction.onerror = () => { db.close(); reject(transaction.error ?? new Error("Lokální stav fotografie se nepodařilo uložit.")); };
+      transaction.onabort = () => { db.close(); reject(transaction.error ?? new Error("Zápis lokálního stavu fotografie byl přerušen.")); };
     });
   },
 };
@@ -646,7 +764,7 @@ export const outboxRepository = {
   acknowledge: async (operationId, expectedLocalRevision, serverRevision = null) => {
     const db = await openLocalDatabase();
     return new Promise((resolve, reject) => {
-      const transaction = db.transaction([CATCH_STORE_NAME, TRIP_STORE_NAME, WATER_STORE_NAME, OUTBOX_STORE_NAME], "readwrite");
+      const transaction = db.transaction([CATCH_STORE_NAME, TRIP_STORE_NAME, WATER_STORE_NAME, OUTBOX_STORE_NAME, PHOTO_BINARY_STORE_NAME], "readwrite");
       const store = transaction.objectStore(OUTBOX_STORE_NAME);
       const request = store.index("operationId").get(operationId);
       let acknowledged = false;
@@ -664,18 +782,29 @@ export const outboxRepository = {
           entityRequest.onsuccess = () => {
             const record = entityRequest.result;
             if (!record || recordScopeKey(record) !== operation.scopeKey || record.sync?.revision !== expectedLocalRevision) return;
-            const photosLocal = operation.entityType === "catch" && (record.photos ?? []).some((photo) => photo.blob);
-            entityStore.put({
-              ...record,
-              sync: {
-                ...record.sync,
-                status: "metadata-synced",
-                serverRevision,
-                photoStatus: photosLocal ? "local-only" : (record.photos?.length ? "metadata-only" : "none"),
-              },
-            });
-            store.delete(operation.sequence);
-            acknowledged = true;
+            const saveAcknowledgedRecord = (photosLocal) => {
+              entityStore.put({
+                ...record,
+                sync: {
+                  ...record.sync,
+                  status: "metadata-synced",
+                  serverRevision,
+                  photoStatus: photosLocal ? "local-only" : (record.photos?.length ? "metadata-only" : "none"),
+                },
+              });
+              store.delete(operation.sequence);
+              acknowledged = true;
+            };
+            if (operation.entityType === "catch" && !(record.photos ?? []).some((photo) => photo.blob) && record.photos?.length) {
+              const photoRequest = transaction.objectStore(PHOTO_BINARY_STORE_NAME).index("catchPhoto").getAll([operation.scopeKey, record.id]);
+              photoRequest.onsuccess = () => {
+                const photoIds = new Set(photoRequest.result.filter((photo) => photo.catchId === record.id).map((photo) => photo.photoId));
+                saveAcknowledgedRecord((record.photos ?? []).some((photo) => photoIds.has(photo.id)));
+              };
+              photoRequest.onerror = () => transaction.abort();
+            } else {
+              saveAcknowledgedRecord(operation.entityType === "catch" && (record.photos ?? []).some((photo) => photo.blob));
+            }
           };
           entityRequest.onerror = () => transaction.abort();
         }

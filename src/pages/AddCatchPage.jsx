@@ -142,6 +142,9 @@ function AddCatchPage() {
         recordPhotoUploadTrace(photoId, "blob_created", {
           preparedMimeType: preparedPhoto.type, preparedBytes: preparedPhoto.size, conversion: "jpeg",
         });
+        recordPhotoUploadTrace(photoId, "photo_prepared", {
+          preparedMimeType: preparedPhoto.type, preparedBytes: preparedPhoto.size, conversion: "jpeg",
+        });
         const optimizedPhoto = preparedPhoto.blob;
         const previewUrl = URL.createObjectURL(optimizedPhoto);
         photoUrlsRef.current.add(previewUrl);

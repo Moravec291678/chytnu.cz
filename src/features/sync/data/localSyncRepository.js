@@ -7,6 +7,7 @@ import {
   PRIVACY_STORE_NAME,
   PROGRESSION_EVENT_STORE_NAME,
   SYNC_STATE_STORE_NAME,
+  PHOTO_BINARY_STORE_NAME,
 } from "../../catches/data/catchRepository.js";
 import { accountScopeKey, isGuestScope, recordScopeKey } from "../../auth/data/localDataScope.js";
 
@@ -91,17 +92,20 @@ export async function readGuestSummary(guestScopeKey) {
   if (!isGuestScope(guestScopeKey)) throw new Error("Místní profil není platný.");
   const db = await openLocalDatabase();
   try {
-    const transaction = db.transaction(["catches", "trips"], "readonly");
-    const [catches, trips] = await Promise.all([
+    const transaction = db.transaction(["catches", "trips", PHOTO_BINARY_STORE_NAME], "readonly");
+    const [catches, trips, binaries] = await Promise.all([
       requestResult(transaction.objectStore("catches").getAll()),
       requestResult(transaction.objectStore("trips").getAll()),
+      requestResult(transaction.objectStore(PHOTO_BINARY_STORE_NAME).index("scopeKey").getAll(guestScopeKey)),
     ]);
     const localCatches = catches.filter((record) => recordScopeKey(record) === guestScopeKey);
     const localTrips = trips.filter((record) => recordScopeKey(record) === guestScopeKey);
+    const localCatchIds = new Set(localCatches.map((record) => record.id));
     return {
       catches: localCatches.length,
       trips: localTrips.length,
-      photos: localCatches.reduce((count, record) => count + (record.photos ?? []).filter((photo) => photo.blob).length, 0),
+      photos: localCatches.reduce((count, record) => count + (record.photos ?? []).filter((photo) => photo.blob).length, 0)
+        + binaries.filter((photo) => localCatchIds.has(photo.catchId)).length,
     };
   } finally { db.close(); }
 }
@@ -111,22 +115,23 @@ export async function linkGuestData(ownerId, guestScopeKey) {
   if (!isGuestScope(guestScopeKey)) throw new Error("Místní profil není platný.");
   const accountScope = accountScopeKey(ownerId);
   const db = await openLocalDatabase();
-  const transaction = db.transaction(["catches", "trips", "waters", OUTBOX_STORE_NAME, PRIVACY_STORE_NAME, PROGRESSION_EVENT_STORE_NAME], "readwrite");
+  const transaction = db.transaction(["catches", "trips", "waters", OUTBOX_STORE_NAME, PRIVACY_STORE_NAME, PROGRESSION_EVENT_STORE_NAME, PHOTO_BINARY_STORE_NAME], "readwrite");
   const catchStore = transaction.objectStore("catches");
   const tripStore = transaction.objectStore("trips");
   const waterStore = transaction.objectStore("waters");
   const outbox = transaction.objectStore(OUTBOX_STORE_NAME);
   const privacyStore = transaction.objectStore(PRIVACY_STORE_NAME);
   const progressionStore = transaction.objectStore(PROGRESSION_EVENT_STORE_NAME);
+  const photoBinaryStore = transaction.objectStore(PHOTO_BINARY_STORE_NAME);
   const result = { catches: 0, trips: 0, photos: 0 };
   let failure;
-  const requests = [catchStore.getAll(), tripStore.getAll(), waterStore.getAll(), outbox.getAll(), privacyStore.get(guestScopeKey), progressionStore.index("scopeKey").getAll(guestScopeKey)];
+  const requests = [catchStore.getAll(), tripStore.getAll(), waterStore.getAll(), outbox.getAll(), privacyStore.get(guestScopeKey), progressionStore.index("scopeKey").getAll(guestScopeKey), photoBinaryStore.index("scopeKey").getAll(guestScopeKey)];
   let loaded = 0;
   const process = () => {
     loaded += 1;
     if (loaded !== requests.length) return;
     try {
-      const [allCatches, allTrips, allWaters, allOperations, guestPrivacy, guestProgression] = requests.map((request) => request.result);
+      const [allCatches, allTrips, allWaters, allOperations, guestPrivacy, guestProgression, guestPhotoBinaries] = requests.map((request) => request.result);
       const ownerlessTrips = allTrips.filter((record) => recordScopeKey(record) === guestScopeKey);
       const ownerlessCatches = allCatches.filter((record) => recordScopeKey(record) === guestScopeKey);
       const ownerlessWaters = allWaters.filter((record) => recordScopeKey(record) === guestScopeKey);
@@ -162,6 +167,14 @@ export async function linkGuestData(ownerId, guestScopeKey) {
         }));
       }
       for (const record of ownerlessCatches) {
+        const catchBinaries = guestPhotoBinaries.filter((photo) => photo.catchId === record.id);
+        const localPhotoIds = new Set((record.photos ?? []).filter((photo) => photo.blob).map((photo) => photo.id));
+        for (const photo of catchBinaries) {
+          const accountKey = JSON.stringify([accountScope, photo.catchId, photo.photoId]);
+          photoBinaryStore.put({ ...photo, key: accountKey, scopeKey: accountScope });
+          photoBinaryStore.delete(photo.key);
+          localPhotoIds.add(photo.photoId);
+        }
         queueOutboxOperation(transaction, {
           entityType: "catch", entityId: record.id, operation: "upsert", ownerId,
           scopeKey: accountScope,
@@ -170,7 +183,7 @@ export async function linkGuestData(ownerId, guestScopeKey) {
           ...record, ownerId, scopeKey: accountScope,
           sync: {
             ...(record.sync ?? {}), status: "local", revision, serverRevision: undefined,
-            photoStatus: (record.photos ?? []).some((photo) => photo.blob) ? "local-only" : "none",
+            photoStatus: localPhotoIds.size ? "local-only" : "none",
           },
         }));
       }
@@ -182,7 +195,8 @@ export async function linkGuestData(ownerId, guestScopeKey) {
       }
       result.catches = ownerlessCatches.length;
       result.trips = ownerlessTrips.length;
-      result.photos = ownerlessCatches.reduce((count, record) => count + (record.photos ?? []).filter((photo) => photo.blob).length, 0);
+      result.photos = ownerlessCatches.reduce((count, record) => count + (record.photos ?? []).filter((photo) => photo.blob).length, 0)
+        + guestPhotoBinaries.filter((photo) => ownerlessCatches.some((record) => record.id === photo.catchId)).length;
     } catch (error) {
       failure = error;
       transaction.abort();
@@ -382,7 +396,7 @@ export async function applyRemotePage({ ownerId, snapshots, cursor, pendingPullU
   const db = await openLocalDatabase();
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(
-      ["catches", "trips", "waters", OUTBOX_STORE_NAME, CONFLICT_STORE_NAME, SYNC_STATE_STORE_NAME],
+      ["catches", "trips", "waters", OUTBOX_STORE_NAME, CONFLICT_STORE_NAME, SYNC_STATE_STORE_NAME, PHOTO_BINARY_STORE_NAME],
       "readwrite",
     );
     const outbox = transaction.objectStore(OUTBOX_STORE_NAME);
@@ -453,15 +467,25 @@ export async function applyRemotePage({ ownerId, snapshots, cursor, pendingPullU
             const acceptedRecord = snapshot.entityType === "catch"
               ? metadataOnlyRecord(remote, localRecord)
               : { ...localRecord };
-            entityStore.put({
+            const saveAcceptedRecord = (hasLocalPhotos) => entityStore.put({
               ...acceptedRecord,
               sync: {
                 ...localRecord.sync,
                 status: "metadata-synced",
                 serverRevision: remote.revision,
-                photoStatus: photoSyncStatus(acceptedRecord.photos ?? []),
+                photoStatus: (acceptedRecord.photos ?? []).length === 0 ? "none"
+                  : hasLocalPhotos ? "local-only" : "metadata-only",
               },
             });
+            if (snapshot.entityType === "catch" && acceptedRecord.photos?.length) {
+              const localBinaries = transaction.objectStore(PHOTO_BINARY_STORE_NAME).index("catchPhoto")
+                .getAll([accountScopeKey(ownerId), snapshot.entityId]);
+              localBinaries.onsuccess = () => {
+                const localIds = new Set(localBinaries.result.map((photo) => photo.photoId));
+                saveAcceptedRecord((acceptedRecord.photos ?? []).some((photo) => photo.blob || localIds.has(photo.id)));
+              };
+              localBinaries.onerror = () => { failure = localBinaries.error; transaction.abort(); };
+            } else saveAcceptedRecord(snapshot.entityType === "catch" && (acceptedRecord.photos ?? []).some((photo) => photo.blob));
           }
           processSnapshot(index + 1);
           return;
@@ -533,9 +557,23 @@ export async function applyRemotePage({ ownerId, snapshots, cursor, pendingPullU
           return;
         }
 
-        entityStore.put(metadataOnlyRecord(remote, localRecord));
-        applied += 1;
-        processSnapshot(index + 1);
+        const mergedRecord = metadataOnlyRecord(remote, localRecord);
+        if (snapshot.entityType === "catch" && mergedRecord.photos?.length) {
+          const localBinaries = transaction.objectStore(PHOTO_BINARY_STORE_NAME).index("catchPhoto")
+            .getAll([accountScopeKey(ownerId), snapshot.entityId]);
+          localBinaries.onsuccess = () => {
+            const localIds = new Set(localBinaries.result.map((photo) => photo.photoId));
+            entityStore.put({ ...mergedRecord, sync: { ...mergedRecord.sync,
+              photoStatus: mergedRecord.photos.some((photo) => photo.blob || localIds.has(photo.id)) ? "local-only" : "metadata-only" } });
+            applied += 1;
+            processSnapshot(index + 1);
+          };
+          localBinaries.onerror = () => { failure = localBinaries.error; transaction.abort(); };
+        } else {
+          entityStore.put(mergedRecord);
+          applied += 1;
+          processSnapshot(index + 1);
+        }
       };
       localRequest.onsuccess = onLoaded;
       operationRequest.onsuccess = onLoaded;

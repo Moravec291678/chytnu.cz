@@ -2,6 +2,7 @@ import { accountScopeKey, validateDataScope } from "../../auth/data/localDataSco
 import { firebaseAuth } from "../../auth/data/firebaseAuth.js";
 import { catchRepository, outboxRepository, photoCloudOutboxRepository } from "./catchRepository.js";
 import { recordPhotoUploadTrace } from "./photoUploadTrace.js";
+import { PHOTO_LOCAL_BLOB_UNREADABLE, photoBlobErrorCode } from "./photoLocalBlob.js";
 import { preparePhotoForStorageAndUpload } from "./photoInput.js";
 import {
   createPhotoObjectKey,
@@ -13,7 +14,7 @@ import {
 } from "./photoCloudProvider.js";
 
 function due(operation, now, force) {
-  if (operation.status === "conflict") return false;
+  if (operation.status === "conflict") return force && operation.lastErrorCode === PHOTO_LOCAL_BLOB_UNREADABLE;
   if (operation.status !== "failed") return true;
   return force || !operation.nextAttemptAt || Date.parse(operation.nextAttemptAt) <= now;
 }
@@ -22,7 +23,7 @@ function isActive(getCurrentOwnerId, ownerId) {
   return getCurrentOwnerId() === ownerId;
 }
 
-const TERMINAL_UPLOAD_ERRORS = new Set(["photo_blob_missing", "photo_content_mismatch", "invalid_photo", "invalid_photo_identity"]);
+const TERMINAL_UPLOAD_ERRORS = new Set(["photo_blob_missing", "photo_content_mismatch", "invalid_photo", "invalid_photo_identity", PHOTO_LOCAL_BLOB_UNREADABLE]);
 
 function safePhotoCloud(photo) {
   return photo?.cloud ?? { state: PHOTO_CLOUD_STATE.LOCAL_ONLY, provider: null, objectKey: null, sha256: null };
@@ -169,16 +170,34 @@ export function createPhotoCloudService({
     return result;
   }
 
-  async function reconcileUploads(ownerId) {
+  async function reconcileUploads(ownerId, { force = false } = {}) {
     const existingJobs = await queue.list();
     const scope = { ownerId, scopeKey: accountScopeKey(ownerId) };
     const records = await catches.list(scope);
     let queued = 0;
+    let needsAttention = false;
     for (const record of records) {
       if (!isActive(getCurrentOwnerId, ownerId)) return queued;
       for (const photo of record.photos ?? []) {
         if (!(photo.blob instanceof Blob)) continue;
-        const sha256 = await sha256Blob(photo.blob);
+        if (photo.localError?.code === PHOTO_LOCAL_BLOB_UNREADABLE && !force) continue;
+        let sha256;
+        try {
+          sha256 = await sha256Blob(photo.blob);
+          if (photo.localError && catches.setPhotoLocalError) await catches.setPhotoLocalError(record.id, photo.id, null, scope);
+        } catch (failure) {
+          if (photoBlobErrorCode(failure) !== PHOTO_LOCAL_BLOB_UNREADABLE) throw failure;
+          recordPhotoUploadTrace(photo.id, "local_blob_failure", { errorCode: PHOTO_LOCAL_BLOB_UNREADABLE,
+            errorName: failure.name, operationStage: failure.photoStage || "photo-hash-local-blob", retryable: false });
+          await catches.setPhotoLocalError?.(record.id, photo.id, { code: PHOTO_LOCAL_BLOB_UNREADABLE,
+            errorName: failure.name, stage: failure.photoStage || "photo-hash-local-blob" }, scope).catch(() => {});
+          if (safePhotoCloud(photo).state !== PHOTO_CLOUD_STATE.SYNCED) {
+            needsAttention = true;
+            await catches.setPhotoCloudState(record.id, photo.id, { state: PHOTO_CLOUD_STATE.UNAVAILABLE,
+              provider: null, objectKey: null, sha256: null }, scope).catch(() => {});
+          }
+          continue;
+        }
         const objectKey = createPhotoObjectKey(ownerId, record.id, photo.id);
         const cloud = safePhotoCloud(photo);
         if (photo.uploadReady !== false && cloud.state === PHOTO_CLOUD_STATE.UNAVAILABLE && cloud.objectKey === objectKey && cloud.sha256 === sha256) continue;
@@ -213,7 +232,7 @@ export function createPhotoCloudService({
         }, scope);
       }
     }
-    return queued;
+    return { queued, needsAttention };
   }
 
   async function saveSyncedPhotoMetadata(job, photoCloud) {
@@ -342,7 +361,9 @@ export function createPhotoCloudService({
     if (preflightOwnerId !== ownerId) await prepareLegacyPhotoIds(ownerId, { force });
     preflightOwnerId = null;
     if (!await provider.isAvailable({ ownerId })) return { status: "local-only", uploaded: 0, deleted: 0, queued: 0 };
-    const queued = await reconcileUploads(ownerId);
+    const reconciliation = await reconcileUploads(ownerId, { force });
+    const queued = reconciliation.queued;
+    let needsAttention = reconciliation.needsAttention;
     let uploaded = 0;
     let deleted = 0;
     let error = null;
@@ -363,13 +384,16 @@ export function createPhotoCloudService({
       } catch (failure) {
         if (failure?.code === "photo_job_superseded") continue;
         error = failure;
-        recordPhotoUploadTrace(operation.photoCloud.photoId, "upload_fail", { errorCode: failure?.code, httpStatus: failure?.status,
-          retryable: failure?.code !== "photo_prepare_failed" && !TERMINAL_UPLOAD_ERRORS.has(failure?.code) });
         const job = operation.photoCloud;
-        const terminal = operation.operation === "photo-upload" && TERMINAL_UPLOAD_ERRORS.has(failure?.code);
-        if (terminal) await operationOutbox.markConflict(operation.operationId, failure?.message, failure.code);
+        const localBlobUnreadable = photoBlobErrorCode(failure) === PHOTO_LOCAL_BLOB_UNREADABLE;
+        const failureCode = localBlobUnreadable ? PHOTO_LOCAL_BLOB_UNREADABLE : failure?.code;
+        recordPhotoUploadTrace(operation.photoCloud.photoId, "upload_fail", { errorCode: failureCode, httpStatus: failure?.status,
+          retryable: failureCode !== "photo_prepare_failed" && !TERMINAL_UPLOAD_ERRORS.has(failureCode),
+          errorName: failure?.name, operationStage: failure?.photoStage || "photo-upload" });
+        const terminal = operation.operation === "photo-upload" && (TERMINAL_UPLOAD_ERRORS.has(failure?.code) || localBlobUnreadable);
+        if (terminal) await operationOutbox.markConflict(operation.operationId, failure?.message, failureCode);
         else await operationOutbox.markFailed(operation.operationId, failure?.message, {
-          code: failure?.code,
+          code: failureCode,
           providerCode: failure?.providerCode,
           endpoint: failure?.endpoint,
         });
@@ -383,15 +407,22 @@ export function createPhotoCloudService({
               provider: job.provider,
               objectKey: job.objectKey,
               sha256: job.sha256,
-              ...(terminal ? { errorCode: failure.code } : {}),
+              ...(terminal ? { errorCode: failureCode } : {}),
             }, scope).catch(() => {});
           }
+          if (localBlobUnreadable) await catches.setPhotoLocalError?.(job.catchId, job.photoId, {
+            code: PHOTO_LOCAL_BLOB_UNREADABLE, errorName: failure.name,
+            stage: failure.photoStage || "photo-hash-local-blob" }, scope).catch(() => {});
         }
-        if (failure?.code !== "photo_prepare_failed") break;
+        if (failure?.code !== "photo_prepare_failed" && !localBlobUnreadable) break;
       }
     }
-    return { status: error ? "error" : isVisible() ? "success" : "deferred", uploaded, deleted, queued, error: error?.message ?? "",
-      errorCode: error?.code ?? "photo_cloud_failed", errorEndpoint: error?.endpoint ?? "" };
+    needsAttention ||= Boolean(error && photoBlobErrorCode(error) === PHOTO_LOCAL_BLOB_UNREADABLE);
+    return { status: error && !needsAttention ? "error" : needsAttention ? "partial" : isVisible() ? "success" : "deferred", uploaded, deleted, queued,
+      needsAttention: Boolean(needsAttention), error: error?.message ?? "",
+      errorCode: needsAttention && photoBlobErrorCode(error) !== PHOTO_LOCAL_BLOB_UNREADABLE ? PHOTO_LOCAL_BLOB_UNREADABLE
+        : photoBlobErrorCode(error) === PHOTO_LOCAL_BLOB_UNREADABLE ? PHOTO_LOCAL_BLOB_UNREADABLE : error?.code ?? "photo_cloud_failed",
+      errorEndpoint: error?.endpoint ?? "" };
   }
 
   return Object.freeze({
@@ -424,11 +455,40 @@ export function createPhotoCloudService({
     async getPhotoBlob({ photo, ownerId, catchId, scopeKey }) {
       const scope = validateDataScope({ scopeKey, ownerId });
       if (!isActive(getCurrentOwnerId, ownerId)) return null;
-      if (photo?.blob instanceof Blob) return photo.blob;
+      let localBlobError = null;
+      if (photo?.blob instanceof Blob) {
+        try {
+          await photo.blob.arrayBuffer();
+          if (photo.cloud?.state === PHOTO_CLOUD_STATE.SYNCED && photo.cloud.sha256
+            && await sha256Blob(photo.blob) !== photo.cloud.sha256) {
+            localBlobError = Object.assign(new Error("Místní fotografie neodpovídá ověřené cloudové kopii."), {
+              code: "photo_local_blob_hash_mismatch", photoStage: "photo-verify-local-blob",
+            });
+          } else return photo.blob;
+        }
+        catch (failure) {
+          localBlobError = failure;
+        }
+        const localErrorCode = photoBlobErrorCode(localBlobError) === PHOTO_LOCAL_BLOB_UNREADABLE
+          ? PHOTO_LOCAL_BLOB_UNREADABLE : "photo_local_blob_hash_mismatch";
+        const operationStage = localBlobError.photoStage || "photo-read-local-blob";
+        recordPhotoUploadTrace(photo.id, "local_blob_failure", { errorCode: localErrorCode,
+          errorName: localBlobError.name, operationStage, retryable: false });
+        await catches.setPhotoLocalError?.(catchId, photo.id, { code: localErrorCode,
+          errorName: localBlobError.name, stage: operationStage }, scope).catch(() => {});
+      }
       const downloadProvider = resolveProvider(photo?.cloud?.provider);
       if (!photo?.cloud || photo.cloud.state !== PHOTO_CLOUD_STATE.SYNCED
         || !downloadProvider || !photo.cloud.objectKey || !photo.cloud.sha256
-        || !isActive(getCurrentOwnerId, ownerId)) return null;
+        || !isActive(getCurrentOwnerId, ownerId)) {
+        if (localBlobError) {
+          if (photoBlobErrorCode(localBlobError) === PHOTO_LOCAL_BLOB_UNREADABLE) {
+            throw Object.assign(localBlobError, { photoErrorCode: PHOTO_LOCAL_BLOB_UNREADABLE, photoStage: "photo-read-local-blob" });
+          }
+          throw localBlobError;
+        }
+        return null;
+      }
       const blob = await downloadProvider.download({
         ownerId,
         catchId,
@@ -447,6 +507,7 @@ export function createPhotoCloudService({
       }
       if (!isActive(getCurrentOwnerId, ownerId)) return null;
       const cached = await catches.cachePhotoBlob(catchId, photo.id, blob, scope);
+      await catches.setPhotoLocalError?.(catchId, photo.id, null, scope);
       return cached instanceof Blob ? cached : blob;
     },
   });

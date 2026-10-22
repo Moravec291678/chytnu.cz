@@ -2,6 +2,8 @@ import { createPhotoObjectKey, sha256Blob } from "./photoCloudProvider.js";
 
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
+import { readPhotoBlob } from "./photoLocalBlob.js";
+
 const CLOUDINARY_API_ORIGIN = "https://api.cloudinary.com";
 
 function providerError(message, code) {
@@ -45,7 +47,7 @@ export function createCloudinaryPhotoProvider({ fetchImpl = globalThis.fetch } =
       }
       // IndexedDB may restore a persisted File. Copy its bytes into a fresh in-memory
       // Blob before FormData/fetch; WebKit can otherwise upload an empty body.
-      const uploadBlob = new Blob([await input.blob.arrayBuffer()], { type: input.contentType });
+      const uploadBlob = new Blob([await readPhotoBlob(input.blob, "photo-upload-memory-copy")], { type: input.contentType });
       if (uploadBlob.size !== input.size || await sha256Blob(uploadBlob) !== input.sha256) {
         throw providerError("Obsah fotografie neodpovídá ověřeným metadatům.", "photo_content_mismatch");
       }

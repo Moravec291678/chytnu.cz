@@ -1,7 +1,7 @@
 const KEY = "chytnu:photo-upload-trace:v1";
 const EVENT = "chytnu:photo-upload-trace-changed";
-const STAGES = new Set(["photo_selected", "photo_preparing", "blob_created", "photo_prepared", "indexeddb_saved", "job_created", "photo_queued", "sign_started", "sign_pass", "sign_fail", "cloud_upload_started", "cloud_upload_response", "cloud_upload_pass", "cloud_upload_fail", "photo_uploaded", "verify_started", "verify_pass", "verify_fail", "photo_verifying", "photo_persisting", "local_metadata_persisted", "photo_synced", "firestore_synced", "upload_fail"]);
-const ERRORS = new Set(["missing_firebase_user", "invalid_auth", "firebase_token_invalid", "firebase_token_expired", "token_refresh_failed", "ownership_denied", "cloudinary_upload_failed", "cloudinary_upload_timeout", "cloudinary_network_error", "cloudinary_verification_failed", "photo_cloud_network_error", "photo_not_owned", "invalid_photo", "photo_prepare_failed", "photo_unsupported", "photo_too_large", "rate_limited", "invalid_grant", "upload_response_mismatch"]);
+const STAGES = new Set(["photo_selected", "photo_preparing", "blob_created", "photo_prepared", "indexeddb_saved", "job_created", "photo_queued", "sign_started", "sign_pass", "sign_fail", "cloud_upload_started", "cloud_upload_response", "cloud_upload_pass", "cloud_upload_fail", "photo_uploaded", "verify_started", "verify_pass", "verify_fail", "photo_verifying", "photo_persisting", "local_metadata_persisted", "photo_synced", "firestore_synced", "local_blob_failure", "upload_fail"]);
+const ERRORS = new Set(["missing_firebase_user", "invalid_auth", "firebase_token_invalid", "firebase_token_expired", "token_refresh_failed", "ownership_denied", "cloudinary_upload_failed", "cloudinary_upload_timeout", "cloudinary_network_error", "cloudinary_verification_failed", "photo_cloud_network_error", "photo_not_owned", "invalid_photo", "photo_prepare_failed", "photo_unsupported", "photo_too_large", "photo_local_blob_unreadable", "photo_local_blob_readback_failed", "photo_local_blob_hash_mismatch", "rate_limited", "invalid_grant", "upload_response_mismatch"]);
 const TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "image/gif", "image/avif", "application/octet-stream"]);
 const FORMATS = ["jpg", "jpeg", "png", "webp", "heic", "heif", "gif", "avif", "unknown"];
 function sanitize(photoId, stage, details = {}, timestamp = Date.now()) {
@@ -12,6 +12,8 @@ function sanitize(photoId, stage, details = {}, timestamp = Date.now()) {
   if (Number.isInteger(details.httpStatus) && details.httpStatus >= 100 && details.httpStatus <= 599) entry.httpStatus = details.httpStatus;
   if (details.errorCode) entry.errorCode = ERRORS.has(details.errorCode) ? details.errorCode : "unknown";
   if (typeof details.retryable === "boolean") entry.retryable = details.retryable;
+  if (["NotFoundError", "DataError", "TypeError", "InvalidStateError", "AbortError", "SecurityError"].includes(details.errorName)) entry.errorName = details.errorName;
+  if (typeof details.operationStage === "string" && /^[a-z0-9-]{1,64}$/.test(details.operationStage)) entry.operationStage = details.operationStage;
   for (const key of ["format", "originalExtension"]) if (FORMATS.includes(details[key])) entry[key] = details[key];
   if (["image", "raw", "video"].includes(details.resourceType)) entry.resourceType = details.resourceType;
   if (["none", "jpeg", "failed"].includes(details.conversion)) entry.conversion = details.conversion;
