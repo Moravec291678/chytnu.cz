@@ -136,6 +136,97 @@
   font-weight: 700;
 }
 
+.challenge-season-variants {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.challenge-season-variants--single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.challenge-season-variant {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+}
+
+.challenge-season-variant--complete {
+  border-color: var(--accent-green);
+  background: var(--accent-green-soft);
+}
+
+.challenge-season-variant-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-1);
+}
+
+.challenge-season-variant h3,
+.challenge-season-variant-heading > strong {
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  font-weight: 850;
+}
+
+.challenge-season-variant-heading > strong,
+.challenge-season-variant-reward {
+  white-space: nowrap;
+}
+
+.challenge-season-variant > p {
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: 1.4;
+}
+
+.challenge-season-variant-meter {
+  height: 5px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--surface-3);
+}
+
+.challenge-season-variant-meter > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent-orange);
+}
+
+.challenge-season-variant--complete .challenge-season-variant-meter > span {
+  background: var(--accent-green);
+}
+
+.challenge-season-variant-reward {
+  color: var(--accent-green);
+  font-size: var(--font-size-xs);
+  font-weight: 850;
+}
+
+@media (max-width: 420px) {
+  .challenge-season-variants {
+    gap: 6px;
+  }
+
+  .challenge-season-variant {
+    gap: 6px;
+    padding: 9px 7px;
+  }
+
+  .challenge-season-variant h3,
+  .challenge-season-variant-heading > strong {
+    font-size: 11px;
+  }
+}
+
 .challenge-season-footer {
   display: flex;
   align-items: center;

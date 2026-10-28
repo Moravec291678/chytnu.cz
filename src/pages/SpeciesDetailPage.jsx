@@ -79,14 +79,14 @@ function SpeciesDetailPage() {
 
         <div className="species-measures">
           <div className="species-measure">
-            <span>{bestWeightCatch ? bestWeightCatch.weightKg.toLocaleString("cs-CZ", { maximumFractionDigits: 2 }) : "—"}</span>
-            {bestWeightCatch && <div className="species-measure-unit">kg</div>}
-            <div className="species-measure-label">Největší váha</div>
-          </div>
-          <div className="species-measure">
             <span>{bestLengthCatch ? bestLengthCatch.lengthCm.toLocaleString("cs-CZ", { maximumFractionDigits: 1 }) : "—"}</span>
             {bestLengthCatch && <div className="species-measure-unit">cm</div>}
             <div className="species-measure-label">Největší délka</div>
+          </div>
+          <div className="species-measure">
+            <span>{bestWeightCatch ? bestWeightCatch.weightKg.toLocaleString("cs-CZ", { maximumFractionDigits: 2 }) : "—"}</span>
+            {bestWeightCatch && <div className="species-measure-unit">kg</div>}
+            <div className="species-measure-label">Největší váha</div>
           </div>
           <div className="species-measure">
             <span>{selectedSpecies.length}</span>

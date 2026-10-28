@@ -19,12 +19,12 @@ test("profile summary omits statistics whose source data is missing", () => {
 
 test("profile summary shows only measured or explicitly recorded statistics", () => {
   const stats = getAvailableProfileStats([
-    { weightKg: 2.4, result: "kept", method: { key: "feeder", label: "Feeder" }, locationName: "Lipno" },
+    { weightKg: 2.4, lengthCm: 82, result: "kept", method: { key: "feeder", label: "Feeder" }, locationName: "Lipno" },
     { weightKg: null, result: "unspecified", method: null, locationName: "" },
   ]);
 
   assert.deepEqual(stats.map(({ key, value }) => [key, value]), [
-    ["record", "2.4 kg"],
+    ["record", "82 cm · 2,4 kg"],
     ["method", "1×"],
     ["location", "1×"],
     ["released", "0%"],

@@ -1,4 +1,5 @@
 import { XP_RULES } from "./xpRules.js";
+import { filterEligibleCatchRecords } from "../../catches/data/catchVerification.js";
 
 const PRAGUE_TIME_ZONE = "Europe/Prague";
 const WATER_VISIT_GAP_MS = 30 * 24 * 60 * 60 * 1000;
@@ -39,7 +40,7 @@ function dailyTasks(catches, trips, now) {
   return [
     { id: "daily-catch", periodKey: today, title: "Zaznamenej dnešní úlovek", progress: Math.min(todayCatches.length, 1), goal: 1, xp: XP_RULES.dailyChallenge },
     { id: "daily-species", periodKey: today, title: "Zaznamenej dnes dva různé druhy", progress: Math.min(speciesToday, 2), goal: 2, xp: XP_RULES.dailyChallenge },
-    { id: "daily-trip", periodKey: today, title: "Dokonči dnešní výpravu", progress: Math.min(completedTripsToday, 1), goal: 1, xp: XP_RULES.dailyChallenge },
+    { id: "daily-trip", periodKey: today, title: "Dokonči dnešní vycházku", progress: Math.min(completedTripsToday, 1), goal: 1, xp: XP_RULES.dailyChallenge },
   ];
 }
 
@@ -58,6 +59,7 @@ export function calculateQuestXp(catches, trips = []) {
 }
 
 export function listCompletedChallengeRewards(catches, trips = []) {
+  catches = filterEligibleCatchRecords(catches);
   const dailyCatchDays = new Set();
   const speciesByDay = new Map();
   const waterVisitsByWeek = new Map();
@@ -135,6 +137,7 @@ function weeklyTasks(catches, now) {
 }
 
 export function buildChallengeOverview(catches, trips = [], now = new Date()) {
+  catches = filterEligibleCatchRecords(catches);
   const daily = dailyTasks(catches, trips, now);
   const weekly = weeklyTasks(catches, now);
   const decorate = (tasks) => tasks.map((task) => ({

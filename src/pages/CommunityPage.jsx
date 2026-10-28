@@ -108,8 +108,8 @@ function CommunityPage() {
                         <div className="community-feed-card-top"><strong>{profileName}</strong><span>Lokální náhled</span></div>
                         <h3>{data.species}</h3>
                         <div className="community-feed-metrics">
-                          {data.weightKg !== null && <b>{data.weightSource === "estimated" ? "≈ " : ""}{data.weightKg.toLocaleString("cs-CZ")} kg</b>}
                           {data.lengthCm !== null && <b>{data.lengthCm.toLocaleString("cs-CZ")} cm</b>}
+                          {data.weightKg !== null && <b>{data.weightSource === "estimated" ? "≈ " : ""}{data.weightKg.toLocaleString("cs-CZ")} kg</b>}
                         </div>
                         {formatDate(data.caughtAt) && <time dateTime={data.caughtAt}>{formatDate(data.caughtAt)}</time>}
                       </Link>

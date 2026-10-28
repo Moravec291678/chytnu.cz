@@ -214,13 +214,13 @@ export function createSeasonStoryShareData(story) {
 export function formatSeasonStoryShareText(shareData) {
   const rows = [
     `Můj příběh sezóny ${shareData.year} · CHYTNUCZ`,
-    `${shareData.catches} ${catchNoun(shareData.catches)} · ${shareData.speciesCount} druhů · ${shareData.trips} výprav`,
+    `${shareData.catches} ${catchNoun(shareData.catches)} · ${shareData.speciesCount} druhů · ${shareData.trips} vycházek`,
   ];
-  if (shareData.distanceKm !== null) rows.push(`Zaznamenaná vzdálenost výprav: ${shareData.distanceKm.toLocaleString("cs-CZ")} km`);
+  if (shareData.distanceKm !== null) rows.push(`Zaznamenaná vzdálenost vycházek: ${shareData.distanceKm.toLocaleString("cs-CZ")} km`);
   if (shareData.bestMoment) {
     const metrics = [
-      shareData.bestMoment.weightKg !== null ? `${shareData.bestMoment.weightKg.toLocaleString("cs-CZ")} kg` : null,
       shareData.bestMoment.lengthCm !== null ? `${shareData.bestMoment.lengthCm.toLocaleString("cs-CZ")} cm` : null,
+      shareData.bestMoment.weightKg !== null ? `${shareData.bestMoment.weightKg.toLocaleString("cs-CZ")} kg` : null,
     ].filter(Boolean).join(" · ");
     rows.push(`${shareData.bestMoment.label}: ${shareData.bestMoment.species || "zapsaný úlovek"}${metrics ? ` · ${metrics}` : ""}`);
   }

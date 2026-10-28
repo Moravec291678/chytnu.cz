@@ -27,26 +27,7 @@
 .launch-splash::before { bottom: 18%; left: -14%; }
 .launch-splash::after { bottom: 12%; left: -8%; opacity: .55; }
 
-.launch-splash-mark {
-  width: 44px;
-  height: 44px;
-  margin-bottom: 12px;
-  border: 1px solid rgb(46 204 113 / 55%);
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-}
-
-.launch-splash-mark span {
-  width: 12px;
-  height: 12px;
-  border: 2px solid #2ecc71;
-  border-top-color: transparent;
-  border-radius: 50%;
-  transform: rotate(35deg);
-}
-
-.launch-splash-greeting { margin: 0; color: #a9efc5; font-size: 16px; font-weight: 700; }
+.launch-splash-greeting { margin: 0; color: #a9efc5; font-size: clamp(26px, 8vw, 32px); font-weight: 700; }
 .launch-splash h1 { margin: 0; font-size: clamp(42px, 12vw, 64px); letter-spacing: -.06em; line-height: 1; }
 .launch-splash-subtitle { margin: 0; color: #829db8; font-size: 17px; font-weight: 600; }
 .launch-splash-loader { width: 18px; height: 18px; margin-top: 28px; border: 2px solid rgb(46 204 113 / 28%); border-top-color: #2ecc71; border-radius: 50%; animation: launch-spin .8s linear infinite; }

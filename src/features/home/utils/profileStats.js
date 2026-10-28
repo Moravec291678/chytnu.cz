@@ -1,4 +1,4 @@
-import { isMeasuredCatchWeight } from "../../catches/data/catchWeight.js";
+import { formatCatchMeasurements, isMeasuredCatchWeight } from "../../catches/data/catchWeight.js";
 
 export function getTopMethod(catches) {
   const groupMethods = catches.reduce((acc, item) => {
@@ -91,7 +91,7 @@ export function getAvailableProfileStats(catches) {
   const topRevier = getTopRevier(catches);
   const releasedPercentage = getReleasedPercentage(catches);
 
-  if (biggestCatch) stats.push({ key: "record", value: `${biggestCatch.weightKg} kg`, label: "REKORD", tone: "green" });
+  if (biggestCatch) stats.push({ key: "record", value: formatCatchMeasurements(biggestCatch), label: "REKORD", tone: "green" });
   if (topMethod.count > 0) stats.push({ key: "method", value: `${topMethod.count}×`, label: topMethod.label?.toUpperCase() || "METODA", tone: "gold" });
   if (topRevier.count > 0) stats.push({ key: "location", value: `${topRevier.count}×`, label: topRevier.label.toUpperCase(), tone: "blue" });
   if (releasedPercentage !== null) stats.push({ key: "released", value: `${releasedPercentage}%`, label: "PUŠTĚNO", tone: "green" });

@@ -169,11 +169,15 @@
 }
 
 .fish-activity-actions--compact {
-  gap: 4px;
+  justify-content: space-between;
+  gap: 8px 14px;
 }
 
 .fish-activity-actions--compact .fish-activity-action {
   min-height: 40px;
+  flex: 0 0 auto;
+  margin-left: auto;
+  white-space: nowrap;
 }
 
 .fish-activity-card:not(.fish-activity-card--muted) .fish-activity-retry {

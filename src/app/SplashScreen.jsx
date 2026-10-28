@@ -3,7 +3,6 @@ import "./SplashScreen.css";
 export default function SplashScreen() {
   return (
     <main className="launch-splash" aria-label="ChytnuCz se načítá">
-      <div className="launch-splash-mark" aria-hidden="true"><span /></div>
       <p className="launch-splash-greeting">Petrův zdar!</p>
       <h1>ChytnuCz</h1>
       <p className="launch-splash-subtitle">Tvůj rybářský deník.</p>

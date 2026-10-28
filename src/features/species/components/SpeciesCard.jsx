@@ -39,9 +39,9 @@ function SpeciesCard({ speciesKey, data, biggest }) {
           </div>
 
           <div className="species-card-right">
-            {biggest.weightKg != null && <p>{biggest.weightKg} kg</p>}
-
             {biggest.lengthCm != null && <p>{biggest.lengthCm} cm</p>}
+
+            {biggest.weightKg != null && <p>{biggest.weightKg} kg</p>}
 
             <p>{data.count}x</p>
           </div>

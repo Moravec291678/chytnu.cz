@@ -7,7 +7,7 @@ import { getStartedTripDayLabel } from "../utils/getStartedTripDayLabel";
 import { Link } from "react-router-dom";
 import { useTrips } from "../context/useTrips";
 import { getDistinctTripSpecies, getTripCatchRatePerHour, getTripDurationMs } from "../data/tripModel";
-import { isMeasuredCatchWeight } from "../../catches/data/catchWeight.js";
+import { formatCatchMeasurements, isMeasuredCatchWeight } from "../../catches/data/catchWeight.js";
 
 function ActiveTripCard({ activeTrip, catches = null }) {
   const navigate = useNavigate();
@@ -20,7 +20,8 @@ function ActiveTripCard({ activeTrip, catches = null }) {
   const activeTripDayLabel = getStartedTripDayLabel(activeTrip);
   const hasCatchData = Array.isArray(catches);
   const tripCatches = hasCatchData ? catches.filter((item) => item.tripId === activeTrip.id) : [];
-  const measuredWeights = tripCatches.filter((item) => isMeasuredCatchWeight(item) && item.weightKg >= 0).map((item) => item.weightKg);
+  const heaviestCatch = tripCatches.filter((item) => isMeasuredCatchWeight(item) && item.weightKg >= 0)
+    .reduce((best, item) => !best || item.weightKg > best.weightKg ? item : best, null);
   const speciesCount = hasCatchData ? getDistinctTripSpecies(tripCatches).length : null;
   const catchRate = hasCatchData ? getTripCatchRatePerHour(tripCatches.length, getTripDurationMs(activeTrip)) : null;
   const finishTrip = async () => {
@@ -32,7 +33,7 @@ function ActiveTripCard({ activeTrip, catches = null }) {
       await endTrip(activeTrip);
       navigate("/trips", { replace: true });
     } catch (finishError) {
-      setError(finishError.message || "Výpravu se nepodařilo ukončit.");
+      setError(finishError.message || "Vycházku se nepodařilo ukončit.");
       endingRef.current = false;
       setEnding(false);
     }
@@ -64,9 +65,9 @@ function ActiveTripCard({ activeTrip, catches = null }) {
         </div>
 
         <div className="active-trip-stat">
-          <p className="active-trip-stat-value">{measuredWeights.length ? Math.max(...measuredWeights).toLocaleString("cs-CZ", { maximumFractionDigits: 2 }) : "—"}</p>
+          <p className="active-trip-stat-value">{heaviestCatch ? formatCatchMeasurements(heaviestCatch) : "—"}</p>
 
-          <p className="active-trip-stat-label">MAX KG</p>
+          <p className="active-trip-stat-label">NEJVĚTŠÍ ÚLOVEK</p>
         </div>
 
         <div className="active-trip-stat">
@@ -85,9 +86,9 @@ function ActiveTripCard({ activeTrip, catches = null }) {
       {error && <p className="active-trip-error" role="alert">{error}</p>}
       <div className="active-trip-actions">
         <Link className="active-trip-add" to="/add" state={{ tripId: activeTrip.id }}>Zapsat úlovek</Link>
-        <button className="active-trip-finish" type="button" onClick={finishTrip} disabled={ending}>{ending ? "Ukončuji…" : "Ukončit výpravu"}</button>
+        <button className="active-trip-finish" type="button" onClick={finishTrip} disabled={ending}>{ending ? "Ukončuji…" : "Ukončit vycházku"}</button>
       </div>
-      <Link className="active-trip-open" to={`/trips/${activeTrip.id}`}>Detail výpravy →</Link>
+      <Link className="active-trip-open" to={`/trips/${activeTrip.id}`}>Detail vycházky →</Link>
     </div>
   );
 }

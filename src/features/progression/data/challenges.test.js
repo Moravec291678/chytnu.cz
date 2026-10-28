@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { buildChallengeOverview } from "./challenges.js";
+import { buildSeasonalChallenge, listCompletedSeasonalChallengeRewards } from "./seasonalChallenge.js";
+import { listCompletedChallengeRewards } from "./challenges.js";
 
 const catches = [
   { id: "old", speciesKey: "carp", locationName: "Labe", waterId: "water-labe", caughtAt: "2026-06-08T10:00:00.000Z" },
@@ -22,6 +24,20 @@ test("daily and weekly challenges reflect real catches and completed trips", () 
 test("no activity produces honest zero-progress challenges", () => {
   const overview = buildChallengeOverview([], [], new Date("2026-06-17T14:00:00.000Z"));
   assert.ok([...overview.daily, ...overview.weekly].every((task) => !task.completed && task.progress === 0));
+});
+
+test("unverified catches do not complete XP-oriented daily, weekly, or seasonal challenges", () => {
+  const record = {
+    id: "unverified-carp", speciesKey: "commonCarp", species: "Kapr obecný", caughtAt: "2026-10-28T10:00:00.000Z",
+    weightKg: 12, weightSource: "manual", verification: { status: "unverified", reason: "missing-photo" },
+  };
+  const now = new Date("2026-10-28T12:00:00.000Z");
+  const overview = buildChallengeOverview([record], [], now);
+  assert.equal(overview.daily.find((item) => item.id === "daily-catch").progress, 0);
+  assert.equal(overview.daily.find((item) => item.id === "daily-species").progress, 0);
+  assert.equal(buildSeasonalChallenge([record], now).variants[0].progress, 0);
+  assert.deepEqual(listCompletedChallengeRewards([record]), []);
+  assert.deepEqual(listCompletedSeasonalChallengeRewards([record]), []);
 });
 
 test("malformed dates do not falsely count toward challenge progress", () => {

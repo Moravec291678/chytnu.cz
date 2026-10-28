@@ -67,7 +67,7 @@ export default function JournalCalendarPage() {
   return <Layout><main className="journal-calendar">
     <header className="journal-calendar-header">
       <h1>Deník</h1>
-      <p>{monthLabel(month)} · {countLabel(monthSummary.catchCount, ["úlovek", "úlovky", "úlovků"])} · {countLabel(monthSummary.tripCount, ["výprava", "výpravy", "výprav"])}</p>
+      <p>{monthLabel(month)} · {countLabel(monthSummary.catchCount, ["úlovek", "úlovky", "úlovků"])} · {countLabel(monthSummary.tripCount, ["vycházka", "vycházky", "vycházek"])}</p>
     </header>
     <nav className="journal-tabs" aria-label="Zobrazení deníku">
       <Link className="journal-tab" to="/journal">Seznam</Link>
@@ -78,7 +78,7 @@ export default function JournalCalendarPage() {
       <button type="button" aria-pressed={calendarView === "month"} onClick={() => setCalendarView("month")}>Měsíc</button>
       <button type="button" aria-pressed={calendarView === "year"} onClick={() => setCalendarView("year")}>Rok</button>
     </nav>
-    {error && <section className="journal-calendar-error" role="alert"><p>{error}</p>{catchState.error && <button type="button" onClick={refreshCatches}>Načíst úlovky znovu</button>}{tripState.error && <button type="button" onClick={refreshTrips}>Načíst výpravy znovu</button>}</section>}
+    {error && <section className="journal-calendar-error" role="alert"><p>{error}</p>{catchState.error && <button type="button" onClick={refreshCatches}>Načíst úlovky znovu</button>}{tripState.error && <button type="button" onClick={refreshTrips}>Načíst vycházky znovu</button>}</section>}
     {loading ? <p className="loading-state" role="status">Načítám kalendář…</p> : !error && <>
       {calendarView === "month" ? <section className="journal-calendar-panel" aria-label="Kalendář rybářských aktivit">
         <div className="journal-calendar-month">
@@ -101,7 +101,7 @@ export default function JournalCalendarPage() {
               type="button"
               role="gridcell"
               aria-pressed={selectedDay === key}
-              aria-label={`${day} ${monthLabel(month)}${dayCatches.length ? `, ${countLabel(dayCatches.length, ["úlovek", "úlovky", "úlovků"])}` : ""}${dayTrips.length ? `, ${countLabel(dayTrips.length, ["výprava", "výpravy", "výprav"])}` : ""}${hasRecord ? ", osobní rekord" : ""}`}
+              aria-label={`${day} ${monthLabel(month)}${dayCatches.length ? `, ${countLabel(dayCatches.length, ["úlovek", "úlovky", "úlovků"])}` : ""}${dayTrips.length ? `, ${countLabel(dayTrips.length, ["vycházka", "vycházky", "vycházek"])}` : ""}${hasRecord ? ", osobní rekord" : ""}`}
               onClick={() => setSelectedDay(key)}
               key={key}
             >
@@ -114,18 +114,18 @@ export default function JournalCalendarPage() {
             </button>;
           })}
         </div>
-        <div className="journal-calendar-legend"><span><i className="marker-catch" /> Úlovek</span><span><i className="marker-trip" /> Výprava</span><span><i className="marker-record" /> Rekord</span></div>
+        <div className="journal-calendar-legend"><span><i className="marker-catch" /> Úlovek</span><span><i className="marker-trip" /> Vycházka</span><span><i className="marker-record" /> Rekord</span></div>
       </section> : <section className="journal-calendar-year" aria-label={`Přehled roku ${month.getFullYear()}`}>
         <div className="journal-calendar-month">
           <button type="button" aria-label="Předchozí rok" onClick={() => shiftPeriod(-1)}>‹</button>
-          <h2>{month.getFullYear()} · {countLabel(yearSummary.catchCount, ["úlovek", "úlovky", "úlovků"])} · {countLabel(yearSummary.tripCount, ["výprava", "výpravy", "výprav"])}</h2>
+          <h2>{month.getFullYear()} · {countLabel(yearSummary.catchCount, ["úlovek", "úlovky", "úlovků"])} · {countLabel(yearSummary.tripCount, ["vycházka", "vycházky", "vycházek"])}</h2>
           <button type="button" aria-label="Další rok" onClick={() => shiftPeriod(1)}>›</button>
         </div>
         <div className="journal-calendar-year-grid">
           {yearMonths.map((item) => <button
             type="button"
             className={item.month === month.getMonth() ? "journal-calendar-year-month is-selected" : "journal-calendar-year-month"}
-            aria-label={`${new Intl.DateTimeFormat("cs-CZ", { month: "long" }).format(new Date(month.getFullYear(), item.month, 1))}, ${countLabel(item.catchCount, ["úlovek", "úlovky", "úlovků"])}, ${countLabel(item.tripCount, ["výprava", "výpravy", "výprav"])}`}
+            aria-label={`${new Intl.DateTimeFormat("cs-CZ", { month: "long" }).format(new Date(month.getFullYear(), item.month, 1))}, ${countLabel(item.catchCount, ["úlovek", "úlovky", "úlovků"])}, ${countLabel(item.tripCount, ["vycházka", "vycházky", "vycházek"])}`}
             key={item.month}
             onClick={() => selectMonth(item.month)}
           >
@@ -137,14 +137,14 @@ export default function JournalCalendarPage() {
             </span>
           </button>)}
         </div>
-        <div className="journal-calendar-legend"><span><i className="marker-catch" /> Úlovky</span><span><i className="marker-trip" /> Výpravy</span></div>
+        <div className="journal-calendar-legend"><span><i className="marker-catch" /> Úlovky</span><span><i className="marker-trip" /> Vycházky</span></div>
       </section>}
       {calendarView === "month" && <section className="journal-calendar-day-details" aria-live="polite">
         <h2>{new Intl.DateTimeFormat("cs-CZ", { dateStyle: "full" }).format(new Date(`${selectedDay}T12:00:00`))}</h2>
         {selectedCatches.length || selectedTrips.length ? <>
-          {selectedTrips.map((trip) => <Link className="progression-link" to={`/trips/${trip.id}`} key={trip.id}>Výprava · {trip.title}<span>→</span></Link>)}
+          {selectedTrips.map((trip) => <Link className="progression-link" to={`/trips/${trip.id}`} key={trip.id}>Vycházka · {trip.title}<span>→</span></Link>)}
           {selectedCatches.map((item) => <CatchCard key={item.id} catchedFish={{ ...item, tripTitle: tripsById.get(item.tripId) }} isPersonalRecord={item.id === personalRecord?.id} />)}
-        </> : <div className="journal-calendar-empty"><p>V tento den nejsou v deníku uložené úlovky ani výpravy.</p><Link to="/add">Zapsat úlovek</Link></div>}
+        </> : <div className="journal-calendar-empty"><p>V tento den nejsou v deníku uložené úlovky ani vycházky.</p><Link to="/add">Zapsat úlovek</Link></div>}
       </section>}
     </>}
   </main></Layout>;

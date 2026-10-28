@@ -90,8 +90,8 @@ export default function SeasonStoryPage() {
 
   const moment = story.bestMoment?.record;
   const momentMetrics = [
-    story.bestMoment?.kind === "weight-pb" && Number.isFinite(moment?.weightKg) ? `${moment.weightKg.toLocaleString("cs-CZ")} kg` : null,
     Number.isFinite(moment?.lengthCm) ? `${moment.lengthCm.toLocaleString("cs-CZ")} cm` : null,
+    story.bestMoment?.kind === "weight-pb" && Number.isFinite(moment?.weightKg) ? `${moment.weightKg.toLocaleString("cs-CZ")} kg` : null,
   ].filter(Boolean);
 
   return (
@@ -117,8 +117,8 @@ export default function SeasonStoryPage() {
             </section>
 
             <section className="season-story-stats" aria-label={`Statistiky sezóny ${year}`}>
-              <article><span>Výpravy</span><strong>{story.trips}</strong><small>{plural(story.trips, "výprava", "výpravy", "výprav")}</small></article>
-              {story.distanceKm !== null && <article><span>Vzdálenost</span><strong>{story.distanceKm.toLocaleString("cs-CZ")}</strong><small>km · z {story.distanceTripCount} {plural(story.distanceTripCount, "výpravy", "výprav", "výprav")}</small></article>}
+              <article><span>Vycházky</span><strong>{story.trips}</strong><small>{plural(story.trips, "vycházka", "vycházky", "vycházek")}</small></article>
+              {story.distanceKm !== null && <article><span>Vzdálenost</span><strong>{story.distanceKm.toLocaleString("cs-CZ")}</strong><small>km · z {story.distanceTripCount} {plural(story.distanceTripCount, "vycházky", "vycházek", "vycházek")}</small></article>}
               <article><span>Úlovky</span><strong>{story.catches}</strong><small>{plural(story.catches, "úlovek", "úlovky", "úlovků")}</small></article>
               <article><span>Druhy</span><strong>{story.speciesCount}</strong><small>{plural(story.speciesCount, "druh", "druhy", "druhů")}</small></article>
             </section>
@@ -141,7 +141,7 @@ export default function SeasonStoryPage() {
                 <section className="season-story-details" aria-label="Detaily sezóny">
                   <article>
                     <span>Oblíbený revír</span>
-                    {story.favoriteWater ? <><strong>{story.favoriteWater.name}</strong><p>{story.favoriteWater.catchCount} {plural(story.favoriteWater.catchCount, "úlovek", "úlovky", "úlovků")}{story.favoriteWater.tripCount ? ` · ${story.favoriteWater.tripCount} výprav` : ""}</p><Link to={`/waters/${story.favoriteWater.id}`}>Detail revíru →</Link></> : <p>Žádný úlovek není propojený s uloženým revírem.</p>}
+                    {story.favoriteWater ? <><strong>{story.favoriteWater.name}</strong><p>{story.favoriteWater.catchCount} {plural(story.favoriteWater.catchCount, "úlovek", "úlovky", "úlovků")}{story.favoriteWater.tripCount ? ` · ${story.favoriteWater.tripCount} vycházek` : ""}</p><Link to={`/waters/${story.favoriteWater.id}`}>Detail revíru →</Link></> : <p>Žádný úlovek není propojený s uloženým revírem.</p>}
                   </article>
                   <article>
                     <span>Nejlepší nástraha</span>

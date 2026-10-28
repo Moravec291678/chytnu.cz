@@ -201,7 +201,7 @@ export default function OnboardingPage() {
         <ol className="onboarding-first-catch-list">
           <li>1 · Fotka</li>
           <li>2 · Druh</li>
-          <li>3 · Váha a délka</li>
+          <li>3 · Délka a váha</li>
         </ol>
         <p className="onboarding-location-description">Místo, čas a počasí se doplní samo.</p>
         <div className="onboarding-location-options" role="group" aria-label="Výchozí přesnost polohy">

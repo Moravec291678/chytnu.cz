@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildSeasonalChallenge, calculateSeasonalChallengeXp } from "./seasonalChallenge.js";
+import { buildSeasonalChallenge, calculateSeasonalChallengeXp, listCompletedSeasonalChallengeRewards } from "./seasonalChallenge.js";
 
 test("seasonal challenge progress comes only from catches in the active season", () => {
   const challenge = buildSeasonalChallenge([
@@ -10,12 +10,14 @@ test("seasonal challenge progress comes only from catches in the active season",
     { caughtAt: "not-a-date" },
   ], new Date(2026, 9, 18));
   assert.equal(challenge.season, "Podzim");
-  assert.equal(challenge.title, "Kapřan sezóny");
-  assert.equal(challenge.totalCatches, 1);
-  assert.equal(challenge.progressLabel, "1/1");
-  assert.equal(challenge.completed, true);
-  assert.equal(challenge.description, "Zaznamenej kapra s uvedenou hmotností.");
-  assert.deepEqual(challenge.bestCatch, { id: "heaviest-carp", weightKg: 4 });
+  const carp = challenge.variants.find((variant) => variant.key === "carp");
+  assert.equal(challenge.title, "Výzvy sezóny");
+  assert.equal(challenge.variants.length, 3);
+  assert.equal(carp.totalCatches, 1);
+  assert.equal(carp.progressLabel, "1/1");
+  assert.equal(carp.completed, true);
+  assert.equal(carp.description, "Zaznamenej kapra s uvedenou hmotností.");
+  assert.deepEqual(carp.bestCatch, { id: "heaviest-carp", weightKg: 4 });
 });
 
 test("seasonal XP is issued once for each completed seasonal challenge across year boundaries", () => {
@@ -63,7 +65,43 @@ test("autumn carp challenge requires the stable carp species ID and a measured w
     { id: "legacy-carp", species: "Kapr obecný", weightKg: 8, caughtAt: "2026-10-01T08:00:00Z" },
     { id: "estimated-carp", speciesKey: "commonCarp", weightKg: 8, weightSource: "estimated", caughtAt: "2026-10-02T08:00:00Z" },
   ], new Date("2026-10-18T10:00:00Z"));
-  assert.equal(challenge.progress, 0);
-  assert.equal(challenge.completed, false);
+  const carp = challenge.variants.find((variant) => variant.key === "carp");
+  assert.equal(carp.progress, 0);
+  assert.equal(carp.completed, false);
+});
+
+test("autumn challenge offers equal measured-catch paths for carp, predators, and salmonids or other fish", () => {
+  const challenge = buildSeasonalChallenge([
+    { id: "carp", speciesKey: "commonCarp", weightKg: 4, caughtAt: "2026-10-01T08:00:00Z" },
+    { id: "pike", speciesKey: "northernPike", weightKg: 3, caughtAt: "2026-10-02T08:00:00Z" },
+    { id: "trout", speciesKey: "brownTrout", weightKg: 1, caughtAt: "2026-10-03T08:00:00Z" },
+    { id: "eel", speciesKey: "europeanEel", weightKg: 1, caughtAt: "2026-10-04T08:00:00Z" },
+  ], new Date("2026-10-18T10:00:00Z"));
+  const byKey = Object.fromEntries(challenge.variants.map((variant) => [variant.key, variant]));
+
+  assert.deepEqual(challenge.variants.map(({ key }) => key), ["carp", "predator", "other"]);
+  assert.deepEqual(challenge.variants.map(({ goal, xp }) => [goal, xp]), [[1, 100], [1, 100], [1, 100]]);
+  assert.equal(byKey.carp.progress, 1);
+  assert.equal(byKey.predator.progress, 1);
+  assert.equal(byKey.other.progress, 1);
+  assert.equal(byKey.carp.id, "season-2026-autumn");
+  assert.equal(byKey.predator.id, "season-2026-autumn-predator");
+  assert.equal(byKey.other.id, "season-2026-autumn-other");
+});
+
+test("seasonal ledger awards each autumn path once and preserves the legacy carp reward ID", () => {
+  const catches = [
+    { id: "pike", speciesKey: "northernPike", weightKg: 3, caughtAt: "2026-10-01T08:00:00Z" },
+    { id: "carp", speciesKey: "commonCarp", weightKg: 4, caughtAt: "2026-10-02T08:00:00Z" },
+    { id: "trout", speciesKey: "brownTrout", weightKg: 1, caughtAt: "2026-10-03T08:00:00Z" },
+    { id: "eel", speciesKey: "europeanEel", weightKg: 1, caughtAt: "2026-10-04T08:00:00Z" },
+  ];
+  const rewards = listCompletedSeasonalChallengeRewards(catches);
+  assert.deepEqual(rewards.map(({ challengeId, sourceEntityId }) => [challengeId, sourceEntityId]), [
+    ["season-2026-autumn", "carp"],
+    ["season-2026-autumn-predator", "pike"],
+    ["season-2026-autumn-other", "trout"],
+  ]);
+  assert.equal(calculateSeasonalChallengeXp(catches), 300);
 });
 

@@ -37,7 +37,7 @@ export default function AchievementsPage() {
         ) : (
           <>
             {catches.length === 0 && trips.length === 0 && (
-              <p className="achievements-no-activity">Zatím bez úlovků a výprav. Achievementy se průběžně vyhodnocují z tvých záznamů.</p>
+              <p className="achievements-no-activity">Zatím bez úlovků a vycházek. Achievementy se průběžně vyhodnocují z tvých záznamů.</p>
             )}
             <nav className="achievements-categories" aria-label="Kategorie achievementů">
               {groups.map((category) => (

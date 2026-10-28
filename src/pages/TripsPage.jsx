@@ -10,11 +10,11 @@ import "./TripsPage.css";
 
 function pluralize(count) {
   const remainder = count % 100;
-  if (remainder >= 11 && remainder <= 14) return "výprav";
+  if (remainder >= 11 && remainder <= 14) return "vycházek";
   const digit = count % 10;
-  if (digit === 1) return "výprava";
-  if (digit >= 2 && digit <= 4) return "výpravy";
-  return "výprav";
+  if (digit === 1) return "vycházka";
+  if (digit >= 2 && digit <= 4) return "vycházky";
+  return "vycházek";
 }
 
 function TripsPage() {
@@ -31,26 +31,26 @@ function TripsPage() {
         <header className="trips-header">
           <div className="trips-header-top">
             <div className="trips-header-top-wrapper">
-              <h1>Výlety</h1>
+              <h1>Vycházky</h1>
 
               <p className="trips-subtitle">
                 {tripState.loading || catchState.loading ? "Načítám přehled…" : `${tripState.trips.length} ${pluralize(tripState.trips.length)} · ${totalHours} hodin · ${formatTripCatchCount(tripCatchCount)}`}
               </p>
             </div>
-            {!activeTrip && !tripState.loading && !tripState.error && <Link aria-label="Zahájit výpravu" className="trips-add-btn header-btn" to="/trips/new">＋</Link>}
+            {!activeTrip && !tripState.loading && !tripState.error && <Link aria-label="Zahájit vycházku" className="trips-add-btn header-btn" to="/trips/new">＋</Link>}
           </div>
         </header>
 
         {tripState.error && <div className="trips-empty" role="alert"><p>{tripState.error}</p><button type="button" onClick={refreshTrips}>Zkusit znovu</button></div>}
         {catchState.error && <div className="trips-empty" role="alert"><p>{catchState.error}</p><button type="button" onClick={refreshCatches}>Načíst úlovky znovu</button></div>}
-        {tripState.loading ? <div className="trips-loading" role="status" aria-label="Načítám výpravy"><span /><span /></div> : null}
+        {tripState.loading ? <div className="trips-loading" role="status" aria-label="Načítám vycházky"><span /><span /></div> : null}
         {activeTrip && !tripState.error && <ActiveTripCard activeTrip={activeTrip} catches={tripCatches} />}
-        {!tripState.loading && !tripState.error && !activeTrip && <div className="trips-empty"><strong>Žádná aktivní výprava</strong><p>Spusť novou výpravu a přiřazuj k ní své úlovky.</p><Link to="/trips/new">Zahájit výpravu</Link></div>}
+        {!tripState.loading && !tripState.error && !activeTrip && <div className="trips-empty"><strong>Žádná aktivní vycházka</strong><p>Spusť novou vycházku a přiřazuj k ní své úlovky.</p><Link to="/trips/new">Zahájit vycházku</Link></div>}
 
         <section className="trips-section">
-          <h3 className="section-title">Minulé výlety</h3>
+          <h3 className="section-title">Minulé vycházky</h3>
 
-          {!tripState.loading && !tripState.error && completedTrips.length === 0 && <p className="trips-empty-history">Dokončené výpravy se zde zobrazí po jejich ukončení.</p>}
+          {!tripState.loading && !tripState.error && completedTrips.length === 0 && <p className="trips-empty-history">Dokončené vycházky se zde zobrazí po jejich ukončení.</p>}
           {completedTrips.map((trip) => (
             <TripCard key={trip.id} trip={trip} catches={tripCatches} />
           ))}

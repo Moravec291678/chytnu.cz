@@ -82,7 +82,7 @@ function WaterDetailPage() {
     setActionError("");
     if (activeTrip) {
       if (!activeTripForWater) {
-        setActionError("Už máš aktivní jinou výpravu. Nejprve ji otevři a případně ukonči.");
+        setActionError("Už máš aktivní jinou vycházku. Nejprve ji otevři a případně ukonči.");
       } else {
         navigate(`/trips/${activeTrip.id}`);
       }
@@ -95,7 +95,7 @@ function WaterDetailPage() {
       const started = await startTrip({ ...trip, waterId: water.id });
       navigate(`/trips/${started.id}`);
     } catch (tripError) {
-      setActionError(tripError?.message || "Výpravu se nepodařilo zahájit.");
+      setActionError(tripError?.message || "Vycházku se nepodařilo zahájit.");
       await refreshTrips();
     } finally {
       startingTripRef.current = false;
@@ -127,7 +127,7 @@ function WaterDetailPage() {
 
   const seasonTotal = seasonCounts.reduce((total, season) => total + season.count, 0);
   const maximumRate = Math.max(0, ...hourlyStats.hours.map((item) => item.catchesPerHour ?? 0));
-  const activityError = dataError ? "Aktivitu úlovků nebo výprav se nepodařilo načíst. Některé statistiky proto nejsou dostupné." : "";
+  const activityError = dataError ? "Aktivitu úlovků nebo vycházek se nepodařilo načíst. Některé statistiky proto nejsou dostupné." : "";
 
   return <Layout>
     <div className="water-detail-page">
@@ -149,7 +149,7 @@ function WaterDetailPage() {
         <Link to={`/waters/${water.id}/chat`} aria-label="Chat revíru" className="water-detail-icon-button">💬</Link>
       </header>
 
-      {actionError && <p role="alert" className="water-action-error">{actionError}{activeTrip && !activeTripForWater && <> <Link to={`/trips/${activeTrip.id}`}>Otevřít aktivní výpravu</Link></>}</p>}
+      {actionError && <p role="alert" className="water-action-error">{actionError}{activeTrip && !activeTripForWater && <> <Link to={`/trips/${activeTrip.id}`}>Otevřít aktivní vycházku</Link></>}</p>}
 
       <section className="water-detail-hero">
         <p className="water-detail-kicker">{water.type}{water.waterNumber ? ` · č. ${water.waterNumber}` : ""}</p>
@@ -199,9 +199,9 @@ function WaterDetailPage() {
         <h2 id="water-hourly-title">Úspěšnost podle hodin</h2>
         <p className="water-detail-section-caption">Počet úlovků za hodinu zaznamenaného času u vody</p>
         {dataError ? <p className="water-detail-insufficient">Hodinový přehled není momentálně dostupný.</p> : !hourlyStats.sufficient ? (
-          <p className="water-detail-insufficient">Zatím nemáme dost údajů. Pro výpočet jsou potřeba dokončené výpravy s časem začátku i konce; minimum jsou {hourlyStats.minimumEffortHours} hodiny. Úlovky bez vazby na výpravu se nezapočítávají.</p>
+          <p className="water-detail-insufficient">Zatím nemáme dost údajů. Pro výpočet jsou potřeba dokončené vycházky s časem začátku i konce; minimum jsou {hourlyStats.minimumEffortHours} hodiny. Úlovky bez vazby na vycházku se nezapočítávají.</p>
         ) : <>
-          <div className="water-hour-bars" role="img" aria-label={`Hodinový průměr z ${hourlyStats.effortHours.toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} hodin zaznamenaných výprav`}>
+          <div className="water-hour-bars" role="img" aria-label={`Hodinový průměr z ${hourlyStats.effortHours.toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} hodin zaznamenaných vycházek`}>
             {hourlyStats.hours.map((hour) => {
               const height = hour.catchesPerHour === null || maximumRate === 0 ? 0 : Math.max(6, (hour.catchesPerHour / maximumRate) * 100);
               return <span key={hour.hour} className="water-hour-bar" title={`${String(hour.hour).padStart(2, "0")}:00 · ${hour.catchesPerHour === null ? "bez zaznamenaného času" : `${hour.catchesPerHour.toLocaleString("cs-CZ", { maximumFractionDigits: 2 })} úlovků/h`}`}>
@@ -210,7 +210,7 @@ function WaterDetailPage() {
             })}
           </div>
           <div className="water-hour-labels" aria-hidden="true"><span>00 h</span><span>06 h</span><span>12 h</span><span>18 h</span><span>23 h</span></div>
-          <p className="water-detail-hour-summary">{hourlyStats.catchCount} úlovků z {hourlyStats.effortHours.toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} hodin výprav</p>
+          <p className="water-detail-hour-summary">{hourlyStats.catchCount} úlovků z {hourlyStats.effortHours.toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} hodin vycházek</p>
         </>}
       </section>
 
@@ -223,7 +223,7 @@ function WaterDetailPage() {
 
       <footer className="water-detail-cta">
         <button type="button" className="water-detail-checkin" onClick={startOrOpenTrip} disabled={startingTrip || tripState.loading}>
-          {startingTrip ? "Zahajuji výpravu…" : activeTripForWater ? "Pokračovat ve výpravě" : activeTrip ? "Jsem tady" : "Jsem tady"}
+          {startingTrip ? "Zahajuji vycházku…" : activeTripForWater ? "Pokračovat ve vycházce" : activeTrip ? "Jsem tady" : "Jsem tady"}
         </button>
         <Link className="water-detail-save" to="/add" state={{ preselectedWaterId: water.id }}>Uložit</Link>
       </footer>

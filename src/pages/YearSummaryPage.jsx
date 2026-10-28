@@ -5,7 +5,7 @@ import { useCatches } from "../features/catches/context/useCatches";
 import { useTrips } from "../features/trips/context/useTrips";
 import { buildYearSummary, getAvailableSummaryYears } from "../features/retrospectives/data/retrospectives.js";
 import { getPragueDateParts } from "../features/stats/utils/statsPeriod.js";
-import { formatCatchWeight } from "../features/catches/data/catchWeight.js";
+import { formatCatchMeasurements } from "../features/catches/data/catchWeight.js";
 import "./YearSummaryPage.css";
 
 const EMPTY_ROWS = Object.freeze([]);
@@ -28,7 +28,6 @@ export default function YearSummaryPage() {
   const [year, setYear] = useState(currentYear);
   const summary = buildYearSummary(catches, trips, year);
   const largest = summary.largestRecordedCatch;
-  const largestWeight = formatCatchWeight(largest);
   const loading = catchState.loading || tripState.loading;
   const hasError = Boolean(catchState.error || tripState.error);
 
@@ -37,7 +36,7 @@ export default function YearSummaryPage() {
       <header className="year-summary-header">
         <Link to="/profile">← Profil</Link>
         <h1>Tvůj rok {year}</h1>
-        <p>Roční přehled podle uložených výprav a úlovků.</p>
+        <p>Roční přehled podle uložených vycházek a úlovků.</p>
       </header>
 
       <label className="year-summary-select-label">
@@ -56,14 +55,14 @@ export default function YearSummaryPage() {
           : summary.catches === 0 && summary.trips === 0
             ? <section className="year-summary-empty">
               <h2>Rok {year} zatím nemá žádné záznamy</h2>
-              <p>Výpravy a úlovky se v ročním přehledu objeví po uložení do deníku.</p>
+              <p>Vycházky a úlovky se v ročním přehledu objeví po uložení do deníku.</p>
             </section>
             : <>
               <section className="year-summary-cards" aria-label={`Souhrn roku ${year}`}>
-                <SummaryCard value={summary.trips.toLocaleString("cs-CZ")} label="výletů" />
+                <SummaryCard value={summary.trips.toLocaleString("cs-CZ")} label="vycházek" />
                 <SummaryCard value={summary.catches.toLocaleString("cs-CZ")} label="úlovků" />
                 <SummaryCard
-                  value={largestWeight ? `${largestWeight} kg` : "—"}
+                  value={largest ? formatCatchMeasurements(largest) : "—"}
                   label="největší ryba"
                   tone="gold"
                   note={largest?.weightSource === "estimated" ? `${largest.species || "Ryba"} · hmotnost je odhad` : largest?.species || "Zvážená hmotnost není uvedena"}
@@ -71,7 +70,7 @@ export default function YearSummaryPage() {
                 <SummaryCard value={summary.bestMonth?.label || "—"} label="nejlepší měsíc" />
                 <SummaryCard value={summary.bestBait?.label || "—"} label="nejlepší nástraha" />
               </section>
-              {summary.catches === 0 && <p className="year-summary-no-catches">V tomto roce zatím nejsou úlovky. Zobrazený počet výprav vychází ze skutečných záznamů Trip.</p>}
+              {summary.catches === 0 && <p className="year-summary-no-catches">V tomto roce zatím nejsou úlovky. Zobrazený počet vycházek vychází ze skutečných záznamů Trip.</p>}
             </>}
 
       <nav className="year-summary-links" aria-label="Další roční přehledy">

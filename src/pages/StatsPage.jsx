@@ -7,6 +7,7 @@ import { getCatchOutcomeStats } from "../features/home/utils/profileStats";
 import { getCatchPatterns, getCatchStatistics } from "../features/stats/utils/catchStatistics";
 import { getMonthlyCatchSeries, getPeriodLabel, getPeriodRange } from "../features/stats/utils/statsPeriod.js";
 import { getBiggestCatch } from "../features/home/utils/profileStats";
+import { formatCatchMeasurements } from "../features/catches/data/catchWeight.js";
 import { isFeatureEnabled } from "../shared/config/featureFlags.js";
 import { getEntitlementState } from "../features/entitlements/data/entitlementAccess.js";
 import "./StatsPage.css";
@@ -122,13 +123,13 @@ function StatsPage() {
       {hasError && <div className="stats-error" role="alert">
         <p>{[catchState.error, tripState.error].filter(Boolean).join(" ")}</p>
         {catchState.error && <button type="button" onClick={refreshCatches}>Načíst úlovky znovu</button>}
-        {tripState.error && <button type="button" onClick={refreshTrips}>Načíst výpravy znovu</button>}
+        {tripState.error && <button type="button" onClick={refreshTrips}>Načíst vycházky znovu</button>}
       </div>}
 
       {loading ? <p className="stats-status loading-state" role="status">Načítám místní statistiky…</p> : hasError
         ? <section className="stats-empty stats-data-unavailable">
           <h2>Statistiky nejsou úplné</h2>
-          <p>Po obnovení místních dat se zobrazí souhrny úlovků i výprav.</p>
+          <p>Po obnovení místních dat se zobrazí souhrny úlovků i vycházek.</p>
         </section>
         : <>
         {patternItems.length > 0 && <section className="stats-panel stats-patterns">
@@ -148,12 +149,12 @@ function StatsPage() {
           <section className="stats-metrics" aria-label="Souhrn úlovků">
             <StatCard label="Zaznamenané úlovky" value={formatNumber(stats.catchCount, 0)} />
             <StatCard label="Různé druhy" value={formatNumber(stats.speciesCount, 0)} />
-            {recordCatch && <StatCard label="Nejtěžší za období" value={`${formatNumber(recordCatch.weightKg)} kg`} note={recordCatch.species} />}
-            {allTimeRecord && <StatCard label="Osobní rekord" value={`${formatNumber(allTimeRecord.weightKg)} kg`} note={`${allTimeRecord.species} · ověřená hmotnost`} />}
+            {stats.longestLengthCm !== null && <StatCard label="Nejdelší změřený" value={`${formatNumber(stats.longestLengthCm, 0)} cm`} note={`${formatCatchCount(stats.measuredLengthCount)} se známou délkou`} />}
+            {recordCatch && <StatCard label="Nejtěžší za období" value={formatCatchMeasurements(recordCatch)} note={recordCatch.species} />}
+            {allTimeRecord && <StatCard label="Osobní rekord" value={formatCatchMeasurements(allTimeRecord)} note={`${allTimeRecord.species} · ověřená hmotnost`} />}
             {patterns.time && <StatCard label="Nejlepší čas" value={patterns.time.labels.join(" · ")} note={`${patterns.time.count}× z ${patterns.time.sampleCount} záznamů`} />}
             {patterns.bait && <StatCard label="Nejlepší nástraha" value={patterns.bait.labels.join(" · ")} note={`${patterns.bait.count}× z ${patterns.bait.sampleCount} záznamů`} />}
             {stats.species[0] && <StatCard label="Nejčastější druh" value={stats.species[0].label} note={`${stats.species[0].count}× v tomto období`} />}
-            {stats.longestLengthCm !== null && <StatCard label="Nejdelší změřený" value={`${formatNumber(stats.longestLengthCm, 0)} cm`} note={`${formatCatchCount(stats.measuredLengthCount)} se známou délkou`} />}
             {outcomes && <StatCard label="Puštěno ze známých výsledků" value={`${outcomes.percentageReleased}%`} note={`${outcomes.released} z ${outcomes.known} úlovků se známým výsledkem`} />}
           </section>
 
@@ -200,13 +201,13 @@ function StatsPage() {
         </section>}
 
         <section className="stats-panel stats-trips">
-          <h2>Výpravy</h2>
+          <h2>Vycházky</h2>
           {stats.completedTripsCount === 0 && stats.activeTripsCount === 0
-            ? <p className="stats-panel-note">Dokončené výpravy se zobrazí po ukončení první výpravy.</p>
+            ? <p className="stats-panel-note">Dokončené vycházky se zobrazí po ukončení první vycházky.</p>
             : <div className="stats-trip-summary">
-              <StatCard label="Dokončené výpravy" value={formatNumber(stats.completedTripsCount, 0)} />
+              <StatCard label="Dokončené vycházky" value={formatNumber(stats.completedTripsCount, 0)} />
               {stats.activeTripsCount > 0 && <StatCard label="Právě probíhá" value={formatNumber(stats.activeTripsCount, 0)} />}
-              {stats.averageCatchesPerCompletedTrip !== null && <StatCard label="Úlovků na dokončenou výpravu" value={formatNumber(stats.averageCatchesPerCompletedTrip)} note="Počítají se jen úlovky přiřazené k dokončeným výpravám." />}
+              {stats.averageCatchesPerCompletedTrip !== null && <StatCard label="Úlovků na dokončenou vycházku" value={formatNumber(stats.averageCatchesPerCompletedTrip)} note="Počítají se jen úlovky přiřazené k dokončeným vycházkám." />}
             </div>}
         </section>
       </>}

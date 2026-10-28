@@ -32,6 +32,7 @@
 }
 
 .dashboard-icon-button {
+  position: relative;
   display: grid;
   width: 44px;
   height: 44px;
@@ -42,6 +43,25 @@
   color: var(--text-secondary);
   text-decoration: none;
   transition: border-color var(--motion-fast), color var(--motion-fast);
+}
+
+.dashboard-notification-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  display: grid;
+  min-width: 18px;
+  height: 18px;
+  place-items: center;
+  padding: 0 4px;
+  border: 2px solid var(--app-bg);
+  border-radius: 999px;
+  background: var(--accent-red);
+  color: var(--text-primary);
+  font-size: 9px;
+  font-weight: 900;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
 }
 
 .dashboard-icon-button:hover {
@@ -127,6 +147,86 @@
 .home-season-card {
   border-color: rgb(var(--accent-orange-rgb) / 30%);
   background: linear-gradient(130deg, var(--surface-1), rgb(var(--accent-orange-rgb) / 5%));
+}
+
+.home-season-title {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.home-season-variants {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.home-season-variants--single {
+  grid-template-columns: minmax(0, 1fr);
+  max-width: 180px;
+}
+
+.home-season-variant {
+  display: grid;
+  min-width: 0;
+  gap: 7px;
+  padding: 9px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-1);
+  color: var(--text-secondary);
+  text-decoration: none;
+}
+
+.home-season-variant--complete {
+  border-color: rgb(var(--accent-green-rgb) / 45%);
+}
+
+.home-season-variant-heading {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 3px;
+}
+
+.home-season-variant-heading strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 10px;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-season-variant-heading > span,
+.home-season-variant-reward {
+  font-size: 9px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.home-season-variant-meter {
+  height: 4px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--surface-3);
+}
+
+.home-season-variant-meter > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent-orange);
+}
+
+.home-season-variant--complete .home-season-variant-meter > span,
+.home-season-variant--complete .home-season-variant-reward {
+  color: var(--accent-green);
+}
+
+.home-season-variant--complete .home-season-variant-meter > span {
+  background: var(--accent-green);
 }
 
 .home-progress-heading,

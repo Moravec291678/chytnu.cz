@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import Layout from "../shared/layout/Layout";
-import { isMeasuredCatchWeight } from "../features/catches/data/catchWeight.js";
+import { formatCatchMeasurements, isMeasuredCatchWeight } from "../features/catches/data/catchWeight.js";
 import { useDataScope } from "../features/auth/context/dataScopeContextValue.js";
 import { useCatches } from "../features/catches/context/useCatches";
 import { useTrips } from "../features/trips/context/useTrips";
@@ -125,11 +125,11 @@ function SpeciesAlbumPage() {
                 {water.type && (water.catchCount > 0 || water.tripCount > 0) && <span aria-hidden="true"> · </span>}
                 {water.catchCount > 0 && <span>{formatTripCatchCount(water.catchCount)}</span>}
                 {water.catchCount > 0 && water.tripCount > 0 && <span aria-hidden="true"> · </span>}
-                {water.tripCount > 0 && <span>{countLabel(water.tripCount, "výprava", "výpravy", "výprav")}</span>}
+                {water.tripCount > 0 && <span>{countLabel(water.tripCount, "vycházka", "vycházky", "vycházek")}</span>}
               </p></div>
               <span className="album-list-arrow" aria-hidden="true">›</span>
             </Link>)}</div>
-            : <p className="album-empty">Revíry se zobrazí po propojení skutečného úlovku nebo výpravy s uloženým revírem.</p>}
+            : <p className="album-empty">Revíry se zobrazí po propojení skutečného úlovku nebo vycházky s uloženým revírem.</p>}
         </section>
 
         <section className="album-section" aria-labelledby="album-seasons-title">
@@ -140,9 +140,9 @@ function SpeciesAlbumPage() {
           {seasons.length
             ? <div className="album-season-grid">{seasons.map((season) => <article className="album-season-card" key={season.key}>
               <span className={`album-season-mark album-season-mark--${season.key}`} aria-hidden="true">{season.name.slice(0, 1)}</span>
-              <div><h3>{season.name}</h3><p>{season.catchCount > 0 ? formatTripCatchCount(season.catchCount) : "Bez úlovků"}{season.tripCount > 0 ? ` · ${countLabel(season.tripCount, "výprava", "výpravy", "výprav")}` : ""}</p></div>
+              <div><h3>{season.name}</h3><p>{season.catchCount > 0 ? formatTripCatchCount(season.catchCount) : "Bez úlovků"}{season.tripCount > 0 ? ` · ${countLabel(season.tripCount, "vycházka", "vycházky", "vycházek")}` : ""}</p></div>
             </article>)}</div>
-            : <p className="album-empty">V tomto roce zatím nejsou uložené úlovky ani výpravy.</p>}
+            : <p className="album-empty">V tomto roce zatím nejsou uložené úlovky ani vycházky.</p>}
         </section>
 
         <section className="album-section" aria-labelledby="album-records-title">
@@ -152,14 +152,14 @@ function SpeciesAlbumPage() {
           </div>
           {yearRecord && <article className="album-year-record">
             <span aria-hidden="true">✦</span>
-            <div><p>NEJTĚŽŠÍ ÚLOVEK ROKU {currentYear}</p><strong>{measurement(yearRecord.weightKg, "kg")}</strong><span>{yearRecord.species || "Druh neuveden"}</span></div>
+            <div><p>NEJTĚŽŠÍ ÚLOVEK ROKU {currentYear}</p><strong>{formatCatchMeasurements(yearRecord)}</strong><span>{yearRecord.species || "Druh neuveden"}</span></div>
             {yearRecord.id && <Link to={`/catch/${yearRecord.id}`} aria-label="Otevřít nejtěžší úlovek roku">›</Link>}
           </article>}
           {trophies.length
             ? <div className="album-list album-trophies">{trophies.map((record, index) => {
               const content = <><span className="album-rank">{String(index + 1).padStart(2, "0")}</span>
                 <div><h3>{record.speciesName}</h3><p>{record.catch.locationName?.trim() || "Místo neuvedeno"}</p></div>
-                <strong>{measurement(record.catch.weightKg, "kg")}</strong></>;
+                <strong>{formatCatchMeasurements(record.catch)}</strong></>;
               return record.catch.id
                 ? <Link className="album-list-card album-trophy-card" to={`/catch/${record.catch.id}`} key={`${record.speciesKey}-${record.catch.id}`}>{content}</Link>
                 : <article className="album-list-card album-trophy-card" key={`${record.speciesKey}-${index}`}>{content}</article>;

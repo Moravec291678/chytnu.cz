@@ -8,10 +8,6 @@ import { useProgression } from "../features/progression/context/progressionConte
 import "./ProgressionPages.css";
 import "./ChallengesPage.css";
 
-function formatWeight(weight) {
-  return `${new Intl.NumberFormat("cs-CZ", { maximumFractionDigits: 2 }).format(weight)} kg`;
-}
-
 function TaskList({ title, tasks, showProgress = false }) {
   return (
     <section className="challenge-section">
@@ -47,7 +43,13 @@ export default function ChallengesPage() {
   const persist = (task) => ({ ...task, completed: task.completed || ledger.isChallengeCompleted(task.id, task.periodKey) });
   const overview = { daily: currentOverview.daily.map(persist), weekly: currentOverview.weekly.map(persist) };
   const currentSeasonal = buildSeasonalChallenge(catchState.catches);
-  const seasonal = { ...currentSeasonal, completed: currentSeasonal.completed || ledger.isChallengeCompleted(currentSeasonal.id, currentSeasonal.id.slice("season-".length)) };
+  const seasonal = {
+    ...currentSeasonal,
+    variants: currentSeasonal.variants.map((variant) => ({
+      ...variant,
+      completed: variant.completed || ledger.isChallengeCompleted(variant.id, currentSeasonal.periodKey),
+    })),
+  };
   const loading = catchState.loading || tripState.loading || ledger.loading;
   const error = [catchState.error, tripState.error, ledger.error].filter(Boolean).join(" ");
   const catches = catchState.catches ?? [];
@@ -67,20 +69,28 @@ export default function ChallengesPage() {
         ) : (
           <>
             {catches.length === 0 && trips.length === 0 && (
-              <p className="challenge-no-activity">Zatím bez úlovků a výprav. Postup se aktualizuje po prvním uloženém záznamu.</p>
+              <p className="challenge-no-activity">Zatím bez úlovků a vycházek. Postup se aktualizuje po prvním uloženém záznamu.</p>
             )}
             <TaskList title="Denní · 3 výzvy" tasks={overview.daily} />
             <TaskList title="Týdenní" tasks={overview.weekly} showProgress />
-            <section className={`challenge-season${seasonal.completed ? " challenge-season--complete" : ""}`}>
+            <section className="challenge-season">
               <span className="challenge-season-kicker">{seasonal.season}</span>
               <h2>{seasonal.title}</h2>
               <p>{seasonal.description}</p>
-              {seasonal.bestCatch && (
-                <p className="challenge-season-best">Nejlepší skutečný úlovek: {formatWeight(seasonal.bestCatch.weightKg)}</p>
-              )}
-              <div className="challenge-season-footer">
-                <span>{seasonal.progressLabel} splněno</span>
-                <strong>+{seasonal.xp} XP</strong>
+              <div className={`challenge-season-variants${seasonal.variants.length === 1 ? " challenge-season-variants--single" : ""}`} role="list" aria-label="Cesty k dokončení sezónní výzvy">
+                {seasonal.variants.map((variant) => (
+                  <article className={`challenge-season-variant${variant.completed ? " challenge-season-variant--complete" : ""}`} key={variant.id} role="listitem">
+                    <div className="challenge-season-variant-heading">
+                      <h3>{variant.title}</h3>
+                      <strong>{variant.progressLabel}</strong>
+                    </div>
+                    <p>{variant.description}</p>
+                    <div className="challenge-season-variant-meter" role="progressbar" aria-label={variant.title} aria-valuemin="0" aria-valuemax={variant.goal} aria-valuenow={variant.progress}>
+                      <span style={{ width: `${(variant.progress / variant.goal) * 100}%` }} />
+                    </div>
+                    <span className="challenge-season-variant-reward">{variant.completed ? "Splněno · " : "Odměna "}{variant.xp} XP</span>
+                  </article>
+                ))}
               </div>
             </section>
           </>

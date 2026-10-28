@@ -13,6 +13,7 @@ import { buildChallengeOverview } from "../features/progression/data/challenges"
 import { buildSeasonalChallenge } from "../features/progression/data/seasonalChallenge";
 import { buildHomeInsight } from "../features/home/utils/homeInsights";
 import { useProgression } from "../features/progression/context/progressionContextValue.js";
+import { useNotifications } from "../features/notifications/context/notificationContextValue.js";
 import "./HomePage.css";
 
 const SEASONS = [
@@ -48,10 +49,6 @@ function pluralize(count, forms) {
   return forms[2];
 }
 
-function formatWeight(weight) {
-  return new Intl.NumberFormat("cs-CZ", { maximumFractionDigits: 1 }).format(weight);
-}
-
 function ActiveTripSummary({ trip, catches }) {
   const duration = useLiveDuration(trip.startedAt);
   const tripCatches = catches.filter((item) => item.tripId === trip.id);
@@ -64,7 +61,7 @@ function ActiveTripSummary({ trip, catches }) {
     <Link className="home-active-trip" to={`/trips/${trip.id}`}>
       <span className="home-active-dot" aria-hidden="true" />
       <span className="home-active-copy">
-        <strong>{trip.locationName || trip.title} · aktivní výprava</strong>
+        <strong>{trip.locationName || trip.title} · aktivní vycházka</strong>
         <span>{getMethodLabel(trip) || "Metoda neuvedena"} · {catchesToday} {pluralize(catchesToday, ["úlovek dnes", "úlovky dnes", "úlovků dnes"])}</span>
       </span>
       <time className="home-active-timer">{duration}</time>
@@ -79,24 +76,20 @@ function SeasonalChallengeCard({ challenge }) {
         <span className="home-progress-kicker">Výzva sezóny · {challenge.season}</span>
         <Link to="/challenges">Detaily <span aria-hidden="true">→</span></Link>
       </div>
-      <h2 id="home-season-title">{challenge.title}</h2>
-      <p>
-        {challenge.description}
-        {challenge.season === "Podzim" && challenge.bestCatch && (
-          <> Tvůj nejlepší kapr:{" "}
-            {challenge.bestCatch.id
-              ? <Link to={`/catch/${challenge.bestCatch.id}`}>{formatWeight(challenge.bestCatch.weightKg)} kg</Link>
-              : <strong>{formatWeight(challenge.bestCatch.weightKg)} kg</strong>}
-            .
-          </>
-        )}
-      </p>
-      <div className="home-progress-meter" role="progressbar" aria-label={challenge.title} aria-valuemin="0" aria-valuemax={challenge.goal} aria-valuenow={challenge.progress}>
-        <span style={{ width: `${(challenge.progress / challenge.goal) * 100}%` }} />
-      </div>
-      <div className="home-progress-foot">
-        <span>{challenge.progressLabel} {pluralize(challenge.progress, ["úlovek", "úlovky", "úlovků"])}</span>
-        <strong>{challenge.completed ? `Splněno · +${challenge.xp} XP` : `Odměna ${challenge.xp} XP`}</strong>
+      <h2 id="home-season-title" className="home-season-title">{challenge.title}</h2>
+      <div className={`home-season-variants${challenge.variants.length === 1 ? " home-season-variants--single" : ""}`} role="list" aria-label="Cesty k dokončení sezónní výzvy">
+        {challenge.variants.map((variant) => (
+          <Link className={`home-season-variant${variant.completed ? " home-season-variant--complete" : ""}`} key={variant.id} to="/challenges" role="listitem" aria-label={`${variant.title}: ${variant.progressLabel}, odměna ${variant.xp} XP${variant.completed ? ", splněno" : ""}`}>
+            <span className="home-season-variant-heading">
+              <strong>{variant.shortLabel}</strong>
+              <span>{variant.progressLabel}</span>
+            </span>
+            <span className="home-season-variant-meter" aria-hidden="true">
+              <span style={{ width: `${(variant.progress / variant.goal) * 100}%` }} />
+            </span>
+            <span className="home-season-variant-reward">{variant.completed ? "Splněno · " : "+"}{variant.xp} XP</span>
+          </Link>
+        ))}
       </div>
     </section>
   );
@@ -161,6 +154,7 @@ function HomeInsightCard({ insight }) {
 }
 
 function HomePage() {
+  const { unreadCount } = useNotifications();
   const { state: catchState, refresh: refreshCatches } = useCatches();
   const { state: tripState, refresh: refreshTrips } = useTrips();
   const ledger = useProgression();
@@ -187,7 +181,13 @@ function HomePage() {
   }, [catches, tripState.trips, ledger]);
   const seasonalChallenge = useMemo(() => {
     const current = buildSeasonalChallenge(catches);
-    return { ...current, completed: current.completed || ledger.isChallengeCompleted(current.id, current.id.slice("season-".length)) };
+    return {
+      ...current,
+      variants: current.variants.map((variant) => ({
+        ...variant,
+        completed: variant.completed || ledger.isChallengeCompleted(variant.id, current.periodKey),
+      })),
+    };
   }, [catches, ledger]);
   const weeklyStreak = ledger.summary.streak;
   const insight = useMemo(() => buildHomeInsight(catches), [catches]);
@@ -206,11 +206,9 @@ function HomePage() {
             </p>
           </div>
           <div className="dashboard-header-actions">
-            <Link className="dashboard-icon-button" to="/journal#catch-search" aria-label="Hledat v deníku">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8" /><path d="m16 16 5 5" /></svg>
-            </Link>
-            <Link className="dashboard-icon-button" to="/profile" aria-label="Otevřít profil">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5" /><path d="M4.5 21a7.5 7.5 0 0 1 15 0" /></svg>
+            <Link className="dashboard-icon-button dashboard-notification-button" to="/notifications" aria-label={unreadCount ? `Oznámení, ${unreadCount} nepřečtených` : "Oznámení"}>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></svg>
+              {unreadCount > 0 && <span className="dashboard-notification-badge" aria-hidden="true">{unreadCount > 99 ? "99+" : unreadCount}</span>}
             </Link>
           </div>
         </header>
@@ -237,8 +235,8 @@ function HomePage() {
         {!tripState.loading && !tripState.error && !activeTrip && (
           <Link className="home-no-trip" to="/trips/new">
             <span>
-              <strong>Žádná aktivní výprava</strong>
-              <span>Zahájit novou výpravu</span>
+              <strong>Žádná aktivní vycházka</strong>
+              <span>Zahájit novou vycházku</span>
             </span>
             <span aria-hidden="true">→</span>
           </Link>
@@ -248,7 +246,7 @@ function HomePage() {
           <section className="dashboard-error" role="alert">
             <p>{[catchState.error, tripState.error, ledger.error].filter(Boolean).join(" ")}</p>
             {catchState.error && <button type="button" onClick={refreshCatches}>Načíst úlovky znovu</button>}
-            {tripState.error && <button type="button" onClick={refreshTrips}>Načíst výpravy znovu</button>}
+            {tripState.error && <button type="button" onClick={refreshTrips}>Načíst vycházky znovu</button>}
           </section>
         )}
 

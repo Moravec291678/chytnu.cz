@@ -332,7 +332,7 @@ export const DEFAULT_SPECIES = [
   },
 
   // =========================
-  // PSTRUHOVITÉ
+  // LOSOSOVITÉ
   // =========================
 
   {
@@ -851,7 +851,7 @@ export const SPECIES_CATEGORIES = [
 
   {
     key: "salmonids",
-    label: "🏞️ Pstruhovité",
+    label: "🏞️ Lososovité",
   },
 
   {

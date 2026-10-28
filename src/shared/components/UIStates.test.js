@@ -15,7 +15,7 @@ test("offline copy promises sync later only when changes are queued", () => {
 test("sync failures have a safe human-readable message and bounded pending count", () => {
   const failed = getOfflineNoticeCopy("error", 2.9);
   assert.equal(failed.title, "Synchronizace se nezdařila");
-  assert.equal(failed.description, "Lokální úlovky a výpravy zůstávají uložené. Čekající změny: 2.");
+  assert.equal(failed.description, "Lokální úlovky a vycházky zůstávají uložené. Čekající změny: 2.");
   assert.doesNotMatch(failed.description, /Firebase|permission-denied|Error/);
 });
 

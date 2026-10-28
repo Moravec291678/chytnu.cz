@@ -25,8 +25,8 @@ function locatedCatchCountLabel(count) {
 
 function measurement(marker) {
   const values = [];
-  if (marker.weightKg !== null) values.push(`${marker.weightKg.toLocaleString("cs-CZ")} kg`);
   if (marker.lengthCm !== null) values.push(`${marker.lengthCm.toLocaleString("cs-CZ")} cm`);
+  if (marker.weightKg !== null) values.push(`${marker.weightKg.toLocaleString("cs-CZ")} kg`);
   return values.join(" · ") || "Míry neuvedeny";
 }
 
@@ -143,8 +143,8 @@ function MapPage() {
             </span>
           </span>
           <span className="catch-map-record-measure">
-            {Number.isFinite(selectedMarker.weightKg) && <><strong>{formatCatchWeight(selectedMarker)}</strong><small>kg</small></>}
             {Number.isFinite(selectedMarker.lengthCm) && <small>{selectedMarker.lengthCm.toLocaleString("cs-CZ")} cm</small>}
+            {Number.isFinite(selectedMarker.weightKg) && <><strong>{formatCatchWeight(selectedMarker)}</strong><small>kg</small></>}
             {!Number.isFinite(selectedMarker.weightKg) && !Number.isFinite(selectedMarker.lengthCm) && <small>Míry neuvedeny</small>}
           </span>
         </Link>}

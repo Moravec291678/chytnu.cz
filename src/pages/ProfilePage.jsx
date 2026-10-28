@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { formatCatchWeight, isMeasuredCatchWeight } from "../features/catches/data/catchWeight.js";
+import { formatCatchMeasurements, isMeasuredCatchWeight } from "../features/catches/data/catchWeight.js";
 import Layout from "../shared/layout/Layout";
 import { useAuth } from "../features/auth/context/authContextValue.js";
 import { useDataScope } from "../features/auth/context/dataScopeContextValue.js";
@@ -234,7 +234,7 @@ function ProfilePage() {
       const result = await linkGuestData(auth.user.uid, guestScopeKey);
       window.dispatchEvent(new Event("chytnu:local-data-restored"));
       window.dispatchEvent(new Event("chytnu:outbox-changed"));
-      setMessage(`K účtu bylo bezpečně propojeno ${result.catches} úlovků, ${result.trips} výprav a ${result.photos} fotografií. Místní data zůstala zachována.`);
+      setMessage(`K účtu bylo bezpečně propojeno ${result.catches} úlovků, ${result.trips} vycházek a ${result.photos} fotografií. Místní data zůstala zachována.`);
       await refreshAccountData();
     } catch (linkError) {
       setError(linkError?.message || "Deník se nepodařilo propojit. Data zůstala beze změny.");
@@ -383,8 +383,8 @@ function ProfilePage() {
       setBackup(null);
       setSummary(null);
       setMessage(mode === "replace"
-        ? `Záloha byla obnovena. Úlovky: ${result.catches}; výpravy: ${result.trips}.`
-        : `Sloučení dokončeno. Přibylo úlovků: ${result.catches}; výprav: ${result.trips}. Shodných záznamů přeskočeno: ${result.skipped}.`);
+        ? `Záloha byla obnovena. Úlovky: ${result.catches}; vycházky: ${result.trips}.`
+        : `Sloučení dokončeno. Přibylo úlovků: ${result.catches}; vycházek: ${result.trips}. Shodných záznamů přeskočeno: ${result.skipped}.`);
     } catch (restoreError) {
       setError(restoreError?.message || "Obnovu se nepodařilo dokončit. Místní data zůstala zachována.");
     } finally {
@@ -415,21 +415,21 @@ function ProfilePage() {
       <section className="profile-stat-grid" aria-label="Souhrn profilu">
         <div><strong>{catchState.loading ? "—" : catchState.catches.length}</strong><span>ÚLOVKY</span></div>
         <div><strong>{catchState.loading ? "—" : progression.speciesCount}</strong><span>DRUHY</span></div>
-        <div className="profile-record-stat"><strong>{recordCatch ? `${recordCatch.weightKg.toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} kg` : "—"}</strong><span>REKORD</span></div>
-        <div><strong>{tripState.loading ? "—" : tripState.trips.length}</strong><span>VÝPRAVY</span></div>
+        <div className="profile-record-stat"><strong>{recordCatch ? formatCatchMeasurements(recordCatch, { maximumFractionDigits: 1 }) : "—"}</strong><span>REKORD</span></div>
+        <div><strong>{tripState.loading ? "—" : tripState.trips.length}</strong><span>VYCHÁZKY</span></div>
         <div><strong>{progression.streak.weeks}</strong><span>TÝDENNÍ SÉRIE</span></div>
         {bestWater?.water ? <Link className="profile-stat-water" to={`/waters/${bestWater.id}`}><strong>{bestWater.name}</strong><span>NEJLEPŠÍ REVÍR · {bestWater.catchCount} ÚLOVKŮ</span></Link>
           : <div><strong>{bestWater?.name || "—"}</strong><span>NEJLEPŠÍ REVÍR{bestWater ? ` · ${bestWater.catchCount} ÚLOVKŮ` : ""}</span></div>}
       </section>
 
       <nav className="profile-quick-links" aria-label="Osobní přehledy">
-        <Link className="profile-stats-link" to="/stats"><span><strong>Statistiky</strong><small>Analýza úlovků a výprav</small></span><b aria-hidden="true">→</b></Link>
+        <Link className="profile-stats-link" to="/stats"><span><strong>Statistiky</strong><small>Analýza úlovků a vycházek</small></span><b aria-hidden="true">→</b></Link>
         <Link className="profile-secondary-link" to="/gallery"><span aria-hidden="true">▦ </span>Galerie <span aria-hidden="true">→</span></Link>
         <Link className="profile-secondary-link" to="/insights">Osobní přehledy <span aria-hidden="true">→</span></Link>
         <Link className="profile-secondary-link" to="/season-story">Příběh sezóny <span aria-hidden="true">→</span></Link>
         <Link className="profile-secondary-link" to="/year-summary">Roční souhrn <span aria-hidden="true">→</span></Link>
         <Link className="profile-secondary-link" to="/settings">Nastavení <span aria-hidden="true">→</span></Link>
-        <Link className="profile-secondary-link" to="/notifications">Upozornění <span aria-hidden="true">→</span></Link>
+        <Link className="profile-secondary-link" to="/notifications">Oznámení <span aria-hidden="true">→</span></Link>
         <Link className="profile-secondary-link" to="/album">Druhové album <span aria-hidden="true">→</span></Link>
         <Link className="profile-secondary-link" to="/map">Soukromá mapa <span aria-hidden="true">→</span></Link>
         <Link className="profile-secondary-link" to="/privacy">Soukromí <span aria-hidden="true">→</span></Link>
@@ -478,7 +478,7 @@ function ProfilePage() {
                     if (next.length > 5) { setTrophyError("Do trofejní vitríny lze vybrat nejvýše 5 úlovků."); return; }
                     try { setTrophySelection({ scopeKey: dataScope.scopeKey, ids: saveTrophySelection(dataScope.scopeKey, next) }); setTrophyError(""); }
                     catch (selectionError) { setTrophyError(selectionError.message); }
-                  }} />{item.species || "Ryba"} · {Number.isFinite(item.weightKg) ? `${formatCatchWeight(item)} kg` : Number.isFinite(item.lengthCm) ? `${item.lengthCm} cm` : "bez měření"}
+                  }} />{item.species || "Ryba"} · {formatCatchMeasurements(item) || "bez měření"}
                 </label>)}
               </details>
               {trophyError && <p role="alert">{trophyError}</p>}
@@ -494,7 +494,7 @@ function ProfilePage() {
 
       <section className="profile-panel" aria-labelledby="local-backup-title">
         <h2 id="local-backup-title">Místní data</h2>
-        <p>Úlovky, výpravy a jejich fotografie jsou uložené v tomto prohlížeči. Export vytvoří kopii pro bezpečné uložení nebo budoucí obnovu.</p>
+        <p>Úlovky, vycházky a jejich fotografie jsou uložené v tomto prohlížeči. Export vytvoří kopii pro bezpečné uložení nebo budoucí obnovu.</p>
         <p className="profile-privacy-note">Soubor může obsahovat přesné lokality, poznámky a fotografie. Ulož ho na bezpečné místo.</p>
         <button className="profile-backup-button" type="button" onClick={exportBackup} disabled={exporting || reading || restoring}>
           {exporting ? "Připravuji zálohu…" : "Exportovat zálohu"}
@@ -518,7 +518,7 @@ function ProfilePage() {
           </button>
           {backup && summary && <div className="profile-restore-preview" aria-live="polite">
             <p><strong>Náhled zálohy</strong></p>
-            <p>{formatCount(summary.catchCount, "úlovek", "úlovky", "úlovků")} · {formatCount(summary.tripCount, "výprava", "výpravy", "výprav")} · {formatCount(summary.photoCount, "fotografie", "fotografie", "fotografií")}</p>
+            <p>{formatCount(summary.catchCount, "úlovek", "úlovky", "úlovků")} · {formatCount(summary.tripCount, "vycházka", "vycházky", "vycházek")} · {formatCount(summary.photoCount, "fotografie", "fotografie", "fotografií")}</p>
             <p>{summary.duplicateCount} ID už v deníku ({summary.unchangedCount} shodných, {summary.conflictCount} s odlišným obsahem).</p>
             <label className="profile-restore-mode">Způsob obnovení
               <select value={mode} onChange={(event) => setMode(event.target.value)} disabled={restoring}>
@@ -547,7 +547,7 @@ function ProfilePage() {
 
       <section className="profile-panel profile-account" aria-labelledby="account-title">
         <h2 id="account-title">Uživatelský účet</h2>
-        <p>{accountEnvironment} Přihlášení nemění místní úlovky ani výpravy.</p>
+        <p>{accountEnvironment} Přihlášení nemění místní úlovky ani vycházky.</p>
         {accountDataError && <p className="profile-error" role="alert">{accountDataError}</p>}
         {auth.status === "loading" && <p className="loading-state" role="status">Ověřuji stav účtu…</p>}
         {auth.status === "unavailable" && <p className="profile-error" role="alert">Přihlášení je dostupné pouze při lokálním spuštění aplikace s emulátorem.</p>}
@@ -573,8 +573,8 @@ function ProfilePage() {
           >{authBusy ? "Odhlašuji…" : "Odhlásit se"}</button>
           {ownerless.catches + ownerless.trips > 0 && <div className="profile-restore-preview">
             <p><strong>Místní deník bez účtu</strong></p>
-            <p>{ownerless.catches} úlovků · {ownerless.trips} výprav · {ownerless.photos} fotografií</p>
-            <p className="profile-privacy-note">Data se nepřenášejí automaticky. Propojení zachová jejich ID, vazby i místní fotografie; do účtu synchronizuje pouze údaje úlovků a výprav.</p>
+            <p>{ownerless.catches} úlovků · {ownerless.trips} vycházek · {ownerless.photos} fotografií</p>
+            <p className="profile-privacy-note">Data se nepřenášejí automaticky. Propojení zachová jejich ID, vazby i místní fotografie; do účtu synchronizuje pouze údaje úlovků a vycházek.</p>
             <button className="profile-account-secondary" type="button" disabled={dataActionBusy} onClick={linkLocalJournal}>
               {dataActionBusy ? "Propojuji…" : "Propojit místní deník s účtem"}
             </button>
@@ -630,7 +630,7 @@ function ProfilePage() {
             <p><strong>Konflikty synchronizace ({conflicts.length})</strong></p>
             <p className="profile-privacy-note">Stejný záznam se změnil na více zařízeních. Vyber verzi; bez volby se nic nepřepíše.</p>
             {conflicts.map((conflict) => <div className="profile-conflict" key={conflict.id}>
-              <p><strong>{conflict.entityType === "catch" ? "Úlovek" : "Výprava"}: {conflict.localRecord?.species || conflict.localRecord?.title || conflict.entityId}</strong></p>
+              <p><strong>{conflict.entityType === "catch" ? "Úlovek" : "Vycházka"}: {conflict.localRecord?.species || conflict.localRecord?.title || conflict.entityId}</strong></p>
               <p>Místní: {conflict.localRecord?.updatedAt ? new Date(conflict.localRecord.updatedAt).toLocaleString("cs-CZ") : "bez času"}</p>
               <p>Vzdálená: {conflict.remoteDeleted ? "záznam byl smazán" : conflict.remoteRecord?.updatedAt ? new Date(conflict.remoteRecord.updatedAt).toLocaleString("cs-CZ") : "bez času"}</p>
               <div className="profile-conflict-actions">
@@ -642,8 +642,8 @@ function ProfilePage() {
         </div>}
         <p className="profile-privacy-note">Odhlášení místní data nemaže. Starší deník bez účtu se přenese jen po výslovném potvrzení výše.</p>
       </section>
-      {confirmingReplace && <ConfirmDialog titleId="replace-backup-title" descriptionId="replace-backup-description" title="Nahradit místní deník?" description="Všechny místní úlovky a výpravy budou nahrazeny obsahem vybrané zálohy. Tuto akci nelze vrátit." busy={restoring} confirmLabel="Nahradit deník" busyLabel="Obnovuji…" confirmClassName="catch-delete-confirm" onCancel={() => setConfirmingReplace(false)} onConfirm={performRestoreBackup} />}
-      {confirmingLink && <ConfirmDialog titleId="link-journal-title" descriptionId="link-journal-description" title="Propojit místní deník s účtem?" description={`Do synchronizační fronty se připraví ${ownerless.catches} úlovků, ${ownerless.trips} výprav a ${ownerless.photos} fotografií. Místní kopie zůstanou v tomto zařízení.`} busy={dataActionBusy} confirmLabel="Propojit deník" busyLabel="Propojuji…" confirmClassName="profile-account-secondary" onCancel={() => setConfirmingLink(false)} onConfirm={performLinkLocalJournal} />}
+      {confirmingReplace && <ConfirmDialog titleId="replace-backup-title" descriptionId="replace-backup-description" title="Nahradit místní deník?" description="Všechny místní úlovky a vycházky budou nahrazeny obsahem vybrané zálohy. Tuto akci nelze vrátit." busy={restoring} confirmLabel="Nahradit deník" busyLabel="Obnovuji…" confirmClassName="catch-delete-confirm" onCancel={() => setConfirmingReplace(false)} onConfirm={performRestoreBackup} />}
+      {confirmingLink && <ConfirmDialog titleId="link-journal-title" descriptionId="link-journal-description" title="Propojit místní deník s účtem?" description={`Do synchronizační fronty se připraví ${ownerless.catches} úlovků, ${ownerless.trips} vycházek a ${ownerless.photos} fotografií. Místní kopie zůstanou v tomto zařízení.`} busy={dataActionBusy} confirmLabel="Propojit deník" busyLabel="Propojuji…" confirmClassName="profile-account-secondary" onCancel={() => setConfirmingLink(false)} onConfirm={performLinkLocalJournal} />}
       {pendingConflict && <ConfirmDialog titleId="resolve-conflict-title" descriptionId="resolve-conflict-description" title="Vyřešit konflikt synchronizace?" description={`Použije se ${pendingConflict.choice === "local" ? "místní" : "vzdálená"} verze. Druhá verze zůstane zachovaná, dokud se tato akce úspěšně nedokončí.`} busy={dataActionBusy} confirmLabel={`Použít ${pendingConflict.choice === "local" ? "místní" : "vzdálenou"} verzi`} busyLabel="Ukládám…" confirmClassName="profile-account-secondary" onCancel={() => setPendingConflict(null)} onConfirm={performResolveConflict} />}
     </div>
   </Layout>;

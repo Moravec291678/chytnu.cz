@@ -77,7 +77,7 @@ function JournalPage() {
           <label>Do<input className="journal-control" aria-label="Datum do" type="date" value={filters.dateTo} onChange={(event) => setFilter("dateTo", event.target.value)} /></label>
           <label>Výsledek<select className="journal-control" value={filters.result} onChange={(event) => setFilter("result", event.target.value)}><option value="">Jakýkoli</option><option value="released">Puštěno</option><option value="kept">Ponecháno</option><option value="unspecified">Neuvedeno</option></select></label>
           <label>Metoda<select className="journal-control" value={filters.methodKey} onChange={(event) => setFilter("methodKey", event.target.value)}><option value="">Všechny metody</option>{DEFAULT_METHODS.map((method) => <option key={method.key} value={method.key}>{method.label}</option>)}</select></label>
-          <label>Výprava<select className="journal-control" value={filters.tripId} onChange={(event) => setFilter("tripId", event.target.value)}><option value="">Všechny výpravy</option>{tripState.trips.map((trip) => <option key={trip.id} value={trip.id}>{trip.title}</option>)}</select></label>
+          <label>Vycházka<select className="journal-control" value={filters.tripId} onChange={(event) => setFilter("tripId", event.target.value)}><option value="">Všechny vycházky</option>{tripState.trips.map((trip) => <option key={trip.id} value={trip.id}>{trip.title}</option>)}</select></label>
         </div>
         <label className="journal-favorite-filter"><input type="checkbox" checked={filters.favoriteOnly} onChange={(event) => setFilter("favoriteOnly", event.target.checked)} /> Jen oblíbené</label>
         </div>}

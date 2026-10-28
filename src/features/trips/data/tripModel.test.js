@@ -43,7 +43,7 @@ test("trip defaults title, ends durably, and elapsed duration uses stored timest
   const start = new Date("2026-10-16T12:00:00.000Z");
   const trip = createTripRecord({}, start);
   const ended = endTripRecord(trip, new Date("2026-10-16T14:35:00.000Z"));
-  assert.match(trip.title, /Výprava/);
+  assert.match(trip.title, /Vycházka/);
   assert.equal(getActiveTrip([trip]), trip);
   assert.equal(getActiveTrip([ended]), null);
   assert.equal(ended.sync.revision, trip.sync.revision + 1);

@@ -5,7 +5,7 @@ import { filterSpeciesCatalog, getPrimarySpeciesCategoryKey, getSpeciesForCatego
 
 test("Full Add picker keeps the original category overview and exposes every catalog species", () => {
   const categoryLabels = new Set(SPECIES_CATEGORIES.map(({ label }) => label));
-  for (const label of ["⭐ Nejčastější úlovky", "🐟 Kaprovité", "🦷 Dravci", "🏞️ Pstruhovité", "🐟 Sumci", "🐍 Úhoři"]) {
+  for (const label of ["⭐ Nejčastější úlovky", "🐟 Kaprovité", "🦷 Dravci", "🏞️ Lososovité", "🐟 Sumci", "🐍 Úhoři"]) {
     assert.ok(categoryLabels.has(label), `missing category ${label}`);
   }
 

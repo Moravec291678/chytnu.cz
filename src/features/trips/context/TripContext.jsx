@@ -32,7 +32,7 @@ export function TripProvider({ children }) {
       trips.sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt));
       dispatch({ type: "LOAD", trips });
     } catch (error) {
-      dispatch({ type: "ERROR", message: error.message || "Výpravy se nepodařilo načíst." });
+      dispatch({ type: "ERROR", message: error.message || "Vycházky se nepodařilo načíst." });
     }
   }, [scope]);
   useEffect(() => {

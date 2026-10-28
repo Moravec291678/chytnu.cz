@@ -11,9 +11,9 @@ function TripEditPage() {
   const navigate = useNavigate();
   const { state, updateTrip, refresh } = useTrips();
   const trip = state.trips.find((item) => item.id === id);
-  if (state.loading) return <Layout><div className="trip-form-page"><p className="loading-state" role="status">Načítám výpravu…</p></div></Layout>;
+  if (state.loading) return <Layout><div className="trip-form-page"><p className="loading-state" role="status">Načítám vycházku…</p></div></Layout>;
   if (state.error) return <Layout><div className="trip-form-page"><p className="trip-form-error" role="alert">{state.error}</p><button type="button" onClick={refresh}>Zkusit znovu</button></div></Layout>;
-  if (!trip) return <Layout><div className="trip-form-page"><h1>Výprava nenalezena</h1><Link to="/trips">Zpět na výpravy</Link></div></Layout>;
+  if (!trip) return <Layout><div className="trip-form-page"><h1>Vycházka nenalezena</h1><Link to="/trips">Zpět na vycházky</Link></div></Layout>;
   return <TripEditForm key={trip.id} trip={trip} updateTrip={updateTrip} navigate={navigate} />;
 }
 
@@ -33,12 +33,12 @@ function TripEditForm({ trip, updateTrip, navigate }) {
       await updateTrip(trip, values);
       navigate(`/trips/${trip.id}`, { replace: true });
     } catch (saveError) {
-      setError(saveError?.message || "Výpravu se nepodařilo upravit.");
+      setError(saveError?.message || "Vycházku se nepodařilo upravit.");
     } finally { savingRef.current = false; setSaving(false); }
   };
   return <Layout><div className="trip-form-page">
-    <Link to={`/trips/${trip.id}`} className="trip-back-link">← Detail výpravy</Link>
-    <header><h1>Upravit výpravu</h1><p>Úlovky a jejich vazby zůstanou zachované.</p></header>
+    <Link to={`/trips/${trip.id}`} className="trip-back-link">← Detail vycházky</Link>
+    <header><h1>Upravit vycházku</h1><p>Úlovky a jejich vazby zůstanou zachované.</p></header>
     <form onSubmit={submit}>
       <label>Název<input value={values.title} maxLength={80} required onChange={(event) => update("title", event.target.value)} /></label>
       <label>Lokalita (volitelná)<input value={values.locationName} maxLength={120} onChange={(event) => update("locationName", event.target.value)} /></label>

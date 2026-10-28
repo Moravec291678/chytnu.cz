@@ -175,7 +175,7 @@ export default function SettingsPage() {
 
       <section className="settings-card" aria-labelledby="settings-units-title">
         <h2 id="settings-units-title">Jednotky</h2>
-        <strong>Metrické · kg, cm, °C</strong>
+        <strong>Metrické · cm, kg, °C</strong>
         <p>Přepínání jednotek tato verze nepodporuje, proto zde není nefunkční přepínač.</p>
       </section>
 
@@ -189,7 +189,7 @@ export default function SettingsPage() {
 
       <section className="settings-card" aria-labelledby="settings-export-title">
         <h2 id="settings-export-title">Export deníku</h2>
-        <p>Stáhne úplnou lokální zálohu úlovků, výprav, soukromí a postupu ve formátu JSON. CSV ani PDF tato akce netvrdí.</p>
+        <p>Stáhne úplnou lokální zálohu úlovků, vycházek, soukromí a postupu ve formátu JSON. CSV ani PDF tato akce netvrdí.</p>
         <button className="settings-primary-button" type="button" onClick={exportJournal} disabled={scope.status !== "ready" || exporting || deleting}>
           {exporting ? "Připravuji zálohu…" : "Stáhnout JSON zálohu"}
         </button>
@@ -199,7 +199,7 @@ export default function SettingsPage() {
       <section className="settings-card" aria-labelledby="settings-more-title">
         <h2 id="settings-more-title">Soukromí a upozornění</h2>
         <Link className="settings-link" to="/privacy">Soukromí a viditelnost <span aria-hidden="true">→</span></Link>
-        <Link className="settings-link" to="/notifications">Preference upozornění <span aria-hidden="true">→</span></Link>
+        <Link className="settings-link" to="/notifications">Oznámení <span aria-hidden="true">→</span></Link>
       </section>
 
       <section className="settings-card" aria-labelledby="settings-feedback-title">
@@ -224,8 +224,8 @@ export default function SettingsPage() {
         descriptionId="settings-delete-confirm-description"
         title="Smazat místní data profilu?"
         description={auth.user
-          ? "Úlovky, výpravy, revíry, postup a předvolby tohoto profilu budou odstraněny z tohoto zařízení. Cloudový účet ani vzdálená data se nesmažou."
-          : "Úlovky, výpravy, revíry, postup a předvolby tohoto místního profilu budou trvale odstraněny z tohoto zařízení."}
+          ? "Úlovky, vycházky, revíry, postup a předvolby tohoto profilu budou odstraněny z tohoto zařízení. Cloudový účet ani vzdálená data se nesmažou."
+          : "Úlovky, vycházky, revíry, postup a předvolby tohoto místního profilu budou trvale odstraněny z tohoto zařízení."}
         busy={deleting}
         confirmLabel="Smazat místní data"
         busyLabel="Mažu…"

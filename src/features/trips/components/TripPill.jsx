@@ -14,7 +14,7 @@ function TripPill({ activeTrip }) {
 
           <div>
             <p className="trip-pill-title">
-              {activeTrip.locationName} · aktivní výlet
+              {activeTrip.locationName} · aktivní vycházka
             </p>
 
             <p className="trip-pill-subtitle">

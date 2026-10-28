@@ -170,7 +170,7 @@ function WatersPage() {
             : positionStatus === "error" ? <ErrorState className="waters-empty waters-location-empty" title="Polohu se nepodařilo zjistit" message={positionError} onRetry={requestPosition} />
               : <EmptyState className="waters-empty waters-location-empty" title="Zobrazit revíry v okolí" description={positionError || "Poloha se použije jen pro výpočet vzdálenosti v tomto seznamu a nikam se neukládá."} action={<button type="button" onClick={requestPosition} disabled={positionStatus === "loading"}>{positionStatus === "loading" ? "Zjišťuji polohu…" : "Povolit polohu"}</button>} />
         ) : noWaters ? (
-          <EmptyState className="waters-empty" title="Zatím nemáš uložené žádné revíry" description="Přidej svůj první revír a přiřazuj k němu úlovky a výpravy." action={<Link to="/waters/new">Přidat první revír</Link>} />
+          <EmptyState className="waters-empty" title="Zatím nemáš uložené žádné revíry" description="Přidej svůj první revír a přiřazuj k němu úlovky a vycházky." action={<Link to="/waters/new">Přidat první revír</Link>} />
         ) : tab === "nearby" && position && filtered.length === 0 ? (
           <EmptyState className="waters-empty" title="V okolí nejsou revíry se známou polohou" description="Vzdálenost zobrazíme jen u revírů se skutečně uloženými souřadnicemi." />
         ) : filtered.length === 0 ? (

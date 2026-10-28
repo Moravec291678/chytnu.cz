@@ -54,7 +54,7 @@ export default function LevelsPage() {
         ) : (
           <>
             {catches.length === 0 && trips.length === 0 && (
-              <p className="level-no-activity">Zatím bez úlovků a výprav. Tvoje úroveň začne růst s prvními uloženými aktivitami.</p>
+              <p className="level-no-activity">Zatím bez úlovků a vycházek. Tvoje úroveň začne růst s prvními uloženými aktivitami.</p>
             )}
             <section className="level-summary">
               <span className="level-rank-name">{progression.rank.name}</span>

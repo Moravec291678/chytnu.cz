@@ -32,7 +32,7 @@ export const tripRepository = {
     const { scopeKey } = requireScope(options);
     const trip = await runStoreOperation(STORE_NAME, "get", "readonly", id);
     if (!trip) return undefined;
-    if (recordScopeKey(trip) !== scopeKey) throw new Error("Výprava nepatří do aktivního profilu.");
+    if (recordScopeKey(trip) !== scopeKey) throw new Error("Vycházka nepatří do aktivního profilu.");
     return trip;
   },
   put: async (trip, options) => {
@@ -76,8 +76,8 @@ export const tripRepository = {
       };
       request.onerror = () => transaction.abort();
       transaction.oncomplete = () => { db.close(); resolve(storedTrip); };
-      transaction.onerror = () => { db.close(); reject(transaction.error ?? new Error("Výpravu se nepodařilo uložit.")); };
-      transaction.onabort = () => { db.close(); reject(transaction.error ?? new Error("Uložení výpravy bylo přerušeno.")); };
+      transaction.onerror = () => { db.close(); reject(transaction.error ?? new Error("Vycházku se nepodařilo uložit.")); };
+      transaction.onabort = () => { db.close(); reject(transaction.error ?? new Error("Uložení vycházky bylo přerušeno.")); };
     });
   },
   delete: async (id, options) => {
@@ -90,7 +90,7 @@ export const tripRepository = {
       let failure;
       request.onsuccess = () => {
         if (request.result.some((item) => item.tripId === id && recordScopeKey(item) === requestedScope.scopeKey)) {
-          failure = new Error("Výprava obsahuje úlovky a nelze ji smazat.");
+          failure = new Error("Vycházka obsahuje úlovky a nelze ji smazat.");
           transaction.abort();
           return;
         }
@@ -98,7 +98,7 @@ export const tripRepository = {
         tripRequest.onsuccess = () => {
           if (!tripRequest.result) return;
           if (recordScopeKey(tripRequest.result) !== requestedScope.scopeKey) {
-            failure = new Error("Výprava nepatří do aktivního profilu.");
+            failure = new Error("Vycházka nepatří do aktivního profilu.");
             transaction.abort();
             return;
           }
@@ -116,8 +116,8 @@ export const tripRepository = {
       };
       request.onerror = () => { failure = request.error; transaction.abort(); };
       transaction.oncomplete = () => { db.close(); resolve(id); };
-      transaction.onerror = () => { db.close(); reject(failure ?? transaction.error ?? new Error("Výpravu se nepodařilo smazat.")); };
-      transaction.onabort = () => { db.close(); reject(failure ?? transaction.error ?? new Error("Mazání výpravy bylo přerušeno.")); };
+      transaction.onerror = () => { db.close(); reject(failure ?? transaction.error ?? new Error("Vycházku se nepodařilo smazat.")); };
+      transaction.onabort = () => { db.close(); reject(failure ?? transaction.error ?? new Error("Mazání vycházky bylo přerušeno.")); };
     });
   },
   start: async (trip, options) => {
@@ -131,7 +131,7 @@ export const tripRepository = {
       let storedTrip = trip;
       request.onsuccess = () => {
         if (request.result.some((item) => !item.endedAt && recordScopeKey(item) === requestedScope.scopeKey)) {
-          failure = new Error("Nejprve ukonči aktivní výpravu.");
+          failure = new Error("Nejprve ukonči aktivní vycházku.");
           transaction.abort();
           return;
         }
@@ -155,8 +155,8 @@ export const tripRepository = {
       };
       request.onerror = () => { failure = request.error; transaction.abort(); };
       transaction.oncomplete = () => { db.close(); resolve(storedTrip); };
-      transaction.onerror = () => { db.close(); reject(failure ?? transaction.error ?? new Error("Výpravu se nepodařilo uložit.")); };
-      transaction.onabort = () => { db.close(); reject(failure ?? transaction.error ?? new Error("Založení výpravy bylo přerušeno.")); };
+      transaction.onerror = () => { db.close(); reject(failure ?? transaction.error ?? new Error("Vycházku se nepodařilo uložit.")); };
+      transaction.onabort = () => { db.close(); reject(failure ?? transaction.error ?? new Error("Založení vycházky bylo přerušeno.")); };
     });
   },
 };

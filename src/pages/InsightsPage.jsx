@@ -5,6 +5,7 @@ import FishActivity from "../features/home/components/FishActivity.jsx";
 import { useCatches } from "../features/catches/context/useCatches";
 import { useTrips } from "../features/trips/context/useTrips";
 import { useDataScope } from "../features/auth/context/dataScopeContextValue.js";
+import { formatCatchMeasurements } from "../features/catches/data/catchWeight.js";
 import { buildInsights } from "../features/retrospectives/data/retrospectives.js";
 import {
   buildLastYearSummary,
@@ -116,13 +117,13 @@ function InsightsPage() {
           {waterError
             ? <p>Osobní přehled revírů není dostupný, protože se nepodařilo načíst uložený katalog.</p>
             : tripState.error
-              ? <p>Výpravy se nepodařilo načíst, proto jsou zobrazené pouze počty úlovků.</p>
+              ? <p>Vycházky se nepodařilo načíst, proto jsou zobrazené pouze počty úlovků.</p>
             : topWaters.length
               ? <ol className="insights-ranking">{topWaters.map((water) => <li key={water.id}>
                 <Link to={`/waters/${water.id}`}>{water.name}</Link>
-                <span>{water.catches} úlovků · {water.trips} výprav</span>
+                <span>{water.catches} úlovků · {water.trips} vycházek</span>
               </li>)}</ol>
-              : <p>Zatím nejsou úlovky ani výpravy propojené se záznamem revíru (waterId).</p>}
+              : <p>Zatím nejsou úlovky ani vycházky propojené se záznamem revíru (waterId).</p>}
         </InsightSection>
 
         <InsightSection title="Druhy">
@@ -141,7 +142,7 @@ function InsightsPage() {
             : <>
               <p>{lastYear.catchCount} {lastYear.catchCount === 1 ? "úlovek" : "úlovků"} · {lastYear.speciesCount} druhů se stabilním ID.</p>
               {lastYear.biggestMeasuredCatch
-                ? <p>Nejtěžší skutečně zvážený úlovek: {lastYear.biggestMeasuredCatch.species || "Druh neuveden"}, {lastYear.biggestMeasuredCatch.weightKg.toLocaleString("cs-CZ")} kg.</p>
+                ? <p>Nejtěžší skutečně zvážený úlovek: {lastYear.biggestMeasuredCatch.species || "Druh neuveden"}, {formatCatchMeasurements(lastYear.biggestMeasuredCatch)}.</p>
                 : <p>V období není zaznamenána zvážená hmotnost.</p>}
             </>}
         </InsightSection>

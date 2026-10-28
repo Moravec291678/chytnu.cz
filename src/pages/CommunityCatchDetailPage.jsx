@@ -163,8 +163,8 @@ function CommunityCatchDetailPage() {
         {projection.photos[0]?.publicUrl && <img className="community-detail-photo" src={projection.photos[0].publicUrl} alt={`Veřejná fotografie úlovku ${projection.species}`} />}
 
         <section className="community-detail-metrics" aria-label="Údaje úlovku">
-          {projection.weightKg !== null && <div><strong>{projection.weightSource === "estimated" ? "≈ " : ""}{projection.weightKg.toLocaleString("cs-CZ")} kg</strong><span>Váha{projection.weightSource === "estimated" ? " · odhad" : ""}</span></div>}
           {projection.lengthCm !== null && <div><strong>{projection.lengthCm.toLocaleString("cs-CZ")} cm</strong><span>Délka</span></div>}
+          {projection.weightKg !== null && <div><strong>{projection.weightSource === "estimated" ? "≈ " : ""}{projection.weightKg.toLocaleString("cs-CZ")} kg</strong><span>Váha{projection.weightSource === "estimated" ? " · odhad" : ""}</span></div>}
           {formattedDate && <div><strong>{formattedDate}</strong><span>Datum</span></div>}
         </section>
 
