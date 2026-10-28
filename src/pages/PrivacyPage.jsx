@@ -4,7 +4,7 @@ import Layout from "../shared/layout/Layout";
 import { useDataScope } from "../features/auth/context/dataScopeContextValue.js";
 import { useCatches } from "../features/catches/context/useCatches.js";
 import { applyOnboardingLocationMode } from "../features/privacy/data/onboardingLocationPreference.js";
-import { DEFAULT_PRIVACY_SETTINGS, HEATMAP_GRANULARITY } from "../features/privacy/data/privacyModel.js";
+import { CATCH_VISIBILITY, DEFAULT_PRIVACY_SETTINGS, HEATMAP_GRANULARITY } from "../features/privacy/data/privacyModel.js";
 import { privacyRepository } from "../features/privacy/data/privacyRepository.js";
 import { waterRepository } from "../features/waters/data/waterRepository.js";
 import "./PrivacyPage.css";
@@ -137,6 +137,17 @@ export default function PrivacyPage() {
           <input type="checkbox" role="switch" checked={currentSettings.profileVisibility === "public"} disabled={disabled} onChange={(event) => save({ profileVisibility: event.target.checked ? "public" : "private" })} />
         </label>
         <p className="privacy-hint privacy-backend-note">Veřejné profily zatím nejsou aktivní. Tato volba nic nezveřejňuje ani neposílá na server.</p>
+        <SegmentedOptions
+          label="Výchozí viditelnost nových úlovků"
+          value={currentSettings.defaultCatchVisibility}
+          options={[
+            { value: CATCH_VISIBILITY.PUBLIC, label: "Veřejné" },
+            { value: CATCH_VISIBILITY.PRIVATE, label: "Soukromé" },
+          ]}
+          disabled={disabled}
+          onChange={(visibility) => save({ defaultCatchVisibility: visibility, defaultCatchVisibilityExplicit: true })}
+        />
+        <p className="privacy-hint">Platí pro nové úlovky. Již uložené záznamy se nezmění. Fotografie a poloha mají vlastní nastavení.</p>
         <div className="privacy-toggle-row privacy-heatmap-heading">
           <span><strong>Moje úlovky v heatmapě</strong><small>Preference se uloží jen pro tento profil.</small></span>
           <input type="checkbox" aria-label="Zahrnout úlovky do heatmapy podle zvolené granularity" checked={currentSettings.heatmapGranularity !== HEATMAP_GRANULARITY.OFF} disabled={disabled} onChange={(event) => save({ heatmapGranularity: event.target.checked ? HEATMAP_GRANULARITY.AREA : HEATMAP_GRANULARITY.OFF })} />
