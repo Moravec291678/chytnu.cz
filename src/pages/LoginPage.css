@@ -30,6 +30,9 @@
 .auth-entry-message { border: 1px solid rgb(46 204 113 / 32%); background: rgb(46 204 113 / 9%); color: var(--auth-accent-soft); }
 .auth-entry-links { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-2-5) var(--space-4-5); margin-top: var(--space-3-5); }
 .auth-entry-links button { padding: var(--space-0-75) 0; border: 0; background: none; color: var(--auth-text); font-size: var(--font-size-13); font-weight: 700; }
+.auth-legal-links { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-2) var(--space-4); padding-top: var(--space-4); }
+.auth-legal-links a { color: var(--auth-text); font-size: var(--font-size-12); text-align: center; text-decoration: underline; text-underline-offset: 3px; }
+.auth-legal-links a:focus-visible { outline: 3px solid var(--accent-blue); outline-offset: 3px; border-radius: 3px; }
 .auth-divider { display: flex; align-items: center; gap: var(--space-2-5); margin: var(--space-4-5) 0 var(--space-3); color: var(--auth-divider-text); font-size: var(--font-size-12); }
 .auth-divider::before, .auth-divider::after { content: ""; height: 1px; flex: 1; background: var(--border); }
 .auth-dialog-backdrop { position: fixed; inset: 0; z-index: var(--z-content-float); display: grid; align-items: end; padding: var(--space-4); background: rgb(3 9 14 / 68%); }

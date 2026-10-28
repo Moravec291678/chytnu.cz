@@ -1,15 +1,20 @@
 import { createHash, createPrivateKey, generateKeyPairSync } from "node:crypto";
+import { Buffer } from "node:buffer";
+import { Readable, Transform } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { PRODUCT_LIMITS } from "../product/config/limits.js";
+import { createCloudinaryPhotoDeletionService, PHOTO_DELETE_RECEIPT_PRUNE_MS } from "./cloudinaryPhotoDeletion.js";
+import { createAccountDeletionService } from "./accountDeletion.js";
 
 export const FIREBASE_PROJECT_ID = "chutnucz";
 export const MAX_PHOTO_BYTES = PRODUCT_LIMITS.photoBytes;
 export const ALLOWED_PHOTO_TYPES = Object.freeze(["image/jpeg", "image/png", "image/webp"]);
 const ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 const SHA_PATTERN = /^[a-f0-9]{64}$/;
-const RATE_LIMITS = Object.freeze({ sign: 20, verify: 30, delivery: 120, delete: 20, metadata: 120 });
+const RATE_LIMITS = Object.freeze({ sign: 20, verify: 30, delivery: 120, export: 120, delete: 20, metadata: 120 });
 const RATE_WINDOW_MS = 60_000;
 
 function send(res, status, payload) {
@@ -48,6 +53,29 @@ function expectedFormat(contentType) {
   return ({ "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" })[contentType] ?? null;
 }
 
+function isCloudinaryDownloadHost(hostname) {
+  return hostname === "api.cloudinary.com" || hostname === "res.cloudinary.com";
+}
+
+async function fetchCloudinaryDownload(url, fetchImpl) {
+  let current;
+  try { current = new URL(url); } catch { throw new Error("Cloudinary download URL is invalid."); }
+  if (current.protocol !== "https:" || !isCloudinaryDownloadHost(current.hostname)) {
+    throw new Error("Cloudinary download URL is invalid.");
+  }
+  for (let redirectCount = 0; redirectCount <= 3; redirectCount += 1) {
+    const response = await fetchImpl(current.href, { method: "GET", redirect: "manual", cache: "no-store" });
+    if (![301, 302, 303, 307, 308].includes(response.status)) return response;
+    const location = response.headers?.get?.("location");
+    if (!location || redirectCount === 3) throw new Error("Cloudinary download redirect is invalid.");
+    try { current = new URL(location, current); } catch { throw new Error("Cloudinary download redirect is invalid."); }
+    if (current.protocol !== "https:" || !isCloudinaryDownloadHost(current.hostname)) {
+      throw new Error("Cloudinary download redirect is invalid.");
+    }
+  }
+  throw new Error("Cloudinary download redirect limit exceeded.");
+}
+
 function activePhotoAccess(access, uid, catchId, photoId) {
   return access?.catchRecord?.ownerId === uid
     && access.catchRecord.id === catchId
@@ -58,16 +86,20 @@ function activePhotoAccess(access, uid, catchId, photoId) {
 }
 
 function deletePhotoAccess(access, uid, catchId, photoId) {
+  const cloud = access?.photoRecord?.cloud;
+  const expectedKey = `users/${uid}/catches/${catchId}/photos/${photoId}/original`;
   return access?.catchRecord?.ownerId === uid
     && access.catchRecord.id === catchId
     && access.photoRecord?.id === photoId
+    && (!cloud || (cloud.provider == null && cloud.objectKey == null)
+      || (cloud.provider === "cloudinary" && cloud.objectKey === expectedKey))
     && (access.catchRecord.deleted === true || access.photoRecord.deleted === true
       || access.catchRecord.photoRefs?.[photoId] !== true);
 }
 
 const AUTH_ROUTES = Object.freeze({
   sign: "/api/cloudinary/sign", verify: "/api/cloudinary/verify-upload",
-  delivery: "/api/cloudinary/delivery", delete: "/api/cloudinary/delete",
+  delivery: "/api/cloudinary/delivery", export: "/api/cloudinary/export", delete: "/api/cloudinary/delete",
   metadata: "/api/cloudinary/metadata",
 });
 const TOKEN_REJECTION_CODES = new Set([
@@ -140,7 +172,9 @@ export function createCloudinaryApi({
   verifyToken,
   getPhotoAccess,
   consumeRateLimit = async () => true,
+  schedulePhotoDeletion = async () => { throw new Error("Photo deletion queue is unavailable."); },
   getCloudinary,
+  fetchImpl = globalThis.fetch,
   now = () => Date.now(),
   logAuthFailure = () => {},
 } = {}) {
@@ -298,6 +332,80 @@ export function createCloudinaryApi({
     }
   }
 
+  async function exportPhoto(req, res) {
+    const request = await prepare(req, res, ["catchId", "photoId"], "export");
+    if (!request) return;
+    const { uid, body } = request;
+    try {
+      const access = await getPhotoAccess(uid, body.catchId, body.photoId);
+      if (!activePhotoAccess(access, uid, body.catchId, body.photoId)) {
+        return send(res, 403, { error: "photo_not_owned", message: "Photo access is not allowed." });
+      }
+      const expectedKey = `users/${uid}/catches/${body.catchId}/photos/${body.photoId}/original`;
+      const photo = access.photoRecord;
+      if (photo.cloud?.provider !== "cloudinary" || photo.cloud?.state !== "synced"
+        || photo.cloud.objectKey !== expectedKey || !SHA_PATTERN.test(photo.cloud.sha256 ?? "")
+        || !ALLOWED_PHOTO_TYPES.includes(photo.type) || !Number.isSafeInteger(photo.size)
+        || photo.size < 0 || photo.size > MAX_PHOTO_BYTES) {
+        return send(res, 404, { error: "photo_not_available", message: "Photo is not available." });
+      }
+      const cloudinary = await getCloudinary(env);
+      const expiresAt = Math.floor(now() / 1000) + 300;
+      const url = cloudinary.utils.private_download_url(cloudinaryPublicId(uid, body.catchId, body.photoId), expectedFormat(photo.type), {
+        resource_type: "image", type: "authenticated", expires_at: expiresAt,
+      });
+      const response = await fetchCloudinaryDownload(url, fetchImpl);
+      if (!response.ok) return send(res, response.status === 404 ? 404 : 502, {
+        error: response.status === 404 ? "photo_not_available" : "provider_download_failed",
+        message: "Cloud photo could not be downloaded.",
+      });
+      if (response.body && typeof res.write === "function") {
+        let byteCount = 0;
+        const digest = createHash("sha256");
+        const validateStream = new Transform({
+          transform(chunk, _encoding, callback) {
+            byteCount += chunk.byteLength;
+            if (byteCount > photo.size || byteCount > MAX_PHOTO_BYTES) {
+              callback(Object.assign(new Error("Cloud photo size mismatch."), { code: "photo_content_mismatch" }));
+              return;
+            }
+            digest.update(chunk);
+            callback(null, chunk);
+          },
+          flush(callback) {
+            if (byteCount !== photo.size || digest.digest("hex") !== photo.cloud.sha256) {
+              callback(Object.assign(new Error("Cloud photo content mismatch."), { code: "photo_content_mismatch" }));
+              return;
+            }
+            callback();
+          },
+        });
+        res.setHeader?.("Cache-Control", "no-store");
+        res.setHeader?.("Content-Type", photo.type);
+        res.setHeader?.("Content-Disposition", "attachment; filename=photo");
+        res.status(200);
+        await pipeline(Readable.fromWeb(response.body), validateStream, res);
+        return;
+      }
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      const hash = createHash("sha256").update(bytes).digest("hex");
+      if (bytes.byteLength !== photo.size || hash !== photo.cloud.sha256) {
+        return send(res, 502, { error: "photo_content_mismatch", message: "Cloud photo could not be verified." });
+      }
+      res.setHeader?.("Cache-Control", "no-store");
+      res.setHeader?.("Content-Type", photo.type);
+      res.setHeader?.("Content-Length", String(bytes.byteLength));
+      res.setHeader?.("Content-Disposition", "attachment; filename=photo");
+      return res.status(200).send(Buffer.from(bytes));
+    } catch (error) {
+      if (res.headersSent || res.destroyed) {
+        res.destroy?.(error);
+        return;
+      }
+      return safeError(res, error);
+    }
+  }
+
   async function remove(req, res) {
     const request = await prepare(req, res, ["catchId", "photoId"], "delete");
     if (!request) return;
@@ -307,14 +415,11 @@ export function createCloudinaryApi({
       if (!deletePhotoAccess(access, uid, body.catchId, body.photoId)) {
         return send(res, 403, { error: "photo_not_deleted", message: "Photo deletion is not allowed." });
       }
-      const cloudinary = await getCloudinary(env);
-      const result = await cloudinary.uploader.destroy(cloudinaryPublicId(uid, body.catchId, body.photoId), {
-        resource_type: "image", type: "authenticated",
-      });
-      if (result?.result !== "ok" && result?.result !== "not found") {
-        return send(res, 502, { error: "provider_delete_failed", message: "Cloudinary could not delete the photo." });
-      }
-      return send(res, 200, { deleted: true, alreadyMissing: result.result === "not found" });
+      const job = await schedulePhotoDeletion({ ownerId: uid, catchId: body.catchId, photoId: body.photoId });
+      const deleteAfterMs = typeof job.deleteAfter?.toMillis === "function" ? job.deleteAfter.toMillis()
+        : typeof job.deleteAfter === "string" ? Date.parse(job.deleteAfter) : Number.NaN;
+      if (!job.jobId || !Number.isFinite(deleteAfterMs)) throw new Error("Photo deletion queue returned an invalid job.");
+      return send(res, 202, { deleted: true, queued: true, jobId: job.jobId, deleteAfter: new Date(deleteAfterMs).toISOString() });
     } catch (error) {
       return safeError(res, error);
     }
@@ -355,7 +460,7 @@ export function createCloudinaryApi({
     return send(res, 200, { enabled: true });
   }
 
-  return { signUpload, verifyUpload, delivery, remove, metadata, capability };
+  return { signUpload, verifyUpload, delivery, exportPhoto, remove, metadata, capability };
 }
 
 let adminContextPromise;
@@ -385,6 +490,10 @@ export async function initializeFirebaseAdminContext(serviceAccount, {
 async function getAdminContext(env, serviceAccount) {
   adminContextPromise ??= initializeFirebaseAdminContext(serviceAccount ?? readFirebaseServiceAccount(env));
   try { return await adminContextPromise; } catch (error) { adminContextPromise = null; throw error; }
+}
+
+export async function getAccountDeletionAdminContext(env) {
+  return getAdminContext(env);
 }
 
 export async function verifyFirebaseIdToken(auth, token) {
@@ -436,15 +545,81 @@ export function createProductionCloudinaryApi({ env = globalThis.process?.env ??
   return createCloudinaryApi({
     env,
     verifyToken: async (token, _action, serviceAccount) => {
-      const { auth } = await getAdminContext(env, serviceAccount);
-      return verifyFirebaseIdToken(auth, token);
+      const { auth, db } = await getAdminContext(env, serviceAccount);
+      const identity = await verifyFirebaseIdToken(auth, token);
+      if ((await db.doc(`accountDeletions/${identity.uid}`).get()).exists) throw new Error("account_deletion_started");
+      return identity;
     },
     getPhotoAccess: (uid, catchId, photoId) => getPhotoAccess(env, uid, catchId, photoId),
     consumeRateLimit: (uid, action, limit, windowMs, nowValue) => consumeDistributedRateLimit(env, uid, action, limit, windowMs, nowValue),
+    schedulePhotoDeletion: (identity) => scheduleProductionPhotoDeletion({ env, now, ...identity }),
     getCloudinary: getCloudinarySdk,
     now,
     logAuthFailure: (diagnostic) => console.warn("cloudinary_auth_failure", diagnostic),
   });
+}
+
+/**
+ * Reconciles Firestore photo tombstones against Cloudinary. The metadata record
+ * is the durable retry receipt: it is retained for 30 days and only pruned
+ * after the provider confirms deletion (including an already-missing asset).
+ */
+export function createCloudinaryPhotoCleanup({ db, getCloudinary, now = () => Date.now(), pageSize = 100, deletionService: suppliedDeletionService } = {}) {
+  if (!db || (!suppliedDeletionService && typeof getCloudinary !== "function")) throw new TypeError("Cloud photo cleanup dependencies are required.");
+  const deletionService = suppliedDeletionService ?? createCloudinaryPhotoDeletionService({
+    db, Timestamp, getCloudinary, now, pageSize, derivePublicId: cloudinaryPublicId,
+  });
+  return async function cleanupDeletedPhotos() {
+    const cutoff = now() - PHOTO_DELETE_RECEIPT_PRUNE_MS;
+    const tombstones = [];
+    let pruned = 0;
+    let cursor = null;
+    while (true) {
+      let query = db.collectionGroup("photos").where("deleted", "==", true).limit(pageSize);
+      if (cursor) query = query.startAfter(cursor);
+      const page = await query.get();
+      if (page.empty) break;
+      for (const snapshot of page.docs) {
+        tombstones.push(snapshot);
+      }
+      cursor = page.docs.at(-1);
+      if (page.docs.length < pageSize) break;
+    }
+    for (const snapshot of tombstones) {
+      const data = snapshot.data();
+      const confirmedAt = Date.parse(data.cloudinaryDeletedAt);
+      if (Number.isFinite(confirmedAt) && confirmedAt <= cutoff) {
+        await snapshot.ref.delete();
+        pruned += 1;
+      }
+    }
+    const discovered = await deletionService.enqueueFromTombstones();
+    const processed = await deletionService.processDueJobs();
+    const prunedJobs = await deletionService.pruneCompletedJobs();
+    return { scanned: discovered.scanned + processed.scanned, enqueued: discovered.enqueued,
+      deleted: processed.deleted, pruned: pruned + prunedJobs, failed: discovered.invalid + processed.failed,
+      deferred: processed.deferred };
+  };
+}
+
+export async function runProductionCloudinaryPhotoCleanup({ env = globalThis.process?.env ?? {}, now = () => Date.now() } = {}) {
+  const { auth, db, Timestamp: FirestoreTimestamp } = await getAdminContext(env);
+  const photoDeletion = createCloudinaryPhotoDeletionService({ db, Timestamp: FirestoreTimestamp,
+    getCloudinary: () => getCloudinarySdk(env), derivePublicId: cloudinaryPublicId, now });
+  const accounts = createAccountDeletionService({ db, auth, photoDeletion, now });
+  try { await accounts.processPending(); } catch { /* Photo cleanup must continue if account reconciliation is unavailable. */ }
+  const cleanup = createCloudinaryPhotoCleanup({ db, now, deletionService: photoDeletion });
+  const result = await cleanup();
+  try { await accounts.processPending(); } catch { /* Retry on the next protected cron run. */ }
+  try { await accounts.pruneCompleted(); } catch { /* Receipt pruning is retryable. */ }
+  return result;
+}
+
+export async function scheduleProductionPhotoDeletion({ env = globalThis.process?.env ?? {}, now = () => Date.now(), ...identity } = {}) {
+  const { db, Timestamp: FirestoreTimestamp } = await getAdminContext(env);
+  const service = createCloudinaryPhotoDeletionService({ db, Timestamp: FirestoreTimestamp,
+    getCloudinary: () => getCloudinarySdk(env), derivePublicId: cloudinaryPublicId, now });
+  return service.enqueue(identity);
 }
 
 let testPrivateKey;

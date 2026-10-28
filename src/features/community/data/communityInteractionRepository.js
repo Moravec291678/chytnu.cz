@@ -71,6 +71,26 @@ async function listForCatch(storeName, catchId, scope) {
 }
 
 export const communityInteractionRepository = {
+  async clearLocalScope(scopeOptions) {
+    const scope = validateDataScope(scopeOptions ?? {});
+    const db = await openCommunityDatabase();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction([COMMENT_STORE, REACTION_STORE, REPORT_STORE], "readwrite");
+      for (const storeName of [COMMENT_STORE, REACTION_STORE, REPORT_STORE]) {
+        const request = transaction.objectStore(storeName).index("scopeKey").openCursor(IDBKeyRange.only(scope.scopeKey));
+        request.onsuccess = () => {
+          const cursor = request.result;
+          if (!cursor) return;
+          cursor.delete();
+          cursor.continue();
+        };
+      }
+      transaction.oncomplete = () => { db.close(); resolve(); };
+      transaction.onerror = () => { db.close(); reject(transaction.error ?? new Error("Místní komunitní data se nepodařilo smazat.")); };
+      transaction.onabort = () => { db.close(); reject(transaction.error ?? new Error("Mazání místních komunitních dat bylo přerušeno.")); };
+    });
+  },
+
   async listComments(catchId, scope) {
     const comments = await listForCatch(COMMENT_STORE, catchId, scope);
     return comments.sort((left, right) => left.createdAt.localeCompare(right.createdAt));

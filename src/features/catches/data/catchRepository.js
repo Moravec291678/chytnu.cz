@@ -42,6 +42,17 @@ export function retainSessionPhotoBlob(scopeKey, catchId, photoId, blob) {
   if (blob instanceof Blob) sessionPhotoBlobs.set(sessionPhotoBlobKey(scopeKey, catchId, photoId), blob);
 }
 
+/** Drop only in-memory photo recovery blobs owned by the deleted local profile. */
+export function clearSessionPhotoBlobsForScope(scopeKey) {
+  for (const key of sessionPhotoBlobs.keys()) {
+    try {
+      if (JSON.parse(key)[0] === scopeKey) sessionPhotoBlobs.delete(key);
+    } catch {
+      // Ignore malformed internal keys; they cannot be safely attributed to this scope.
+    }
+  }
+}
+
 export function outboxEntityKey(scopeOrOwnerId, entityType, entityId) {
   const scopeKey = isGuestScope(scopeOrOwnerId) || isAccountScope(scopeOrOwnerId)
     ? scopeOrOwnerId
@@ -162,6 +173,30 @@ function queuePhotoCloudOperation(transaction, {
       try { transaction.abort(); } catch { /* transaction has finished */ }
     }
   };
+}
+
+function reconcileRemovedPhotoUpload(transaction, { ownerId, scopeKey, catchId, photo, dependsOnCatchOperationId, dependsOnCatchRevision }) {
+  const store = transaction.objectStore(OUTBOX_STORE_NAME);
+  const photoId = photo.id;
+  const key = outboxEntityKey(scopeKey, "photoCloud", `${catchId}/${photoId}`);
+  const request = store.index("entityKey").get(key);
+  request.onsuccess = () => {
+    const upload = request.result;
+    if (upload?.operation === "photo-upload" && upload.photoCloud?.state === "pendingUpload" && upload.attemptCount === 0) {
+      store.delete(upload.sequence);
+      return;
+    }
+    const cloud = upload?.operation === "photo-upload" ? upload.photoCloud : photo.cloud;
+    if (!cloud?.provider || !cloud?.objectKey) return;
+    queuePhotoCloudOperation(transaction, {
+      ownerId, catchId, photoId, operation: "delete", provider: cloud.provider,
+      objectKey: cloud.objectKey, sha256: cloud.sha256,
+      size: photo.blob?.size ?? photo.size ?? null,
+      contentType: photo.type ?? photo.blob?.type ?? null,
+      dependsOnCatchOperationId, dependsOnCatchRevision,
+    });
+  };
+  request.onerror = () => transaction.abort();
 }
 
 function requestValue(request) {
@@ -479,21 +514,18 @@ export const catchRepository = {
               },
             };
             for (const photo of existing?.photos ?? []) {
-              if (nextPhotoIds.has(photo.id) || !photo.cloud?.provider || !photo.cloud?.objectKey || !effectiveOwnerId) continue;
-              queuePhotoCloudOperation(transaction, {
-                ownerId: effectiveOwnerId,
-                catchId: existing.id,
-                photoId: photo.id,
-                operation: "delete",
-                provider: photo.cloud.provider,
-                objectKey: photo.cloud.objectKey,
-                sha256: photo.cloud.sha256 ?? null,
-                size: photo.blob?.size ?? photo.size ?? null,
-                contentType: photo.type ?? photo.blob?.type ?? null,
-                dependsOnCatchOperationId: entry.operationId,
-                dependsOnCatchRevision: revision,
-              });
+              if (nextPhotoIds.has(photo.id) || !effectiveOwnerId) continue;
+              reconcileRemovedPhotoUpload(transaction, { ownerId: effectiveOwnerId, scopeKey: effectiveScopeKey,
+                catchId: existing.id, photo,
+                dependsOnCatchOperationId: entry.operationId, dependsOnCatchRevision: revision });
             }
+            const staleBinaries = photoBinaryStore.index("catchPhoto").getAll([effectiveScopeKey, record.id]);
+            staleBinaries.onsuccess = () => {
+              for (const binary of staleBinaries.result) {
+                if (!nextPhotoIds.has(binary.photoId)) photoBinaryStore.delete(binary.key);
+              }
+            };
+            staleBinaries.onerror = () => transaction.abort();
             catchStore.put({ ...persistedRecord, sync: storedRecord.sync });
           });
         };
@@ -532,8 +564,9 @@ export const catchRepository = {
     const requestedScope = requireRepositoryScope(options);
     const db = await openLocalDatabase();
     return new Promise((resolve, reject) => {
-      const transaction = db.transaction([CATCH_STORE_NAME, OUTBOX_STORE_NAME], "readwrite");
+      const transaction = db.transaction([CATCH_STORE_NAME, OUTBOX_STORE_NAME, PHOTO_BINARY_STORE_NAME], "readwrite");
       const store = transaction.objectStore(CATCH_STORE_NAME);
+      const photoBinaryStore = transaction.objectStore(PHOTO_BINARY_STORE_NAME);
       const request = store.get(id);
       let failure;
       request.onsuccess = () => {
@@ -554,22 +587,17 @@ export const catchRepository = {
           baseServerRevision: existing.sync?.serverRevision ?? null,
         }, (revision, entry) => {
           for (const photo of existing.photos ?? []) {
-            if (!existing.ownerId || !photo.cloud?.provider || !photo.cloud?.objectKey) continue;
-            queuePhotoCloudOperation(transaction, {
-              ownerId: existing.ownerId,
-              catchId: existing.id,
-              photoId: photo.id,
-              operation: "delete",
-              provider: photo.cloud.provider,
-              objectKey: photo.cloud.objectKey,
-              sha256: photo.cloud.sha256 ?? null,
-              size: photo.blob?.size ?? photo.size ?? null,
-              contentType: photo.type ?? photo.blob?.type ?? null,
-              dependsOnCatchOperationId: entry.operationId,
-              dependsOnCatchRevision: revision,
-            });
+            if (!existing.ownerId) continue;
+            reconcileRemovedPhotoUpload(transaction, { ownerId: existing.ownerId, scopeKey: recordScopeKey(existing),
+              catchId: existing.id, photo,
+              dependsOnCatchOperationId: entry.operationId, dependsOnCatchRevision: revision });
           }
-          store.delete(id);
+          const binaryRequest = photoBinaryStore.index("catchPhoto").getAllKeys([recordScopeKey(existing), id]);
+          binaryRequest.onsuccess = () => {
+            for (const key of binaryRequest.result) photoBinaryStore.delete(key);
+            store.delete(id);
+          };
+          binaryRequest.onerror = () => transaction.abort();
         });
       };
       request.onerror = () => { failure = request.error; transaction.abort(); };

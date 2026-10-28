@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { getFirebaseIdToken, initializeBrowserAuth, runGoogleSignIn } from "./firebaseAuth.js";
+import { getFirebaseIdToken, initializeBrowserAuth, runGoogleSignIn, runAccountDeletionReauthentication } from "./firebaseAuth.js";
 
 function authApi(overrides = {}) {
   class GoogleAuthProvider {
@@ -81,4 +81,25 @@ test("Google errors other than popup blocking are preserved for the UI", async (
   });
   await assert.rejects(() => runGoogleSignIn({}, api), (error) => error === failure);
   assert.equal(redirected, false);
+});
+
+test("account deletion reauth uses Firebase password credential", async () => {
+  const user = { email: "fisher@example.test", providerData: [{ providerId: "password" }] };
+  const calls = [];
+  const api = { EmailAuthProvider: { credential: (email, password) => ({ email, password }) },
+    reauthenticateWithCredential: async (...args) => calls.push(args) };
+  assert.equal(await runAccountDeletionReauthentication({ currentUser: user }, api, "secret"), true);
+  assert.deepEqual(calls, [[user, { email: user.email, password: "secret" }]]);
+});
+
+test("account deletion Google reauth requests account selection and supports redirect", async () => {
+  const user = { providerData: [{ providerId: "google.com" }] };
+  let parameters;
+  let redirected = false;
+  const api = authApi({ onProviderParameters: (value) => { parameters = value; },
+    reauthenticateWithPopup: async () => { throw Object.assign(new Error("blocked"), { code: "auth/popup-blocked" }); },
+    reauthenticateWithRedirect: async (receivedUser) => { assert.equal(receivedUser, user); redirected = true; } });
+  assert.equal(await runAccountDeletionReauthentication({ currentUser: user }, api), false);
+  assert.equal(redirected, true);
+  assert.deepEqual(parameters, { prompt: "select_account" });
 });

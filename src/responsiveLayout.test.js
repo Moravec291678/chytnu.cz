@@ -5,16 +5,16 @@ import test from "node:test";
 const css = (path) => readFile(new URL(path, import.meta.url), "utf8");
 
 test("modal panels that can grow have a viewport bound and their own scroll region", async () => {
-  const [photoFrame, catchForm, communityDetail, login] = await Promise.all([
+  const [photoFrame, confirmDialog, communityDetail, login] = await Promise.all([
     css("./features/catches/components/PhotoFrameEditor.css"),
-    css("./pages/AddCatchPage.css"),
+    css("./shared/components/ConfirmDialog.css"),
     css("./pages/CommunityCatchDetailPage.css"),
     css("./pages/LoginPage.css"),
   ]);
 
   for (const [source, selector] of [
     [photoFrame, ".photo-frame-editor"],
-    [catchForm, ".catch-confirm-dialog"],
+    [confirmDialog, ".catch-confirm-dialog"],
     [communityDetail, ".community-detail-report-sheet"],
     [login, ".auth-guest-dialog"],
   ]) {

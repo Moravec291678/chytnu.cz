@@ -12,13 +12,12 @@ import { resolveHomeEntry } from "./homeEntry.js";
 import SplashScreen from "./SplashScreen.jsx";
 import { isGuestAccessConfirmed } from "../features/auth/data/guestAccess.js";
 import { useAuth } from "../features/auth/context/authContextValue.js";
-import { canAccessProtectedRoute } from "./routeAccess.js";
+import { canAccessProtectedRoute, isPublicRoute } from "./routeAccess.js";
 
 function RouteAccessGuard() {
   const auth = useAuth();
   const location = useLocation();
-  const publicRoute = location.pathname === "/login" || location.pathname === "/";
-  if (publicRoute || canAccessProtectedRoute({ user: auth.user, guestActive: isGuestAccessConfirmed() })) return null;
+  if (isPublicRoute(location.pathname) || canAccessProtectedRoute({ user: auth.user, guestActive: isGuestAccessConfirmed() })) return null;
   return <Navigate to="/login" replace />;
 }
 
@@ -55,6 +54,8 @@ const CommunityReportPage = lazy(() => import("../pages/CommunityReportPage"));
 const NearbyPage = lazy(() => import("../pages/NearbyPage"));
 const CrewPage = lazy(() => import("../pages/CrewPage"));
 const PrivacyPage = lazy(() => import("../pages/PrivacyPage"));
+const PrivacyPolicyPage = lazy(() => import("../pages/PrivacyPolicyPage"));
+const TermsPage = lazy(() => import("../pages/TermsPage"));
 const SettingsPage = lazy(() => import("../pages/SettingsPage"));
 const NotificationsPage = lazy(() => import("../pages/NotificationsPage"));
 const OnboardingPage = lazy(() => import("../pages/OnboardingPage"));
@@ -154,6 +155,8 @@ function App() {
         <Route path="/stats" element={<PageSuspense><StatsPage /></PageSuspense>} />
         <Route path="/profile" element={<PageSuspense><ProfilePage /></PageSuspense>} />
         <Route path="/privacy" element={<PageSuspense><PrivacyPage /></PageSuspense>} />
+        <Route path="/privacy-policy" element={<PageSuspense><PrivacyPolicyPage /></PageSuspense>} />
+        <Route path="/terms" element={<PageSuspense><TermsPage /></PageSuspense>} />
         <Route path="/settings" element={<PageSuspense><SettingsPage /></PageSuspense>} />
         <Route path="/notifications" element={<PageSuspense><NotificationsPage /></PageSuspense>} />
         <Route path="/insights" element={<PageSuspense><InsightsPage /></PageSuspense>} />

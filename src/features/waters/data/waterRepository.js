@@ -3,6 +3,7 @@ import {
   isAccountScope,
   isGuestScope,
   recordScopeKey,
+  validateDataScope,
 } from "../../auth/data/localDataScope.js";
 import {
   openLocalDatabase,
@@ -88,6 +89,42 @@ async function migrateLegacyData() {
     } finally { legacy.close(); }
   })().catch(() => undefined);
   return legacyMigration;
+}
+
+export async function clearLegacyLocalScope(scopeOptions) {
+  const scope = validateDataScope(scopeOptions ?? {});
+  if (!globalThis.indexedDB) return { removed: 0, skipped: true };
+  if (typeof indexedDB.databases === "function") {
+    const databases = await indexedDB.databases();
+    if (!databases.some((database) => database.name === "chytnu-waters")) return { removed: 0, skipped: false };
+  }
+  const legacy = await openLegacyDatabase();
+  if (!legacy) return { removed: 0, skipped: false };
+  try {
+    const stores = ["waters", "waterChat"].filter((name) => legacy.objectStoreNames.contains(name));
+    if (!stores.length) return { removed: 0, skipped: false };
+    return await new Promise((resolve, reject) => {
+      const transaction = legacy.transaction(stores, "readwrite");
+      let removed = 0;
+      for (const storeName of stores) {
+        const request = transaction.objectStore(storeName).openCursor();
+        request.onsuccess = () => {
+          const cursor = request.result;
+          if (!cursor) return;
+          // Older rows without ownership metadata are intentionally retained.
+          if (recordScopeKey(cursor.value) === scope.scopeKey) {
+            cursor.delete();
+            removed += 1;
+          }
+          cursor.continue();
+        };
+        request.onerror = () => { try { transaction.abort(); } catch { /* already inactive */ } };
+      }
+      transaction.oncomplete = () => resolve({ removed, skipped: false });
+      transaction.onerror = () => reject(transaction.error ?? new Error("Starší místní data revírů se nepodařilo smazat."));
+      transaction.onabort = () => reject(transaction.error ?? new Error("Mazání starších místních dat revírů bylo přerušeno."));
+    });
+  } finally { legacy.close(); }
 }
 
 async function readScopedWater(id, scopeKey) {

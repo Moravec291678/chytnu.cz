@@ -1,5 +1,5 @@
 import PhotoUploadTracePanel from "./PhotoUploadTracePanel.jsx";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Layout from "../shared/layout/Layout";
 import ConfirmDialog from "../shared/components/ConfirmDialog";
@@ -7,11 +7,14 @@ import { readPreferences, savePreferences } from "../features/preferences/data/p
 import { useDataScope } from "../features/auth/context/dataScopeContextValue.js";
 import { useAuth } from "../features/auth/context/authContextValue.js";
 import { getLocalBackupFileName, serializeLocalBackupJson } from "../features/backup/data/backupFormat.js";
-import { readLocalBackupSnapshot } from "../features/backup/data/localBackupRepository.js";
+import { readCloudExportDeviceSupplement, readLocalBackupSnapshot } from "../features/backup/data/localBackupRepository.js";
+import { cloudAccountExportService } from "../features/backup/data/cloudAccountExport.js";
 import { deleteLocalScopeData } from "../features/settings/data/localDataDeletion.js";
+import { deleteCloudAccount } from "../features/settings/data/deleteCloudAccount.js";
 import { useSync } from "../features/sync/context/syncContextValue.js";
 import { readPhotoSyncDiagnostics } from "../features/catches/data/photoSyncDiagnostics.js";
 import { getRuntimeLabel } from "../features/sync/data/runtimeDiagnostics.js";
+import { useModalFocusTrap } from "../shared/hooks/useModalFocusTrap.js";
 import "./SettingsPage.css";
 
 /* global __APP_BUILD_ID__ */
@@ -32,8 +35,16 @@ export default function SettingsPage() {
     try { return localStorage.getItem("fishActivityEnabled") === "true"; } catch { return false; }
   });
   const [exporting, setExporting] = useState(false);
+  const [exportingCloud, setExportingCloud] = useState(false);
+  const [cloudExportProgress, setCloudExportProgress] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [confirmingAccountDelete, setConfirmingAccountDelete] = useState(false);
+  const [accountDeleteText, setAccountDeleteText] = useState("");
+  const [accountDeletePassword, setAccountDeletePassword] = useState("");
+  const [deletingAccount, setDeletingAccount] = useState(false);
+  const accountDeleteDialogRef = useRef(null);
+  useModalFocusTrap(accountDeleteDialogRef, { active: confirmingAccountDelete, onEscape: deletingAccount ? undefined : () => setConfirmingAccountDelete(false) });
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [photoDiagnostics, setPhotoDiagnostics] = useState({ scopeKey: null, rows: [] });
@@ -90,11 +101,49 @@ export default function SettingsPage() {
       link.click();
       link.remove();
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-      setMessage("Úplná JSON záloha deníku byla předána prohlížeči ke stažení.");
+      setMessage("Místní JSON záloha byla předána prohlížeči ke stažení.");
     } catch (exportError) {
       setError(exportError?.message || "Zálohu se nepodařilo vytvořit.");
     } finally {
       setExporting(false);
+    }
+  };
+
+  const exportCloudAccount = async () => {
+    if (scope.status !== "ready" || !scope.ownerId || exportingCloud) return;
+    setExportingCloud(true);
+    setCloudExportProgress("Načítám cloudová data účtu…");
+    setMessage("");
+    setError("");
+    try {
+      const deviceSupplement = await readCloudExportDeviceSupplement(scope);
+      const exportDocument = await cloudAccountExportService.exportAccount({
+        ownerId: scope.ownerId,
+        user: auth.user,
+        deviceSupplement,
+        onProgress: (progress) => {
+          if (progress.phase === "photos") setCloudExportProgress("Stahuji cloudové fotografie…");
+          else setCloudExportProgress("Načítám cloudová data účtu…");
+        },
+      });
+      const json = JSON.stringify(exportDocument);
+      const url = URL.createObjectURL(new Blob([json], { type: "application/json;charset=utf-8" }));
+      const link = window.document.createElement("a");
+      link.href = url;
+      link.download = `chytnucz-export-${new Date().toISOString().slice(0, 10)}.json`;
+      window.document.body.append(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      const missingPhotos = exportDocument.coverage.photosWithoutCloudBinary;
+      setMessage(missingPhotos
+        ? `Cloudový export je stažený. ${missingPhotos} fotografií nemá dostupnou cloudovou kopii; důvod je uveden v exportu.`
+        : "Cloudový export účtu je předán prohlížeči ke stažení.");
+    } catch {
+      setError("Cloudový export se nepodařilo vytvořit. Zkontroluj připojení a přihlášení a zkus to znovu.");
+    } finally {
+      setExportingCloud(false);
+      setCloudExportProgress("");
     }
   };
 
@@ -113,6 +162,25 @@ export default function SettingsPage() {
       setConfirmingDelete(false);
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const deleteAccount = async () => {
+    if (accountDeleteText !== "SMAZAT" || deletingAccount || !auth.user) return;
+    setDeletingAccount(true);
+    setError("");
+    try {
+      const result = await deleteCloudAccount(scope, accountDeletePassword);
+      if (result.redirected) {
+        setError("Dokonči Google ověření a potom potvrď smazání znovu.");
+        return;
+      }
+      setConfirmingAccountDelete(false);
+      navigate("/login", { replace: true, state: { accountDeletionStarted: true, localCleanupError: result.localCleanupError } });
+    } catch (deleteError) {
+      setError(deleteError?.message || "Mazání účtu se nepodařilo zahájit.");
+    } finally {
+      setDeletingAccount(false);
     }
   };
 
@@ -188,10 +256,18 @@ export default function SettingsPage() {
       </section>
 
       <section className="settings-card" aria-labelledby="settings-export-title">
-        <h2 id="settings-export-title">Export deníku</h2>
-        <p>Stáhne úplnou lokální zálohu úlovků, vycházek, soukromí a postupu ve formátu JSON. CSV ani PDF tato akce netvrdí.</p>
-        <button className="settings-primary-button" type="button" onClick={exportJournal} disabled={scope.status !== "ready" || exporting || deleting}>
-          {exporting ? "Připravuji zálohu…" : "Stáhnout JSON zálohu"}
+        <h2 id="settings-export-title">Export dat</h2>
+        {scope.ownerId ? <>
+          <p>Stáhne kopii dat uložených k vašemu účtu. Zahrnuje synchronizované úlovky, Vycházky, vody, dostupné fotografie a postup; přidá také profilová nastavení z tohoto zařízení. Nesynchronizovaná data z jiných zařízení v něm nejsou.</p>
+          <p>Soubor může obsahovat přesnou polohu a fotografie. Uchovávej ho bezpečně.</p>
+          <button className="settings-primary-button" type="button" onClick={exportCloudAccount} disabled={scope.status !== "ready" || exportingCloud || exporting || deleting}>
+            {exportingCloud ? "Připravuji export účtu…" : "Exportovat moje data"}
+          </button>
+          {cloudExportProgress && <p role="status" aria-live="polite">{cloudExportProgress}</p>}
+        </> : <p>Cloudový export je dostupný po přihlášení k účtu.</p>}
+        <p><strong>Místní záloha</strong> obsahuje pouze data uložená v tomto zařízení a může se lišit od dat účtu.</p>
+        <button className="settings-secondary-button" type="button" onClick={exportJournal} disabled={scope.status !== "ready" || exporting || exportingCloud || deleting}>
+          {exporting ? "Připravuji místní zálohu…" : "Stáhnout místní zálohu"}
         </button>
         <Link className="settings-link" to="/profile">Obnova ze zálohy <span aria-hidden="true">→</span></Link>
       </section>
@@ -199,6 +275,8 @@ export default function SettingsPage() {
       <section className="settings-card" aria-labelledby="settings-more-title">
         <h2 id="settings-more-title">Soukromí a upozornění</h2>
         <Link className="settings-link" to="/privacy">Soukromí a viditelnost <span aria-hidden="true">→</span></Link>
+        <Link className="settings-link" to="/privacy-policy">Zásady ochrany osobních údajů <span aria-hidden="true">→</span></Link>
+        <Link className="settings-link" to="/terms">Podmínky používání <span aria-hidden="true">→</span></Link>
         <Link className="settings-link" to="/notifications">Oznámení <span aria-hidden="true">→</span></Link>
       </section>
 
@@ -209,13 +287,20 @@ export default function SettingsPage() {
       </section>
 
       <section className="settings-card settings-danger" aria-labelledby="settings-delete-title">
-        <h2 id="settings-delete-title">Smazat účet nebo data</h2>
-        <p>Smazání místních dat odstraní z tohoto zařízení pouze data aktivního profilu. Ostatní profily zůstanou zachované.</p>
-        {auth.user && <p>Tato akce nesmaže účet ani data uložená online. S jejich odstraněním ti pomůže podpora.</p>}
+        <h2 id="settings-delete-title">Smazat místní data</h2>
+        <p>Smaže data aktivního profilu uložená v tomto zařízení. Data ostatních profilů zůstanou zachována.</p>
+        {auth.user && <p>Tato akce nesmaže účet ani data uložená online.</p>}
         <button type="button" onClick={() => setConfirmingDelete(true)} disabled={scope.status !== "ready" || exporting || deleting}>
           Smazat místní data tohoto profilu
         </button>
       </section>
+
+      {auth.user && <section className="settings-card settings-danger" aria-labelledby="settings-account-delete-title">
+        <h2 id="settings-account-delete-title">Smazat účet</h2>
+        <p>Smaže účet, synchronizované úlovky, fotografie a další data účtu. Tuto akci nelze vrátit zpět. Cloudové fotografie se mohou odstraňovat ještě přibližně 24 hodin.</p>
+        <p>Před smazáním si můžeš stáhnout kopii přes „Exportovat moje data“ výše. Export je dobrovolný.</p>
+        <button type="button" onClick={() => setConfirmingAccountDelete(true)} disabled={scope.status !== "ready" || deletingAccount || exportingCloud}>Smazat účet</button>
+      </section>}
 
       {message && <p className="settings-message" role="status">{message}</p>}
       {error && <p className="settings-error" role="alert">{error}</p>}
@@ -233,6 +318,25 @@ export default function SettingsPage() {
         onCancel={() => setConfirmingDelete(false)}
         onConfirm={deleteLocalData}
       />}
+      {confirmingAccountDelete && <div className="catch-confirm-backdrop">
+        <form ref={accountDeleteDialogRef} tabIndex="-1" className="catch-confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="account-delete-confirm-title" onSubmit={(event) => { event.preventDefault(); void deleteAccount(); }}>
+          <h2 id="account-delete-confirm-title">Smazat účet a cloudová data?</h2>
+          <p>Účet, synchronizované úlovky, Vycházky, vody a další data budou odstraněny. Fotografie se dočistí na serveru. Tuto akci nelze vrátit zpět.</p>
+          {error && <p className="settings-error" role="alert">{error}</p>}
+          <label className="settings-field">Pro potvrzení napiš SMAZAT
+            <input autoFocus value={accountDeleteText} onChange={(event) => setAccountDeleteText(event.target.value)} autoComplete="off" disabled={deletingAccount} />
+          </label>
+          {auth.user?.providerData?.some((provider) => provider.providerId === "password")
+            && !auth.user?.providerData?.some((provider) => provider.providerId === "google.com")
+            && <label className="settings-field">Heslo pro opětovné ověření
+              <input type="password" value={accountDeletePassword} onChange={(event) => setAccountDeletePassword(event.target.value)} autoComplete="current-password" disabled={deletingAccount} required />
+            </label>}
+          <div className="catch-detail-actions">
+            <button className="photo-action-button" type="button" onClick={() => setConfirmingAccountDelete(false)} disabled={deletingAccount}>Zrušit</button>
+            <button className="settings-delete-confirm" type="submit" disabled={deletingAccount || accountDeleteText !== "SMAZAT"}>{deletingAccount ? "Zahajuji mazání…" : "Nenávratně smazat účet"}</button>
+          </div>
+        </form>
+      </div>}
     </main>
   </Layout>;
 }

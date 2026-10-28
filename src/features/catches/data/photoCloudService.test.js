@@ -672,6 +672,39 @@ test("photo and Catch deletion are local-first with durable cloud delete retries
   assert.equal((await photoCloudOutboxRepository.list()).length, 0);
 });
 
+test("upload completing during Catch deletion cannot restore the removed photo", async () => {
+  await resetDatabase();
+  const ownerId = "upload-delete-race";
+  const scope = { ownerId, scopeKey: accountScopeKey(ownerId) };
+  const provider = createFakeProvider();
+  let releaseUpload;
+  let notifyUploaded;
+  const uploadWritten = new Promise((resolve) => { notifyUploaded = resolve; });
+  const finishUpload = new Promise((resolve) => { releaseUpload = resolve; });
+  provider.upload = async (input) => {
+    await input.onStage("signing");
+    await input.onStage("uploading");
+    provider.objects.set(input.objectKey, { blob: input.blob, sha256: input.sha256, contentType: input.contentType });
+    notifyUploaded();
+    await finishUpload;
+    return { objectKey: input.objectKey };
+  };
+  await catchRepository.put(makeCatch(ownerId, "race-catch", [makePhoto("race-photo")]), scope);
+  const running = makeService(ownerId, provider).run(ownerId);
+  await uploadWritten;
+  await catchRepository.delete("race-catch", scope);
+  releaseUpload();
+  await running;
+  assert.equal(await catchRepository.get("race-catch", scope), undefined);
+  const jobs = await photoCloudOutboxRepository.list();
+  assert.deepEqual(jobs.map((job) => job.operation), ["photo-delete"]);
+  assert.equal(provider.objects.size, 1, "the already-started upload is retained for queued cleanup");
+  await acknowledgeCatchOperations(ownerId);
+  assert.equal((await makeService(ownerId, provider).run(ownerId)).deleted, 1);
+  assert.equal(provider.objects.size, 0);
+  assert.equal((await photoCloudOutboxRepository.list()).length, 0);
+});
+
 test("Gallery and Share prefer local primary photos and show a truthful fallback for remote-only data", () => {
   const record = { photos: [{ id: "p1", blob: new Blob(["local"]) }, { id: "p2" }], primaryPhotoId: "p2" };
   assert.equal(getPrimaryAvailablePhoto(record).id, "p1");

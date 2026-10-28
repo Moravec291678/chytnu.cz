@@ -560,8 +560,13 @@ export function createFirestoreSyncAdapter({ now = () => new Date().toISOString(
           if (current && isDeletedTombstone(current)) {
             throw new SyncPortError("conflict", "Záznam byl již smazán.");
           }
+          const legacyPhotos = entityType === "catch" && Array.isArray(current?.photos) ? current.photos : [];
           const photoIds = entityType === "catch"
-            ? (current?.photoRefs && typeof current.photoRefs === "object" ? Object.keys(current.photoRefs) : [])
+            ? [...new Set([
+              ...(current?.photoRefs && typeof current.photoRefs === "object" ? Object.keys(current.photoRefs) : []),
+              ...(Array.isArray(current?.photoIds) ? current.photoIds : []),
+              ...legacyPhotos.map((photo) => photo?.id),
+            ].filter((photoId) => typeof photoId === "string" && PHOTO_ID_PATTERN.test(photoId)))]
             : [];
           firestoreStage = entityType === "catch" ? "read-catch-photo-documents" : "stage-entity-delete";
           const photoRefs = photoIds.map((photoId) => catchPhotoRef(db, ownerId, entityId, photoId));
@@ -590,9 +595,19 @@ export function createFirestoreSyncAdapter({ now = () => new Date().toISOString(
           };
           firestoreStage = `commit-${entityType}-delete`;
           photoSnapshots.forEach((photoSnapshot, index) => {
-            if (photoSnapshot.exists() && !photoSnapshot.data().deleted) {
-              transaction.set(photoRefs[index], photoTombstone(photoSnapshot.data(), now()));
+            if (photoSnapshot.exists()) {
+              if (!photoSnapshot.data().deleted) transaction.set(photoRefs[index], photoTombstone(photoSnapshot.data(), now()));
+              return;
             }
+            const legacyPhoto = legacyPhotos.find((photo) => photo?.id === photoIds[index]);
+            if (!legacyPhoto) return;
+            const normalized = sanitizedRemotePhoto(legacyPhoto, photoIds[index], ownerId, entityId);
+            if (!normalized) return;
+            const cloud = normalized.cloud.state === "synced" ? normalized.cloud
+              : { state: "localOnly", provider: null, objectKey: null, sha256: null };
+            transaction.set(photoRefs[index], photoTombstone(toRemotePhotoDocument({
+              ...normalized, cloud, sortIndex: Math.min(index, 9),
+            }), now()));
           });
           transaction.set(ref, tombstone);
           transaction.set(receipt, receiptDocument);

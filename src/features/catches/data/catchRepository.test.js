@@ -1,7 +1,7 @@
 import "fake-indexeddb/auto";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { openLocalDatabase, getActiveGuestScopeKey, catchRepository, outboxRepository, PHOTO_BINARY_STORE_NAME, CATCH_STORE_NAME, NOTIFICATION_STORE_NAME, SERVER_PROGRESSION_CLAIM_STORE_NAME } from "./catchRepository.js";
+import { openLocalDatabase, getActiveGuestScopeKey, catchRepository, outboxRepository, photoCloudOutboxRepository, PHOTO_BINARY_STORE_NAME, CATCH_STORE_NAME, NOTIFICATION_STORE_NAME, SERVER_PROGRESSION_CLAIM_STORE_NAME } from "./catchRepository.js";
 import { sha256Blob } from "./photoCloudProvider.js";
 import { tripRepository } from "../../trips/data/tripRepository.js";
 
@@ -278,4 +278,114 @@ test("account-owned trips retain their owner through updates and tombstones", as
   await tripRepository.delete(trip.id, { scopeKey: "account:angler-a", ownerId: "angler-a" });
   assert.equal((await outboxRepository.list())[0].operation, "delete");
   assert.equal((await outboxRepository.list())[0].ownerId, "angler-a");
+});
+
+test("removing an unuploaded photo and Catch cancels local bytes without creating a cloud delete", async () => {
+  await deleteDatabase();
+  const scope = { scopeKey: "account:upload-pending-a", ownerId: "upload-pending-a" };
+  const otherScope = { scopeKey: "account:upload-pending-b", ownerId: "upload-pending-b" };
+  const makePhoto = (id) => ({ id, name: `${id}.jpg`, type: "image/jpeg", blob: new Blob([id], { type: "image/jpeg" }) });
+  const binaries = async (ownerScope, catchId) => {
+    const db = await openLocalDatabase();
+    const transaction = db.transaction(PHOTO_BINARY_STORE_NAME, "readonly");
+    const result = await new Promise((resolve, reject) => {
+      const request = transaction.objectStore(PHOTO_BINARY_STORE_NAME).index("catchPhoto").getAll([ownerScope.scopeKey, catchId]);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    db.close();
+    return result;
+  };
+  await catchRepository.put(makeCatch("pending-catch", { photos: [makePhoto("photo-a"), makePhoto("photo-b")] }), scope);
+  await catchRepository.put(makeCatch("other-catch", { photos: [makePhoto("other-photo")] }), otherScope);
+  assert.equal((await binaries(scope, "pending-catch")).length, 2);
+  const saved = await catchRepository.get("pending-catch", scope);
+  await catchRepository.put({ ...saved, photos: saved.photos.filter((photo) => photo.id === "photo-b"),
+    sync: { ...saved.sync, revision: saved.sync.revision + 1 } }, scope);
+  assert.deepEqual((await binaries(scope, "pending-catch")).map((item) => item.photoId), ["photo-b"]);
+  assert.equal((await outboxRepository.list()).filter((item) => item.entityType === "photoCloud").length, 0);
+  await catchRepository.delete("pending-catch", scope);
+  assert.equal(await catchRepository.get("pending-catch", scope), undefined);
+  assert.equal((await binaries(scope, "pending-catch")).length, 0);
+  assert.equal((await binaries(otherScope, "other-catch")).length, 1);
+  assert.equal((await outboxRepository.list()).filter((item) => item.entityType === "photoCloud").length, 0);
+});
+
+test("deleting Catch cancels a queued photo upload before it can start", async () => {
+  await deleteDatabase();
+  const ownerId = "pending-owner";
+  const scope = { ownerId, scopeKey: `account:${ownerId}` };
+  const objectKey = `users/${ownerId}/catches/pending-delete/photos/photo-a/original`;
+  const photo = { id: "photo-a", name: "photo-a.jpg", type: "image/jpeg",
+    blob: new Blob(["pending bytes"], { type: "image/jpeg" }),
+    cloud: { state: "pendingUpload", provider: "cloudinary", objectKey, sha256: "a".repeat(64) } };
+  await catchRepository.put(makeCatch("pending-delete", { photos: [photo] }), scope);
+  await photoCloudOutboxRepository.enqueue({ ownerId, catchId: "pending-delete", photoId: photo.id,
+    operation: "upload", provider: "cloudinary", objectKey, sha256: "a".repeat(64), size: photo.blob.size, contentType: photo.type });
+  assert.equal((await photoCloudOutboxRepository.list())[0].operation, "photo-upload");
+  await catchRepository.delete("pending-delete", scope);
+  const photoJobs = await photoCloudOutboxRepository.list();
+  assert.equal(photoJobs.length, 0);
+  assert.equal(await catchRepository.get("pending-delete", scope), undefined);
+  const db = await openLocalDatabase();
+  const binaryCount = await new Promise((resolve, reject) => {
+    const request = db.transaction(PHOTO_BINARY_STORE_NAME, "readonly").objectStore(PHOTO_BINARY_STORE_NAME)
+      .index("catchPhoto").count([scope.scopeKey, "pending-delete"]);
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+  db.close();
+  assert.equal(binaryCount, 0);
+});
+
+test("a missing local cloud state cancels an unstarted upload and preserves cleanup for an in-flight upload", async () => {
+  await deleteDatabase();
+  const ownerId = "upload-window-owner";
+  const scope = { ownerId, scopeKey: `account:${ownerId}` };
+  for (const catchId of ["not-started", "already-uploading"]) {
+    const photo = { id: "photo-a", name: "photo-a.jpg", type: "image/jpeg",
+      blob: new Blob([catchId], { type: "image/jpeg" }) };
+    await catchRepository.put(makeCatch(catchId, { photos: [photo] }), scope);
+    await photoCloudOutboxRepository.enqueue({ ownerId, catchId, photoId: photo.id,
+      operation: "upload", provider: "cloudinary",
+      objectKey: `users/${ownerId}/catches/${catchId}/photos/${photo.id}/original`,
+      sha256: "a".repeat(64), size: photo.blob.size, contentType: photo.type });
+    if (catchId === "already-uploading") {
+      const uploading = (await photoCloudOutboxRepository.list()).find((item) => item.entityId === `${catchId}/${photo.id}`);
+      await photoCloudOutboxRepository.setStage(uploading.operationId, uploading.localRevision, "uploading");
+    }
+    await catchRepository.delete(catchId, scope);
+    const matchingJobs = (await photoCloudOutboxRepository.list()).filter((item) => item.entityId === `${catchId}/${photo.id}`);
+    assert.equal(matchingJobs.length, catchId === "not-started" ? 0 : 1);
+    if (matchingJobs.length) assert.equal(matchingJobs[0].operation, "photo-delete");
+  }
+});
+
+test("removing one pending photo cancels its upload while a synced photo still queues cloud cleanup", async () => {
+  await deleteDatabase();
+  const ownerId = "mixed-photo-owner";
+  const scope = { ownerId, scopeKey: `account:${ownerId}` };
+  const objectKey = (photoId) => `users/${ownerId}/catches/mixed/photos/${photoId}/original`;
+  const pending = { id: "pending", name: "pending.jpg", type: "image/jpeg",
+    blob: new Blob(["pending"], { type: "image/jpeg" }),
+    cloud: { state: "pendingUpload", provider: "cloudinary", objectKey: objectKey("pending"), sha256: "a".repeat(64) } };
+  const synced = { id: "synced", name: "synced.jpg", type: "image/jpeg",
+    cloud: { state: "synced", provider: "cloudinary", objectKey: objectKey("synced"), sha256: "b".repeat(64) } };
+  await catchRepository.put(makeCatch("mixed", { photos: [pending, synced] }), scope);
+  await photoCloudOutboxRepository.enqueue({ ownerId, catchId: "mixed", photoId: pending.id,
+    operation: "upload", provider: "cloudinary", objectKey: objectKey("pending"),
+    sha256: "a".repeat(64), size: pending.blob.size, contentType: pending.type });
+  const saved = await catchRepository.get("mixed", scope);
+  await catchRepository.put({ ...saved, photos: [], sync: { ...saved.sync, revision: saved.sync.revision + 1 } }, scope);
+  const jobs = await photoCloudOutboxRepository.list();
+  assert.deepEqual(jobs.map((job) => [job.entityId, job.operation]), [["mixed/synced", "photo-delete"]]);
+  const db = await openLocalDatabase();
+  const binaryCount = await new Promise((resolve, reject) => {
+    const request = db.transaction(PHOTO_BINARY_STORE_NAME, "readonly").objectStore(PHOTO_BINARY_STORE_NAME)
+      .index("catchPhoto").count([scope.scopeKey, "mixed"]);
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+  db.close();
+  assert.equal(binaryCount, 0);
 });

@@ -3,7 +3,8 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedInAs(userId) {
-      return request.auth != null && request.auth.uid == userId;
+      return request.auth != null && request.auth.uid == userId
+        && !exists(/databases/$(database)/documents/accountDeletions/$(userId));
     }
 
     function optionalString(value) {
@@ -339,6 +340,16 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    match /users/{userId}/serverProgressionPhotoClaims/{photoHash} {
+      allow get, list: if signedInAs(userId) && resource.data.ownerId == userId;
+      allow create, update, delete: if false;
+    }
+
+    match /users/{userId}/serverProgressionDailyCaps/{dayKey} {
+      allow get, list: if signedInAs(userId) && resource.data.ownerId == userId;
+      allow create, update, delete: if false;
+    }
+
     match /users/{userId}/catches/{catchId} {
       allow get, list: if signedInAs(userId);
       allow create: if validSyncWrite(userId, 'catch', catchId, request.resource.data)
@@ -423,8 +434,12 @@ service cloud.firestore {
       allow get, list: if signedInAs(userId);
       allow create: if signedInAs(userId)
         && validPhotoMetadata(request.resource.data, userId, catchId, photoId)
-        && request.resource.data.deleted == false
-        && validPhotoMutationParent(userId, catchId, photoId, false);
+        && ((request.resource.data.deleted == false
+            && validPhotoMutationParent(userId, catchId, photoId, false))
+          || (request.resource.data.deleted == true
+            && exists(/databases/$(database)/documents/users/$(userId)/catches/$(catchId))
+            && get(/databases/$(database)/documents/users/$(userId)/catches/$(catchId)).data.get('photos', null) is list
+            && validPhotoMutationParent(userId, catchId, photoId, true)));
       allow update: if signedInAs(userId)
         && resource.data.deleted == false
         && resource.data.id is string

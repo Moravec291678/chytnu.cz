@@ -1,17 +1,25 @@
 import {
   CATCH_STORE_NAME,
   CONFLICT_STORE_NAME,
+  LOCAL_PROFILE_STORE_NAME,
   OUTBOX_STORE_NAME,
   PRIVACY_STORE_NAME,
   PROGRESSION_EVENT_STORE_NAME,
   NOTIFICATION_STORE_NAME,
+  PHOTO_BINARY_STORE_NAME,
+  SERVER_PROGRESSION_CLAIM_STORE_NAME,
   SYNC_STATE_STORE_NAME,
   TRIP_STORE_NAME,
   WATER_STORE_NAME,
   WATER_CHAT_STORE_NAME,
+  clearSessionPhotoBlobsForScope,
   openLocalDatabase,
 } from "../../catches/data/catchRepository.js";
+import { catchDraftRepository } from "../../catches/data/catchDraftRepository.js";
 import { validateDataScope } from "../../auth/data/localDataScope.js";
+import { crewRepository } from "../../crew/data/crewRepository.js";
+import { communityInteractionRepository } from "../../community/data/communityInteractionRepository.js";
+import { clearLegacyLocalScope } from "../../waters/data/waterRepository.js";
 
 function deleteIndexMatches(store, indexName, value) {
   const request = store.index(indexName).openCursor(IDBKeyRange.only(value));
@@ -43,9 +51,12 @@ async function deleteJournalScope(scope) {
     PRIVACY_STORE_NAME,
     PROGRESSION_EVENT_STORE_NAME,
     NOTIFICATION_STORE_NAME,
+    SERVER_PROGRESSION_CLAIM_STORE_NAME,
+    LOCAL_PROFILE_STORE_NAME,
     SYNC_STATE_STORE_NAME,
     WATER_STORE_NAME,
     WATER_CHAT_STORE_NAME,
+    PHOTO_BINARY_STORE_NAME,
   ];
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(stores, "readwrite");
@@ -53,10 +64,13 @@ async function deleteJournalScope(scope) {
     deleteIndexMatches(transaction.objectStore(TRIP_STORE_NAME), "scopeKey", scope.scopeKey);
     deleteIndexMatches(transaction.objectStore(WATER_STORE_NAME), "scopeKey", scope.scopeKey);
     deleteIndexMatches(transaction.objectStore(WATER_CHAT_STORE_NAME), "scopeKey", scope.scopeKey);
+    deleteIndexMatches(transaction.objectStore(PHOTO_BINARY_STORE_NAME), "scopeKey", scope.scopeKey);
     deleteIndexMatches(transaction.objectStore(OUTBOX_STORE_NAME), "scopeKey", scope.scopeKey);
     deleteIndexMatches(transaction.objectStore(PROGRESSION_EVENT_STORE_NAME), "scopeKey", scope.scopeKey);
     deleteIndexMatches(transaction.objectStore(NOTIFICATION_STORE_NAME), "scopeKey", scope.scopeKey);
+    deleteIndexMatches(transaction.objectStore(SERVER_PROGRESSION_CLAIM_STORE_NAME), "scopeKey", scope.scopeKey);
     transaction.objectStore(PRIVACY_STORE_NAME).delete(scope.scopeKey);
+    transaction.objectStore(LOCAL_PROFILE_STORE_NAME).delete(scope.scopeKey);
     if (scope.ownerId) transaction.objectStore(SYNC_STATE_STORE_NAME).delete(scope.ownerId);
     deleteMatchingRecords(transaction.objectStore(CONFLICT_STORE_NAME), (record) => (
       scope.ownerId ? record.ownerId === scope.ownerId : record.scopeKey === scope.scopeKey
@@ -79,7 +93,15 @@ function deleteScopedPreferences(scopeKey, storage) {
 
 export async function deleteLocalScopeData(options, storage = globalThis.localStorage) {
   const scope = validateDataScope(options ?? {});
+  // Drafts live in their own IndexedDB database and may contain photo Blobs.
+  await catchDraftRepository.remove(scope);
   await deleteJournalScope(scope);
+  await Promise.all([
+    crewRepository.clearLocalScope(scope),
+    communityInteractionRepository.clearLocalScope(scope),
+    clearLegacyLocalScope(scope),
+  ]);
+  clearSessionPhotoBlobsForScope(scope.scopeKey);
   try {
     deleteScopedPreferences(scope.scopeKey, storage);
   } catch (error) {

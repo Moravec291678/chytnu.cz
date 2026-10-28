@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { initializeApp, deleteApp } from "firebase/app";
+import { initializeApp as initializeAdminApp, deleteApp as deleteAdminApp } from "firebase-admin/app";
+import { getFirestore as getAdminFirestore, Timestamp as AdminTimestamp } from "firebase-admin/firestore";
 import {
   connectAuthEmulator,
   createUserWithEmailAndPassword,
@@ -9,6 +11,7 @@ import {
 import { collection, connectFirestoreEmulator, doc, getDoc, getDocs, getFirestore } from "firebase/firestore";
 import "fake-indexeddb/auto";
 import { catchRepository, outboxRepository } from "../src/features/catches/data/catchRepository.js";
+import { createCloudinaryPhotoDeletionService } from "../src/server/cloudinaryPhotoDeletion.js";
 import { createFirestoreSyncAdapter, toRemoteRecord } from "../src/features/sync/data/firestoreSyncAdapter.js";
 import { createSyncPort } from "../src/features/sync/data/syncPort.js";
 import { createSyncService } from "../src/features/sync/data/syncService.js";
@@ -21,6 +24,8 @@ const auth = initializeAuth(app, { persistence: inMemoryPersistence });
 connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
 const db = getFirestore(app);
 connectFirestoreEmulator(db, "127.0.0.1", 8080);
+const adminApp = initializeAdminApp({ projectId }, `sync-admin-${crypto.randomUUID()}`);
+const adminDb = getAdminFirestore(adminApp);
 const uid = `sync-${crypto.randomUUID()}`;
 const email = `${uid}@example.test`;
 const password = `Local-sync-${crypto.randomUUID()}-9a!`;
@@ -154,6 +159,34 @@ try {
   });
   assert.equal(legacyWrite.revision, 1, "legacy photo metadata without framing must remain valid");
 
+  const embeddedCatchId = `legacy-embedded-${crypto.randomUUID()}`;
+  const embeddedPhotos = Array.from({ length: 6 }, (_, index) => ({
+    id: `legacy-${index + 1}`, name: `legacy-${index + 1}.jpg`, type: "image/jpeg", size: 3,
+    cloud: { state: "synced", provider: "cloudinary",
+      objectKey: `users/${ownerId}/catches/${embeddedCatchId}/photos/legacy-${index + 1}/original`,
+      sha256: "a".repeat(64) },
+  }));
+  const embeddedRemote = { ...remoteCatch.data(), id: embeddedCatchId, photos: embeddedPhotos,
+    primaryPhotoId: embeddedPhotos[0].id, serverRevision: 1 };
+  delete embeddedRemote.photoRefs;
+  await adminDb.doc(`users/${ownerId}/catches/${embeddedCatchId}`).set(embeddedRemote);
+  const embeddedDelete = await firestoreAdapter.delete({ ownerId, entityType: "catch", entityId: embeddedCatchId,
+    expectedRevision: 1, operationId: `legacy-delete-${crypto.randomUUID()}`, localRevision: 2 });
+  assert.equal(embeddedDelete.revision, 2);
+  const legacyTombstones = await getDocs(collection(db, "users", ownerId, "catches", embeddedCatchId, "photos"));
+  assert.equal(legacyTombstones.size, 6, "legacy Catch with more than four embedded photos must create six child tombstones");
+  assert.ok(legacyTombstones.docs.every((photo) => photo.data().deleted === true));
+  assert.deepEqual(new Set(legacyTombstones.docs.map((photo) => photo.data().cloud?.objectKey)),
+    new Set(embeddedPhotos.map((photo) => photo.cloud.objectKey)));
+  const deletionService = createCloudinaryPhotoDeletionService({ db: adminDb, Timestamp: AdminTimestamp,
+    getCloudinary: async () => ({ uploader: { destroy: async () => ({ result: "not found" }) } }),
+    derivePublicId: (owner, catchKey, photoKey) => `chytnucz/users/${owner}/catches/${catchKey}/photos/${photoKey}/original`,
+  });
+  await deletionService.enqueueFromTombstones();
+  const ownerJobs = await adminDb.collection(`users/${ownerId}/photoDeletionJobs`).get();
+  assert.equal(ownerJobs.docs.filter((job) => job.data().catchId === embeddedCatchId).length, 6,
+    "legacy tombstones must feed the same server deletion queue");
+
   assert.deepEqual(
     toRemoteRecord("catch", { ...local, conditionSources: { airTempC: "fabricated" } }, ownerId).conditionSources,
     {},
@@ -191,5 +224,6 @@ try {
 
   console.log("Firestore sync emulator passed: authenticated Trip/Catch/Water writes, four-photo new Catch limit, separately validated ordered photo documents, crop/primary/photo-delete synchronization, retained local Blob, exact operation replay, remote delta pull, idempotent resync, Catch/photo tombstones, and clean outbox.");
 } finally {
+  await deleteAdminApp(adminApp);
   await deleteApp(app);
 }

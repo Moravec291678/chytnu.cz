@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import "fake-indexeddb/auto";
-import { catchRepository, NOTIFICATION_STORE_NAME, openLocalDatabase } from "../../catches/data/catchRepository.js";
-import { readLocalBackupSnapshot } from "./localBackupRepository.js";
+import { catchRepository, NOTIFICATION_STORE_NAME, openLocalDatabase, PRIVACY_STORE_NAME, PROGRESSION_EVENT_STORE_NAME } from "../../catches/data/catchRepository.js";
+import { readCloudExportDeviceSupplement, readLocalBackupSnapshot } from "./localBackupRepository.js";
 import { createLocalBackupDocument } from "./backupFormat.js";
 import { parseLocalBackupDocument, restoreLocalBackup } from "./backupRestore.js";
 
@@ -37,6 +37,31 @@ test("local backup snapshot includes notifications only from the selected guest 
   const backup = await createLocalBackupDocument({ ...snapshot, createdAt: new Date("2026-10-28T12:00:00.000Z") });
   assert.equal(backup.records.catches[0].photos[0].blobSize, 5);
   assert.equal(backup.records.notifications[0].id, "backup-notification");
+});
+
+test("cloud export device supplement includes only scoped privacy, progression, inbox and preferences", async () => {
+  const scopeKey = `account:${crypto.randomUUID()}`;
+  const otherScopeKey = `account:${crypto.randomUUID()}`;
+  const db = await openLocalDatabase();
+  const transaction = db.transaction([PRIVACY_STORE_NAME, PROGRESSION_EVENT_STORE_NAME, NOTIFICATION_STORE_NAME], "readwrite");
+  transaction.objectStore(PRIVACY_STORE_NAME).put({ scopeKey, defaultCatchVisibility: "private" });
+  transaction.objectStore(PROGRESSION_EVENT_STORE_NAME).put({ id: `${scopeKey}|achievement.unlocked:first-catch`, scopeKey, xp: 10 });
+  transaction.objectStore(PROGRESSION_EVENT_STORE_NAME).put({ id: `${otherScopeKey}|foreign`, scopeKey: otherScopeKey, xp: 999 });
+  transaction.objectStore(NOTIFICATION_STORE_NAME).put({ id: "local-notice", scopeKey, title: "Výzva" });
+  await new Promise((resolve, reject) => {
+    transaction.oncomplete = resolve;
+    transaction.onerror = () => reject(transaction.error);
+    transaction.onabort = () => reject(transaction.error);
+  });
+  db.close();
+  const storage = { getItem: (key) => key === `chytnu:preferences:v1:${scopeKey}` ? JSON.stringify({ detailMode: "detailed" }) : null };
+  const supplement = await readCloudExportDeviceSupplement({ scopeKey, ownerId: scopeKey.slice("account:".length) }, storage);
+  assert.equal(supplement.source, "current-device-profile-scope");
+  assert.equal(supplement.privacySettings.defaultCatchVisibility, "private");
+  assert.equal(supplement.preferences.general.detailMode, "detailed");
+  assert.deepEqual(supplement.progressionEvents.map((event) => event.xp), [10]);
+  assert.equal(supplement.progressionSummary.xpFromLocalEvents, 10);
+  assert.deepEqual(supplement.notifications.map((notice) => notice.id), ["local-notice"]);
 });
 
 test("restored backup photo bytes are stored in and hydrated from the normal IndexedDB binary store", async () => {

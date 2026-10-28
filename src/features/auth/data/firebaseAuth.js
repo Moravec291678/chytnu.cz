@@ -99,6 +99,30 @@ export async function runGoogleSignIn(auth, authApi) {
   }
 }
 
+export async function runAccountDeletionReauthentication(auth, authApi, password) {
+  const user = auth?.currentUser;
+  if (!user) throw Object.assign(new Error("Přihlaste se znovu."), { code: "auth/requires-recent-login" });
+  const providers = user.providerData?.map((provider) => provider.providerId) ?? [];
+  if (providers.includes("google.com")) {
+    const provider = new authApi.GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: "select_account" });
+    try {
+      await authApi.reauthenticateWithPopup(user, provider);
+    } catch (error) {
+      if (error?.code !== "auth/popup-blocked") throw error;
+      await authApi.reauthenticateWithRedirect(user, provider);
+      return false;
+    }
+    return true;
+  }
+  if (providers.includes("password") && user.email && password) {
+    const credential = authApi.EmailAuthProvider.credential(user.email, password);
+    await authApi.reauthenticateWithCredential(user, credential);
+    return true;
+  }
+  throw Object.assign(new Error("Pro smazání účtu je potřeba heslo nebo Google ověření."), { code: "auth/reauth-method-required" });
+}
+
 export const firebaseAuth = {
   capabilities: readBackendCapabilities,
   currentUserId() {
@@ -159,6 +183,10 @@ export const firebaseAuth = {
   async signOut() {
     const auth = await getAuthInstance();
     return firebaseAuthApi.signOut(auth);
+  },
+  async reauthenticateForAccountDeletion(password) {
+    const auth = await getAuthInstance();
+    return runAccountDeletionReauthentication(auth, firebaseAuthApi, password);
   },
   async resetPassword(email) {
     try {

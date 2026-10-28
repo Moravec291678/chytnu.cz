@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { Buffer } from "node:buffer";
+import { createHash } from "node:crypto";
+import { Writable } from "node:stream";
 import test from "node:test";
 import { classifyFirebaseAuthFailure, cloudinaryPublicId, createCloudinaryApi, createEnabledTestEnvironment, initializeFirebaseAdminContext, MAX_PHOTO_BYTES, readFirebaseServiceAccount, verifyFirebaseIdToken } from "./cloudinaryApi.js";
 
@@ -17,22 +20,29 @@ function makePhotoAccess(uid = ownerId, { deleted = false, catchDeleted = false 
   };
 }
 
-function createHarness({ access = makePhotoAccess(), resource = null, deleteResult = { result: "ok" }, rateAllowed = true } = {}) {
+function createHarness({ access = makePhotoAccess(), resource = null, deleteResult = { result: "ok" }, rateAllowed = true, fetchImpl } = {}) {
   const signed = [];
   const reads = [];
   const deletes = [];
+  const scheduledDeletes = [];
   const deliveries = [];
   const api = createCloudinaryApi({
     env: createEnabledTestEnvironment(),
     verifyToken: async (token) => {
-      if (token === "invalid-token") throw Object.assign(new Error("private verifier details"), { code: "auth/invalid-id-token" });
-      return { uid: token === "owner-b-token" ? otherOwnerId : ownerId };
+      if (token === "owner-a-token") return { uid: ownerId };
+      if (token === "owner-b-token") return { uid: otherOwnerId };
+      throw Object.assign(new Error("private verifier details"), { code: "auth/invalid-id-token" });
     },
     getPhotoAccess: async (uid, receivedCatchId, receivedPhotoId) => {
       reads.push({ uid, catchId: receivedCatchId, photoId: receivedPhotoId });
       return typeof access === "function" ? access(uid, receivedCatchId, receivedPhotoId) : access;
     },
     consumeRateLimit: async () => rateAllowed,
+    schedulePhotoDeletion: async (identity) => {
+      scheduledDeletes.push(identity);
+      return { jobId: "stable-delete-job", deleteAfter: "2026-10-22T12:00:00.000Z" };
+    },
+    fetchImpl,
     getCloudinary: async () => ({
       utils: {
         api_sign_request(params, secret) { signed.push({ params, secret }); return "b".repeat(64); },
@@ -43,7 +53,7 @@ function createHarness({ access = makePhotoAccess(), resource = null, deleteResu
     }),
     now: () => Date.parse("2026-10-21T12:00:00.000Z"),
   });
-  return { api, signed, reads, deletes, deliveries };
+  return { api, signed, reads, deletes, deliveries, scheduledDeletes };
 }
 
 function request(handler, { method = "POST", authorization = "Bearer owner-a-token", body = { catchId, photoId } } = {}) {
@@ -51,6 +61,7 @@ function request(handler, { method = "POST", authorization = "Bearer owner-a-tok
     setHeader(key, value) { this.headers[key] = value; },
     status(statusCode) { this.statusCode = statusCode; return this; },
     json(payload) { this.body = payload; return this; },
+    send(payload) { this.body = payload; return this; },
   };
   return Promise.resolve(handler({ method, headers: authorization ? { authorization } : {}, body }, response)).then(() => response);
 }
@@ -59,7 +70,7 @@ test("sign endpoint accepts only authenticated owner metadata and returns a cons
   const harness = createHarness();
   const response = await request(harness.api.signUpload, { body: { catchId, photoId, size: 1024, contentType: "image/jpeg", sha256 } });
   const publicId = cloudinaryPublicId(ownerId, catchId, photoId);
-  assert.equal(response.statusCode, 200);
+  assert.equal(response.statusCode, 200, JSON.stringify(response.body));
   assert.deepEqual(response.body.params, { public_id: publicId, type: "authenticated", overwrite: true });
   assert.equal(response.body.resourceType, "image");
   assert.equal(response.body.signature, "b".repeat(64));
@@ -238,6 +249,20 @@ test("Cloudinary upload response is verified against actual authenticated image 
   assert.equal((await request(mismatch.api.verifyUpload, { body: { catchId, photoId, bytes: 1024, format: "jpg" } })).statusCode, 409);
 });
 
+test("deletion just before verify-upload rejects the stale upload without reading Cloudinary", async () => {
+  let deleted = false;
+  const harness = createHarness({ access: () => makePhotoAccess(ownerId, { deleted }) });
+  const signed = await request(harness.api.signUpload, { body: { catchId, photoId, size: 1024, contentType: "image/jpeg", sha256 } });
+  assert.equal(signed.statusCode, 200);
+  deleted = true;
+  const verified = await request(harness.api.verifyUpload, { body: { catchId, photoId, bytes: 1024, format: "jpg" } });
+  assert.equal(verified.statusCode, 403);
+  assert.equal(harness.reads.some((item) => item.resource), false);
+  const removed = await request(harness.api.remove);
+  assert.equal(removed.statusCode, 202);
+  assert.equal(harness.scheduledDeletes.length, 1, "an uploaded asset remains eligible for server cleanup");
+});
+
 test("delivery returns a five-minute authenticated URL only for Firestore-synced owner photos", async () => {
   const harness = createHarness();
   const response = await request(harness.api.delivery);
@@ -251,18 +276,112 @@ test("delivery returns a five-minute authenticated URL only for Firestore-synced
   assert.equal((await request(foreign.api.delivery, { authorization: "Bearer owner-b-token" })).statusCode, 403);
 });
 
-test("delete endpoint derives the target from owner tombstones and treats duplicate deletion as success", async () => {
+test("account export returns only verified binary bytes from the authenticated owner's cloud photo", async () => {
+  const bytes = new Uint8Array([0xff, 0xd8, 0xff, 0x01]);
+  const photoAccess = makePhotoAccess();
+  photoAccess.photoRecord.size = bytes.byteLength;
+  photoAccess.photoRecord.cloud.sha256 = createHash("sha256").update(bytes).digest("hex");
+  let remoteRequest;
+  const harness = createHarness({ access: photoAccess, fetchImpl: async (url, options) => {
+    remoteRequest = { url, options };
+    return { ok: true, status: 200, arrayBuffer: async () => bytes.buffer };
+  } });
+  const response = await request(harness.api.exportPhoto);
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual([...response.body], [...bytes]);
+  assert.equal(response.headers["Cache-Control"], "no-store");
+  assert.equal(response.headers["Content-Type"], "image/jpeg");
+  assert.deepEqual(remoteRequest, { url: "https://api.cloudinary.com/short-lived-private-url",
+    options: { method: "GET", redirect: "manual", cache: "no-store" } });
+  assert.equal(harness.deliveries[0].options.expires_at,
+    Math.floor(Date.parse("2026-10-21T12:00:00.000Z") / 1000) + 300);
+
+  const foreign = createHarness({ access: photoAccess, fetchImpl: async () => assert.fail("foreign owner must not reach Cloudinary") });
+  assert.equal((await request(foreign.api.exportPhoto, { authorization: "Bearer owner-b-token" })).statusCode, 403);
+  const corrupted = createHarness({ access: photoAccess, fetchImpl: async () => ({
+    ok: true, status: 200, arrayBuffer: async () => new Uint8Array([1, 2, 3, 4]).buffer,
+  }) });
+  assert.equal((await request(corrupted.api.exportPhoto)).statusCode, 502);
+});
+
+test("photo export denies tampered Catch/photo IDs before requesting Cloudinary", async () => {
+  const harness = createHarness({ fetchImpl: async () => assert.fail("Cloudinary must not be contacted for a foreign photo") });
+  const foreignCatch = await request(harness.api.exportPhoto, { body: { catchId: "foreign-catch", photoId } });
+  const foreignPhoto = await request(harness.api.exportPhoto, { body: { catchId, photoId: "foreign-photo" } });
+  assert.equal(foreignCatch.statusCode, 403);
+  assert.equal(foreignPhoto.statusCode, 403);
+  assert.deepEqual(harness.deliveries, []);
+});
+
+test("photo export derives its owner from the verified token and rejects client identity fields", async () => {
+  const received = [];
+  const bytes = new Uint8Array([1, 2, 3]);
+  const ownerPhoto = makePhotoAccess();
+  ownerPhoto.photoRecord.size = bytes.byteLength;
+  ownerPhoto.photoRecord.cloud.sha256 = createHash("sha256").update(bytes).digest("hex");
+  const harness = createHarness({ access: (uid) => {
+    received.push(uid);
+    return ownerPhoto;
+  }, fetchImpl: async () => ({ ok: true, status: 200, arrayBuffer: async () => bytes.buffer }) });
+  const allowed = await request(harness.api.exportPhoto, { body: { catchId, photoId } });
+  assert.equal(allowed.statusCode, 200);
+  assert.deepEqual(received, [ownerId]);
+
+  for (const field of ["uid", "ownerId", "email"]) {
+    const requestBody = { catchId, photoId, [field]: otherOwnerId };
+    const rejected = await request(harness.api.exportPhoto, { body: requestBody });
+    assert.equal(rejected.statusCode, 400, `${field} must not be accepted from the client`);
+  }
+  assert.equal((await request(harness.api.exportPhoto, { authorization: null })).statusCode, 401);
+  assert.equal((await request(harness.api.exportPhoto, { authorization: "Bearer invalid-token" })).statusCode, 401);
+  assert.equal((await request(harness.api.exportPhoto, { authorization: "Bearer abc.def.not-a-valid-signature" })).statusCode, 401);
+
+  const userA = createHarness({ access: makePhotoAccess(otherOwnerId) });
+  assert.equal((await request(userA.api.exportPhoto, { authorization: "Bearer owner-a-token" })).statusCode, 403);
+  assert.equal((await request(userA.api.exportPhoto, {
+    authorization: "Bearer owner-a-token", body: { catchId: "foreign-catch", photoId: "foreign-photo" },
+  })).statusCode, 403);
+});
+
+test("large account export photos are streamed after server-side SHA-256 validation", async () => {
+  const bytes = new Uint8Array([0xff, 0xd8, 0xff, 0x02]);
+  const photoAccess = makePhotoAccess();
+  photoAccess.photoRecord.size = bytes.byteLength;
+  photoAccess.photoRecord.cloud.sha256 = createHash("sha256").update(bytes).digest("hex");
+  const chunks = [];
+  const response = new Writable({ write(chunk, _encoding, callback) { chunks.push(Buffer.from(chunk)); callback(); } });
+  response.on("error", (error) => { response.pipelineError = error; });
+  response.headers = {};
+  response.statusCode = null;
+  response.setHeader = function setHeader(key, value) { this.headers[key] = value; };
+  response.status = function status(statusCode) { this.statusCode = statusCode; return this; };
+  response.json = function json(payload) { this.body = payload; return this; };
+  const harness = createHarness({ access: photoAccess, fetchImpl: async () => new Response(bytes) });
+  await harness.api.exportPhoto({ method: "POST", headers: { authorization: "Bearer owner-a-token" }, body: { catchId, photoId } }, response);
+  assert.equal(response.statusCode, 200, `${JSON.stringify(response.body)} ${response.pipelineError?.message ?? ""}`);
+  assert.equal(response.headers["Content-Type"], "image/jpeg");
+  assert.deepEqual([...Buffer.concat(chunks)], [...bytes]);
+});
+
+test("delete endpoint validates owner tombstone and queues server-derived deletion instead of deleting immediately", async () => {
   const harness = createHarness({ access: makePhotoAccess(ownerId, { deleted: true }), deleteResult: { result: "not found" } });
   const response = await request(harness.api.remove);
-  assert.equal(response.statusCode, 200);
-  assert.deepEqual(response.body, { deleted: true, alreadyMissing: true });
-  assert.deepEqual(harness.deletes[0], [cloudinaryPublicId(ownerId, catchId, photoId), {
-    resource_type: "image", type: "authenticated",
-  }]);
+  assert.equal(response.statusCode, 202);
+  assert.deepEqual(response.body, { deleted: true, queued: true, jobId: "stable-delete-job", deleteAfter: "2026-10-22T12:00:00.000Z" });
+  assert.deepEqual(harness.scheduledDeletes[0], { ownerId, catchId, photoId });
+  assert.deepEqual(harness.deletes, [], "HTTP delete request must enqueue only; provider destroy belongs to the server worker");
   const active = createHarness();
   assert.equal((await request(active.api.remove)).statusCode, 403);
+  assert.equal((await request(harness.api.remove, { body: { catchId, photoId, publicId: "arbitrary/asset" } })).statusCode, 400);
+  assert.equal((await request(harness.api.remove, { body: { catchId, photoId, public_id: "arbitrary/asset" } })).statusCode, 400);
   const foreign = createHarness({ access: makePhotoAccess(otherOwnerId, { deleted: true }) });
   assert.equal((await request(foreign.api.remove, { authorization: "Bearer owner-a-token" })).statusCode, 403);
+  assert.deepEqual(foreign.scheduledDeletes, []);
+  const mismatchedCloud = makePhotoAccess(ownerId, { deleted: true });
+  mismatchedCloud.photoRecord.cloud.objectKey = `users/${otherOwnerId}/catches/${catchId}/photos/${photoId}/original`;
+  const mismatched = createHarness({ access: mismatchedCloud });
+  assert.equal((await request(mismatched.api.remove)).statusCode, 403);
+  assert.deepEqual(mismatched.scheduledDeletes, []);
 });
 
 test("API routes enforce POST and per-user rate limits", async () => {
@@ -270,4 +389,5 @@ test("API routes enforce POST and per-user rate limits", async () => {
   assert.equal((await request(method.api.signUpload, { method: "GET" })).statusCode, 405);
   const limited = createHarness({ rateAllowed: false });
   assert.equal((await request(limited.api.delivery)).statusCode, 429);
+  assert.equal((await request(limited.api.exportPhoto)).statusCode, 429);
 });

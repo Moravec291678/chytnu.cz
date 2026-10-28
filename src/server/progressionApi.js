@@ -258,8 +258,10 @@ export async function createProductionServerProgressionApi({ env = globalThis.pr
     env,
     now,
     verifyToken: async (token) => {
-      const { auth } = await productionAdmin(env);
-      return verifyFirebaseIdToken(auth, token);
+      const { auth, db } = await productionAdmin(env);
+      const identity = await verifyFirebaseIdToken(auth, token);
+      if ((await db.doc(`accountDeletions/${identity.uid}`).get()).exists) throw new Error("account_deletion_started");
+      return identity;
     },
     consumeRateLimit: async (uid, timestamp) => {
       const { db, Timestamp } = await productionAdmin(env);

@@ -6,7 +6,7 @@ import {
   assertSucceeds,
   initializeTestEnvironment,
 } from "@firebase/rules-unit-testing";
-import { collection, deleteDoc, doc, getDoc, getDocs, setDoc, updateDoc, writeBatch } from "firebase/firestore";
+import { collection, deleteDoc, doc, getDoc, getDocs, query, setDoc, updateDoc, where, writeBatch } from "firebase/firestore";
 
 const projectId = "demo-chytnucz-local";
 const catchPath = (userId, catchId) => `users/${userId}/catches/${catchId}`;
@@ -17,6 +17,8 @@ const pushSubscriptionPath = (userId, subscriptionId) => `users/${userId}/pushSu
 const serverProgressionEventPath = (userId, eventId) => `users/${userId}/serverProgressionEvents/${eventId}`;
 const serverProgressionStatePath = (userId, catchId) => `users/${userId}/serverProgressionCatchState/${catchId}`;
 const serverProgressionSummaryPath = (userId) => `users/${userId}/serverProgressionState/summary`;
+const serverProgressionPhotoClaimPath = (userId, hash) => `users/${userId}/serverProgressionPhotoClaims/${hash}`;
+const serverProgressionDailyCapPath = (userId, dayKey) => `users/${userId}/serverProgressionDailyCaps/${dayKey}`;
 
 function makeTrip(id, ownerId) {
   return {
@@ -257,6 +259,12 @@ test("server progression shadow ledger je owner-readable a klient jej nemůže f
     await setDoc(doc(db, serverProgressionSummaryPath("angler-a")), {
       ownerId: "angler-a", legacyBaselineXp: 250,
     });
+    await setDoc(doc(db, serverProgressionPhotoClaimPath("angler-a", "a".repeat(64))), {
+      ownerId: "angler-a", catchId: "catch-a", photoHash: "a".repeat(64),
+    });
+    await setDoc(doc(db, serverProgressionDailyCapPath("angler-a", "2026-10-28")), {
+      ownerId: "angler-a", dayKey: "2026-10-28", xp: 4,
+    });
   });
   const ownEvent = doc(alice.firestore(), serverProgressionEventPath("angler-a", "catch-created-catch-a"));
   const ownState = doc(alice.firestore(), serverProgressionStatePath("angler-a", "catch-a"));
@@ -264,6 +272,16 @@ test("server progression shadow ledger je owner-readable a klient jej nemůže f
   assert.equal((await assertSucceeds(getDoc(ownEvent))).data().xp, 10);
   assert.equal((await assertSucceeds(getDoc(ownState))).data().level, "standard");
   assert.equal((await assertSucceeds(getDoc(ownSummary))).data().legacyBaselineXp, 250);
+  const ownPhotoClaim = doc(alice.firestore(), serverProgressionPhotoClaimPath("angler-a", "a".repeat(64)));
+  const ownDailyCap = doc(alice.firestore(), serverProgressionDailyCapPath("angler-a", "2026-10-28"));
+  assert.equal((await assertSucceeds(getDoc(ownPhotoClaim))).data().catchId, "catch-a");
+  assert.equal((await assertSucceeds(getDoc(ownDailyCap))).data().xp, 4);
+  assert.equal((await assertSucceeds(getDocs(query(collection(alice.firestore(), `users/angler-a/serverProgressionPhotoClaims`), where("ownerId", "==", "angler-a"))))).size, 1);
+  assert.equal((await assertSucceeds(getDocs(query(collection(alice.firestore(), `users/angler-a/serverProgressionDailyCaps`), where("ownerId", "==", "angler-a"))))).size, 1);
+  await assertFails(getDoc(doc(bob.firestore(), serverProgressionPhotoClaimPath("angler-a", "a".repeat(64)))));
+  await assertFails(getDoc(doc(bob.firestore(), serverProgressionDailyCapPath("angler-a", "2026-10-28"))));
+  await assertFails(updateDoc(ownPhotoClaim, { catchId: "forged" }));
+  await assertFails(updateDoc(ownDailyCap, { xp: 1000 }));
   await assertFails(updateDoc(ownSummary, { legacyBaselineXp: 0 }));
   await assertFails(setDoc(doc(alice.firestore(), serverProgressionEventPath("angler-a", "forged")), {
     id: "forged", ownerId: "angler-a", catchId: "catch-a", type: "catch.created", xp: 1000,
@@ -432,4 +450,16 @@ test("nový Catch má limit čtyř fotek a legacy Catch může počet jen zachov
   await assertFails(updateDoc(doc(bobDb, photoPath("angler-a", "catch-legacy", legacyIds[0])), { focalX: 0.2 }));
   await assertFails(deleteDoc(doc(db, photoPath("angler-a", "catch-legacy", legacyIds[0]))));
   await assertFails(getDoc(doc(anonymous.firestore(), photoPath("angler-a", "catch-legacy", legacyIds[0]))));
+});
+
+test("account deletion marker blocks old client reads and delayed writes without affecting another owner", async () => {
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), "accountDeletions/angler-a"), { ownerId: "angler-a", status: "requested" });
+    await setDoc(doc(context.firestore(), tripPath("angler-b", "still-active")), makeTrip("still-active", "angler-b"));
+  });
+  await assertFails(getDoc(doc(alice.firestore(), catchPath("angler-a", "old-catch"))));
+  await assertFails(setDoc(doc(alice.firestore(), catchPath("angler-a", "old-catch")), makeSyncedCatch("old-catch", "angler-a")));
+  await assertFails(setDoc(doc(alice.firestore(), tripPath("angler-a", "old-trip")), makeTrip("old-trip", "angler-a")));
+  await assertSucceeds(getDoc(doc(bob.firestore(), tripPath("angler-b", "still-active"))));
+  await assertFails(getDoc(doc(bob.firestore(), "accountDeletions/angler-a")));
 });

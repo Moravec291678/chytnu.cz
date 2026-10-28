@@ -1,5 +1,6 @@
 import { useRef } from "react";
 import { useModalFocusTrap } from "../hooks/useModalFocusTrap.js";
+import "./ConfirmDialog.css";
 
 function ConfirmDialog({ titleId, descriptionId, title, description, busy = false, confirmLabel, busyLabel, confirmClassName, onCancel, onConfirm }) {
   const cancelButtonRef = useRef(null);

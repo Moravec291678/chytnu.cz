@@ -83,6 +83,17 @@ export const crewRepository = {
     });
   },
 
+  async clearLocalScope(scopeOptions) {
+    const scope = validateDataScope(scopeOptions ?? {});
+    return withStore("readwrite", async (store) => {
+      const record = await requestValue(store.get(scope.scopeKey));
+      if (!record) return false;
+      if (record.scopeKey !== scope.scopeKey || record.ownerId !== scope.ownerId) return false;
+      await requestValue(store.delete(scope.scopeKey));
+      return true;
+    });
+  },
+
   async leave(crewId, scopeOptions) {
     return this.deleteOwn(crewId, scopeOptions);
   },

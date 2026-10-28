@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useAuth } from "../features/auth/context/authContextValue.js";
 import { validateAuthForm } from "../features/auth/data/authFormValidation.js";
 import { confirmGuestAccess } from "../features/auth/data/guestAccess.js";
@@ -18,6 +19,7 @@ export default function LoginPage() {
   const guestContinueRef = useRef(null);
   const auth = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [mode, setMode] = useState(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -62,6 +64,7 @@ export default function LoginPage() {
 
   return <main className={`auth-entry-screen${mode ? " auth-entry-screen-form" : " auth-entry-screen-welcome"}`}>
     <div className="auth-entry-content">
+      {location.state?.accountDeletionStarted && <p className="auth-entry-alert" role="status">Mazání účtu bylo zahájeno. Cloudové fotografie se ještě dočistí.{location.state?.localCleanupError ? " Místní data se nepodařilo úplně vyčistit; zkus je smazat v nastavení zařízení." : ""}</p>}
       <header className="auth-entry-brand" aria-label="ChytnuCz, Tvůj rybářský deník">
         <p className="auth-entry-greeting">Petrův zdar!</p><h1>ChytnuCz</h1><p>Tvůj rybářský deník.</p>
       </header>
@@ -92,6 +95,10 @@ export default function LoginPage() {
         </div>
         {mode === "login" && <><div className="auth-divider"><span>nebo</span></div><button className="auth-entry-secondary" type="button" disabled={busy} onClick={() => void run(auth.signInWithGoogle)}>{busy ? "Připojuji…" : "Pokračovat přes Google"}</button></>}
       </section>}
+      <nav className="auth-legal-links" aria-label="Právní informace">
+        <Link to="/privacy-policy">Zásady ochrany osobních údajů</Link>
+        <Link to="/terms">Podmínky používání</Link>
+      </nav>
     </div>
     {guestDialog && <div className="auth-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setGuestDialog(false); }}><section ref={guestDialogRef} tabIndex="-1" className="auth-guest-dialog" role="dialog" aria-modal="true" aria-labelledby="guest-dialog-title" aria-describedby="guest-dialog-description"><h2 id="guest-dialog-title">Pokračovat jako host?</h2><p id="guest-dialog-description">Data budou uložena pouze v tomto zařízení. Při smazání dat prohlížeče, aplikace nebo při ztrátě zařízení o ně můžete přijít.</p><p>Přihlášený účet umožňuje synchronizaci dat mezi zařízeními.</p><div className="auth-guest-actions"><button ref={guestContinueRef} className="auth-entry-primary" type="button" onClick={continueAsGuest}>Pokračovat jako host</button><button className="auth-entry-secondary" type="button" onClick={() => setGuestDialog(false)}>Přihlásit se</button></div></section></div>}
   </main>;
