@@ -675,6 +675,6 @@ test("photo and Catch deletion are local-first with durable cloud delete retries
 test("Gallery and Share prefer local primary photos and show a truthful fallback for remote-only data", () => {
   const record = { photos: [{ id: "p1", blob: new Blob(["local"]) }, { id: "p2" }], primaryPhotoId: "p2" };
   assert.equal(getPrimaryAvailablePhoto(record).id, "p1");
-  assert.equal(getGalleryMissingMessage({ cloud: { state: PHOTO_CLOUD_STATE.SYNCED } }), "Tato fotografie má cloudová metadata, ale úložiště není dostupné.");
-  assert.equal(getGalleryMissingMessage({ cloud: { state: PHOTO_CLOUD_STATE.LOCAL_ONLY } }), "Fotografie není na tomto zařízení dostupná.");
+  assert.match(getGalleryMissingMessage({ cloud: { state: PHOTO_CLOUD_STATE.SYNCED } }), /synchronizace trvat déle/);
+  assert.match(getGalleryMissingMessage({ cloud: { state: PHOTO_CLOUD_STATE.LOCAL_ONLY } }), /synchronizace trvat déle/);
 });

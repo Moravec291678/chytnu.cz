@@ -4,6 +4,7 @@ import { catchRepository, outboxRepository, photoCloudOutboxRepository } from ".
 import { recordPhotoUploadTrace } from "./photoUploadTrace.js";
 import { PHOTO_LOCAL_BLOB_UNREADABLE, photoBlobErrorCode } from "./photoLocalBlob.js";
 import { preparePhotoForStorageAndUpload } from "./photoInput.js";
+import { resolveApiUrl } from "../../../platform/api.js";
 import {
   createPhotoObjectKey,
   getPhotoCloudProvider,
@@ -98,6 +99,7 @@ function photoEndpointError(path, response, result) {
 export function createAuthenticatedPhotoEndpointCaller({
   getIdToken = (forceRefresh) => firebaseAuth.currentIdToken(forceRefresh),
   fetchImpl = globalThis.fetch,
+  apiUrl = resolveApiUrl,
 } = {}) {
   return async function callAuthenticatedPhotoEndpoint(path, payload) {
     let idToken;
@@ -107,8 +109,9 @@ export function createAuthenticatedPhotoEndpointCaller({
 
     const send = async (token) => {
       let response;
+      const requestUrl = apiUrl(path);
       try {
-        response = await fetchImpl(path, {
+        response = await fetchImpl(requestUrl, {
           method: "POST",
           credentials: "same-origin",
           headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },

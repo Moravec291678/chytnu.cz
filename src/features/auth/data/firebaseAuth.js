@@ -85,6 +85,8 @@ export async function getFirebaseIdToken(auth, forceRefresh = false) {
 
 export async function runGoogleSignIn(auth, authApi) {
   const provider = new authApi.GoogleAuthProvider();
+  // This applies to both popup and redirect requests and only changes this explicit sign-in.
+  provider.setCustomParameters({ prompt: "select_account" });
   try {
     const credential = await authApi.signInWithPopup(auth, provider);
     return credential.user;

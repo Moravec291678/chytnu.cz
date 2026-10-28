@@ -7,6 +7,7 @@ import { buildGalleryItems, countActiveGalleryFilters, filterAndSortGallery, get
 import { useDataScope } from "../features/auth/context/dataScopeContextValue.js";
 import GalleryPhotoImage from "./GalleryPhotoImage.js";
 import "./GalleryPage.css";
+import "../features/catches/components/PhotoSyncStatus.css";
 
 function GalleryTile({ item, scope, onOpen }) {
   const ref = useRef(null);

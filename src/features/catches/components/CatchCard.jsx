@@ -10,34 +10,73 @@ import { photoFrameStyle } from "../data/photoFraming.js";
 import { getPrimaryAvailablePhoto } from "../data/catchPhotos.js";
 import { accountScopeKey } from "../../auth/data/localDataScope.js";
 import { getPhotoBlobForDisplay } from "../data/photoCloudService.js";
+import { getPhotoAvailability, PHOTO_AVAILABILITY } from "../data/photoAvailability.js";
+import PhotoSyncStatus from "./PhotoSyncStatus.js";
 
+import "./PhotoSyncStatus.css";
 import "./CatchCard.css";
 
 function CatchPhoto({ blob, species, photo, ownerId, catchId }) {
   const [photoUrl, setPhotoUrl] = useState("");
-  const [displayBlob, setDisplayBlob] = useState(blob);
-  const [photoFailed, setPhotoFailed] = useState(false);
+  const [displayBlob, setDisplayBlob] = useState(blob ?? null);
+  const [loadState, setLoadState] = useState(blob ? "ready" : "idle");
+  const [loadErrorCode, setLoadErrorCode] = useState("");
   const attemptedFallback = useRef(false);
   useEffect(() => {
-    if (!displayBlob) return undefined;
+    let active = true;
+    Promise.resolve().then(async () => {
+      if (blob instanceof Blob) return blob;
+      if (photo?.cloud?.state !== "synced" || !ownerId) return null;
+      return getPhotoBlobForDisplay({ photo, ownerId, catchId, scopeKey: accountScopeKey(ownerId) });
+    }).then((recovered) => {
+      if (!active) return;
+      setPhotoUrl("");
+      setLoadErrorCode("");
+      if (recovered) {
+        attemptedFallback.current = false;
+        setDisplayBlob(recovered);
+        setLoadState("ready");
+      } else {
+        setDisplayBlob(null);
+        setLoadState("missing");
+      }
+    }).catch((error) => {
+      if (!active) return;
+      setLoadErrorCode(error?.code ?? "");
+      setLoadState("error");
+    });
+    return () => { active = false; };
+  }, [blob, photo, ownerId, catchId]);
+  useEffect(() => {
+    if (!(displayBlob instanceof Blob)) return undefined;
     let active = true;
     let url = "";
     Promise.resolve().then(() => {
       if (!active) return;
       try { url = URL.createObjectURL(displayBlob); setPhotoUrl(url); }
-      catch { setPhotoFailed(true); }
+      catch { setLoadState("error"); setLoadErrorCode("photo_local_blob_unreadable"); }
     });
     return () => { active = false; if (url) URL.revokeObjectURL(url); };
   }, [displayBlob]);
-  if (photoFailed) return <div className="catch-card-photo-error" role="img" aria-label="Fotografii se v tomto zařízení nepodařilo zobrazit.">Fotografii se v tomto zařízení nepodařilo zobrazit.</div>;
+  const availability = getPhotoAvailability(photo, { loadState, errorCode: loadErrorCode });
+  if (availability === PHOTO_AVAILABILITY.PENDING || availability === PHOTO_AVAILABILITY.SYNCING) {
+    return <PhotoSyncStatus className="photo-sync-status catch-card-photo-sync" compact />;
+  }
+  if (availability === PHOTO_AVAILABILITY.BROKEN) {
+    return <div className="catch-card-photo-error" role="status">Fotografii se nepodařilo načíst.</div>;
+  }
+  if (availability === PHOTO_AVAILABILITY.RETRYABLE_ERROR) {
+    return <div className="catch-card-photo-error" role="status">Fotografii se teď nepodařilo načíst. Otevři úlovek a zkus to znovu.</div>;
+  }
   return photoUrl ? <img className="catch-card-photo" src={photoUrl} alt={`Úlovek – ${species}`} style={photoFrameStyle(photo)} onError={async () => {
-    if (attemptedFallback.current || !ownerId || !photo.cloud?.objectKey) { setPhotoFailed(true); return; }
+    if (attemptedFallback.current || !ownerId || !photo.cloud?.objectKey) { setLoadState("error"); return; }
     attemptedFallback.current = true;
+    setLoadState("loading");
     try {
       const recovered = await getPhotoBlobForDisplay({ photo, ownerId, catchId, scopeKey: accountScopeKey(ownerId) });
       if (recovered && recovered !== displayBlob) setDisplayBlob(recovered);
-      else setPhotoFailed(true);
-    } catch { setPhotoFailed(true); }
+      else setLoadState("error");
+    } catch (error) { setLoadErrorCode(error?.code ?? ""); setLoadState("error"); }
   }} /> : <div className="catch-card-icon" aria-hidden="true">🐟</div>;
 }
 
@@ -64,7 +103,7 @@ function CatchCard({ catchedFish, isPersonalRecord = false }) {
     <Link to={`/catch/${catchedFish.id}`} className={`catch-card-link${isPersonalRecord ? " catch-card-link-record" : ""}`}>
       <article className={`catch-card${isPersonalRecord ? " catch-card-record" : ""}`}>
         <div className="catch-card-main">
-          {primaryPhoto?.blob ? <CatchPhoto key={primaryPhoto.id} blob={primaryPhoto.blob} species={catchedFish.species} photo={primaryPhoto} ownerId={catchedFish.ownerId} catchId={catchedFish.id} /> : <FishMark speciesKey={catchedFish.speciesKey} />}
+          {primaryPhoto ? <CatchPhoto key={primaryPhoto.id} blob={primaryPhoto.blob} species={catchedFish.species} photo={primaryPhoto} ownerId={catchedFish.ownerId} catchId={catchedFish.id} /> : <FishMark speciesKey={catchedFish.speciesKey} />}
 
           <div className="catch-card-info">
             <h2>{catchedFish.species}</h2>
@@ -82,14 +121,15 @@ function CatchCard({ catchedFish, isPersonalRecord = false }) {
               {catchedFish.result === "kept" && (
                 <span className="catch-card-tag catch-card-tag-kept">Ponecháno</span>
               )}
-              {catchedFish.tripTitle && <span className="catch-card-tag">Výprava: {catchedFish.tripTitle}</span>}
+              {catchedFish.verification?.status === "unverified" && <span className="catch-card-tag catch-card-tag-unverified">Neověřený úlovek</span>}
+              {catchedFish.tripTitle && <span className="catch-card-tag">Vycházka: {catchedFish.tripTitle}</span>}
             </div>
           </div>
 
           <div className="catch-card-right">
+            {length && <small>{length} cm</small>}
             {weight && <strong>{weight}</strong>}
             {weight && <span>kg</span>}
-            {length && <small>{length} cm</small>}
           </div>
         </div>
 

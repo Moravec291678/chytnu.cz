@@ -5,6 +5,7 @@ import SyncStatus from "./SyncStatus.js";
 import PwaUpdateNotice from "./PwaUpdateNotice.jsx";
 import "./Layout.css";
 import "./SyncStatus.css";
+import { SYNC_STATUS_COMPACT_DELAY_MS } from "./syncStatusView.js";
 
 function NavIcon({ name }) {
   const common = {
@@ -24,6 +25,13 @@ function Layout({ children }) {
   const { pathname } = useLocation();
   const sync = useOptionalSync();
   const [isOnline, setIsOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine !== false);
+  const [compactSyncId, setCompactSyncId] = useState(null);
+  const syncPresentationId = sync?.presentationId;
+  useEffect(() => {
+    if (sync?.status !== "syncing" || !sync.showSyncStatus || !syncPresentationId) return undefined;
+    const timer = window.setTimeout(() => setCompactSyncId(syncPresentationId), SYNC_STATUS_COMPACT_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [sync?.status, sync?.showSyncStatus, syncPresentationId]);
   useEffect(() => {
     const update = () => setIsOnline(navigator.onLine !== false);
     window.addEventListener("online", update);
@@ -39,7 +47,7 @@ function Layout({ children }) {
   const tripsActive = pathname === "/trips" || pathname.startsWith("/trips/");
   return (
         <div className={pathname === "/gallery" ? "layout layout-gallery" : "layout"}>
-      <SyncStatus sync={sync} isOnline={isOnline} />
+      <SyncStatus sync={sync} isOnline={isOnline} compact={sync?.status === "syncing" && sync?.showSyncStatus && compactSyncId === syncPresentationId} />
       <PwaUpdateNotice syncing={sync?.status === "syncing"} />
       <main className="layout-main">{children}</main>
       <nav className="bottom-nav" aria-label="Hlavní navigace">
@@ -56,7 +64,7 @@ function Layout({ children }) {
         </Link>
         <Link to="/trips" className={itemClass(tripsActive)} aria-current={tripsActive ? "page" : undefined}>
           <span className="nav-icon" aria-hidden="true"><NavIcon name="trips" /></span>
-          <span className="nav-label">Výlety</span>
+          <span className="nav-label">Vycházky</span>
         </Link>
         <Link to="/profile" className={itemClass(pathname === "/profile")} aria-current={pathname === "/profile" ? "page" : undefined}>
           <span className="nav-icon" aria-hidden="true"><NavIcon name="profile" /></span>

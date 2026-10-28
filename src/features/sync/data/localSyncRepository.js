@@ -139,7 +139,7 @@ export async function linkGuestData(ownerId, guestScopeKey) {
       for (const record of ownerlessCatches) {
         const linkedTrip = record.tripId ? tripsById.get(record.tripId) : null;
         if (record.tripId && (!linkedTrip || recordScopeKey(linkedTrip) !== guestScopeKey)) {
-          throw new Error(`Úlovek ${record.species || record.id} odkazuje na výpravu jiného účtu. Propojení bylo zastaveno.`);
+          throw new Error(`Úlovek ${record.species || record.id} odkazuje na vycházku jiného účtu. Propojení bylo zastaveno.`);
         }
       }
       for (const event of guestProgression) {

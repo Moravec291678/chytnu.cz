@@ -24,6 +24,7 @@
 .gallery-tile img{width:100%;height:100%;object-fit:cover}
 .gallery-primary-badge{position:absolute;left:7px;top:7px;padding:4px 7px;border:1px solid #ffffff2b;border-radius:7px;background:#111820c9;color:var(--text-primary);font-size:10px;font-weight:800;backdrop-filter:blur(5px)}
 .gallery-missing{padding:12px;color:var(--text-secondary);font-size:11px;line-height:1.4;text-align:center}
+.gallery-photo-sync-status{min-height:100%;padding:10px}
 .gallery-state{display:grid;min-height:150px;align-content:center;justify-items:center;gap:10px;padding:20px;border:1px solid var(--border);border-radius:14px;background:var(--surface-1);color:var(--text-secondary);font-size:13px;text-align:center}
 .gallery-state a,.gallery-viewer-footer a{color:var(--accent-green);font-weight:800;text-decoration:none}
 .gallery-viewer-backdrop{position:fixed;z-index:1200;inset:0;display:grid;place-items:center;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);background:#05090edb}

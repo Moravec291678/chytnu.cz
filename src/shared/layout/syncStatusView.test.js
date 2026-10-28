@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { getSyncStatusView } from "./syncStatusView.js";
+import { getSyncPendingCount, getSyncStatusView, SYNC_STATUS_COMPACT_DELAY_MS } from "./syncStatusView.js";
 import { runManualSync, runSyncRetry } from "./syncStatusView.js";
 import SyncStatus from "./SyncStatus.js";
 
@@ -18,12 +18,28 @@ test("meaningful progress and success have a polite status; errors remain visibl
   assert.equal(getSyncStatusView({ status: "offline" }, false).kind, "offline");
 });
 
-test("SyncStatus component renders accessible progress/success and wires Retry", () => {
+test("significant sync minimizes after the presentation delay and hides its counter at zero", () => {
+  assert.equal(SYNC_STATUS_COMPACT_DELAY_MS, 1_500);
+  assert.equal(getSyncPendingCount({ pending: 2, pullPending: 1 }), 3);
+  assert.deepEqual(getSyncStatusView({ status: "syncing", showSyncStatus: true, pending: 2, pullPending: 1 }, true, false), { kind: "syncing", pending: 3 });
+  assert.deepEqual(getSyncStatusView({ status: "syncing", showSyncStatus: true, pending: 2, pullPending: 1 }, true, true), { kind: "syncing-compact", pending: 3 });
+  assert.equal(getSyncStatusView({ status: "syncing", showSyncStatus: true, pending: 0, pullPending: 0 }, true, true).kind, "hidden");
+  assert.equal(getSyncStatusView({ status: "syncing", showSyncStatus: false, pending: 0 }, true, true).kind, "hidden");
+});
+
+test("SyncStatus component renders accessible progress/success, compact count and Retry", () => {
   assert.equal(SyncStatus({ sync: { status: "idle" }, isOnline: true }), null);
   const progress = SyncStatus({ sync: { status: "syncing", showSyncStatus: true }, isOnline: true });
   const progressCard = progress.props.children;
   assert.equal(progressCard.props.role, "status");
   assert.equal(progressCard.props["aria-live"], "polite");
+  assert.equal(progressCard.props["aria-busy"], true, "a retry immediately presents the actual active sync state");
+  const compact = SyncStatus({ sync: { status: "syncing", showSyncStatus: true, pending: 2, pullPending: 1 }, isOnline: true, compact: true });
+  const compactIndicator = compact.props.children;
+  assert.match(compactIndicator.props.className, /sync-status-compact/);
+  assert.equal(compactIndicator.props.role, "status");
+  assert.equal(compactIndicator.props["aria-live"], "polite");
+  assert.equal(compactIndicator.props.children[0].props.children.props.children, "3");
   const success = SyncStatus({ sync: { status: "success", showSyncStatus: true }, isOnline: true });
   assert.equal(success.props.children.props.role, "status");
 

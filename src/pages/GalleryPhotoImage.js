@@ -1,6 +1,8 @@
 import { createElement, useCallback, useEffect, useRef, useState } from "react";
 import { getGalleryMissingMessage, getGalleryPhotoLoadRequest } from "../features/catches/data/catchGallery.js";
 import { getPhotoBlobForDisplay } from "../features/catches/data/photoCloudService.js";
+import { getPhotoAvailability, PHOTO_AVAILABILITY } from "../features/catches/data/photoAvailability.js";
+import PhotoSyncStatus from "../features/catches/components/PhotoSyncStatus.js";
 import { Link } from "react-router-dom";
 
 export default function GalleryPhotoImage({ item, scope = null, style, alt, loading, enabled = true }) {
@@ -14,6 +16,7 @@ export default function GalleryPhotoImage({ item, scope = null, style, alt, load
     ? loaded
     : { blob: initialRequest.kind === "local" ? initialRequest.blob : null,
       status: !enabled ? "idle" : initialRequest.kind === "remote" ? "loading" : "missing" };
+  const availability = getPhotoAvailability(item, { loadState: state.status === "decode-error" ? "error" : state.status, errorCode: state.errorCode });
   useEffect(() => {
     let active = true;
     if (!enabled) return undefined;
@@ -37,23 +40,25 @@ export default function GalleryPhotoImage({ item, scope = null, style, alt, load
       image.src = objectUrlRef.current;
     }
   }, [state.blob]);
-  if (item?.cloud?.state === "unavailable") {
-    if (!(item.blob instanceof Blob)) return createElement("span", { className: "gallery-missing" }, createElement(Link, { to: `/catch/${item.catchId}/edit` },
-      "Původní fotografie není dostupná. Přidej ji znovu."));
-  }
   if (state.status === "decode-error") return createElement("span", { className: "gallery-missing" },
     item.uploadReady === false ? "Soubor je zachovaný, ale nepodporuje ho prohlížeč ani synchronizace. Převeď ho a nahraď." : "Fotografii se v tomto zařízení nepodařilo zobrazit.",
     createElement("br"), createElement(Link, { to: `/catch/${item.catchId}/edit` }, "Upravit úlovek"));
-  if (!state.blob) return createElement("span", { className: "gallery-missing" }, state.status === "loading" ? "Načítám fotografii…"
-    : state.errorCode === "cloudinary_asset_missing" ? createElement(Link, { to: `/catch/${item.catchId}/edit` }, getGalleryMissingMessage(item, state.errorCode))
-      : state.status === "error" && item?.cloud?.state === "synced"
-        ? createElement("span", null, "Fotografii se nepodařilo načíst. ", createElement("button", { type: "button", onClick: () => {
+  if (availability === PHOTO_AVAILABILITY.PENDING || availability === PHOTO_AVAILABILITY.SYNCING) {
+    return createElement(PhotoSyncStatus, { className: "gallery-missing gallery-photo-sync-status" });
+  }
+  if (!state.blob) return createElement("span", { className: "gallery-missing" },
+    availability === PHOTO_AVAILABILITY.BROKEN || availability === PHOTO_AVAILABILITY.RETRYABLE_ERROR
+      ? state.errorCode === "cloudinary_asset_missing" || item?.cloud?.state === "unavailable"
+        ? createElement(Link, { to: `/catch/${item.catchId}/edit` }, getGalleryMissingMessage(item, state.errorCode))
+        : state.errorCode === "photo_local_blob_unreadable"
+          ? createElement(Link, { to: `/catch/${item.catchId}/edit` }, "Fotografii se na tomto zařízení nepodařilo přečíst. Nahraď ji.")
+          : state.status === "error"
+            ? createElement("span", null, "Fotografii se nepodařilo načíst. ", createElement("button", { type: "button", onClick: () => {
           setLoaded({ item, scopeKey, blob: null, status: "loading", errorCode: "" });
           setRetryVersion((version) => version + 1);
         } }, "Zkusit znovu"))
-        : item?.cloud?.state !== "synced" && item?.catchId
-          ? createElement(Link, { to: `/catch/${item.catchId}/edit` }, "Původní fotografie není dostupná. Přidej ji znovu.")
-        : getGalleryMissingMessage(item, state.errorCode));
+            : getGalleryMissingMessage(item, state.errorCode)
+      : state.status === "loading" ? "Načítám fotografii…" : getGalleryMissingMessage(item, state.errorCode));
   // The callback ref only creates the object URL once the DOM image is mounted.
   // eslint-disable-next-line react-hooks/refs
   return createElement("img", { ref: setImage, style, alt, loading, onError: () => {

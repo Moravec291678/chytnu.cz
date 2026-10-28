@@ -223,7 +223,8 @@ export function createSyncService({ port, getCurrentOwnerId, now = () => Date.no
           conflicts += 1;
           continue;
         }
-        const failure = describeSyncFailure(error, operation);
+        const stagedError = withSyncStage(error, `push:${operation.operation}`, error?.firestoreStage);
+        const failure = describeSyncFailure(stagedError, operation);
         await outboxRepository.markFailed(operation.operationId, failure.message, failure);
         onDiagnostic({ event: "push-failed", ...failure });
         transientFailure = failure;

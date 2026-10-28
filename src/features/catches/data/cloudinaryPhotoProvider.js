@@ -3,6 +3,7 @@ import { createPhotoObjectKey, sha256Blob } from "./photoCloudProvider.js";
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
 import { readPhotoBlob } from "./photoLocalBlob.js";
+import { resolveApiUrl } from "../../../platform/api.js";
 
 const CLOUDINARY_API_ORIGIN = "https://api.cloudinary.com";
 
@@ -26,10 +27,10 @@ function grantParams(grant) {
   return grant;
 }
 
-export function createCloudinaryPhotoProvider({ fetchImpl = globalThis.fetch } = {}) {
+export function createCloudinaryPhotoProvider({ fetchImpl = globalThis.fetch, apiUrl = resolveApiUrl } = {}) {
   async function available() {
     try {
-      const response = await fetchImpl("/api/cloudinary/capability", { method: "GET", credentials: "same-origin" });
+      const response = await fetchImpl(apiUrl("/api/cloudinary/capability"), { method: "GET", credentials: "same-origin" });
       const body = await readJson(response);
       return response.ok && body.enabled === true;
     } catch {

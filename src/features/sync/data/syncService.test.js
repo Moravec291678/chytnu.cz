@@ -59,7 +59,7 @@ async function conflictRecords() {
 function makeService(adapter = createInMemorySyncAdapter(), options = {}) {
   let ownerId = options.ownerId ?? "angler-a";
   const port = createSyncPort(adapter);
-  const service = createSyncService({ port, getCurrentOwnerId: () => ownerId, now: options.now });
+  const service = createSyncService({ port, getCurrentOwnerId: () => ownerId, now: options.now, onDiagnostic: options.onDiagnostic });
   return { service, port, changeOwner: (next) => { ownerId = next; } };
 }
 
@@ -327,6 +327,31 @@ test("unavailable server preserves outbox and a later retry sends it", async () 
   const retry = makeService(adapter, { now: () => Date.now() + 60_000 });
   await retry.service.run("angler-a");
   assert.equal((await outboxRepository.list()).length, 0);
+});
+
+test("permission failures retain safe entity, operation and sync/firestore stage diagnostics", async () => {
+  await resetDatabase();
+  const base = createInMemorySyncAdapter();
+  const adapter = {
+    ...base,
+    read: (...args) => base.read(...args),
+    delta: (...args) => base.delta(...args),
+    list: (...args) => base.list(...args),
+    delete: (...args) => base.delete(...args),
+    write: async () => { throw new SyncPortError("permission_denied", "denied", { firestoreStage: "commit-catch-create" }); },
+  };
+  const diagnostics = [];
+  await catchRepository.put(makeCatch("permission-stage", "angler-a"), accountScope());
+  const { service } = makeService(adapter, { onDiagnostic: (event) => diagnostics.push(event) });
+  const result = await service.run("angler-a");
+  assert.equal(result.status, "error");
+  assert.equal(result.errorCode, "permission_denied");
+  const failure = diagnostics.find((event) => event.event === "push-failed");
+  assert.equal(failure.entityType, "catch");
+  assert.equal(failure.operation, "upsert");
+  assert.equal(failure.syncStage, "push:upsert");
+  assert.equal(failure.firestoreStage, "commit-catch-create");
+  assert.equal((await outboxRepository.list())[0].lastErrorCode, "permission_denied", "the pending local operation is preserved for retry");
 });
 
 test("local conflict snapshots do not advance the cursor if the IndexedDB transaction aborts", async () => {

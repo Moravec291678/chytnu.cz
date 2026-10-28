@@ -16,7 +16,7 @@ import { attachSyncLifecycle } from "./syncLifecycle.js";
 import { getPullRetryAt, mergeSyncForce } from "./syncRetry.js";
 import { preparePhotoSyncService } from "./photoSyncPreparation.js";
 
-const initialState = { status: "idle", sent: 0, applied: 0, conflicts: 0, pending: 0, failed: 0, pullPending: 0, error: "", errorCode: "", errorEndpoint: "", nextRetryAt: null, lastResult: "never", showSyncStatus: false };
+const initialState = { status: "idle", sent: 0, applied: 0, conflicts: 0, pending: 0, failed: 0, pullPending: 0, error: "", errorCode: "", errorEndpoint: "", nextRetryAt: null, lastResult: "never", showSyncStatus: false, presentationId: null };
 
 function online() {
   return typeof navigator === "undefined" || navigator.onLine !== false;
@@ -58,7 +58,7 @@ export function SyncProvider({ children }) {
     if (runningRef.current) {
       rerunRef.current = true;
       rerunForceRef.current = mergeSyncForce(rerunForceRef.current, force);
-      if (manual) setState((previous) => ({ ...previous, showSyncStatus: true }));
+      if (manual) setState((previous) => ({ ...previous, showSyncStatus: true, presentationId: Date.now() }));
       return;
     }
     if (!online()) {
@@ -71,8 +71,12 @@ export function SyncProvider({ children }) {
       return;
     }
     runningRef.current = true;
+    if (manual) {
+      setState((previous) => ({ ...previous, status: "syncing", error: "", errorCode: "", errorEndpoint: "",
+        nextRetryAt: null, showSyncStatus: true, presentationId: Date.now() }));
+    }
     const startingSummary = await updateSummary(userId).catch(() => null);
-    setState((previous) => ({ ...previous, ...(startingSummary ?? {}), status: "syncing",
+    setState((previous) => ({ ...previous, ...(startingSummary ?? {}), status: "syncing", presentationId: Date.now(),
       error: startingSummary?.pullErrorMessage || previous.error,
       errorCode: startingSummary?.pullErrorCode || previous.errorCode,
       showSyncStatus: manual || previous.status === "error" || previous.status === "offline"
@@ -161,6 +165,21 @@ export function SyncProvider({ children }) {
       }
     }
   }, [authStatus, updateSummary, userId]);
+
+  // Keep the presentation count current without changing sync scheduling or operation handling.
+  useEffect(() => {
+    if (state.status !== "syncing" || !state.showSyncStatus || !userId) return undefined;
+    let active = true;
+    let timer;
+    const refreshProgress = async () => {
+      const summary = await updateSummary(userId).catch(() => null);
+      if (!active) return;
+      if (summary) setState((previous) => previous.status === "syncing" ? { ...previous, ...summary } : previous);
+      timer = window.setTimeout(refreshProgress, 750);
+    };
+    timer = window.setTimeout(refreshProgress, 400);
+    return () => { active = false; window.clearTimeout(timer); };
+  }, [state.status, state.showSyncStatus, updateSummary, userId]);
 
   runSyncRef.current = runSync;
 

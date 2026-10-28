@@ -1,4 +1,5 @@
 import { normalizeText } from "../../../shared/utils/helpers.js";
+import { getPhotoAvailability, PHOTO_AVAILABILITY, PHOTO_SYNC_HELP } from "./photoAvailability.js";
 
 function dateKey(value) {
   const date = new Date(value);
@@ -53,9 +54,10 @@ export function getGalleryPhotoLoadRequest(item, scope) {
 
 export function getGalleryMissingMessage(item, errorCode = "") {
   if (errorCode === "cloudinary_asset_missing") return "Cloudová fotografie chybí. Otevři úlovek a přidej ji znovu.";
-  return item?.cloud?.state === "synced"
-    ? "Tato fotografie má cloudová metadata, ale úložiště není dostupné."
-    : "Fotografie není na tomto zařízení dostupná.";
+  const availability = getPhotoAvailability(item, { errorCode });
+  if (availability === PHOTO_AVAILABILITY.PENDING || availability === PHOTO_AVAILABILITY.SYNCING) return PHOTO_SYNC_HELP;
+  if (availability === PHOTO_AVAILABILITY.RETRYABLE_ERROR) return "Fotografii se teď nepodařilo načíst. Zkus to prosím znovu.";
+  return "Fotografii se nepodařilo načíst. Otevři úlovek a zkontroluj její dostupnost.";
 }
 
 export function countActiveGalleryFilters(filters = {}) {

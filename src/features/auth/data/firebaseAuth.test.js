@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import { getFirebaseIdToken, initializeBrowserAuth, runGoogleSignIn } from "./firebaseAuth.js";
 
 function authApi(overrides = {}) {
-  class GoogleAuthProvider {}
+  class GoogleAuthProvider {
+    setCustomParameters(parameters) { overrides.onProviderParameters?.(parameters); }
+  }
   return {
     GoogleAuthProvider,
     signInWithPopup: async () => ({ user: { uid: "google-user" } }),
@@ -40,6 +42,13 @@ test("Google popup returns the authenticated Firebase user", async () => {
   assert.deepEqual(await runGoogleSignIn(auth, authApi()), { uid: "google-user" });
 });
 
+test("explicit Google login requests account selection from the provider", async () => {
+  let providerParameters = null;
+  const api = authApi({ onProviderParameters: (parameters) => { providerParameters = parameters; } });
+  await runGoogleSignIn({}, api);
+  assert.deepEqual(providerParameters, { prompt: "select_account" });
+});
+
 test("photo auth uses the current Firebase user ID token and forwards force refresh", async () => {
   const calls = [];
   const auth = { currentUser: { async getIdToken(forceRefresh) { calls.push(forceRefresh); return forceRefresh ? "fresh-id-token" : "current-id-token"; } } };
@@ -52,12 +61,15 @@ test("photo auth uses the current Firebase user ID token and forwards force refr
 test("a browser-blocked popup falls back to Firebase redirect on the same Auth instance", async () => {
   const auth = {};
   let redirectedAuth = null;
+  let providerParameters = null;
   const api = authApi({
+    onProviderParameters: (parameters) => { providerParameters = parameters; },
     signInWithPopup: async () => { throw Object.assign(new Error("blocked"), { code: "auth/popup-blocked" }); },
     signInWithRedirect: async (receivedAuth) => { redirectedAuth = receivedAuth; },
   });
   assert.equal(await runGoogleSignIn(auth, api), null);
   assert.equal(redirectedAuth, auth);
+  assert.deepEqual(providerParameters, { prompt: "select_account" });
 });
 
 test("Google errors other than popup blocking are preserved for the UI", async () => {

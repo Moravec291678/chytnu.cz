@@ -5,6 +5,8 @@ import { useCatches } from "../features/catches/context/useCatches";
 import { photoFrameStyle } from "../features/catches/data/photoFraming.js";
 import { getPrimaryAvailablePhoto } from "../features/catches/data/catchPhotos.js";
 import { getPhotoBlobForDisplay } from "../features/catches/data/photoCloudService.js";
+import { getPhotoAvailability, PHOTO_AVAILABILITY } from "../features/catches/data/photoAvailability.js";
+import PhotoSyncStatus from "../features/catches/components/PhotoSyncStatus.js";
 import { useDataScope } from "../features/auth/context/dataScopeContextValue.js";
 import { useTrips } from "../features/trips/context/useTrips";
 import { formatBottomType } from "../features/catches/data/catchFormatting";
@@ -15,6 +17,7 @@ import { DEFAULT_SPECIES } from "../shared/constants/constants.js";
 import { getCatchRarity } from "../features/catches/utils/rarity.js";
 import { formatCatchWeight } from "../features/catches/data/catchWeight.js";
 import ConfirmDialog from "../shared/components/ConfirmDialog";
+import "../features/catches/components/PhotoSyncStatus.css";
 import "./AddCatchPage.css";
 
 function formatDate(value) {
@@ -147,7 +150,7 @@ function CatchDetailPage() {
       ? null
       : `${formatNumber(item.waterDepthM)} m${formatBottomType(item.bottomType) ? ` · ${formatBottomType(item.bottomType).toLocaleLowerCase("cs-CZ")}` : ""}`],
     ["Obvod", valueLabel(item.girthCm, "cm")],
-    ["Výprava", trip ? <Link to={`/trips/${trip.id}`}>{trip.title} →</Link> : null],
+    ["Vycházka", trip ? <Link to={`/trips/${trip.id}`}>{trip.title} →</Link> : null],
   ].filter(([, value]) => value !== null && value !== undefined && value !== "");
   const methodFacts = [
     ["Metoda", item.method?.label],
@@ -162,6 +165,11 @@ function CatchDetailPage() {
   const isLengthRecord = isNewLengthRecord(item, state.catches);
   const hasMapLocation = buildPrivateCatchMarkers([item]).length > 0;
   const rarity = getCatchRarity(item, DEFAULT_SPECIES);
+  const displayedPhotoIds = new Set(photos.map((photo) => photo.id));
+  const unresolvedPhotos = (item.photos ?? []).filter((photo) => !displayedPhotoIds.has(photo.id));
+  const hasPendingPhotos = unresolvedPhotos.some((photo) => [PHOTO_AVAILABILITY.PENDING, PHOTO_AVAILABILITY.SYNCING]
+    .includes(getPhotoAvailability(photo)));
+  const hasBrokenPhotos = unresolvedPhotos.some((photo) => getPhotoAvailability(photo) === PHOTO_AVAILABILITY.BROKEN);
 
   return <Layout>
     <div className="add-catch-page catch-detail-page">
@@ -201,14 +209,20 @@ function CatchDetailPage() {
           {isSpeciesRecord && <span className="catch-detail-badge catch-detail-badge-species">Rekord druhu</span>}
           {item.method?.label && <span className="catch-detail-badge catch-detail-badge-method">{item.method.label}</span>}
           {item.isFavorite && <span className="catch-detail-badge">Oblíbený</span>}
+          {item.verification?.status === "unverified" && <span className="catch-detail-badge">Neověřený úlovek · 0 XP</span>}
+          {item.verification?.status === "verified" && <span className="catch-detail-badge catch-detail-badge-positive">Ověřený úlovek</span>}
           {item.result === "released" && <span className="catch-detail-badge catch-detail-badge-positive">Puštěno</span>}
           {item.result === "kept" && <span className="catch-detail-badge catch-detail-badge-danger">Ponecháno</span>}
         </div>
+        {item.verification?.status === "unverified" && <p className="catch-detail-date" role="status">
+          Zatím bez XP. Úlovek můžeš doplnit později; datum a polohu lze načíst z EXIF podporované fotografie.
+          {" "}<Link to={`/catch/${item.id}/edit`}>Doplnit úlovek</Link>
+        </p>}
       </section>
       {location.state?.saved && <p role="status">Úlovek byl uložen do tohoto zařízení.</p>}
       {error && <p role="alert" className="catch-form-error">{error}</p>}
-      {tripState.error && item.tripId && <p role="alert" className="catch-form-error">Přiřazenou výpravu se nepodařilo načíst: {tripState.error}</p>}
-      {tripState.loading && item.tripId && <p role="status">Načítám přiřazenou výpravu…</p>}
+      {tripState.error && item.tripId && <p role="alert" className="catch-form-error">Přiřazenou vycházku se nepodařilo načíst: {tripState.error}</p>}
+      {tripState.loading && item.tripId && <p role="status">Načítám přiřazenou vycházku…</p>}
       {heroPhoto && <section className="catch-detail-photo-gallery" aria-label="Fotografie úlovku">
         <figure className="photo-preview-item catch-detail-hero-photo"><img src={heroPhoto.url} style={photoFrameStyle(heroPhoto)} alt={`Hlavní fotografie úlovku – ${item.species}`} /><figcaption>Hlavní fotografie</figcaption></figure>
         {photos.length > 1 && <div className="catch-detail-photo-strip">{photos.filter((photo) => photo.id !== heroPhoto.id).map((photo) => <button type="button" key={photo.id} onClick={() => setPreviewPhoto(photo)} aria-label={`Zobrazit fotografii ${photo.name}`}><img src={photo.url} style={photoFrameStyle(photo)} alt="" /></button>)}</div>}
@@ -216,19 +230,18 @@ function CatchDetailPage() {
       {(item.photos ?? []).some((photo) => photo.uploadReady === false && photo.blob instanceof Blob)
         ? <p className="catch-photo-unavailable" role="status">Původní fotografie zůstává uložená v tomto zařízení, ale není připravená k synchronizaci. Převeď ji na JPG, PNG nebo WebP a <Link to={`/catch/${item.id}/edit`}>nahraď ji</Link>.</p>
         : (item.photos ?? []).some((photo) => photo.localError?.code === "photo_local_blob_unreadable")
+          && !(item.photos ?? []).some((photo) => photo.cloud?.state === "synced")
           ? <p className="catch-photo-unavailable" role="status">Fotografii se na tomto zařízení nepodařilo přečíst. <Link to={`/catch/${item.id}/edit`}>Nahraď fotografii</Link>.</p>
         : missingCloudPhoto ? <p className="catch-photo-unavailable" role="status">Původní cloudová fotografie chybí. <Link to={`/catch/${item.id}/edit`}>Přidej ji znovu</Link>.</p>
-        : (item.photos ?? []).some((photo) => photo.cloud?.state === "unavailable")
+        : hasBrokenPhotos || (item.photos ?? []).some((photo) => photo.cloud?.state === "unavailable")
           ? <p className="catch-photo-unavailable" role="status">Fotografii nelze bezpečně obnovit z uložených dat. <Link to={`/catch/${item.id}/edit`}>Přidej ji znovu</Link>, případně ji ulož jako JPG, PNG nebo WebP.</p>
         : photoLoadFailed ? <p className="catch-photo-unavailable" role="status">{item.photos?.some((photo) => photo.localError?.code === "photo_local_blob_unreadable")
           ? "Fotografii se na tomto zařízení nepodařilo přečíst. " : "Cloudovou fotografii se nepodařilo načíst. "}<button type="button" onClick={retryPhotoLoads}>Zkusit znovu</button></p>
-          : (item.photos ?? []).some((photo) => !photo.blob && photo.cloud?.state !== "synced")
-            ? <p className="catch-photo-unavailable" role="status">Původní fotografie není dostupná. <Link to={`/catch/${item.id}/edit`}>Přidej ji znovu</Link>.</p>
-            : (item.photos ?? []).some((photo) => !photo.blob) && <p className="catch-photo-unavailable" role="status">Některé fotografie se načítají ze synchronizovaného úložiště.</p>}
+          : hasPendingPhotos && <PhotoSyncStatus className="photo-sync-status catch-photo-sync-status" />}
       {previewPhoto && <div className="catch-photo-lightbox" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPreviewPhoto(null); }}><section role="dialog" aria-modal="true" aria-label="Náhled fotografie"><button type="button" onClick={() => setPreviewPhoto(null)} aria-label="Zavřít náhled">Zavřít</button><img src={previewPhoto.url} style={photoFrameStyle(previewPhoto)} alt={`Fotografie úlovku – ${item.species}`} /></section></div>}
       <section className="catch-detail-measures" aria-label="Míry úlovku">
-        <div><strong>{Number.isFinite(item.weightKg) ? formatCatchWeight(item) : "—"}</strong><span>kg</span><small>{item.weightSource === "estimated" ? "ODHAD HMOTNOSTI" : "HMOTNOST"}</small>{isPersonalBest && <em>{recognition.personalBestDelta > 0 ? `+${formatNumber(recognition.personalBestDelta, 2)} kg rekord` : "Osobní rekord"}</em>}</div>
         <div><strong>{Number.isFinite(item.lengthCm) ? formatNumber(item.lengthCm) : "—"}</strong><span>cm</span><small>DÉLKA</small>{isLengthRecord && <em>Nový rekord</em>}</div>
+        <div><strong>{Number.isFinite(item.weightKg) ? formatCatchWeight(item) : "—"}</strong><span>kg</span><small>{item.weightSource === "estimated" ? "ODHAD HMOTNOSTI" : "HMOTNOST"}</small>{isPersonalBest && <em>{recognition.personalBestDelta > 0 ? `+${formatNumber(recognition.personalBestDelta, 2)} kg rekord` : "Osobní rekord"}</em>}</div>
         <div><strong>{Number.isFinite(item.fightMinutes) ? item.fightMinutes : "—"}</strong><span>{Number.isFinite(item.fightMinutes) ? "min" : ""}</span><small>BOJ</small></div>
       </section>
       {recognition.personalBest || recognition.speciesRecord || recognition.seasonRecord || recognition.newLocation ? (

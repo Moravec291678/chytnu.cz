@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { MemoryRouter } from "react-router-dom";
 import { readFile } from "node:fs/promises";
 import { buildGalleryItems, countActiveGalleryFilters, filterAndSortGallery, getGalleryMissingMessage, getGalleryOptions, getGalleryPhotoLoadRequest } from "./catchGallery.js";
 import GalleryPhotoImage from "../../../pages/GalleryPhotoImage.js";
@@ -11,6 +12,10 @@ const catches = [
   { id: "c2", species: "Kapr", speciesKey: "cyprinus-carpio", caughtAt: "2025-04-05T12:00:00Z", locationName: "Rybník", isFavorite: false, weightKg: 8, photos: [{ id: "p3" }] },
 ];
 const items = buildGalleryItems(catches);
+
+test("Catch without photographs does not get a synthetic Gallery image", () => {
+  assert.deepEqual(buildGalleryItems([{ id: "unverified-empty", species: "Kapr", photos: [], verification: { status: "unverified" } }]), []);
+});
 
 test("gallery flattens every catch photo and retains primary, crop, and missing-byte state", () => {
   assert.equal(items.length, 3);
@@ -86,7 +91,8 @@ test("GalleryPhotoImage renders safely without scope, nested Catch, or local pho
   const item = { id: "remote-photo", photoId: "remote-photo", catchId: "remote-catch", ownerId: "account-7",
     cloud: { state: "synced", provider: "fake", objectKey: "object-key", sha256: "a".repeat(64) }, blob: null };
   assert.doesNotThrow(() => renderToStaticMarkup(createElement(GalleryPhotoImage, { item })));
-  assert.match(renderToStaticMarkup(createElement(GalleryPhotoImage, { item })), /cloudová metadata/);
+  assert.match(renderToStaticMarkup(createElement(GalleryPhotoImage, { item })), /Fotografie se synchronizuje/);
+  assert.doesNotMatch(renderToStaticMarkup(createElement(GalleryPhotoImage, { item })), /Přidej ji znovu/);
   const local = { ...item, blob: new Blob(["photo"], { type: "image/jpeg" }) };
   assert.match(renderToStaticMarkup(createElement(GalleryPhotoImage, { item: local })), /<img/);
   assert.doesNotThrow(() => renderToStaticMarkup(createElement(GalleryPhotoImage, { item: null })));
@@ -94,7 +100,26 @@ test("GalleryPhotoImage renders safely without scope, nested Catch, or local pho
 
 test("confirmed missing Cloudinary asset offers re-add guidance without deleting photo metadata", () => {
   assert.match(getGalleryMissingMessage({ cloud: { state: "synced" } }, "cloudinary_asset_missing"), /přidej ji znovu/);
-  assert.match(getGalleryMissingMessage({ cloud: { state: "synced" } }), /úložiště není dostupné/);
+  assert.match(getGalleryMissingMessage({ cloud: { state: "synced" } }), /synchronizace trvat déle/);
+});
+
+test("Gallery pending photo never asks for re-add; broken cloud copy is actionable; available bytes replace pending state", () => {
+  const renderPhoto = (item) => renderToStaticMarkup(createElement(MemoryRouter, null, createElement(GalleryPhotoImage, { item })));
+  const photo = { id: "pending", photoId: "pending", catchId: "catch-p", ownerId: "owner-p", cloud: { state: "localOnly" } };
+  const pending = renderPhoto(photo);
+  assert.match(pending, /Fotografie se synchronizuje/);
+  assert.match(pending, /může synchronizace trvat déle/);
+  assert.doesNotMatch(pending, /Přidej ji znovu/);
+
+  const broken = renderPhoto({ ...photo, cloud: { state: "unavailable" } });
+  assert.match(broken, /dostupnost|znovu/i);
+
+  const available = renderPhoto({
+    ...photo, cloud: { state: "synced", provider: "fake", objectKey: "photo", sha256: "a".repeat(64) },
+    blob: new Blob(["ready"], { type: "image/jpeg" }),
+  });
+  assert.match(available, /<img/);
+  assert.doesNotMatch(available, /Fotografie se synchronizuje/);
 });
 
 test("date periods and custom ranges use catch dates", () => {
@@ -119,7 +144,7 @@ test("gallery route and primary Profile entry are connected without changing bot
   assert.match(app, /path="\/gallery"/);
   assert.match(profile, /to="\/gallery"[^>]*>.*Galerie/s);
   assert.match(layout, /aria-label="Hlavní navigace"/);
-  assert.match(layout, /nav-label">Domů[\s\S]*nav-label">Deník[\s\S]*nav-label">Výlety[\s\S]*nav-label">Profil/);
+  assert.match(layout, /nav-label">Domů[\s\S]*nav-label">Deník[\s\S]*nav-label">Vycházky[\s\S]*nav-label">Profil/);
   assert.doesNotMatch(layout, /to="\/gallery"/);
 });
 
