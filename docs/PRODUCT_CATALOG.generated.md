@@ -46,9 +46,9 @@ Automaticky vytvořeno příkazem `npm run product:inventory` z `src/product/con
 | season-{YYYY}-winter | Zimní warrior | Zaznamenej úlovek při teplotě pod 5 °C. | 100 XP | Ano · prosinec, leden, únor |
 | season-{YYYY}-spring | První úlovek po zimě | Zaznamenej první jarní úlovek. | 100 XP | Ano · březen, duben, květen |
 | season-{YYYY}-summer | Noční rybaření | Zaznamenej letní úlovek mezi 22:00 a 04:00. | 100 XP | Ano · červen, červenec, srpen |
-| season-{YYYY}-autumn | Kapr | Zaznamenej kapra s uvedenou hmotností. | 100 XP | Ano · září, říjen, listopad |
-| season-{YYYY}-autumn-predator | Dravec | Zaznamenej dravce s uvedenou hmotností. | 100 XP | Ano · září, říjen, listopad |
-| season-{YYYY}-autumn-other | Lososovité / ostatní | Zaznamenej lososovitou nebo jinou nedravou rybu s uvedenou hmotností. | 100 XP | Ano · září, říjen, listopad |
+| season-{YYYY}-autumn | Kapr | Zaznamenej kapra s uvedenou délkou. | 100 XP | Ano · září, říjen, listopad |
+| season-{YYYY}-autumn-predator | Dravec | Zaznamenej dravce s uvedenou délkou. | 100 XP | Ano · září, říjen, listopad |
+| season-{YYYY}-autumn-other | Lososovité / ostatní | Zaznamenej lososovitou nebo jinou nedravou rybu s uvedenou délkou. | 100 XP | Ano · září, říjen, listopad |
 
 ## XP, úrovně a mastery
 
@@ -136,6 +136,16 @@ Preference jsou uživatelsky nastavitelné: morningFishActivity (default ON), to
 | marathonTripHours | 8 |
 | waterVisitGapDays | 30 |
 - Rozestup návštěvy stejného revíru pro weekly challenge: 30 dní.
+
+## Supporter entitlements
+
+| Capability ID | Required entitlement | Free limit | Supporter limit |
+|---|---|---:|---:|
+| catch.photos.extended | supporter | 4 | 8 |
+| stats.advanced | supporter | — | — |
+| filters.saved | supporter | — | — |
+| profile.supporter-style | supporter | — | — |
+| share.extra-themes | supporter | — | — |
 
 ## Supporter obsah
 

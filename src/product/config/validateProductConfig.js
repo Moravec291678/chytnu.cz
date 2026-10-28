@@ -10,6 +10,7 @@ import { FEATURES } from "./featureFlags.js";
 import { LEVEL_XP_BASE, MAX_LEVEL, MASTERY_LEVELS, RANKS } from "./levels.js";
 import { NOTIFICATION_COPY, NOTIFICATION_PREFERENCES, NOTIFICATION_TYPE_PRESENTATION, NOTIFICATION_TYPES } from "./notifications.js";
 import { PRODUCT_LIMITS } from "./limits.js";
+import { SUPPORTER_CAPABILITIES } from "./supporter.js";
 import { XP_RULES } from "./xp.js";
 
 const ACHIEVEMENT_RULES = new Set([
@@ -37,6 +38,7 @@ export const PRODUCT_CONFIG = Object.freeze({
   notificationPresentation: NOTIFICATION_TYPE_PRESENTATION,
   notificationCopy: NOTIFICATION_COPY,
   limits: PRODUCT_LIMITS,
+  supporterCapabilities: SUPPORTER_CAPABILITIES,
   xp: XP_RULES,
 });
 
@@ -64,7 +66,7 @@ export function validateProductConfig({ routeExists = null, config = PRODUCT_CON
   const {
     achievements, dailyChallenges, weeklyChallenges, seasons, seasonalChallenge, seasonalRules,
     features, levelXpBase, maxLevel, masteries, ranks, notificationTypes, notificationPreferences,
-    notificationPresentation, notificationCopy, limits, xp,
+    notificationPresentation, notificationCopy, limits, supporterCapabilities, xp,
   } = config;
   const dailyAndWeekly = [...dailyChallenges, ...weeklyChallenges];
   const variants = seasons.flatMap((season) => season.challenges ?? []);
@@ -157,6 +159,14 @@ export function validateProductConfig({ routeExists = null, config = PRODUCT_CON
 
   for (const [flag, enabled] of Object.entries(features)) {
     if (!/^[a-z][A-Za-z0-9]*$/.test(flag) || typeof enabled !== "boolean") errors.push(`Invalid feature flag: ${flag}`);
+  }
+
+  for (const [id, capability] of Object.entries(supporterCapabilities)) {
+    if (!/^[a-z][a-z0-9.-]*$/.test(id) || !capability.requiredEntitlement) errors.push(`Invalid Supporter capability: ${id}`);
+    if (id === "catch.photos.extended" && (!Number.isInteger(capability.freeLimit) || !Number.isInteger(capability.supporterLimit)
+      || capability.freeLimit !== limits.photosPerCatch || capability.supporterLimit < capability.freeLimit)) {
+      errors.push(`Invalid photo entitlement limits: ${id}`);
+    }
   }
 
   for (const type of notificationTypes) {

@@ -8,6 +8,15 @@ export const SUPPORTER_BENEFITS = Object.freeze([
   "Badge Supporter",
 ]);
 
+// Capability names are stable product IDs. Access rules live in the entitlement engine.
+export const SUPPORTER_CAPABILITIES = Object.freeze({
+  "catch.photos.extended": Object.freeze({ requiredEntitlement: "supporter", freeLimit: 4, supporterLimit: 8 }),
+  "stats.advanced": Object.freeze({ requiredEntitlement: "supporter" }),
+  "filters.saved": Object.freeze({ requiredEntitlement: "supporter" }),
+  "profile.supporter-style": Object.freeze({ requiredEntitlement: "supporter" }),
+  "share.extra-themes": Object.freeze({ requiredEntitlement: "supporter" }),
+});
+
 export const FREE_FEATURES = Object.freeze([
   "Neomezený deník",
   "XP, úrovně a úspěchy",
