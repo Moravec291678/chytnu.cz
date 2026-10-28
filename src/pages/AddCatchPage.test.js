@@ -45,13 +45,16 @@ test("Add Catch attempts optional GPS autofill, selects a nearby saved water, an
 });
 
 test("Add Catch photo manager keeps the primary photo dominant, shows legacy thumbnails, and caps additions at four", async () => {
-  const [source, styles, photoModel] = await Promise.all([
+  const [source, styles, photoModel, productLimits] = await Promise.all([
     readFile(new URL("./AddCatchPage.jsx", import.meta.url), "utf8"),
     readFile(new URL("./AddCatchPage.css", import.meta.url), "utf8"),
     readFile(new URL("../features/catches/data/catchPhotos.js", import.meta.url), "utf8"),
+    readFile(new URL("../product/config/limits.js", import.meta.url), "utf8"),
   ]);
-  assert.match(photoModel, /MAX_PHOTOS_PER_CATCH = 4/);
-  assert.match(photoModel, /MAX_LEGACY_PHOTOS_PER_CATCH = 10/);
+  assert.match(productLimits, /photosPerCatch: 4/);
+  assert.match(productLimits, /legacyPhotosPerCatch: 10/);
+  assert.match(photoModel, /MAX_PHOTOS_PER_CATCH = PRODUCT_LIMITS\.photosPerCatch/);
+  assert.match(photoModel, /MAX_LEGACY_PHOTOS_PER_CATCH = PRODUCT_LIMITS\.legacyPhotosPerCatch/);
   assert.match(source, /catchData\.photos\.length < MAX_PHOTOS_PER_CATCH/);
   assert.match(source, /photo-preview-primary/);
   assert.match(source, /photo-preview-thumbnail/);

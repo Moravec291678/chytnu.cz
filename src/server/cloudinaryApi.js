@@ -2,9 +2,10 @@ import { createHash, createPrivateKey, generateKeyPairSync } from "node:crypto";
 import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
+import { PRODUCT_LIMITS } from "../product/config/limits.js";
 
 export const FIREBASE_PROJECT_ID = "chutnucz";
-export const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
+export const MAX_PHOTO_BYTES = PRODUCT_LIMITS.photoBytes;
 export const ALLOWED_PHOTO_TYPES = Object.freeze(["image/jpeg", "image/png", "image/webp"]);
 const ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 const SHA_PATTERN = /^[a-f0-9]{64}$/;

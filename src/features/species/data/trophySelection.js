@@ -1,4 +1,6 @@
-const LIMIT = 5;
+import { PRODUCT_LIMITS } from "../../../product/config/limits.js";
+
+const LIMIT = PRODUCT_LIMITS.trophySelection;
 function storageKey(scopeKey) { return `chytnu:trophy-selection:v1:${scopeKey}`; }
 
 export function readTrophySelection(scopeKey, storage = globalThis.localStorage) {

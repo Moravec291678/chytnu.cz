@@ -1,6 +1,7 @@
 import { DEFAULT_SPECIES } from "../../../shared/constants/speciesCatalog.js";
+import { PRODUCT_LIMITS } from "../../../product/config/limits.js";
 
-export const MAX_QUICK_SPECIES = 8;
+export const MAX_QUICK_SPECIES = PRODUCT_LIMITS.quickSpecies;
 export const DEFAULT_QUICK_SPECIES_IDS = Object.freeze([
   "commonCarp", "northernPike", "zander", "europeanPerch",
   "brownTrout", "tench", "welsCatfish",

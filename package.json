@@ -16,7 +16,8 @@
     "test:rules": "firebase emulators:exec --project demo-chytnucz-local --only auth,firestore \"node tools/firebase-security.rules.mjs\"",
     "test:auth": "firebase emulators:exec --project demo-chytnucz-local --only auth \"node tools/firebase-auth.emulator.mjs\"",
     "test:sync": "firebase emulators:exec --project demo-chytnucz-local --only auth,firestore \"node tools/firebase-sync.emulator.mjs\"",
-    "test:photos": "node tools/firebase-photo-sync.emulator.mjs"
+    "test:photos": "node tools/firebase-photo-sync.emulator.mjs",
+    "product:inventory": "node tools/product-inventory.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.3",

@@ -1,55 +1,41 @@
 import { isMeasuredCatchWeight } from "../../catches/data/catchWeight.js";
 import { DEFAULT_SPECIES } from "../../../shared/constants/speciesCatalog.js";
 import { filterEligibleCatchRecords } from "../../catches/data/catchVerification.js";
-
-export const SEASONAL_CHALLENGE = Object.freeze({
-  catchGoal: 1,
-  xpReward: 100,
-});
+import { SEASONAL_CHALLENGE, SEASONAL_CHALLENGE_RULES, SEASONAL_CHALLENGE_SEASONS } from "../../../product/config/challenges.js";
+export { SEASONAL_CHALLENGE } from "../../../product/config/challenges.js";
 
 const SPECIES_BY_KEY = new Map(DEFAULT_SPECIES.map((species) => [species.key, species]));
 
-const SEASONS = [
-  { key: "winter", label: "Zima", months: [11, 0, 1], title: "Zimní warrior", description: "Zaznamenej úlovek při teplotě pod 5 °C.", matches: (record) => {
+const SEASON_MATCHERS = Object.freeze({
+  "cold-catch": (record) => {
     const temperature = record.conditions?.airTempC ?? record.conditions?.airTemperatureC ?? record.conditions?.temperatureC;
-    return Number.isFinite(temperature) && temperature < 5;
-  } },
-  { key: "spring", label: "Jaro", months: [2, 3, 4], title: "První úlovek po zimě", description: "Zaznamenej první jarní úlovek.", matches: () => true },
-  { key: "summer", label: "Léto", months: [5, 6, 7], title: "Noční rybaření", description: "Zaznamenej letní úlovek mezi 22:00 a 04:00.", matches: (record) => {
+    return Number.isFinite(temperature) && temperature < SEASONAL_CHALLENGE_RULES.coldCatchMaxAirTempC;
+  },
+  "any-catch": () => true,
+  "night-catch": (record) => {
     const timestamp = Date.parse(record.caughtAt);
     if (!Number.isFinite(timestamp)) return false;
     const hour = new Date(timestamp).getHours();
-    return hour >= 22 || hour < 4;
-  } },
-  { key: "autumn", label: "Podzim", months: [8, 9, 10], title: "Výzvy sezóny", description: "Vyber si cestu podle svého stylu rybolovu.", challenges: [
-    {
-      key: "carp",
-      title: "Kapr",
-      description: "Zaznamenej kapra s uvedenou hmotností.",
-      matches: (record) => ["commonCarp", "carp"].includes(record.speciesKey) && isMeasuredCatchWeight(record),
-    },
-    {
-      key: "predator",
-      title: "Dravec",
-      description: "Zaznamenej dravce s uvedenou hmotností.",
-      matches: (record) => {
-        const species = SPECIES_BY_KEY.get(record.speciesKey);
-        return Boolean(species?.isPredator && species.categoryKey !== "salmonids" && isMeasuredCatchWeight(record));
-      },
-    },
-    {
-      key: "other",
-      title: "Lososovité / ostatní",
-      description: "Zaznamenej lososovitou nebo jinou nedravou rybu s uvedenou hmotností.",
-      matches: (record) => {
-        const species = SPECIES_BY_KEY.get(record.speciesKey);
-        return Boolean(species && species.categoryKey !== "cyprinids"
-          && (species.categoryKey === "salmonids" || !species.isPredator)
-          && isMeasuredCatchWeight(record));
-      },
-    },
-  ] },
-];
+    return hour >= SEASONAL_CHALLENGE_RULES.nightStartHour || hour < SEASONAL_CHALLENGE_RULES.nightEndHour;
+  },
+  "measured-carp": (record) => ["commonCarp", "carp"].includes(record.speciesKey) && isMeasuredCatchWeight(record),
+  "measured-predator": (record) => {
+    const species = SPECIES_BY_KEY.get(record.speciesKey);
+    return Boolean(species?.isPredator && species.categoryKey !== "salmonids" && isMeasuredCatchWeight(record));
+  },
+  "measured-salmonid-or-other": (record) => {
+    const species = SPECIES_BY_KEY.get(record.speciesKey);
+    return Boolean(species && species.categoryKey !== "cyprinids"
+      && (species.categoryKey === "salmonids" || !species.isPredator)
+      && isMeasuredCatchWeight(record));
+  },
+});
+
+const SEASONS = SEASONAL_CHALLENGE_SEASONS.map((season) => ({
+  ...season,
+  matches: season.ruleKey ? SEASON_MATCHERS[season.ruleKey] : null,
+  challenges: season.challenges?.map((challenge) => ({ ...challenge, matches: SEASON_MATCHERS[challenge.ruleKey] })),
+}));
 
 function getSeasonKey(date) {
   const season = SEASONS.find((item) => item.months.includes(date.getMonth()));

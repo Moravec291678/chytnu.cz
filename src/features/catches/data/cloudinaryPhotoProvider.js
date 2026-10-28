@@ -1,7 +1,8 @@
 import { createPhotoObjectKey, sha256Blob } from "./photoCloudProvider.js";
+import { PRODUCT_LIMITS } from "../../../product/config/limits.js";
 
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
-const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
+const MAX_PHOTO_BYTES = PRODUCT_LIMITS.photoBytes;
 import { readPhotoBlob } from "./photoLocalBlob.js";
 import { resolveApiUrl } from "../../../platform/api.js";
 

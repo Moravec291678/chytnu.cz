@@ -7,9 +7,10 @@ import { LOCAL_BACKUP_FORMAT, LOCAL_BACKUP_VERSION } from "./backupFormat.js";
 import { MAX_LEGACY_PHOTOS_PER_CATCH, normalizePrimaryPhotoId } from "../../catches/data/catchPhotos.js";
 import { normalizeCatchVerification, normalizeLocationEvidence } from "../../catches/data/catchVerification.js";
 import { createNotificationRecord } from "../../notifications/data/notificationModel.js";
+import { PRODUCT_LIMITS } from "../../../product/config/limits.js";
 
-export const MAX_BACKUP_FILE_BYTES = 100 * 1024 * 1024;
-const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
+export const MAX_BACKUP_FILE_BYTES = PRODUCT_LIMITS.backupFileBytes;
+const MAX_PHOTO_BYTES = PRODUCT_LIMITS.photoBytes;
 const ALLOWED_PHOTO_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const ALLOWED_SYNC_STATUSES = new Set(["local", "metadata-synced"]);
 const CONDITION_SOURCE_FIELDS = new Set(["airTempC", "waterTempC", "pressureHpa", "windKmh", "moonPhase"]);

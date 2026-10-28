@@ -1,11 +1,14 @@
+import { PRODUCT_LIMITS } from "../product/config/limits.js";
+import { XP_RULES } from "../product/config/xp.js";
+
 const SHA256_PATTERN = /^[a-f\d]{64}$/i;
-const LIVE_GPS_MAX_AGE_MS = 15 * 60 * 1000;
-const LIVE_GPS_MAX_ACCURACY_METERS = 150;
-const CATCH_CLOCK_SKEW_MS = 5 * 60 * 1000;
-const PHOTO_DATE_TOLERANCE_MS = 24 * 60 * 60 * 1000;
-const TRIP_TOLERANCE_MS = 30 * 60 * 1000;
-const WATER_RADIUS_METERS = 1000;
-const XP = Object.freeze({ base: 10, photo: 15, context: 20, limitedMultiplier: 0.25, dailyLimitedCap: 20 });
+const XP = Object.freeze({
+  base: XP_RULES.catch.base,
+  photo: XP_RULES.catch.photo,
+  context: XP_RULES.catch.gpsAndWeather,
+  limitedMultiplier: XP_RULES.catchVerificationMultiplier.limited,
+  dailyLimitedCap: XP_RULES.limitedCatch.dailyCap,
+});
 
 function dateMs(value) {
   const result = Date.parse(value);
@@ -55,33 +58,33 @@ function matchesTrip(record, trip, caughtAt) {
   if (!trip || trip.deleted || trip.ownerId !== record.ownerId || trip.id !== record.tripId) return false;
   const start = dateMs(trip.startedAt);
   const end = trip.endedAt == null ? null : dateMs(trip.endedAt);
-  return start !== null && caughtAt >= start - TRIP_TOLERANCE_MS
-    && (end === null || caughtAt <= end + TRIP_TOLERANCE_MS);
+  return start !== null && caughtAt >= start - PRODUCT_LIMITS.tripCatchTimeToleranceMs
+    && (end === null || caughtAt <= end + PRODUCT_LIMITS.tripCatchTimeToleranceMs);
 }
 
 function evidenceLevel(record, { trip, water, caughtAt, now }) {
   const proof = record.verification?.photoCaptureMetadata;
   const capturedAt = dateMs(proof?.capturedAt);
   const photoDateMatches = capturedAt !== null && capturedAt <= now
-    && Math.abs(capturedAt - caughtAt) <= PHOTO_DATE_TOLERANCE_MS;
+    && Math.abs(capturedAt - caughtAt) <= PRODUCT_LIMITS.photoCaptureTimeToleranceMs;
   const waterCoordinates = water?.ownerId === record.ownerId && !water.deleted ? water.coordinates : null;
   const photoGpsMatches = coordinates(proof?.coordinates) && coordinates(waterCoordinates)
-    && distanceMeters(proof.coordinates, waterCoordinates) <= WATER_RADIUS_METERS;
+    && distanceMeters(proof.coordinates, waterCoordinates) <= PRODUCT_LIMITS.verifiedWaterRadiusMeters;
 
   const live = record.locationEvidence;
   const liveAt = dateMs(live?.capturedAt);
   const liveFixValid = live?.source === "live-gps" && liveAt !== null
-    && now - liveAt >= 0 && now - liveAt <= LIVE_GPS_MAX_AGE_MS
-    && Math.abs(liveAt - caughtAt) <= LIVE_GPS_MAX_AGE_MS
+    && now - liveAt >= 0 && now - liveAt <= PRODUCT_LIMITS.liveGpsMaxAgeMs
+    && Math.abs(liveAt - caughtAt) <= PRODUCT_LIMITS.liveGpsMaxAgeMs
     && Number.isFinite(live.accuracyMeters) && live.accuracyMeters > 0
-    && live.accuracyMeters <= LIVE_GPS_MAX_ACCURACY_METERS && coordinates(live.coordinates);
+    && live.accuracyMeters <= PRODUCT_LIMITS.liveGpsMaxAccuracyMeters && coordinates(live.coordinates);
   const liveGpsMatches = liveFixValid && coordinates(waterCoordinates)
-    && distanceMeters(live.coordinates, waterCoordinates) <= WATER_RADIUS_METERS;
+    && distanceMeters(live.coordinates, waterCoordinates) <= PRODUCT_LIMITS.verifiedWaterRadiusMeters;
   if (liveGpsMatches || (photoDateMatches && photoGpsMatches)) return "strong";
 
   const tripMatches = matchesTrip(record, trip, caughtAt);
   const gpsMatchesCatch = liveFixValid && record.gpsSource === "live-gps" && coordinates(record.coordinates)
-    && distanceMeters(live.coordinates, record.coordinates) <= LIVE_GPS_MAX_ACCURACY_METERS;
+    && distanceMeters(live.coordinates, record.coordinates) <= PRODUCT_LIMITS.liveGpsMaxAccuracyMeters;
   if (photoDateMatches || (coordinates(proof?.coordinates) && photoGpsMatches) || tripMatches || gpsMatchesCatch) return "standard";
   return "limited";
 }
@@ -99,7 +102,7 @@ export function calculateServerCatchReward({
   const candidateHashes = Array.isArray(photoHashes) ? photoHashes : getServerSyncedPhotoHashes(catchRecord, ownerId);
   const usedHashes = duplicatePhotoHashes instanceof Set ? duplicatePhotoHashes : new Set(duplicatePhotoHashes);
   const photoHash = candidateHashes.find((hash) => !usedHashes.has(hash)) ?? null;
-  if (caughtAt === null || caughtAt > now + CATCH_CLOCK_SKEW_MS) {
+  if (caughtAt === null || caughtAt > now + PRODUCT_LIMITS.futureCatchClockSkewMs) {
     return { eligible: false, level: "unverified", reason: caughtAt === null ? "invalid-catch-date" : "future-catch", photoHash, targetXp: currentXp, deltaXp: 0, events: [] };
   }
   if (!photoHash || duplicatePhoto || candidateHashes.length > 0 && candidateHashes.every((hash) => usedHashes.has(hash))) {

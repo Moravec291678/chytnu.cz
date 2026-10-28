@@ -1,22 +1,13 @@
 import { validateDataScope } from "../../auth/data/localDataScope.js";
+import { NOTIFICATION_COPY, NOTIFICATION_TYPES } from "../../../product/config/notifications.js";
+import { PRODUCT_LIMITS } from "../../../product/config/limits.js";
 
-export const NOTIFICATION_TYPES = Object.freeze([
-  "sync_problem",
-  "achievement",
-  "challenge",
-  "active_trip",
-  "app_update",
-]);
-
-const MAX_ID_LENGTH = 128;
-const MAX_TITLE_LENGTH = 120;
-const MAX_BODY_LENGTH = 500;
-const MAX_DEEP_LINK_LENGTH = 300;
+export { NOTIFICATION_TYPES } from "../../../product/config/notifications.js";
 
 export function normalizeNotificationDeepLink(value) {
   if (typeof value !== "string") return null;
   const link = value.trim();
-  if (!link.startsWith("/") || link.startsWith("//") || link.length > MAX_DEEP_LINK_LENGTH
+  if (!link.startsWith("/") || link.startsWith("//") || link.length > PRODUCT_LIMITS.notificationDeepLinkLength
     || !/^\/[A-Za-z0-9/_?=&%#.-]*$/.test(link)) return null;
   return link;
 }
@@ -28,10 +19,10 @@ export function createNotificationRecord(input, scopeOptions, { now = new Date()
   const deepLink = normalizeNotificationDeepLink(input?.deepLink);
   const id = typeof input?.id === "string" ? input.id.trim() : `n_${globalThis.crypto?.randomUUID?.() ?? ""}`;
   const createdAt = input?.createdAt ?? now.toISOString();
-  if (!id || id.length > MAX_ID_LENGTH || !/^[A-Za-z0-9_-]+$/.test(id)) throw new TypeError("Oznámení nemá platné ID.");
+  if (!id || id.length > PRODUCT_LIMITS.notificationIdLength || !/^[A-Za-z0-9_-]+$/.test(id)) throw new TypeError("Oznámení nemá platné ID.");
   if (!NOTIFICATION_TYPES.includes(input?.type)) throw new TypeError("Oznámení má nepodporovaný typ.");
-  if (!title || title.length > MAX_TITLE_LENGTH) throw new TypeError("Název oznámení musí mít 1 až 120 znaků.");
-  if (!body || body.length > MAX_BODY_LENGTH) throw new TypeError("Text oznámení musí mít 1 až 500 znaků.");
+  if (!title || title.length > PRODUCT_LIMITS.notificationTitleLength) throw new TypeError(`Název oznámení musí mít 1 až ${PRODUCT_LIMITS.notificationTitleLength} znaků.`);
+  if (!body || body.length > PRODUCT_LIMITS.notificationBodyLength) throw new TypeError(`Text oznámení musí mít 1 až ${PRODUCT_LIMITS.notificationBodyLength} znaků.`);
   if (!deepLink) throw new TypeError("Oznámení musí odkazovat na bezpečnou stránku aplikace.");
   if (typeof createdAt !== "string" || !Number.isFinite(Date.parse(createdAt))) throw new TypeError("Oznámení nemá platný čas vytvoření.");
   const readAt = input?.readAt ?? null;
@@ -52,7 +43,7 @@ export function createNotificationRecord(input, scopeOptions, { now = new Date()
 }
 
 export function stableNotificationId(...parts) {
-  return `n_${parts.map((part) => String(part ?? "")).join("_").replace(/[^A-Za-z0-9_-]/g, "_").slice(0, MAX_ID_LENGTH - 2)}`;
+  return `n_${parts.map((part) => String(part ?? "")).join("_").replace(/[^A-Za-z0-9_-]/g, "_").slice(0, PRODUCT_LIMITS.notificationIdLength - 2)}`;
 }
 
 export function sortNotificationsNewestFirst(notifications) {
@@ -69,23 +60,25 @@ export function mergeNotificationReadState(local, remote) {
 
 export function progressionNotificationInput(event, scopeKey) {
   if (event?.type === "achievement.unlocked") {
+    const copy = NOTIFICATION_COPY.achievement;
     return {
       id: stableNotificationId("achievement", scopeKey, event.id),
       type: "achievement",
-      title: "Nový úspěch",
-      body: event.xp > 0 ? `Odemkl(a) jsi nový úspěch a získal(a) ${event.xp} XP.` : "Odemkl(a) jsi nový úspěch. Podívej se na svůj postup.",
+      title: copy.title,
+      body: event.xp > 0 ? copy.bodyWithXp.replace("{xp}", String(event.xp)) : copy.bodyWithoutXp,
       createdAt: event.createdAt,
-      deepLink: "/achievements",
+      deepLink: copy.deepLink,
     };
   }
   if (event?.type === "challenge.completed") {
+    const copy = NOTIFICATION_COPY.challenge;
     return {
       id: stableNotificationId("challenge", scopeKey, event.id),
       type: "challenge",
-      title: "Výzva dokončena",
-      body: event.xp > 0 ? `Dokončil(a) jsi výzvu a získal(a) ${event.xp} XP.` : "Dokončil(a) jsi svou výzvu.",
+      title: copy.title,
+      body: event.xp > 0 ? copy.bodyWithXp.replace("{xp}", String(event.xp)) : copy.bodyWithoutXp,
       createdAt: event.createdAt,
-      deepLink: "/challenges",
+      deepLink: copy.deepLink,
     };
   }
   return null;

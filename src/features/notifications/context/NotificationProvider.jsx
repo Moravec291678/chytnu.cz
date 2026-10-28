@@ -6,6 +6,7 @@ import { progressionNotificationInput, sortNotificationsNewestFirst, stableNotif
 import { notificationRepository } from "../data/notificationRepository.js";
 import { NotificationContext } from "./notificationContextValue.js";
 import { userFacingErrorMessage } from "../../../shared/errors/userFacingError.js";
+import { NOTIFICATION_COPY } from "../../../product/config/notifications.js";
 
 const emptyState = { scopeKey: null, notifications: [], loading: true, error: "" };
 
@@ -77,13 +78,14 @@ export function NotificationProvider({ children }) {
   useEffect(() => {
     if (scope.status !== "ready" || sync?.status !== "error") return;
     const day = new Date().toISOString().slice(0, 10);
+    const copy = NOTIFICATION_COPY.syncProblem;
     void publishNotification({
       id: stableNotificationId("sync", scope.scopeKey, sync.errorCode || "sync-problem", day),
       type: "sync_problem",
-      title: "Synchronizace potřebuje pozornost",
-      body: "Některé záznamy se nepodařilo synchronizovat. Místní data zůstávají uložená; zkus synchronizaci zopakovat.",
+      title: copy.title,
+      body: copy.body,
       createdAt: new Date().toISOString(),
-      deepLink: "/profile",
+      deepLink: copy.deepLink,
     }).catch(() => {});
   }, [publishNotification, scope.scopeKey, scope.status, sync?.errorCode, sync?.status]);
 

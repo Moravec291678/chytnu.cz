@@ -1,5 +1,7 @@
-export const MAX_PHOTOS_PER_CATCH = 4;
-export const MAX_LEGACY_PHOTOS_PER_CATCH = 10;
+import { PRODUCT_LIMITS } from "../../../product/config/limits.js";
+
+export const MAX_PHOTOS_PER_CATCH = PRODUCT_LIMITS.photosPerCatch;
+export const MAX_LEGACY_PHOTOS_PER_CATCH = PRODUCT_LIMITS.legacyPhotosPerCatch;
 
 export function getPrimaryPhoto(record) {
   const photos = Array.isArray(record?.photos) ? record.photos : [];

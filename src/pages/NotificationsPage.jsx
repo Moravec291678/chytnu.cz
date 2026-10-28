@@ -5,18 +5,11 @@ import { useNotifications } from "../features/notifications/context/notification
 import { normalizeNotificationDeepLink } from "../features/notifications/data/notificationModel.js";
 import { readPreferences, savePreferences } from "../features/preferences/data/preferences.js";
 import { getNotificationAdapter } from "../platform/notifications/index.js";
+import { NOTIFICATION_PREFERENCES, NOTIFICATION_TYPE_PRESENTATION } from "../product/config/notifications.js";
 import Layout from "../shared/layout/Layout";
 import "./NotificationsPage.css";
 
-const OPTIONS = [
-  { key: "morningFishActivity", title: "Ranní aktivita ryb", description: "Ranní přehled orientačních podmínek pro rybaření." },
-  { key: "tomorrowGreatConditions", title: "Skvělé podmínky zítra", description: "Preference pro upozornění na vhodné podmínky." },
-  { key: "friendActivity", title: "Aktivita přátel", description: "Preference pro nové úlovky a aktivitu přátel." },
-  { key: "streaksAndChallenges", title: "Série a výzvy", description: "Preference pro připomenutí série a výzev." },
-  { key: "friendLegendaryCatch", title: "Výjimečný úlovek přítele", description: "Preference pro výjimečné úlovky přátel." },
-];
-
-const TYPE_ICONS = Object.freeze({ sync_problem: "↻", achievement: "★", challenge: "✓", active_trip: "⌖", app_update: "i" });
+const TYPE_ICONS = Object.freeze(Object.fromEntries(Object.entries(NOTIFICATION_TYPE_PRESENTATION).map(([key, value]) => [key, value.icon])));
 
 function formatNotificationDate(value) {
   const date = new Date(value);
@@ -127,7 +120,7 @@ export default function NotificationsPage() {
           <summary>Preference oznámení</summary>
           <p className="notifications-preferences-intro">Ukládají se pro tento profil a vyjadřují zájem o jednotlivá témata.</p>
           <div className="notifications-list" aria-label="Preference oznámení">
-            {OPTIONS.map((option) => (
+            {NOTIFICATION_PREFERENCES.map((option) => (
               <label className="notification-option" key={option.key}>
                 <span className="notification-copy"><strong>{option.title}</strong><small>{option.description}</small></span>
                 <input type="checkbox" role="switch" checked={Boolean(preferences.notifications[option.key])}

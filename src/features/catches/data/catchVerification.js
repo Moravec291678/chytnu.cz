@@ -1,4 +1,5 @@
 import { distanceBetweenCoordinatesMeters } from "../../waters/data/nearbyWaterMatch.js";
+import { PRODUCT_LIMITS } from "../../../product/config/limits.js";
 
 export const CATCH_VERIFICATION_STATUS = Object.freeze({ VERIFIED: "verified", UNVERIFIED: "unverified" });
 export const CATCH_VERIFICATION_LEVEL = Object.freeze({
@@ -8,12 +9,12 @@ export const CATCH_VERIFICATION_LEVEL = Object.freeze({
   UNVERIFIED: "unverified",
 });
 const CATCH_VERIFICATION_LEVELS = new Set(Object.values(CATCH_VERIFICATION_LEVEL));
-export const LIVE_GPS_MAX_AGE_MS = 15 * 60 * 1000;
-export const LIVE_GPS_MAX_ACCURACY_METERS = 150;
-export const VERIFIED_WATER_RADIUS_METERS = 1000;
-export const PHOTO_CAPTURE_TIME_TOLERANCE_MS = 24 * 60 * 60 * 1000;
-export const TRIP_CATCH_TIME_TOLERANCE_MS = 30 * 60 * 1000;
-export const FUTURE_CATCH_CLOCK_SKEW_MS = 5 * 60 * 1000;
+export const LIVE_GPS_MAX_AGE_MS = PRODUCT_LIMITS.liveGpsMaxAgeMs;
+export const LIVE_GPS_MAX_ACCURACY_METERS = PRODUCT_LIMITS.liveGpsMaxAccuracyMeters;
+export const VERIFIED_WATER_RADIUS_METERS = PRODUCT_LIMITS.verifiedWaterRadiusMeters;
+export const PHOTO_CAPTURE_TIME_TOLERANCE_MS = PRODUCT_LIMITS.photoCaptureTimeToleranceMs;
+export const TRIP_CATCH_TIME_TOLERANCE_MS = PRODUCT_LIMITS.tripCatchTimeToleranceMs;
+export const FUTURE_CATCH_CLOCK_SKEW_MS = PRODUCT_LIMITS.futureCatchClockSkewMs;
 
 export function isCatchDateEligibleForProgression(record, now = new Date()) {
   const caughtAtMs = Date.parse(record?.caughtAt);

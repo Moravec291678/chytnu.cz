@@ -1,8 +1,9 @@
 import { normalizeText } from "../../../shared/utils/helpers.js";
 import { isMeasuredCatchWeight } from "../../catches/data/catchWeight.js";
 import { getPragueDateParts } from "./statsPeriod.js";
+import { PRODUCT_LIMITS } from "../../../product/config/limits.js";
 
-export const PATTERN_MIN_SAMPLE_SIZE = 3;
+export const PATTERN_MIN_SAMPLE_SIZE = PRODUCT_LIMITS.statsPatternMinimumSample;
 
 function groupBy(items, getKey, getLabel) {
   const groups = new Map();

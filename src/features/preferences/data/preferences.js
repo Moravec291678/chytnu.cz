@@ -1,11 +1,9 @@
 const KEY = "chytnu:preferences:v1";
-export const DEFAULT_NOTIFICATION_PREFERENCES = Object.freeze({
-  morningFishActivity: true,
-  tomorrowGreatConditions: false,
-  friendActivity: false,
-  streaksAndChallenges: true,
-  friendLegendaryCatch: false,
-});
+import { NOTIFICATION_PREFERENCES } from "../../../product/config/notifications.js";
+
+export const DEFAULT_NOTIFICATION_PREFERENCES = Object.freeze(Object.fromEntries(
+  NOTIFICATION_PREFERENCES.map(({ key, defaultEnabled }) => [key, defaultEnabled]),
+));
 
 export const DEFAULT_PREFERENCES = Object.freeze({
   detailMode: "simple",

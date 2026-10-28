@@ -4,6 +4,7 @@ import { estimateFishWeight, formatEstimatedWeight } from "./lengthWeightRelatio
 import { hasCustomPhotoFrame, normalizePhotoFrame } from "./photoFraming.js";
 import { MAX_LEGACY_PHOTOS_PER_CATCH, MAX_PHOTOS_PER_CATCH, normalizePrimaryPhotoId } from "./catchPhotos.js";
 import { normalizeCatchVerification, normalizeLocationEvidence } from "./catchVerification.js";
+import { PRODUCT_LIMITS } from "../../../product/config/limits.js";
 
 const CONDITION_SOURCE_FIELDS = ["airTempC", "waterTempC", "pressureHpa", "windKmh", "moonPhase"];
 
@@ -47,16 +48,16 @@ export function validateCatchForm(data) {
   if (!data.catchDate || Number.isNaN(Date.parse(`${data.catchDate}T${data.catchTime || "12:00"}`))) {
     errors.catchDate = "Zadej platné datum úlovku.";
   }
-  parseOptionalNumber(data.weightKg, "Váha", errors, { max: 1000 });
-  parseOptionalNumber(data.lengthCm, "Délka", errors, { max: 2000 });
-  parseOptionalNumber(data.girthCm, "Obvod", errors, { max: 2000 });
-  parseOptionalNumber(data.fightDurationMin, "Délka boje", errors, { max: 10000 });
-  parseOptionalNumber(data.depthM, "Hloubka", errors, { max: 2000 });
-  parseOptionalNumber(data.waterNumber, "Číslo revíru", errors, { max: 99999999 });
-  parseOptionalNumber(data.conditions?.airTempC, "Teplota vzduchu", errors, { min: -60, max: 60 });
-  parseOptionalNumber(data.conditions?.waterTempC, "Teplota vody", errors, { min: -10, max: 60 });
-  parseOptionalNumber(data.conditions?.pressureHpa, "Tlak", errors, { min: 300, max: 1200 });
-  parseOptionalNumber(data.conditions?.windKmh, "Rychlost větru", errors, { max: 300 });
+  parseOptionalNumber(data.weightKg, "Váha", errors, { max: PRODUCT_LIMITS.catch.weightKg });
+  parseOptionalNumber(data.lengthCm, "Délka", errors, { max: PRODUCT_LIMITS.catch.lengthCm });
+  parseOptionalNumber(data.girthCm, "Obvod", errors, { max: PRODUCT_LIMITS.catch.girthCm });
+  parseOptionalNumber(data.fightDurationMin, "Délka boje", errors, { max: PRODUCT_LIMITS.catch.fightDurationMin });
+  parseOptionalNumber(data.depthM, "Hloubka", errors, { max: PRODUCT_LIMITS.catch.depthM });
+  parseOptionalNumber(data.waterNumber, "Číslo revíru", errors, { max: PRODUCT_LIMITS.catch.waterNumber });
+  parseOptionalNumber(data.conditions?.airTempC, "Teplota vzduchu", errors, PRODUCT_LIMITS.catch.airTempC);
+  parseOptionalNumber(data.conditions?.waterTempC, "Teplota vody", errors, PRODUCT_LIMITS.catch.waterTempC);
+  parseOptionalNumber(data.conditions?.pressureHpa, "Tlak", errors, PRODUCT_LIMITS.catch.pressureHpa);
+  parseOptionalNumber(data.conditions?.windKmh, "Rychlost větru", errors, { max: PRODUCT_LIMITS.catch.windKmh });
   return errors;
 }
 
