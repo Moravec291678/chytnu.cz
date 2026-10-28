@@ -6,6 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build && node tools/cloudinary-client-secret-scan.mjs",
+    "build:android": "npm run build && cap sync android",
+    "android:open": "cap open android",
+    "android:run": "npm run build:android && cap run android",
     "lint": "eslint .",
     "test": "node --test",
     "preview": "vite preview",
@@ -16,8 +19,11 @@
     "test:photos": "node tools/firebase-photo-sync.emulator.mjs"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/core": "^8.5.3",
     "cloudinary": "^2.11.0",
-    "firebase": "12.8.0",
+    "exifr": "^7.1.3",
+    "firebase": "12.19.0",
     "firebase-admin": "^14.5.0",
     "heic2any": "^0.0.4",
     "leaflet": "^1.9.4",
@@ -25,18 +31,24 @@
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.26.0"
   },
+  "overrides": {
+    "@firebase/firestore": {
+      "@grpc/grpc-js": "1.14.6"
+    }
+  },
   "devDependencies": {
+    "@capacitor/cli": "^8.5.3",
     "@eslint/js": "^10.0.1",
     "@firebase/rules-unit-testing": "5.0.2",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^4.3.1",
+    "@vitejs/plugin-react": "^5.2.0",
     "eslint": "^10.2.1",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",
     "fake-indexeddb": "^6.2.6",
     "firebase-tools": "15.34.0",
     "globals": "^17.5.0",
-    "vite": "^5.4.0"
+    "vite": "^6.4.5"
   }
 }

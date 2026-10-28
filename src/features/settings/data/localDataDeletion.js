@@ -4,6 +4,7 @@ import {
   OUTBOX_STORE_NAME,
   PRIVACY_STORE_NAME,
   PROGRESSION_EVENT_STORE_NAME,
+  NOTIFICATION_STORE_NAME,
   SYNC_STATE_STORE_NAME,
   TRIP_STORE_NAME,
   WATER_STORE_NAME,
@@ -41,6 +42,7 @@ async function deleteJournalScope(scope) {
     CONFLICT_STORE_NAME,
     PRIVACY_STORE_NAME,
     PROGRESSION_EVENT_STORE_NAME,
+    NOTIFICATION_STORE_NAME,
     SYNC_STATE_STORE_NAME,
     WATER_STORE_NAME,
     WATER_CHAT_STORE_NAME,
@@ -53,6 +55,7 @@ async function deleteJournalScope(scope) {
     deleteIndexMatches(transaction.objectStore(WATER_CHAT_STORE_NAME), "scopeKey", scope.scopeKey);
     deleteIndexMatches(transaction.objectStore(OUTBOX_STORE_NAME), "scopeKey", scope.scopeKey);
     deleteIndexMatches(transaction.objectStore(PROGRESSION_EVENT_STORE_NAME), "scopeKey", scope.scopeKey);
+    deleteIndexMatches(transaction.objectStore(NOTIFICATION_STORE_NAME), "scopeKey", scope.scopeKey);
     transaction.objectStore(PRIVACY_STORE_NAME).delete(scope.scopeKey);
     if (scope.ownerId) transaction.objectStore(SYNC_STATE_STORE_NAME).delete(scope.ownerId);
     deleteMatchingRecords(transaction.objectStore(CONFLICT_STORE_NAME), (record) => (

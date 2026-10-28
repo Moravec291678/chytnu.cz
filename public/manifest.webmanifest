@@ -1,7 +1,7 @@
 {
   "name": "ChytnuCz",
   "short_name": "ChytnuCz",
-  "description": "Soukromý rybářský deník úlovků a výprav.",
+  "description": "Soukromý rybářský deník úlovků a vycházek.",
   "lang": "cs",
   "start_url": "/",
   "scope": "/",

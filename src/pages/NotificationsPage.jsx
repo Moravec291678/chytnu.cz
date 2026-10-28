@@ -1,91 +1,156 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { useDataScope } from "../features/auth/context/dataScopeContextValue.js";
+import { useNotifications } from "../features/notifications/context/notificationContextValue.js";
+import { normalizeNotificationDeepLink } from "../features/notifications/data/notificationModel.js";
 import { readPreferences, savePreferences } from "../features/preferences/data/preferences.js";
-import { isFeatureEnabled } from "../shared/config/featureFlags.js";
+import { getNotificationAdapter } from "../platform/notifications/index.js";
 import Layout from "../shared/layout/Layout";
 import "./NotificationsPage.css";
 
 const OPTIONS = [
-  { key: "morningFishActivity", title: "Ranní aktivita ryb", description: "Ranní přehled odhadu vhodnosti podmínek pro rybaření." },
-  { key: "tomorrowGreatConditions", title: "Skvělé podmínky zítra", description: "Preference upozornění, když předpověď ukáže výrazně vhodné podmínky." },
+  { key: "morningFishActivity", title: "Ranní aktivita ryb", description: "Ranní přehled orientačních podmínek pro rybaření." },
+  { key: "tomorrowGreatConditions", title: "Skvělé podmínky zítra", description: "Preference pro upozornění na vhodné podmínky." },
   { key: "friendActivity", title: "Aktivita přátel", description: "Preference pro nové úlovky a aktivitu přátel." },
-  { key: "streaksAndChallenges", title: "Série a výzvy", description: "Připomenutí série a průběhu osobních výzev." },
-  { key: "friendLegendaryCatch", title: "Legendary úlovek přítele", description: "Preference pro výjimečný úlovek přítele." },
+  { key: "streaksAndChallenges", title: "Série a výzvy", description: "Preference pro připomenutí série a výzev." },
+  { key: "friendLegendaryCatch", title: "Výjimečný úlovek přítele", description: "Preference pro výjimečné úlovky přátel." },
 ];
+
+const TYPE_ICONS = Object.freeze({ sync_problem: "↻", achievement: "★", challenge: "✓", active_trip: "⌖", app_update: "i" });
+
+function formatNotificationDate(value) {
+  const date = new Date(value);
+  return Number.isFinite(date.getTime())
+    ? new Intl.DateTimeFormat("cs-CZ", { dateStyle: "medium", timeStyle: "short" }).format(date)
+    : "";
+}
 
 export default function NotificationsPage() {
   const scope = useDataScope();
+  const navigate = useNavigate();
+  const { notifications, unreadCount, loading, error: inboxError, markAsRead, markAllAsRead } = useNotifications();
   const [preferenceOverride, setPreferenceOverride] = useState({ scopeKey: null, value: null });
-  const [error, setError] = useState("");
+  const [preferenceError, setPreferenceError] = useState("");
+  const [pushState, setPushState] = useState({ support: null, permission: "default", subscribed: false, busy: false, error: "" });
   const preferences = preferenceOverride.value && preferenceOverride.scopeKey === scope.scopeKey
     ? preferenceOverride.value
     : readPreferences(globalThis.localStorage, scope.scopeKey);
-  const pushDeliveryAvailable = isFeatureEnabled("notifications");
+
+  useEffect(() => {
+    let active = true;
+    try {
+      const notificationAdapter = getNotificationAdapter();
+      const support = notificationAdapter.support();
+      setPushState((previous) => ({ ...previous, support, permission: notificationAdapter.permission() }));
+      if (support.available && scope.ownerId) {
+        notificationAdapter.currentSubscription().then((subscription) => {
+          if (!active) return;
+          setPushState((previous) => ({ ...previous, subscribed: Boolean(subscription) }));
+          if (subscription) void notificationAdapter.refresh().catch(() => {});
+        }).catch(() => {});
+      }
+    } catch {
+      setPushState((previous) => ({ ...previous, support: { available: false, reason: "Web Push není v tomto prostředí nakonfigurovaný." } }));
+    }
+    return () => { active = false; };
+  }, [scope.ownerId]);
+
+  async function toggleWebPush() {
+    setPushState((previous) => ({ ...previous, busy: true, error: "" }));
+    try {
+      const notificationAdapter = getNotificationAdapter();
+      if (pushState.subscribed) await notificationAdapter.unsubscribe();
+      else await notificationAdapter.subscribe();
+      setPushState((previous) => ({ ...previous, permission: notificationAdapter.permission(), subscribed: !previous.subscribed, busy: false, error: "" }));
+    } catch (error) {
+      setPushState((previous) => ({ ...previous, permission: getNotificationAdapter().permission(), busy: false, error: error?.message || "Nastavení push oznámení se nezdařilo." }));
+    }
+  }
 
   function toggle(key, checked) {
     if (scope.status !== "ready") return;
     try {
-      const value = savePreferences(
-        { notifications: { [key]: checked } },
-        globalThis.localStorage,
-        scope.scopeKey,
-      );
+      const value = savePreferences({ notifications: { [key]: checked } }, globalThis.localStorage, scope.scopeKey);
       setPreferenceOverride({ scopeKey: scope.scopeKey, value });
-      setError("");
+      setPreferenceError("");
     } catch (saveError) {
-      setError(saveError.message);
+      setPreferenceError(saveError.message);
     }
+  }
+
+  async function openNotification(notification) {
+    const destination = normalizeNotificationDeepLink(notification.deepLink) ?? "/notifications";
+    if (!notification.readAt) await markAsRead(notification.id).catch(() => {});
+    navigate(destination);
+  }
+
+  async function markAll() {
+    try { await markAllAsRead(); } catch { /* Inbox keeps locally saved state and reports load errors separately. */ }
   }
 
   return (
     <Layout>
       <section className="notifications-page">
         <header className="notifications-header">
-          <Link to="/settings">← Nastavení</Link>
-          <h1>Oznámení</h1>
-          <p>Vyber si témata, o kterých chceš být informován.</p>
+          <Link to="/profile">← Profil</Link>
+          <div className="notifications-heading-row">
+            <div>
+              <h1>Oznámení</h1>
+              <p>Nové události a důležité informace k tvému rybářskému deníku.</p>
+            </div>
+            {unreadCount > 0 && <button type="button" className="notifications-mark-all" onClick={markAll}>Označit vše jako přečtené</button>}
+          </div>
         </header>
 
-        <div className="notifications-status-grid" aria-label="Stav oznámení">
-          <article className="notifications-status-card">
-            <span>PREFERENCE</span>
-            <strong>Ukládají se pro tento profil</strong>
-            <p>Přepínače určují, o jaké typy oznámení máš zájem.</p>
-          </article>
-          <article className="notifications-status-card notifications-delivery-card">
-            <span>PUSH DELIVERY</span>
-            <strong>{pushDeliveryAvailable ? "Povoleno pro toto prostředí" : "Push backend není aktivní"}</strong>
-            <p>
-              {pushDeliveryAvailable
-                ? "Doručení stále závisí na oprávnění zařízení a dostupnosti služby."
-                : "Zapnutí preference samo o sobě nezačne posílat oznámení do zařízení."}
-            </p>
-          </article>
-        </div>
+        {inboxError && <p className="notifications-error" role="alert">{inboxError}</p>}
+        {loading ? <p className="notifications-inbox-status" role="status" aria-live="polite">Načítám oznámení…</p>
+          : notifications.length === 0 ? <div className="notifications-empty">
+            <span className="notifications-empty-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></svg></span>
+            <strong>Zatím tu nic není</strong>
+            <p>Úspěchy, dokončené výzvy a důležité události se zobrazí právě tady.</p>
+          </div> : <div className="notification-inbox-list" aria-label="Seznam oznámení">
+            {notifications.map((notification) => <article className={`notification-inbox-item${notification.readAt ? " notification-inbox-item-read" : " notification-inbox-item-unread"}`} key={notification.id}>
+              <button className="notification-inbox-open" type="button" onClick={() => void openNotification(notification)}>
+                <span className="notification-inbox-icon" aria-hidden="true">{TYPE_ICONS[notification.type] ?? "•"}</span>
+                <span className="notification-inbox-copy">
+                  <strong>{notification.title}</strong>
+                  <span>{notification.body}</span>
+                  <time dateTime={notification.createdAt}>{formatNotificationDate(notification.createdAt)} · {notification.readAt ? "Přečteno" : "Nepřečteno"}</time>
+                </span>
+                {!notification.readAt && <span className="notification-unread-dot" aria-label="Nepřečtené" />}
+              </button>
+              {!notification.readAt && <button type="button" className="notification-mark-read" onClick={() => void markAsRead(notification.id).catch(() => {})}>Označit jako přečtené</button>}
+            </article>)}
+          </div>}
 
-        <div className="notifications-list" aria-label="Preference oznámení">
-          {OPTIONS.map((option) => (
-            <label className="notification-option" key={option.key}>
-              <span className="notification-copy">
-                <strong>{option.title}</strong>
-                <small>{option.description}</small>
-              </span>
-              <input
-                type="checkbox"
-                role="switch"
-                checked={Boolean(preferences.notifications[option.key])}
-                disabled={scope.status !== "ready"}
-                onChange={(event) => toggle(option.key, event.target.checked)}
-              />
-            </label>
-          ))}
-        </div>
-
-        <p className="notifications-rule">
-          Pokud bude doručování aktivováno, produktové pravidlo je nejvýše 1–2 oznámení denně.
-        </p>
-        {error && <p className="notifications-error" role="alert">{error}</p>}
+        <details className="notifications-preferences" id="preferences">
+          <summary>Preference oznámení</summary>
+          <p className="notifications-preferences-intro">Ukládají se pro tento profil a vyjadřují zájem o jednotlivá témata.</p>
+          <div className="notifications-list" aria-label="Preference oznámení">
+            {OPTIONS.map((option) => (
+              <label className="notification-option" key={option.key}>
+                <span className="notification-copy"><strong>{option.title}</strong><small>{option.description}</small></span>
+                <input type="checkbox" role="switch" checked={Boolean(preferences.notifications[option.key])}
+                  disabled={scope.status !== "ready"} onChange={(event) => toggle(option.key, event.target.checked)} />
+              </label>
+            ))}
+          </div>
+          {preferenceError && <p className="notifications-error" role="alert">{preferenceError}</p>}
+        </details>
+        <section className="web-push-settings" aria-labelledby="web-push-title">
+            <div>
+              <strong id="web-push-title">Push oznámení</strong>
+              <p>{pushState.subscribed ? "Push oznámení jsou pro tento účet zapnutá." : pushState.support?.available ? "Doručení upozornění i mimo otevřenou aplikaci." : pushState.support?.reason || "Kontroluji podporu prohlížeče…"}</p>
+            </div>
+            {scope.ownerId && <button type="button" className="web-push-toggle" onClick={() => void toggleWebPush()} disabled={pushState.busy || pushState.permission === "denied" || !pushState.support?.available}>
+              {pushState.busy ? "Nastavuji…" : pushState.subscribed ? "Vypnout oznámení" : "Zapnout oznámení"}
+            </button>}
+            {scope.ownerId && !pushState.support?.available && pushState.support?.reason && <p className="web-push-unavailable">{pushState.support.reason}</p>}
+            {!scope.ownerId && <p className="web-push-unavailable">Push oznámení vyžadují přihlášený účet.</p>}
+            {pushState.permission === "denied" && <p className="web-push-unavailable">Oznámení jsou zakázaná v nastavení prohlížeče.</p>}
+            {pushState.error && <p className="notifications-error" role="alert">{pushState.error}</p>}
+        </section>
+        <p className="notifications-preferences-note">Oprávnění se vyžádá pouze po stisknutí tlačítka Zapnout oznámení.</p>
       </section>
     </Layout>
   );

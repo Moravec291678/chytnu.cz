@@ -34,6 +34,8 @@ test("environment example declares public client variables without server creden
     "VITE_FIREBASE_STORAGE_BUCKET",
     "VITE_FIREBASE_MESSAGING_SENDER_ID",
     "VITE_FIREBASE_APP_ID",
+    "VITE_API_BASE_URL",
+    "VITE_WEB_PUSH_PUBLIC_KEY",
     "VITE_FIREBASE_GOOGLE_AUTH_ENABLED",
   ]) assert.match(content, new RegExp(`^${variable}=`, "m"));
   assert.doesNotMatch(content, /PRIVATE_KEY|SERVICE_ACCOUNT|ADMIN_CREDENTIAL/i);

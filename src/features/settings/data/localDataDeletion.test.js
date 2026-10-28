@@ -3,6 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { catchRepository, getActiveGuestScopeKey } from "../../catches/data/catchRepository.js";
 import { waterRepository } from "../../waters/data/waterRepository.js";
+import { notificationRepository } from "../../notifications/data/notificationRepository.js";
 import { deleteLocalScopeData } from "./localDataDeletion.js";
 
 function memoryStorage() {
@@ -36,6 +37,8 @@ test("confirmed local deletion clears only the active scope and its scoped setti
   await catchRepository.put(catchRecord("account-catch"), account);
   await waterRepository.put({ id: "guest-water", name: "Guest Water" }, guest);
   await waterRepository.put({ id: "account-water", name: "Account Water" }, account);
+  await notificationRepository.create({ id: "guest-notice", type: "app_update", title: "Novinka", body: "Aktualizace aplikace.", createdAt: "2026-10-20T10:00:00.000Z", deepLink: "/notifications" }, guest);
+  await notificationRepository.create({ id: "account-notice", type: "app_update", title: "Novinka", body: "Aktualizace aplikace.", createdAt: "2026-10-20T10:00:00.000Z", deepLink: "/notifications" }, account);
   const storage = memoryStorage();
   storage.setItem(`chytnu:preferences:v1:${guest.scopeKey}`, "{}");
   storage.setItem(`chytnu:trophy-selection:v1:${guest.scopeKey}`, "[]");
@@ -46,6 +49,8 @@ test("confirmed local deletion clears only the active scope and its scoped setti
   assert.equal((await catchRepository.list(account)).length, 1);
   assert.deepEqual(await waterRepository.list(guest), []);
   assert.equal((await waterRepository.list(account)).length, 1);
+  assert.deepEqual(await notificationRepository.list(guest), []);
+  assert.equal((await notificationRepository.list(account)).length, 1);
   assert.equal(storage.getItem(`chytnu:preferences:v1:${guest.scopeKey}`), null);
   assert.equal(storage.getItem(`chytnu:trophy-selection:v1:${guest.scopeKey}`), null);
 });

@@ -14,6 +14,20 @@ service cloud.firestore {
       return value == null || (value is number && value >= 0 && value <= maximum);
     }
 
+    function validNotification(data, userId, notificationId) {
+      return data.keys().hasAll(['id', 'ownerId', 'type', 'title', 'body', 'createdAt', 'readAt', 'deepLink'])
+        && data.keys().hasOnly(['id', 'ownerId', 'type', 'title', 'body', 'createdAt', 'readAt', 'deepLink'])
+        && data.id == notificationId
+        && data.ownerId == userId
+        && data.type in ['sync_problem', 'achievement', 'challenge', 'active_trip', 'app_update']
+        && data.title is string && data.title.size() > 0 && data.title.size() <= 120
+        && data.body is string && data.body.size() > 0 && data.body.size() <= 500
+        && data.createdAt is string && data.createdAt.size() <= 40
+        && (data.readAt == null || (data.readAt is string && data.readAt.size() <= 40))
+        && data.deepLink is string && data.deepLink.size() <= 300
+        && data.deepLink.matches('^/[A-Za-z0-9/_?=&%#.-]*$');
+    }
+
     function optionalRange(value, minimum, maximum) {
       return value == null || (value is number && value >= minimum && value <= maximum);
     }
@@ -196,7 +210,6 @@ service cloud.firestore {
         && data.baits.size() <= 20
         && data.result is string
         && data.photoRefs is map
-        && data.photoRefs.size() <= 10
         && ((data.photoRefs.size() == 0 && data.primaryPhotoId == null)
           || (data.photoRefs.size() > 0
             && data.primaryPhotoId is string
@@ -210,7 +223,7 @@ service cloud.firestore {
         && data.createdAt is string
         && data.updatedAt is string
         && data.keys().hasOnly([
-          'schemaVersion', 'id', 'ownerId', 'entityType', 'createdAt', 'updatedAt', 'caughtAt',
+          'schemaVersion', 'id', 'ownerId', 'entityType', 'createdAt', 'updatedAt', 'caughtAt', 'catchDateTimeSource', 'gpsSource', 'locationEvidence', 'verification',
           'species', 'speciesKey', 'speciesLatin', 'weightKg', 'weightSource', 'lengthCm', 'girthCm', 'fightMinutes',
           'locationName', 'waterNumber', 'waterId', 'gpsLocation', 'coordinates', 'waterDepthM', 'bottomType', 'conditions', 'conditionSources', 'tripId', 'method',
           'baits', 'result', 'photoRefs', 'primaryPhotoId', 'notes', 'isFavorite', 'privacy', 'deleted', 'deletedAt', 'serverRevision',
@@ -273,11 +286,49 @@ service cloud.firestore {
         && validEnvelope(data, userId, entityType, entityId);
     }
 
+    match /users/{userId}/notifications/{notificationId} {
+      allow get, list: if signedInAs(userId);
+      allow create: if signedInAs(userId)
+        && validNotification(request.resource.data, userId, notificationId)
+        && request.resource.data.readAt == null;
+      allow update: if signedInAs(userId)
+        && resource.data.ownerId == userId
+        && validNotification(request.resource.data, userId, notificationId)
+        && resource.data.readAt == null
+        && request.resource.data.readAt is string
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt']);
+      allow delete: if false;
+    }
+
+    match /users/{userId}/pushSubscriptions/{subscriptionId} {
+      allow get, list: if signedInAs(userId);
+      allow create, update: if signedInAs(userId)
+        && request.resource.data.keys().hasOnly(['ownerId', 'installationId', 'endpoint', 'expirationTime', 'keys', 'updatedAt'])
+        && request.resource.data.keys().hasAll(['ownerId', 'installationId', 'endpoint', 'expirationTime', 'keys', 'updatedAt'])
+        && request.resource.data.ownerId == userId
+        && request.resource.data.installationId is string
+        && request.resource.data.installationId.size() <= 64
+        && request.resource.data.endpoint is string
+        && request.resource.data.endpoint.size() <= 2000
+        && request.resource.data.endpoint.matches('^https://.*$')
+        && (request.resource.data.expirationTime == null || request.resource.data.expirationTime is number)
+        && request.resource.data.keys is map
+        && request.resource.data.keys.keys().hasOnly(['p256dh', 'auth'])
+        && request.resource.data.keys.keys().hasAll(['p256dh', 'auth'])
+        && request.resource.data.keys.p256dh is string
+        && request.resource.data.keys.p256dh.size() <= 256
+        && request.resource.data.keys.auth is string
+        && request.resource.data.keys.auth.size() <= 256
+        && request.resource.data.updatedAt is string;
+      allow delete: if signedInAs(userId) && resource.data.ownerId == userId;
+    }
+
     match /users/{userId}/catches/{catchId} {
       allow get, list: if signedInAs(userId);
       allow create: if validSyncWrite(userId, 'catch', catchId, request.resource.data)
         && request.resource.data.deleted == false
         && validCatchContent(request.resource.data, userId, catchId)
+        && request.resource.data.photoRefs.size() <= 4
         && request.resource.data.serverRevision == 1;
       allow create: if validSyncWrite(userId, 'catch', catchId, request.resource.data)
         && request.resource.data.deleted == true
@@ -289,6 +340,10 @@ service cloud.firestore {
         && request.resource.data.ownerId == resource.data.ownerId
         && (request.resource.data.deleted == false
           ? (validCatchContent(request.resource.data, userId, catchId)
+            && (request.resource.data.photoRefs.size() <= 4
+              || (resource.data.photoRefs.size() > 4
+                && request.resource.data.photoRefs.size() <= resource.data.photoRefs.size()
+                && request.resource.data.photoRefs.diff(resource.data.photoRefs).addedKeys().size() == 0))
             && request.resource.data.createdAt == resource.data.createdAt)
           : (request.resource.data.deleted == true
             && validTombstone(request.resource.data, userId, 'catch', catchId)));

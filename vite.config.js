@@ -40,6 +40,24 @@ self.addEventListener('fetch', (event) => {
   if (url.pathname.startsWith('/assets/') || ['/favicon.svg', '/icons.svg', '/icon-192.png', '/icon-512.png', '/manifest.webmanifest'].includes(url.pathname)) {
     event.respondWith(caches.match(request).then((cached) => cached || fetch(request)));
   }
+});
+self.addEventListener('push', (event) => {
+  let payload = {};
+  try { payload = event.data ? event.data.json() : {}; } catch { payload = { body: event.data?.text() || '' }; }
+  const title = typeof payload.title === 'string' && payload.title ? payload.title.slice(0, 120) : 'ChytnuCz';
+  const body = typeof payload.body === 'string' ? payload.body.slice(0, 500) : '';
+  const path = typeof payload.deepLink === 'string' && /^\\/[A-Za-z0-9/_?=&%#.-]*$/.test(payload.deepLink) ? payload.deepLink : '/notifications';
+  event.waitUntil(self.registration.showNotification(title, { body, icon: '/icon-192.png', badge: '/icon-192.png', data: { deepLink: path } }));
+});
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const path = event.notification.data?.deepLink;
+  const target = typeof path === 'string' && /^\\/[A-Za-z0-9/_?=&%#.-]*$/.test(path) ? new URL(path, self.location.origin).href : new URL('/notifications', self.location.origin).href;
+  event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+    const existing = clients.find((client) => new URL(client.url).origin === self.location.origin);
+    if (existing) { existing.navigate(target); return existing.focus(); }
+    return self.clients.openWindow(target);
+  }));
 });`;
       this.emitFile({ type: 'asset', fileName: 'sw.js', source });
     },

@@ -9,7 +9,7 @@ import {
 import { readPhotoBlob } from "./photoLocalBlob.js";
 
 const DATABASE_NAME = "chytnu-local";
-export const DATABASE_VERSION = 7;
+export const DATABASE_VERSION = 8;
 export const CATCH_STORE_NAME = "catches";
 export const TRIP_STORE_NAME = "trips";
 export const WATER_STORE_NAME = "waters";
@@ -23,6 +23,7 @@ export const PRIVACY_STORE_NAME = "privacySettings";
 export const PROGRESSION_EVENT_STORE_NAME = "progressionEvents";
 export const ACTIVE_GUEST_SCOPE_KEY = "activeGuestScope";
 export const PHOTO_BINARY_STORE_NAME = "photoBinaries";
+export const NOTIFICATION_STORE_NAME = "notifications";
 
 const sessionPhotoBlobs = new Map();
 function sessionPhotoBlobKey(scopeKey, catchId, photoId) { return JSON.stringify([scopeKey, catchId, photoId]); }
@@ -250,6 +251,11 @@ export function openLocalDatabase() {
       ]) {
         if (!progression.indexNames.contains(name)) progression.createIndex(name, keyPath, { unique: false });
       }
+      const notifications = db.objectStoreNames.contains(NOTIFICATION_STORE_NAME)
+        ? transaction.objectStore(NOTIFICATION_STORE_NAME)
+        : db.createObjectStore(NOTIFICATION_STORE_NAME, { keyPath: "id" });
+      if (!notifications.indexNames.contains("scopeKey")) notifications.createIndex("scopeKey", "scopeKey", { unique: false });
+      if (!notifications.indexNames.contains("createdAt")) notifications.createIndex("createdAt", "createdAt", { unique: false });
 
       if (event.oldVersion < 5) {
         const createdAt = new Date().toISOString();
@@ -471,14 +477,14 @@ export const catchRepository = {
         tripRequest.onsuccess = () => {
           const trip = tripRequest.result;
           if (!trip) {
-            failure = new Error("Vybraná výprava již neexistuje. Obnov seznam výprav a zkus to znovu.");
+            failure = new Error("Vybraná vycházka již neexistuje. Obnov seznam vycházek a zkus to znovu.");
             transaction.abort();
             return;
           }
           // A newly account-owned catch cannot silently bind an older local
           // trip. It remains local until the explicit migration stage.
           if (recordScopeKey(trip) !== effectiveScopeKey) {
-            failure = new Error("Tento úlovek odkazuje na výpravu jiného profilu.");
+            failure = new Error("Tento úlovek odkazuje na vycházku jiného profilu.");
             transaction.abort();
             return;
           }

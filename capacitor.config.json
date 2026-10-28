@@ -1,0 +1,9 @@
+{
+  "appId": "cz.chytnu.app",
+  "appName": "ChytnuCz",
+  "webDir": "dist",
+  "backgroundColor": "#111820",
+  "android": {
+    "backgroundColor": "#111820"
+  }
+}

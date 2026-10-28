@@ -12,6 +12,8 @@ const projectId = "demo-chytnucz-local";
 const catchPath = (userId, catchId) => `users/${userId}/catches/${catchId}`;
 const photoPath = (userId, catchId, photoId) => `${catchPath(userId, catchId)}/photos/${photoId}`;
 const tripPath = (userId, tripId) => `users/${userId}/trips/${tripId}`;
+const notificationPath = (userId, notificationId) => `users/${userId}/notifications/${notificationId}`;
+const pushSubscriptionPath = (userId, subscriptionId) => `users/${userId}/pushSubscriptions/${subscriptionId}`;
 
 function makeTrip(id, ownerId) {
   return {
@@ -199,6 +201,47 @@ test("uživatel A nemůže číst, měnit ani mazat záznamy uživatele B", asyn
   await assertFails(deleteDoc(foreignTrip));
 });
 
+test("notification inbox je owner-scoped a vlastní oznámení lze pouze označit jako přečtené", async () => {
+  const aliceDb = alice.firestore();
+  const notificationRef = doc(aliceDb, notificationPath("angler-a", "notice-1"));
+  const notification = {
+    id: "notice-1", ownerId: "angler-a", type: "achievement", title: "Nový úspěch",
+    body: "Odemkl(a) jsi nový úspěch a získal(a) 30 XP.", createdAt: "2026-10-28T10:00:00.000Z",
+    readAt: null, deepLink: "/achievements",
+  };
+  await assertSucceeds(setDoc(notificationRef, notification));
+  assert.equal((await assertSucceeds(getDocs(collection(aliceDb, "users/angler-a/notifications")))).size, 1);
+  await assertSucceeds(updateDoc(notificationRef, { readAt: "2026-10-28T10:01:00.000Z" }));
+  await assertFails(updateDoc(notificationRef, { title: "Změněný obsah" }));
+  await assertFails(updateDoc(notificationRef, { readAt: null }));
+  await assertFails(setDoc(doc(aliceDb, notificationPath("angler-a", "external")), {
+    ...notification, id: "external", deepLink: "https://example.com",
+  }));
+
+  const bobDb = bob.firestore();
+  await assertFails(getDoc(doc(bobDb, notificationPath("angler-a", "notice-1"))));
+  await assertFails(getDocs(collection(bobDb, "users/angler-a/notifications")));
+  await assertFails(setDoc(doc(bobDb, notificationPath("angler-a", "spoofed")), {
+    ...notification, id: "spoofed", ownerId: "angler-a",
+  }));
+});
+
+test("Web Push subscription je owner-scoped a přijímá pouze omezený endpoint a klíče", async () => {
+  const aliceDb = alice.firestore();
+  const subscriptionRef = doc(aliceDb, pushSubscriptionPath("angler-a", "endpoint-hash"));
+  const subscription = {
+    ownerId: "angler-a", installationId: "device-a", endpoint: "https://push.example/subscription/123", expirationTime: null,
+    keys: { p256dh: "public-key", auth: "auth-secret" }, updatedAt: "2026-10-28T10:00:00.000Z",
+  };
+  await assertSucceeds(setDoc(subscriptionRef, subscription));
+  assert.equal((await assertSucceeds(getDocs(collection(aliceDb, "users/angler-a/pushSubscriptions")))).size, 1);
+  await assertSucceeds(deleteDoc(subscriptionRef));
+  await assertFails(setDoc(doc(aliceDb, pushSubscriptionPath("angler-a", "bad-endpoint")), { ...subscription, endpoint: "http://push.example/subscription" }));
+  await assertFails(setDoc(doc(aliceDb, pushSubscriptionPath("angler-a", "bad-owner")), { ...subscription, ownerId: "angler-b" }));
+  await assertFails(getDocs(collection(bob.firestore(), "users/angler-a/pushSubscriptions")));
+  await assertFails(setDoc(doc(bob.firestore(), pushSubscriptionPath("angler-a", "spoofed")), subscription));
+});
+
 test("pravidla odmítnou převzetí vlastníka, změnu chráněných polí i neznámá pole", async () => {
   const db = alice.firestore();
   const catchRef = doc(db, catchPath("angler-a", "catch-a"));
@@ -308,25 +351,50 @@ test("pravidla bezpečně validují každou fotku a odmítnou neplatná metadata
   await assertFails(invalidId.commit());
 });
 
-test("limit 10 projde, jedenáctá fotografie a cross-account přístup jsou zakázány", async () => {
+test("nový Catch má limit čtyř fotek a legacy Catch může počet jen zachovat nebo snížit", async () => {
   const db = alice.firestore();
-  const catchRef = doc(db, catchPath("angler-a", "catch-a"));
-  const tenIds = Array.from({ length: 10 }, (_, index) => `photo-${index}`);
-  const createTen = writeBatch(db);
-  const tenRefs = Object.fromEntries(tenIds.map((id) => [id, true]));
-  createTen.update(catchRef, nextSyncedCatch((await getDoc(catchRef)).data(), { photoRefs: tenRefs, primaryPhotoId: tenIds[0] }));
-  tenIds.forEach((id, index) => createTen.set(doc(db, photoPath("angler-a", "catch-a", id)), makePhoto(id, "angler-a", "catch-a", { sortIndex: index })));
-  await assertSucceeds(createTen.commit());
+  const fourIds = Array.from({ length: 4 }, (_, index) => `photo-${index}`);
+  const fourCatch = { ...makeSyncedCatch("catch-four", "angler-a"), photoRefs: Object.fromEntries(fourIds.map((id) => [id, true])), primaryPhotoId: fourIds[0], photoState: "metadata-only" };
+  const createFour = writeBatch(db);
+  createFour.set(doc(db, catchPath("angler-a", "catch-four")), fourCatch);
+  fourIds.forEach((id, index) => createFour.set(doc(db, photoPath("angler-a", "catch-four", id)), makePhoto(id, "angler-a", "catch-four", { sortIndex: index })));
+  await assertSucceeds(createFour.commit());
 
-  const eleven = [...tenIds, "photo-10"];
-  const createEleven = writeBatch(db);
-  createEleven.update(catchRef, nextSyncedCatch((await getDoc(catchRef)).data(), { photoRefs: Object.fromEntries(eleven.map((id) => [id, true])), primaryPhotoId: tenIds[0] }));
-  createEleven.set(doc(db, photoPath("angler-a", "catch-a", "photo-10")), makePhoto("photo-10", "angler-a", "catch-a", { sortIndex: 10 }));
-  await assertFails(createEleven.commit());
+  const fiveIds = [...fourIds, "photo-4"];
+  const fiveCatch = { ...makeSyncedCatch("catch-five", "angler-a"), photoRefs: Object.fromEntries(fiveIds.map((id) => [id, true])), primaryPhotoId: fiveIds[0], photoState: "metadata-only" };
+  const createFive = writeBatch(db);
+  createFive.set(doc(db, catchPath("angler-a", "catch-five")), fiveCatch);
+  fiveIds.forEach((id, index) => createFive.set(doc(db, photoPath("angler-a", "catch-five", id)), makePhoto(id, "angler-a", "catch-five", { sortIndex: index })));
+  await assertFails(createFive.commit());
+
+  const legacyIds = Array.from({ length: 10 }, (_, index) => `legacy-photo-${index}`);
+  const legacyRefs = Object.fromEntries(legacyIds.map((id) => [id, true]));
+  const legacyCatch = { ...makeSyncedCatch("catch-legacy", "angler-a"), photoRefs: legacyRefs, primaryPhotoId: legacyIds[0], photoState: "metadata-only" };
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    const seed = context.firestore();
+    await setDoc(doc(seed, catchPath("angler-a", "catch-legacy")), legacyCatch);
+    await Promise.all(legacyIds.map((id, index) => setDoc(doc(seed, photoPath("angler-a", "catch-legacy", id)), makePhoto(id, "angler-a", "catch-legacy", { sortIndex: index }))));
+  });
+  const legacyRef = doc(db, catchPath("angler-a", "catch-legacy"));
+  await assertSucceeds(getDoc(legacyRef));
+  await assertSucceeds(getDoc(doc(db, photoPath("angler-a", "catch-legacy", legacyIds[9]))));
+
+  const elevenIds = [...legacyIds, "legacy-photo-10"];
+  const increase = writeBatch(db);
+  increase.update(legacyRef, nextSyncedCatch(legacyCatch, { photoRefs: Object.fromEntries(elevenIds.map((id) => [id, true])) }));
+  increase.set(doc(db, photoPath("angler-a", "catch-legacy", "legacy-photo-10")), makePhoto("legacy-photo-10", "angler-a", "catch-legacy"));
+  await assertFails(increase.commit());
+
+  const reduceToFive = nextSyncedCatch(legacyCatch, { photoRefs: Object.fromEntries(legacyIds.slice(0, 5).map((id) => [id, true])), primaryPhotoId: legacyIds[0] });
+  await assertSucceeds(updateDoc(legacyRef, reduceToFive));
+  assert.equal((await getDoc(legacyRef)).data().photoRefs && Object.keys((await getDoc(legacyRef)).data().photoRefs).length, 5);
+
+  const reduceToFour = nextSyncedCatch(reduceToFive, { photoRefs: Object.fromEntries(legacyIds.slice(0, 4).map((id) => [id, true])) });
+  await assertSucceeds(updateDoc(legacyRef, reduceToFour));
 
   const bobDb = bob.firestore();
-  await assertFails(getDoc(doc(bobDb, photoPath("angler-a", "catch-a", "photo-0"))));
-  await assertFails(updateDoc(doc(bobDb, photoPath("angler-a", "catch-a", "photo-0")), { focalX: 0.2 }));
-  await assertFails(deleteDoc(doc(db, photoPath("angler-a", "catch-a", "photo-0"))));
-  await assertFails(getDoc(doc(anonymous.firestore(), photoPath("angler-a", "catch-a", "photo-0"))));
+  await assertFails(getDoc(doc(bobDb, photoPath("angler-a", "catch-legacy", legacyIds[0]))));
+  await assertFails(updateDoc(doc(bobDb, photoPath("angler-a", "catch-legacy", legacyIds[0])), { focalX: 0.2 }));
+  await assertFails(deleteDoc(doc(db, photoPath("angler-a", "catch-legacy", legacyIds[0]))));
+  await assertFails(getDoc(doc(anonymous.firestore(), photoPath("angler-a", "catch-legacy", legacyIds[0]))));
 });
