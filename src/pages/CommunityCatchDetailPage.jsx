@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useAuth } from "../features/auth/context/authContextValue.js";
 import { useDataScope } from "../features/auth/context/dataScopeContextValue.js";
@@ -12,6 +12,7 @@ import {
 } from "../features/community/data/communityInteractionRepository.js";
 import { createPublicCatchProjection } from "../features/privacy/data/privacyModel.js";
 import { DEFAULT_SPECIES } from "../shared/constants/constants.js";
+import { useModalFocusTrap } from "../shared/hooks/useModalFocusTrap.js";
 import Layout from "../shared/layout/Layout";
 import "./CommunityCatchDetailPage.css";
 
@@ -44,6 +45,9 @@ function CommunityCatchDetailPage() {
   const [reportReason, setReportReason] = useState("");
   const [reportBusy, setReportBusy] = useState(false);
   const [reportMessage, setReportMessage] = useState("");
+  const reportDialogRef = useRef(null);
+  const reportCloseRef = useRef(null);
+  useModalFocusTrap(reportDialogRef, { active: reportOpen, initialFocusRef: reportCloseRef, onEscape: () => setReportOpen(false) });
 
   useEffect(() => {
     let active = true;
@@ -135,7 +139,7 @@ function CommunityCatchDetailPage() {
       const report = await communityInteractionRepository.createReport({ catchId, reason: reportReason, scope: interactionScope });
       setStoredReport(report);
       setReportOpen(false);
-      setReportMessage("Hlášení bylo skutečně uloženo lokálně se stavem čeká na odeslání.");
+      setReportMessage("Hlášení je uložené v tomto zařízení a čeká na odeslání.");
     } catch (error) {
       setInteractionError(error?.message || "Hlášení se nepodařilo uložit.");
     } finally {
@@ -155,7 +159,7 @@ function CommunityCatchDetailPage() {
       <main className="community-detail-page">
         <header className="community-detail-header">
           <Link to="/community">← Komunita</Link>
-          <span>DEV · LOCAL PUBLIC-SAFE PREVIEW</span>
+          <span>MÍSTNÍ VEŘEJNÝ NÁHLED</span>
           <div className="community-detail-title-row"><h1>{projection.species}</h1>{rarity && <b>{rarity.label}</b>}</div>
           <p>{profileName}</p>
         </header>
@@ -180,7 +184,7 @@ function CommunityCatchDetailPage() {
         </section>
 
         <section className="community-detail-section" aria-labelledby="community-comments-title">
-          <div className="community-detail-section-heading"><h2 id="community-comments-title">Komentáře ({comments.length})</h2><span>LOCAL/DEV</span></div>
+          <div className="community-detail-section-heading"><h2 id="community-comments-title">Komentáře ({comments.length})</h2><span>Jen v tomto zařízení</span></div>
           {interactionLoading ? <p className="loading-state" role="status">Načítám komentáře…</p> : comments.length === 0 ? <p className="community-comments-empty">Zatím žádné lokální komentáře.</p> : (
             <div className="community-comments-list">
               {comments.map((comment) => (
@@ -201,29 +205,29 @@ function CommunityCatchDetailPage() {
 
         {interactionError && <p className="community-detail-error" role="alert">{interactionError}</p>}
         {reportMessage && <p className="community-detail-status" role="status">{reportMessage}</p>}
-        {storedReasonLabel && <p className="community-detail-report-state">Lokální hlášení: <strong>{storedReasonLabel}</strong> · čeká na backend</p>}
+        {storedReasonLabel && <p className="community-detail-report-state">Hlášení: <strong>{storedReasonLabel}</strong> · čeká na odeslání</p>}
 
         <button className="community-report-open" type="button" onClick={() => setReportOpen(true)}>Nahlásit obsah</button>
 
         <aside className="community-detail-privacy">
-          <strong>Privacy-safe náhled</strong>
-          <p>Přesná GPS, soukromé místo, neveřejné poznámky, scopeKey, vlastník, Trip a sync metadata nejsou součástí projekce.</p>
+          <strong>Soukromé údaje jsou skryté</strong>
+          <p>Náhled nezobrazuje přesnou polohu, neveřejné poznámky ani údaje o vycházce a synchronizaci.</p>
         </aside>
 
-        <aside className="community-detail-backend"><span>BACKEND_REQUIRED</span><p>Interakce výše jsou pouze místní vývojová data. Produkční komentáře, reakce, moderace a odeslání hlášení vyžadují vzdálený backend.</p></aside>
+        <aside className="community-detail-backend"><span>JEN V TOMTO ZAŘÍZENÍ</span><p>Komentáře a reakce se zatím neodesílají ostatním. Hlášení čekají na odeslání.</p></aside>
 
         {reportOpen && (
           <div className="community-detail-report-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setReportOpen(false); }}>
-            <form className="community-detail-report-sheet" role="dialog" aria-modal="true" aria-labelledby="community-report-title" onSubmit={submitReport}>
-              <button className="community-detail-report-close" type="button" onClick={() => setReportOpen(false)} aria-label="Zavřít hlášení">×</button>
-              <span>LOCAL/DEV REPORT</span>
+            <form ref={reportDialogRef} tabIndex="-1" className="community-detail-report-sheet" role="dialog" aria-modal="true" aria-labelledby="community-report-title" onSubmit={submitReport}>
+              <button ref={reportCloseRef} className="community-detail-report-close" type="button" onClick={() => setReportOpen(false)} aria-label="Zavřít hlášení">×</button>
+              <span>MÍSTNÍ HLÁŠENÍ</span>
               <h2 id="community-report-title">Nahlásit úlovek</h2>
-              <p>Záznam se uloží lokálně. Do produkční moderace se odešle až po připojení backendu.</p>
+              <p>Hlášení se uloží v tomto zařízení. Odeslání zatím není dostupné.</p>
               <fieldset>
                 <legend>Důvod</legend>
                 {COMMUNITY_REPORT_REASONS.map((reason) => <label key={reason.id}><input type="radio" name="report-reason" value={reason.id} checked={reportReason === reason.id} onChange={(event) => setReportReason(event.target.value)} />{reason.label}</label>)}
               </fieldset>
-              <button className="community-detail-report-submit" type="submit" disabled={!reportReason || reportBusy}>{reportBusy ? "Ukládám…" : "Uložit lokální hlášení"}</button>
+              <button className="community-detail-report-submit" type="submit" disabled={!reportReason || reportBusy}>{reportBusy ? "Ukládám…" : "Uložit hlášení"}</button>
             </form>
           </div>
         )}

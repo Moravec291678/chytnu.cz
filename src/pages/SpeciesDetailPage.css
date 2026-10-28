@@ -1,21 +1,21 @@
 .species-detail-page {
-  padding: 0 0 calc(20px + env(safe-area-inset-bottom));
+  padding: 0 0 calc(var(--space-5) + env(safe-area-inset-bottom));
 }
 
 .species-hero {
-  padding: 16px 20px 0;
+  padding: var(--space-4) var(--space-5) 0;
   background: var(--accent-green-soft);
 }
 
 .species-hero-nav {
   display: flex;
   align-items: center;
-  margin-bottom: 10px;
+  margin-bottom: var(--space-2-5);
 }
 
 .species-hero-actions {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
   margin-left: auto;
 }
 
@@ -25,12 +25,12 @@
   min-height: 44px;
   align-items: center;
   justify-content: center;
-  padding: 0 10px;
+  padding: 0 var(--space-2-5);
   border: 1px solid rgb(var(--white-rgb) / 10%);
-  border-radius: 11px;
+  border-radius: var(--radius-sm-mid);
   background: rgb(var(--black-rgb) / 22%);
   color: var(--text-primary);
-  font-size: 17px;
+  font-size: var(--font-size-17);
   text-decoration: none;
 }
 
@@ -41,7 +41,7 @@
   align-items: center;
   justify-content: center;
   border: 1px solid rgb(var(--white-rgb) / 10%);
-  border-radius: 11px;
+  border-radius: var(--radius-sm-mid);
   background: rgb(var(--black-rgb) / 22%);
   color: var(--text-primary);
   text-decoration: none;
@@ -68,23 +68,23 @@
 }
 
 .species-favorite-error {
-  margin: 0 0 8px;
+  margin: 0 0 var(--space-2);
   color: var(--accent-red);
   font-size: var(--font-size-xs);
 }
 
 .species-latin {
-  margin-bottom: 2px;
+  margin-bottom: var(--space-0-5);
   color: var(--accent-green);
-  font-size: 12px;
+  font-size: var(--font-size-12);
   font-style: italic;
   font-weight: 600;
 }
 
 .species-hero h1 {
-  margin-bottom: 9px;
+  margin-bottom: var(--space-2-25);
   color: var(--text-primary);
-  font-size: 29px;
+  font-size: var(--font-size-29);
   font-weight: 900;
   letter-spacing: -0.7px;
   line-height: 1.1;
@@ -94,7 +94,7 @@
   display: inline-flex;
   min-height: 32px;
   align-items: center;
-  margin: 0 0 8px;
+  margin: 0 0 var(--space-2);
   color: var(--accent-green);
   font-size: var(--font-size-xs);
   font-weight: 800;
@@ -104,19 +104,19 @@
 .species-hero .tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 5px;
-  margin-bottom: 12px;
+  gap: var(--space-1-25);
+  margin-bottom: var(--space-3);
 }
 
 .species-detail-badge {
   display: inline-flex;
   min-height: 25px;
   align-items: center;
-  padding: 0 8px;
-  border-radius: 7px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-xs);
   background: var(--accent-blue-soft);
   color: var(--accent-blue);
-  font-size: 10px;
+  font-size: var(--font-size-10);
   font-weight: 800;
 }
 
@@ -151,7 +151,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 8px 5px;
+  padding: var(--space-2) var(--space-1-25);
   border-right: 1px solid var(--border);
   text-align: center;
 }
@@ -164,7 +164,7 @@
   overflow: hidden;
   max-width: 100%;
   color: var(--text-primary);
-  font-size: 27px;
+  font-size: var(--font-size-27);
   font-weight: 900;
   font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
@@ -173,13 +173,13 @@
 
 .species-measure-unit {
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: var(--font-size-11);
 }
 
 .species-measure-label {
-  margin-top: 5px;
+  margin-top: var(--space-1-25);
   color: var(--text-muted);
-  font-size: 9px;
+  font-size: var(--font-size-9);
   font-weight: 800;
   letter-spacing: 0.55px;
   text-transform: uppercase;
@@ -189,12 +189,12 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 15px 20px 9px;
+  padding: var(--space-3-75) var(--space-5) var(--space-2-25);
 }
 
 .species-catches-title {
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: var(--font-size-11);
   font-weight: 800;
   letter-spacing: 0.8px;
   text-transform: uppercase;
@@ -205,12 +205,12 @@
   min-height: 44px;
   align-items: center;
   justify-content: center;
-  margin-top: 10px;
-  padding: 0 13px;
-  border-radius: 10px;
+  margin-top: var(--space-2-5);
+  padding: 0 var(--space-3-25);
+  border-radius: var(--radius-sm);
   background: var(--accent-green);
   color: var(--text-on-accent);
-  font-size: 12px;
+  font-size: var(--font-size-12);
   font-weight: 800;
   text-decoration: none;
 }
@@ -221,13 +221,13 @@
 .species-detail-page > p,
 .species-detail-page > .species-add-link,
 .species-detail-page > .species-hero-back {
-  margin-right: 20px;
-  margin-left: 20px;
+  margin-right: var(--space-5);
+  margin-left: var(--space-5);
 }
 
 .species-detail-error {
-  margin-top: 12px;
-  padding: 12px;
+  margin-top: var(--space-3);
+  padding: var(--space-3);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--surface-1);
@@ -236,12 +236,12 @@
 }
 
 .species-detail-page > h1 {
-  margin-top: 15px;
-  font-size: 21px;
+  margin-top: var(--space-3-75);
+  font-size: var(--font-size-21);
 }
 
 .species-detail-page > p {
-  margin-top: 5px;
+  margin-top: var(--space-1-25);
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-12);
 }

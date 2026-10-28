@@ -1,23 +1,13 @@
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
+import { useModalFocusTrap } from "../hooks/useModalFocusTrap.js";
 
 function ConfirmDialog({ titleId, descriptionId, title, description, busy = false, confirmLabel, busyLabel, confirmClassName, onCancel, onConfirm }) {
   const cancelButtonRef = useRef(null);
-
-  useEffect(() => {
-    const previouslyFocused = document.activeElement;
-    cancelButtonRef.current?.focus();
-    const handleKeyDown = (event) => {
-      if (event.key === "Escape" && !busy) onCancel();
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-      previouslyFocused?.focus?.();
-    };
-  }, [busy, onCancel]);
+  const dialogRef = useRef(null);
+  useModalFocusTrap(dialogRef, { initialFocusRef: cancelButtonRef, onEscape: busy ? undefined : onCancel });
 
   return <div className="catch-confirm-backdrop">
-    <section className="catch-confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={descriptionId}>
+    <section ref={dialogRef} tabIndex="-1" className="catch-confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={descriptionId}>
       <h2 id={titleId}>{title}</h2>
       <p id={descriptionId}>{description}</p>
       <div className="catch-detail-actions">

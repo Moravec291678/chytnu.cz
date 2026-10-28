@@ -1,21 +1,11 @@
 .catch-card-link {
   display: block;
-  margin: 0 20px 8px;
+  margin: 0 var(--space-5) var(--space-2);
   color: inherit;
   text-decoration: none;
 }
 
-.catch-card {
-  min-width: 0;
-  padding: 11px;
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  background: var(--surface-1);
-  transition: border-color var(--motion-fast), background var(--motion-fast);
-}
-
 .catch-card-link:hover .catch-card {
-  border-color: var(--border-strong);
   background: var(--surface-hover);
 }
 
@@ -27,7 +17,7 @@
   display: flex;
   min-width: 0;
   align-items: flex-start;
-  gap: 10px;
+  gap: var(--space-2-5);
 }
 
 .catch-fish-mark,
@@ -38,7 +28,7 @@
   flex: 0 0 48px;
   place-items: center;
   overflow: hidden;
-  border-radius: 12px;
+  border-radius: var(--radius-sm-roomy);
 }
 
 .catch-fish-mark {
@@ -72,10 +62,10 @@
   height: 48px;
   flex: 0 0 48px;
   place-items: center;
-  border-radius: 12px;
+  border-radius: var(--radius-sm-roomy);
   background: var(--surface-2);
   color: var(--text-secondary);
-  font-size: 20px;
+  font-size: var(--font-size-20);
 }
 
 .catch-card-photo-sync {
@@ -83,7 +73,7 @@
   height: 48px;
   flex: 0 0 48px;
   overflow: hidden;
-  border-radius: 12px;
+  border-radius: var(--radius-sm-roomy);
   background: var(--surface-2);
 }
 
@@ -94,11 +84,11 @@
   flex: 0 0 48px;
   place-items: center;
   overflow: hidden;
-  padding: 4px;
-  border-radius: 12px;
+  padding: var(--space-1);
+  border-radius: var(--radius-sm-roomy);
   background: var(--surface-2);
   color: var(--text-secondary);
-  font-size: 9px;
+  font-size: var(--font-size-9);
   line-height: 1.25;
   text-align: center;
 }
@@ -108,13 +98,13 @@
   min-width: 0;
   flex: 1;
   flex-direction: column;
-  gap: 3px;
+  gap: var(--space-0-75);
 }
 
 .catch-card-info h2 {
   overflow: hidden;
   color: var(--text-primary);
-  font-size: 15px;
+  font-size: var(--font-size-15);
   font-weight: 800;
   line-height: 1.25;
   text-overflow: ellipsis;
@@ -125,7 +115,7 @@
   display: -webkit-box;
   overflow: hidden;
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: var(--font-size-11);
   font-weight: 500;
   line-height: 1.35;
   -webkit-box-orient: vertical;
@@ -135,41 +125,8 @@
 .catch-card-info .tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 3px;
-}
-
-.catch-card-tag {
-  display: inline-flex;
-  min-height: 22px;
-  align-items: center;
-  padding: 2px 7px;
-  border-radius: 7px;
-  background: var(--surface-2);
-  color: var(--text-secondary);
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 1.2;
-}
-
-.catch-card-tag-record {
-  background: var(--accent-orange-soft);
-  color: var(--accent-orange);
-}
-
-.catch-card-tag-released {
-  background: var(--accent-green-soft);
-  color: var(--accent-green);
-}
-
-.catch-card-tag-kept {
-  background: var(--accent-red-soft);
-  color: var(--accent-red);
-}
-
-.catch-card-tag-unverified {
-  background: var(--surface-2);
-  color: var(--text-secondary);
+  gap: var(--space-1);
+  margin-top: var(--space-0-75);
 }
 
 .catch-card-right {
@@ -177,13 +134,13 @@
   flex: 0 0 auto;
   flex-direction: column;
   align-items: flex-end;
-  padding-left: 4px;
+  padding-left: var(--space-1);
   text-align: right;
 }
 
 .catch-card-right strong {
   color: var(--text-primary);
-  font-size: 25px;
+  font-size: var(--font-size-25);
   font-weight: 900;
   font-variant-numeric: tabular-nums;
   line-height: 1;
@@ -195,31 +152,31 @@
 
 .catch-card-right span {
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: var(--font-size-11);
   line-height: 1.2;
 }
 
 .catch-card-right small {
-  margin-top: 3px;
+  margin-top: var(--space-0-75);
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--font-size-11);
   white-space: nowrap;
 }
 
 .catch-card-footer {
   display: flex;
   justify-content: space-between;
-  gap: 8px;
-  margin-top: 8px;
-  padding-top: 7px;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  padding-top: var(--space-1-75);
   border-top: 1px solid var(--border);
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: var(--font-size-10);
 }
 
 @media (max-width: 360px) {
   .catch-card-link {
-    margin-right: 16px;
-    margin-left: 16px;
+    margin-right: var(--space-4);
+    margin-left: var(--space-4);
   }
 }

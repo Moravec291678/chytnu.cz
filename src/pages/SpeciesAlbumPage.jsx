@@ -103,7 +103,7 @@ function SpeciesAlbumPage() {
             return <Link className="album-card album-card--discovered" to={`/species/${species.key}`} key={species.key}>
               <span className="album-fish" aria-hidden="true">🐟</span>
               <strong>{species.label}</strong>
-              <span className="album-stars" aria-label={`${stars} ${stars === 1 ? "hvězda" : "hvězdy"} mastery`}>
+              <span className="album-stars" aria-label={`${stars} ${stars === 1 ? "hvězda" : "hvězdy"} mistrovství`}>
                 {"★".repeat(stars)}<span>{"☆".repeat(Math.max(0, 5 - stars))}</span>
               </span>
               <span>{formatTripCatchCount(species.catchCount)}</span>

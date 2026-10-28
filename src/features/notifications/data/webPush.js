@@ -5,7 +5,7 @@ import { webPushSubscriptionStore } from "./webPushSubscriptionStore.js";
 const APPLICATION_SERVER_KEY = import.meta.env?.VITE_WEB_PUSH_PUBLIC_KEY;
 
 function decodeVapidKey(value) {
-  if (typeof value !== "string" || !value.trim()) throw new Error("Web Push zatím není nakonfigurovaný.");
+  if (typeof value !== "string" || !value.trim()) throw new Error("Oznámení na zařízení zatím nejsou připravená.");
   const normalized = value.trim().replace(/-/g, "+").replace(/_/g, "/");
   const padded = normalized + "=".repeat((4 - normalized.length % 4) % 4);
   const binary = globalThis.atob(padded);
@@ -18,10 +18,10 @@ export function getWebPushSupport({ navigatorValue = globalThis.navigator, windo
   const ios = /iphone|ipad|ipod/i.test(navigatorValue?.userAgent ?? "");
   const available = supported && Boolean(publicKey) && config.mode !== "emulator";
   let reason = "";
-  if (!supported) reason = ios ? "Na iPhonu a iPadu jsou push oznámení dostupná po přidání aplikace na plochu." : "Tento prohlížeč Web Push nepodporuje.";
+  if (!supported) reason = ios ? "Na iPhonu a iPadu jsou oznámení dostupná po přidání aplikace na plochu." : "Tento prohlížeč oznámení na zařízení nepodporuje.";
   else if (ios && !standalone) reason = "Na iPhonu přidej ChytnuCz na plochu a otevři ji jako aplikaci.";
-  else if (config.mode === "emulator") reason = "Web Push není dostupný v lokálním emulátoru.";
-  else if (!publicKey) reason = "Web Push zatím není na serveru nakonfigurovaný.";
+  else if (config.mode === "emulator") reason = "Oznámení na zařízení v tomto prostředí nejsou dostupná.";
+  else if (!publicKey) reason = "Oznámení na zařízení zatím nejsou připravená.";
   return { supported, standalone, ios, available: available && (!ios || standalone), reason };
 }
 
@@ -37,9 +37,9 @@ export function createWebPushManager({
   async function ready() {
     const environment = typeof config === "function" ? config() : config;
     const support = getWebPushSupport({ navigatorValue, windowValue, config: environment, publicKey });
-    if (!support.available) throw new Error(support.reason || "Web Push není v tomto prostředí dostupný.");
+    if (!support.available) throw new Error(support.reason || "Oznámení na zařízení nejsou dostupná.");
     const registration = await navigatorValue.serviceWorker.ready;
-    if (!registration.pushManager) throw new Error("Service Worker nepodporuje Push API.");
+      if (!registration.pushManager) throw new Error("Tento prohlížeč oznámení na zařízení nepodporuje.");
     return registration;
   }
 
@@ -55,7 +55,7 @@ export function createWebPushManager({
       if (!ownerId) throw new Error("Pro zapnutí Web Push se přihlas ke svému účtu.");
       const environment = typeof config === "function" ? config() : config;
       const support = getWebPushSupport({ navigatorValue, windowValue, config: environment, publicKey });
-      if (!support.available) throw new Error(support.reason || "Web Push není v tomto prostředí dostupný.");
+      if (!support.available) throw new Error(support.reason || "Oznámení na zařízení nejsou dostupná.");
       const permission = await NotificationValue.requestPermission();
       if (permission !== "granted") throw new Error(permission === "denied" ? "Oznámení jsou v nastavení prohlížeče zakázaná." : "Oprávnění k oznámením nebylo uděleno.");
       const registration = await ready();

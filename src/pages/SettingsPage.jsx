@@ -135,7 +135,7 @@ export default function SettingsPage() {
       <section className="settings-card" aria-labelledby="settings-account-title">
         <h2 id="settings-account-title">Účet</h2>
         <strong>{accountSummary}</strong>
-        {auth.status === "unavailable" && <p>Účet není v tomto prostředí nakonfigurovaný. Místní deník funguje dál.</p>}
+        {auth.status === "unavailable" && <p>V tomto prostředí se nelze přihlásit. Místní deník funguje dál.</p>}
         <Link className="settings-link" to="/profile">Správa účtu <span aria-hidden="true">→</span></Link>
       </section>
 
@@ -211,7 +211,7 @@ export default function SettingsPage() {
       <section className="settings-card settings-danger" aria-labelledby="settings-delete-title">
         <h2 id="settings-delete-title">Smazat účet nebo data</h2>
         <p>Smazání místních dat odstraní z tohoto zařízení pouze data aktivního profilu. Ostatní profily zůstanou zachované.</p>
-        {auth.user && <p>Cloudový účet a vzdálená data tato akce nemaže. Jejich úplné odstranění vyžaduje podporu produkčního backendu.</p>}
+        {auth.user && <p>Tato akce nesmaže účet ani data uložená online. S jejich odstraněním ti pomůže podpora.</p>}
         <button type="button" onClick={() => setConfirmingDelete(true)} disabled={scope.status !== "ready" || exporting || deleting}>
           Smazat místní data tohoto profilu
         </button>

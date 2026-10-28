@@ -20,7 +20,7 @@ export default function SpeciesMasteryPage() {
   const speciesFacts = getSpeciesFacts(species);
 
   if (state.loading || ledger.loading) {
-    return <Layout><main className="progression-page"><p className="loading-state" role="status">Načítám mastery druhu…</p></main></Layout>;
+    return <Layout><main className="progression-page"><p className="loading-state" role="status">Načítám mistrovství druhu…</p></main></Layout>;
   }
   if (state.error || ledger.error) {
     return <Layout><main className="progression-page"><p className="progression-item" role="alert">{state.error || ledger.error}</p></main></Layout>;
@@ -35,10 +35,10 @@ export default function SpeciesMasteryPage() {
         <header>
           <Link className="progression-back" to={`/species/${speciesKey}`}>← Detail druhu</Link>
           <h1>{species.label}</h1>
-          <p>Mastery {currentLevel} / 5 · {catchCount} {catchCount === 1 ? "úlovek v historii" : "úlovků v historii"}</p>
+          <p>Mistrovství {currentLevel} / 5 · {catchCount} {catchCount === 1 ? "úlovek v historii" : "úlovků v historii"}</p>
         </header>
 
-        <section className="mastery-summary" aria-label={`Mastery ${currentLevel} z 5`}>
+        <section className="mastery-summary" aria-label={`Mistrovství ${currentLevel} z 5`}>
           <div className="mastery-stars" aria-hidden="true">
             {Array.from({ length: MASTERY_LEVELS.length }, (_, index) => (
               <span className={index < currentLevel ? "mastery-star mastery-star--earned" : "mastery-star"} key={index}>
@@ -46,7 +46,7 @@ export default function SpeciesMasteryPage() {
               </span>
             ))}
           </div>
-          <p>{mastery?.nextLevelAt ? `Další úroveň při ${mastery.nextLevelAt} úlovcích.` : mastery ? "Dosaženo maximální mastery." : "První zaznamenaný úlovek odemkne druh."}</p>
+            <p>{mastery?.nextLevelAt ? `Další úroveň při ${mastery.nextLevelAt} úlovcích.` : mastery ? "Dosaženo nejvyššího stupně." : "První zaznamenaný úlovek odemkne druh."}</p>
           {!mastery && <strong className="mastery-undiscovered">Zatím neobjevený druh</strong>}
         </section>
 
@@ -65,7 +65,7 @@ export default function SpeciesMasteryPage() {
                       <p>Milník dosažen · {progress} / {milestone.catches} úlovků</p>
                     ) : (
                       <>
-                        <div className="mastery-progress" role="progressbar" aria-label={`${milestone.level}. mastery hvězda`} aria-valuemin="0" aria-valuemax={milestone.catches} aria-valuenow={progress}>
+                        <div className="mastery-progress" role="progressbar" aria-label={`${milestone.level}. hvězda mistrovství`} aria-valuemin="0" aria-valuemax={milestone.catches} aria-valuenow={progress}>
                           <span style={{ width: `${Math.min(100, (progress / milestone.catches) * 100)}%` }} />
                         </div>
                         <p>{progress} / {milestone.catches} úlovků</p>
@@ -82,7 +82,7 @@ export default function SpeciesMasteryPage() {
         <section className="mastery-facts" aria-labelledby="mastery-facts-title">
           <h2 id="mastery-facts-title">Fakta o druhu</h2>
           {currentLevel < 2 ? (
-            <p>Fakta se odemknou na mastery 2. úrovni.</p>
+            <p>Fakta se odemknou na 2. úrovni mistrovství.</p>
           ) : speciesFacts ? (
             <ul>{speciesFacts.map((fact) => <li key={fact}>{fact}</li>)}</ul>
           ) : (

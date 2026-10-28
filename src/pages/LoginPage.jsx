@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../features/auth/context/authContextValue.js";
 import { validateAuthForm } from "../features/auth/data/authFormValidation.js";
 import { confirmGuestAccess } from "../features/auth/data/guestAccess.js";
 import { resolveAuthenticatedRedirect } from "../app/routeAccess.js";
+import { useModalFocusTrap } from "../shared/hooks/useModalFocusTrap.js";
 import "./LoginPage.css";
 
 const FORM_COPY = {
@@ -13,6 +14,8 @@ const FORM_COPY = {
 };
 
 export default function LoginPage() {
+  const guestDialogRef = useRef(null);
+  const guestContinueRef = useRef(null);
   const auth = useAuth();
   const navigate = useNavigate();
   const [mode, setMode] = useState(null);
@@ -25,6 +28,7 @@ export default function LoginPage() {
   const [formError, setFormError] = useState("");
   const [message, setMessage] = useState("");
   const [guestDialog, setGuestDialog] = useState(false);
+  useModalFocusTrap(guestDialogRef, { active: Boolean(guestDialog), initialFocusRef: guestContinueRef, onEscape: () => setGuestDialog(false) });
 
   useEffect(() => {
     const destination = resolveAuthenticatedRedirect({ status: auth.status, user: auth.user });
@@ -89,6 +93,6 @@ export default function LoginPage() {
         {mode === "login" && <><div className="auth-divider"><span>nebo</span></div><button className="auth-entry-secondary" type="button" disabled={busy} onClick={() => void run(auth.signInWithGoogle)}>{busy ? "Připojuji…" : "Pokračovat přes Google"}</button></>}
       </section>}
     </div>
-    {guestDialog && <div className="auth-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setGuestDialog(false); }}><section className="auth-guest-dialog" role="dialog" aria-modal="true" aria-labelledby="guest-dialog-title" aria-describedby="guest-dialog-description"><h2 id="guest-dialog-title">Pokračovat jako host?</h2><p id="guest-dialog-description">Data budou uložena pouze v tomto zařízení. Při smazání dat prohlížeče, aplikace nebo při ztrátě zařízení o ně můžete přijít.</p><p>Přihlášený účet umožňuje synchronizaci dat mezi zařízeními.</p><div className="auth-guest-actions"><button className="auth-entry-primary" type="button" onClick={continueAsGuest}>Pokračovat jako host</button><button className="auth-entry-secondary" type="button" onClick={() => setGuestDialog(false)}>Přihlásit se</button></div></section></div>}
+    {guestDialog && <div className="auth-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setGuestDialog(false); }}><section ref={guestDialogRef} tabIndex="-1" className="auth-guest-dialog" role="dialog" aria-modal="true" aria-labelledby="guest-dialog-title" aria-describedby="guest-dialog-description"><h2 id="guest-dialog-title">Pokračovat jako host?</h2><p id="guest-dialog-description">Data budou uložena pouze v tomto zařízení. Při smazání dat prohlížeče, aplikace nebo při ztrátě zařízení o ně můžete přijít.</p><p>Přihlášený účet umožňuje synchronizaci dat mezi zařízeními.</p><div className="auth-guest-actions"><button ref={guestContinueRef} className="auth-entry-primary" type="button" onClick={continueAsGuest}>Pokračovat jako host</button><button className="auth-entry-secondary" type="button" onClick={() => setGuestDialog(false)}>Přihlásit se</button></div></section></div>}
   </main>;
 }

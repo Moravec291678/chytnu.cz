@@ -156,7 +156,7 @@
 
 .water-create-submit {
   position: fixed;
-  z-index: 1101;
+  z-index: var(--z-notification-top);
   bottom: 0;
   left: 50%;
   width: min(100%, 487px);

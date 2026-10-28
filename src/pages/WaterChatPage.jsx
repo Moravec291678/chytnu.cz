@@ -97,9 +97,9 @@ function WaterChatPage() {
         </div>
       </header>
 
-      <aside className="water-chat-backend-state" aria-label="Stav přítomnosti">
-        <span>BACKEND_REQUIRED</span>
-        <p>Online presence a zprávy ostatních rybářů nejsou bez vzdáleného backendu dostupné.</p>
+      <aside className="water-chat-backend-state" aria-label="Dostupnost zpráv">
+        <span>JEN PRO TEBE</span>
+        <p>Zprávy ostatních rybářů zatím nejsou dostupné. Tady si můžeš ukládat vlastní poznámky k revíru.</p>
       </aside>
 
       {loadError && <p className="water-chat-error" role="alert">{loadError}</p>}

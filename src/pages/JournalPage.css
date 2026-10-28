@@ -1,37 +1,37 @@
 .journal-page {
-  padding-bottom: 16px;
+  padding-bottom: var(--space-4);
 }
 
 .home-header {
-  padding: 17px 20px 0;
+  padding: var(--space-4-25) var(--space-5) 0;
 }
 
 .home-header-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 14px;
+  margin-bottom: var(--space-3-5);
 }
 
 .home-header h1 {
   color: var(--text-primary);
-  font-size: 30px;
+  font-size: var(--font-size-30);
   font-weight: 900;
   letter-spacing: -0.8px;
   line-height: 1;
 }
 
 .home-header p {
-  margin-top: 5px;
+  margin-top: var(--space-1-25);
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: var(--font-size-13);
   font-weight: 600;
 }
 
 .journal-tabs {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin-bottom: 12px;
+  margin-bottom: var(--space-3);
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -44,7 +44,7 @@
   align-items: center;
   justify-content: center;
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: var(--font-size-13);
   font-weight: 800;
   text-decoration: none;
 }
@@ -56,7 +56,7 @@
 
 .journal-controls {
   display: grid;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .journal-search {
@@ -65,8 +65,8 @@
   min-width: 0;
   min-height: 44px;
   align-items: center;
-  gap: 9px;
-  padding: 0 11px;
+  gap: var(--space-2-25);
+  padding: 0 var(--space-2-75);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--surface-1);
@@ -79,7 +79,7 @@
 .journal-search-icon {
   flex: 0 0 auto;
   color: var(--text-secondary);
-  font-size: 23px;
+  font-size: var(--font-size-23);
   line-height: 1;
 }
 
@@ -95,7 +95,7 @@
   box-shadow: none;
   background: transparent;
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--font-size-13);
 }
 
 .journal-page .journal-search input[type="search"]:focus-visible {
@@ -115,27 +115,27 @@
   border-radius: 50%;
   background: var(--surface-2);
   color: var(--text-secondary);
-  font-size: 20px;
+  font-size: var(--font-size-20);
 }
 
 .journal-filter-actions {
   display: flex;
   min-height: 42px;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .journal-filter-toggle {
   display: inline-flex;
   min-height: 40px;
   align-items: center;
-  gap: 8px;
-  padding: 0 12px;
+  gap: var(--space-2);
+  padding: 0 var(--space-3);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--surface-1);
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--font-size-13);
   font-weight: 700;
 }
 
@@ -148,28 +148,28 @@
   min-width: 22px;
   height: 22px;
   place-items: center;
-  padding: 0 5px;
+  padding: 0 var(--space-1-25);
   border-radius: var(--radius-pill);
   background: var(--accent-blue-soft);
   color: var(--accent-blue);
-  font-size: 11px;
+  font-size: var(--font-size-11);
   font-weight: 800;
 }
 
 .journal-reset-button {
   min-height: 40px;
-  padding: 0 4px;
+  padding: 0 var(--space-1);
   border: 0;
   background: transparent;
   color: var(--accent-blue);
-  font-size: 12px;
+  font-size: var(--font-size-12);
   font-weight: 700;
 }
 
 .journal-filter-panel {
   display: grid;
-  gap: 10px;
-  padding: 12px;
+  gap: var(--space-2-5);
+  padding: var(--space-3);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--surface-1);
@@ -178,36 +178,36 @@
 .journal-filter-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 9px;
+  gap: var(--space-2-25);
 }
 
 .journal-filter-grid label {
   display: grid;
   min-width: 0;
-  gap: 5px;
+  gap: var(--space-1-25);
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: var(--font-size-11);
   font-weight: 700;
 }
 
 .journal-control {
   width: 100%;
   min-height: 42px;
-  padding: 8px 9px;
+  padding: var(--space-2) var(--space-2-25);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--surface-2);
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--font-size-13);
 }
 
 .journal-favorite-filter {
   display: flex;
   min-height: 44px;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: var(--font-size-13);
 }
 
 .journal-favorite-filter input {
@@ -218,9 +218,9 @@
 
 .journal-empty {
   display: grid;
-  gap: 7px;
-  margin: 0 20px 12px;
-  padding: 18px;
+  gap: var(--space-1-75);
+  margin: 0 var(--space-5) var(--space-3);
+  padding: var(--space-4-5);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--surface-1);
@@ -229,17 +229,17 @@
 
 .journal-empty strong {
   color: var(--text-primary);
-  font-size: 16px;
+  font-size: var(--font-size-16);
 }
 
 .journal-empty h2 {
   color: var(--text-primary);
-  font-size: 16px;
+  font-size: var(--font-size-16);
 }
 
 .journal-empty p {
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: var(--font-size-13);
 }
 
 .journal-empty a,
@@ -249,21 +249,21 @@
   align-items: center;
   justify-content: center;
   justify-self: stretch;
-  margin-top: 4px;
-  padding: 0 14px;
+  margin-top: var(--space-1);
+  padding: 0 var(--space-3-5);
   border: 1px solid var(--accent-green);
   border-radius: var(--radius-sm);
   background: var(--accent-green);
   color: var(--text-on-accent);
-  font-size: 14px;
+  font-size: var(--font-size-14);
   font-weight: 800;
   text-decoration: none;
 }
 
 .journal-skeleton {
   display: grid;
-  gap: 8px;
-  margin: 0 20px 14px;
+  gap: var(--space-2);
+  margin: 0 var(--space-5) var(--space-3-5);
 }
 
 .journal-skeleton span {

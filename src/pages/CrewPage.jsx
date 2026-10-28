@@ -42,10 +42,10 @@ function CrewPage() {
       setCrew(record);
       setForm(formFromCrew(record));
       setStatus("ready");
-    }).catch((error) => {
+    }).catch(() => {
       if (!active) return;
       setStatus("error");
-      setMessage(error?.message || "Místní Crew se nepodařilo načíst.");
+      setMessage("Skupinu se nepodařilo načíst. Zkus to znovu.");
     });
     return () => { active = false; };
   }, [scope]);
@@ -67,9 +67,9 @@ function CrewPage() {
       setForm(formFromCrew(saved));
       setStatus("ready");
       setMessage(crew ? "Místní Crew byla upravena." : "Místní Crew byla vytvořena jako soukromý draft.");
-    } catch (error) {
+    } catch {
       setStatus("error");
-      setMessage(error?.message || "Crew se nepodařilo uložit.");
+      setMessage("Skupinu se nepodařilo uložit. Zkus to znovu.");
     }
   };
 
@@ -84,9 +84,9 @@ function CrewPage() {
       setForm(formFromCrew(null));
       setStatus("ready");
       setMessage("Místní Crew byla opuštěna a smazána.");
-    } catch (error) {
+    } catch {
       setStatus("error");
-      setMessage(error?.message || "Crew se nepodařilo smazat.");
+      setMessage("Skupinu se nepodařilo smazat. Zkus to znovu.");
     }
   };
 
@@ -101,15 +101,15 @@ function CrewPage() {
         <header className="crew-header">
           <div>
             <h1 id="crew-title">Crew</h1>
-            <p>Soukromá místní skupina a příprava týmových funkcí</p>
+            <p>Soukromá skupina uložená v tomto zařízení</p>
           </div>
-          <span className="crew-backend-badge">BACKEND_REQUIRED</span>
+          <span className="crew-backend-badge">Jen místně</span>
         </header>
 
         {crew && (
           <section className="crew-summary" aria-labelledby="crew-summary-title">
             <div className="crew-summary-heading">
-              <div><span>LOCAL DRAFT</span><h2 id="crew-summary-title">{crew.name}</h2></div>
+              <div><span>MÍSTNÍ NÁVRH</span><h2 id="crew-summary-title">{crew.name}</h2></div>
               <b>{crew.privacy === "invite-only" ? "Na pozvání" : "Soukromá"}</b>
             </div>
             <div className="crew-stat-grid">
@@ -134,7 +134,7 @@ function CrewPage() {
               {CREW_PRIVACY_OPTIONS.map((option) => <option value={option.id} key={option.id}>{option.label}</option>)}
             </select>
           </label>
-          <p>Lokální Crew není veřejná. Režim „Pouze na pozvání“ se uplatní až po připojení bezpečného member backendu.</p>
+          <p>Skupina je soukromá a dostupná jen v tomto zařízení. Pozvánky zatím nejsou dostupné.</p>
 
           <fieldset className="crew-challenge-config" disabled={busy}>
             <legend>Crew výzva</legend>
@@ -147,7 +147,7 @@ function CrewPage() {
             <label>Cíl ({selectedChallenge.unit})
               <input type="number" min="0.1" max="100000" step={form.challenge.type === "total-weight" ? "0.1" : "1"} value={form.challenge.target} disabled={!form.challenge.enabled || busy} onChange={(event) => setChallenge("target", event.target.value)} />
             </label>
-            <small>Konfigurace se ukládá lokálně. Týmový postup nelze bez synchronizace členů pravdivě spočítat.</small>
+            <small>Nastavení se ukládá v tomto zařízení. Společný postup se zobrazí, až bude možné synchronizovat členy.</small>
           </fieldset>
 
           <button className="crew-save" type="submit" disabled={busy}>{status === "saving" ? "Ukládám…" : crew ? "Uložit změny" : "Vytvořit lokální Crew"}</button>
@@ -155,7 +155,7 @@ function CrewPage() {
         </form>
 
         <section className="crew-remote" aria-labelledby="crew-remote-title">
-          <div><span>BACKEND_REQUIRED</span><h2 id="crew-remote-title">Týmové funkce</h2></div>
+          <div><span>ZATÍM NEDOSTUPNÉ</span><h2 id="crew-remote-title">Týmové funkce</h2></div>
           <div className="crew-remote-grid">
             <article><strong>Pozvat / přidat člena</strong><p>Pozvánky, join a synchronizace členů nejsou aktivní.</p><button type="button" disabled>Pozvat člena</button></article>
             <article><strong>Žebříček</strong><p>Bez vzdálených členů se nevytváří pořadí, váhy ani skóre.</p></article>

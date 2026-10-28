@@ -57,7 +57,7 @@ function HotspotsPage() {
         <header className="hotspots-header">
           <h1>Hotspoty</h1>
           <p>Soukromé agregace pouze z úlovků v tomto profilu</p>
-          <span>PRIVATE · LOCAL DATA</span>
+          <span>MOJE SOUKROMÁ DATA</span>
         </header>
 
         <div className="hotspots-tabs" role="tablist" aria-label="Zobrazení hotspotů">
@@ -119,7 +119,7 @@ function HotspotsPage() {
           </section>
         ) : (
           <section className="hotspots-section" aria-labelledby="water-hotspots-title">
-            <div className="hotspots-section-heading"><div><span>TOP WATERS · VLASTNÍ DATA</span><h2 id="water-hotspots-title">Moje nejúspěšnější revíry</h2></div></div>
+            <div className="hotspots-section-heading"><div><span>MOJE DATA</span><h2 id="water-hotspots-title">Moje nejúspěšnější revíry</h2></div></div>
             {watersError && <p className="hotspots-warning" role="status">{watersError} Názvy se berou přímo z úlovků.</p>}
             {waterHotspots.length === 0 ? (
               <EmptyState>Zatím nemáš úlovek s uvedeným revírem nebo lokalitou.</EmptyState>
@@ -142,9 +142,9 @@ function HotspotsPage() {
         )}
 
         <aside className="hotspots-backend-state" aria-label="Stav komunitních hotspotů">
-          <span>BACKEND_REQUIRED</span>
+          <span>ZATÍM NEDOSTUPNÉ</span>
           <strong>Komunitní agregace není dostupná</strong>
-          <p>Bez produkčního agregačního backendu se nepoužívají cizí úlovky ani jejich GPS. Tato stránka pracuje jen s vlastními lokálními záznamy.</p>
+          <p>Společný přehled zatím není dostupný. Stránka zobrazuje jen tvoje úlovky a revíry; cizí polohy nepoužívá.</p>
         </aside>
       </div>
     </Layout>

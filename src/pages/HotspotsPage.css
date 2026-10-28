@@ -26,7 +26,7 @@
 .hotspots-backend-state > span {
   width: fit-content;
   color: var(--accent-green);
-  font-size: 10px;
+  font-size: var(--font-size-10);
   font-weight: 900;
   letter-spacing: 0.08em;
 }
@@ -80,12 +80,12 @@
 .hotspots-section-heading > div {
   display: grid;
   min-width: 0;
-  gap: 2px;
+  gap: var(--space-0-5);
 }
 
 .hotspots-section-heading h2 {
   color: var(--text-primary);
-  font-size: 18px;
+  font-size: var(--font-size-18);
   font-weight: 900;
 }
 
@@ -130,7 +130,7 @@
 .hotspot-main {
   display: grid;
   min-width: 0;
-  gap: 3px;
+  gap: var(--space-0-75);
 }
 
 .hotspot-main > strong,
@@ -175,7 +175,7 @@
 
 .heatmap-row-copy {
   display: grid;
-  gap: 2px;
+  gap: var(--space-0-5);
 }
 
 .heatmap-row-copy strong {
@@ -197,7 +197,7 @@
   grid-column: 1 / -1;
   height: 8px;
   overflow: hidden;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--surface-3);
 }
 

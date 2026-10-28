@@ -12,6 +12,7 @@ import { accountScopeKey } from "../../auth/data/localDataScope.js";
 import { getPhotoBlobForDisplay } from "../data/photoCloudService.js";
 import { getPhotoAvailability, PHOTO_AVAILABILITY } from "../data/photoAvailability.js";
 import PhotoSyncStatus from "./PhotoSyncStatus.js";
+import { Badge, Card } from "../../../shared/components/UIPrimitives.jsx";
 
 import "./PhotoSyncStatus.css";
 import "./CatchCard.css";
@@ -101,7 +102,7 @@ function CatchCard({ catchedFish, isPersonalRecord = false }) {
 
   return (
     <Link to={`/catch/${catchedFish.id}`} className={`catch-card-link${isPersonalRecord ? " catch-card-link-record" : ""}`}>
-      <article className={`catch-card${isPersonalRecord ? " catch-card-record" : ""}`}>
+      <Card as="article" density="compact" interactive className={`catch-card${isPersonalRecord ? " catch-card-record" : ""}`}>
         <div className="catch-card-main">
           {primaryPhoto ? <CatchPhoto key={primaryPhoto.id} blob={primaryPhoto.blob} species={catchedFish.species} photo={primaryPhoto} ownerId={catchedFish.ownerId} catchId={catchedFish.id} /> : <FishMark speciesKey={catchedFish.speciesKey} />}
 
@@ -111,19 +112,19 @@ function CatchCard({ catchedFish, isPersonalRecord = false }) {
             <p>{formatCatchDateTime(catchedFish.caughtAt)}{catchedFish.locationName ? ` · ${catchedFish.locationName}` : ""}{catchedFish.method?.label ? ` · ${catchedFish.method.label}` : ""}</p>
 
             <div className="tags">
-              {isPersonalRecord && <span className="catch-card-tag catch-card-tag-record">Osobní rekord</span>}
-              {catchedFish.isFavorite && <span className="catch-card-tag">Oblíbený</span>}
+              {isPersonalRecord && <Badge size="compact" tone="record">Osobní rekord</Badge>}
+              {catchedFish.isFavorite && <Badge size="compact">Oblíbený</Badge>}
 
               {catchedFish.result === "released" && (
-                <span className="catch-card-tag catch-card-tag-released">Puštěno</span>
+                <Badge size="compact" tone="released">Puštěno</Badge>
               )}
 
               {catchedFish.result === "kept" && (
-                <span className="catch-card-tag catch-card-tag-kept">Ponecháno</span>
+                <Badge size="compact" tone="kept">Ponecháno</Badge>
               )}
-              {catchedFish.verification?.level === "limited" && <span className="catch-card-tag catch-card-tag-unverified">Omezené ověření</span>}
-              {catchedFish.verification?.status === "unverified" && catchedFish.verification?.level !== "limited" && <span className="catch-card-tag catch-card-tag-unverified">Neověřený úlovek</span>}
-              {catchedFish.tripTitle && <span className="catch-card-tag">Vycházka: {catchedFish.tripTitle}</span>}
+              {catchedFish.verification?.level === "limited" && <Badge size="compact">Omezené ověření</Badge>}
+              {catchedFish.verification?.status === "unverified" && catchedFish.verification?.level !== "limited" && <Badge size="compact">Neověřený úlovek</Badge>}
+              {catchedFish.tripTitle && <Badge size="compact">Vycházka: {catchedFish.tripTitle}</Badge>}
             </div>
           </div>
 
@@ -135,7 +136,7 @@ function CatchCard({ catchedFish, isPersonalRecord = false }) {
         </div>
 
         {catchedFish.fightMinutes != null && <div className="catch-card-footer"><span>Délka boje</span><span>{formatFightDuration(catchedFish.fightMinutes)}</span></div>}
-      </article>
+      </Card>
     </Link>
   );
 }

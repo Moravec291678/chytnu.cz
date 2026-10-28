@@ -1,8 +1,8 @@
 .fish-activity-card {
-  margin: 0 20px 14px;
-  padding: 13px 14px 12px;
+  margin: 0 var(--space-5) var(--space-3-5);
+  padding: var(--space-3-25) var(--space-3-5) var(--space-3);
   border: 1px solid rgb(var(--accent-green-rgb) / 34%);
-  border-radius: 16px;
+  border-radius: var(--radius-md-roomy);
   background: var(--accent-green-soft);
 }
 
@@ -22,7 +22,7 @@
 .fish-activity-header {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-2-5);
 }
 
 .fish-activity-card--detailed .fish-activity-header {
@@ -37,7 +37,7 @@
 .fish-activity-label {
   display: block;
   color: var(--accent-green);
-  font-size: 10px;
+  font-size: var(--font-size-10);
   font-weight: 800;
   letter-spacing: 0.85px;
   text-transform: uppercase;
@@ -56,7 +56,7 @@
   border: 2px solid var(--accent-green);
   border-radius: 50%;
   color: var(--accent-green);
-  font-size: 16px;
+  font-size: var(--font-size-16);
   font-weight: 900;
   font-variant-numeric: tabular-nums;
 }
@@ -91,45 +91,45 @@
 }
 
 .fish-activity-status {
-  margin-top: 2px;
+  margin-top: var(--space-0-5);
   color: var(--text-primary);
-  font-size: 15px;
+  font-size: var(--font-size-15);
   font-weight: 800;
   line-height: 1.2;
 }
 
 .fish-activity-disclaimer,
 .fish-activity-reason {
-  margin-top: 3px;
+  margin-top: var(--space-0-75);
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: var(--font-size-11);
   line-height: 1.4;
 }
 
 .fish-activity-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 5px;
-  margin-top: 10px;
+  gap: var(--space-1-25);
+  margin-top: var(--space-2-5);
 }
 
 .fish-activity-tag {
   display: inline-flex;
   min-height: 24px;
   align-items: center;
-  padding: 3px 8px;
-  border-radius: 7px;
+  padding: var(--space-0-75) var(--space-2);
+  border-radius: var(--radius-xs);
   background: rgb(var(--white-rgb) / 6%);
   color: var(--text-secondary);
-  font-size: 10px;
+  font-size: var(--font-size-10);
   font-weight: 700;
   white-space: nowrap;
 }
 
 .fish-activity-attribution {
-  margin-top: 9px;
+  margin-top: var(--space-2-25);
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: var(--font-size-10);
   line-height: 1.4;
 }
 
@@ -141,13 +141,13 @@
 .fish-activity-action,
 .fish-activity-retry {
   min-height: 44px;
-  margin-top: 8px;
-  padding: 0 13px;
+  margin-top: var(--space-2);
+  padding: 0 var(--space-3-25);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--surface-2);
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: var(--font-size-12);
   font-weight: 800;
 }
 
@@ -155,8 +155,8 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  margin-top: 8px;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
 }
 
 .fish-activity-actions .fish-activity-detail-link,
@@ -170,7 +170,7 @@
 
 .fish-activity-actions--compact {
   justify-content: space-between;
-  gap: 8px 14px;
+  gap: var(--space-2) var(--space-3-5);
 }
 
 .fish-activity-actions--compact .fish-activity-action {
@@ -188,14 +188,14 @@
 
 .fish-activity-loading {
   display: flex;
-  gap: 6px;
-  margin-top: 9px;
+  gap: var(--space-1-5);
+  margin-top: var(--space-2-25);
 }
 
 .fish-activity-loading span {
   width: 66px;
   height: 23px;
-  border-radius: 7px;
+  border-radius: var(--radius-xs);
   background: var(--surface-2);
 }
 
@@ -207,10 +207,10 @@
   display: inline-flex;
   min-height: 40px;
   align-items: center;
-  gap: 6px;
-  margin-top: 4px;
+  gap: var(--space-1-5);
+  margin-top: var(--space-1);
   color: var(--accent-green);
-  font-size: 11px;
+  font-size: var(--font-size-11);
   font-weight: 800;
   text-decoration: none;
 }
@@ -240,7 +240,7 @@
   height: 156px;
   grid-template-columns: repeat(8, minmax(0, 1fr));
   align-items: end;
-  gap: 7px;
+  gap: var(--space-1-75);
   padding: var(--space-4) var(--space-3) var(--space-3);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -253,9 +253,9 @@
   min-width: 0;
   grid-template-rows: minmax(0, 1fr) auto;
   align-items: end;
-  gap: 5px;
+  gap: var(--space-1-25);
   color: var(--text-muted);
-  font-size: 9px;
+  font-size: var(--font-size-9);
   text-align: center;
 }
 
@@ -264,7 +264,7 @@
   width: 100%;
   min-height: 8px;
   align-self: end;
-  border-radius: 7px 7px 0 0;
+  border-radius: var(--radius-xs) 7px 0 0;
   background: linear-gradient(180deg, var(--accent-green), #17633a);
 }
 
@@ -275,7 +275,7 @@
 
 @media (max-width: 360px) {
   .fish-activity-forecast-chart {
-    gap: 4px;
+    gap: var(--space-1);
     padding-right: var(--space-2);
     padding-left: var(--space-2);
   }

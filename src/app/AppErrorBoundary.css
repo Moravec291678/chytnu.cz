@@ -1,7 +1,7 @@
-.app-error-screen { display: grid; min-height: 100dvh; place-items: center; padding: 24px; background: #111820; color: #f4f7f8; }
-.app-error-card { display: grid; justify-items: center; width: min(100%, 420px); gap: 12px; padding: 28px; border: 1px solid rgba(255, 255, 255, .14); border-radius: 18px; background: #1a2630; text-align: center; }
-.app-error-mark { display: grid; width: 42px; height: 42px; place-items: center; border: 1px solid #ef8a63; border-radius: 50%; color: #ffad89; font-size: 21px; font-weight: 800; }
+.app-error-screen { display: grid; min-height: 100dvh; place-items: center; padding: var(--space-6); background: var(--app-bg); color: var(--app-error-screen-text); }
+.app-error-card { display: grid; justify-items: center; width: min(100%, 420px); gap: var(--space-3); padding: var(--space-7-compact); border: 1px solid rgba(255, 255, 255, .14); border-radius: var(--radius-lg); background: var(--app-error-background); text-align: center; }
+.app-error-mark { display: grid; width: 42px; height: 42px; place-items: center; border: 1px solid var(--app-error-accent); border-radius: 50%; color: var(--app-error-accent-soft); font-size: var(--font-size-21); font-weight: 800; }
 .app-error-card h1 { margin: 0; font-size: clamp(20px, 5vw, 25px); }
-.app-error-card p { margin: 0; color: #c1ccd2; font-size: 14px; line-height: 1.5; }
-.app-error-card button { min-height: 46px; margin-top: 6px; padding: 0 18px; border: 0; border-radius: 10px; background: #83c998; color: #101820; font: inherit; font-weight: 800; }
-.app-error-card button:focus-visible { outline: 3px solid #f4f7f8; outline-offset: 3px; }
+.app-error-card p { margin: 0; color: var(--app-error-text); font-size: var(--font-size-14); line-height: 1.5; }
+.app-error-card button { min-height: 46px; margin-top: var(--space-1-5); padding: 0 var(--space-4-5); border: 0; border-radius: var(--radius-sm); background: var(--app-error-button); color: var(--app-error-button-text); font: inherit; font-weight: 800; }
+.app-error-card button:focus-visible { outline: 3px solid var(--app-error-screen-text); outline-offset: 3px; }

@@ -5,6 +5,7 @@ import { useCatches } from "../features/catches/context/useCatches";
 import { photoFrameStyle } from "../features/catches/data/photoFraming.js";
 import { buildGalleryItems, countActiveGalleryFilters, filterAndSortGallery, getGalleryOptions } from "../features/catches/data/catchGallery.js";
 import { useDataScope } from "../features/auth/context/dataScopeContextValue.js";
+import { useModalFocusTrap } from "../shared/hooks/useModalFocusTrap.js";
 import GalleryPhotoImage from "./GalleryPhotoImage.js";
 import "./GalleryPage.css";
 import "../features/catches/components/PhotoSyncStatus.css";
@@ -32,20 +33,19 @@ function PhotoViewer({ items, index, scope, onClose, onMove }) {
   const item = items[index];
   const location = item.locationName || (item.waterId ? "Revír" : "");
   const closeRef = useRef(null);
+  const dialogRef = useRef(null);
   const touchX = useRef(null);
+  useModalFocusTrap(dialogRef, { initialFocusRef: closeRef, onEscape: onClose });
   useEffect(() => {
-    const previousFocus = document.activeElement;
-    closeRef.current?.focus();
     const onKey = (event) => {
-      if (event.key === "Escape") onClose();
       if (event.key === "ArrowRight") onMove(1);
       if (event.key === "ArrowLeft") onMove(-1);
     };
     document.addEventListener("keydown", onKey);
-    return () => { document.removeEventListener("keydown", onKey); previousFocus?.focus?.(); };
-  }, [onClose, onMove]);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onMove]);
   return <div className="gallery-viewer-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <section className="gallery-viewer" role="dialog" aria-modal="true" aria-label="Náhled fotografie" onTouchStart={(event) => { touchX.current = event.touches[0]?.clientX ?? null; }} onTouchEnd={(event) => {
+    <section ref={dialogRef} tabIndex="-1" className="gallery-viewer" role="dialog" aria-modal="true" aria-label="Náhled fotografie" onTouchStart={(event) => { touchX.current = event.touches[0]?.clientX ?? null; }} onTouchEnd={(event) => {
       if (touchX.current === null) return;
       const delta = event.changedTouches[0]?.clientX - touchX.current;
       if (Math.abs(delta) > 45) onMove(delta < 0 ? 1 : -1);
@@ -72,6 +72,9 @@ function GalleryPage() {
   const [filterDraft, setFilterDraft] = useState(EMPTY_FILTERS);
   const [filterPanelOpen, setFilterPanelOpen] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(-1);
+  const filterDialogRef = useRef(null);
+  const filterCloseRef = useRef(null);
+  useModalFocusTrap(filterDialogRef, { active: filterPanelOpen, initialFocusRef: filterCloseRef, onEscape: () => setFilterPanelOpen(false) });
   const allItems = useMemo(() => buildGalleryItems(state.catches, { ownerId: scope.ownerId }), [scope.ownerId, state.catches]);
   const options = useMemo(() => getGalleryOptions(allItems), [allItems]);
   const photos = useMemo(() => filterAndSortGallery(allItems, filters), [allItems, filters]);
@@ -91,13 +94,6 @@ function GalleryPage() {
     setFilters((current) => ({ ...current, ...filterDraft }));
     setFilterPanelOpen(false);
   };
-  useEffect(() => {
-    if (!filterPanelOpen) return undefined;
-    const onKeyDown = (event) => { if (event.key === "Escape") setFilterPanelOpen(false); };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [filterPanelOpen]);
-
   return <Layout><div className="gallery-page">
     <header className="gallery-heading"><div><h1>Galerie</h1><p>{allItems.length} {allItems.length === 1 ? "fotografie" : "fotografií"} z tvých úlovků</p></div></header>
     <section className="gallery-controls" aria-label="Hledání a filtry fotografií">
@@ -108,8 +104,8 @@ function GalleryPage() {
             Filtry{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
           </button>
           {filterPanelOpen && <div className="gallery-filter-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setFilterPanelOpen(false); }}>
-            <section id="gallery-filter-panel" className="gallery-filter-panel" role="dialog" aria-modal="true" aria-label="Filtry galerie">
-              <header className="gallery-filter-header"><h2>Filtry</h2><button type="button" className="gallery-filter-close" onClick={() => setFilterPanelOpen(false)} aria-label="Zavřít filtry">×</button></header>
+            <section ref={filterDialogRef} tabIndex="-1" id="gallery-filter-panel" className="gallery-filter-panel" role="dialog" aria-modal="true" aria-label="Filtry galerie">
+              <header className="gallery-filter-header"><h2>Filtry</h2><button ref={filterCloseRef} type="button" className="gallery-filter-close" onClick={() => setFilterPanelOpen(false)} aria-label="Zavřít filtry">×</button></header>
               <label>Druh<select value={filterDraft.speciesKey} onChange={(event) => setDraft("speciesKey", event.target.value)}><option value="">Všechny druhy</option>{options.species.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}</select></label>
               <label>Voda / revír<select value={filterDraft.waterKey} onChange={(event) => setDraft("waterKey", event.target.value)}><option value="">Všechny vody</option>{options.waters.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}</select></label>
               <label>Období<select value={filterDraft.period} onChange={(event) => setDraft("period", event.target.value)}><option value="all">Všechna období</option><option value="month">Tento měsíc</option><option value="year">Tento rok</option><option value="custom:range">Vlastní rozsah</option></select></label>

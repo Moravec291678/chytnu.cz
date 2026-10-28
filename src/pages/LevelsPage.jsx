@@ -87,7 +87,7 @@ export default function LevelsPage() {
               ) : (
                 <p className="level-empty-xp">Pravidla XP nejsou dostupná.</p>
               )}
-              <p className="level-rule-note">Stav úrovně a postup počítáme výhradně z trvalého XP ledgeru. Komunitní XP se připíšou až po potvrzeném příspěvku; tato funkce zatím čeká na backend.</p>
+              <p className="level-rule-note">Úroveň vychází z uloženého postupu. Odměny za komunitní příspěvky zatím nejsou dostupné.</p>
             </section>
 
             <section className="level-section" aria-labelledby="level-ranks-title">
@@ -122,7 +122,7 @@ export default function LevelsPage() {
               <p className="level-rule-note">Rarity určuje stabilní pravidlo podle ověřené hmotnosti, délky a vlastností druhu.</p>
             </section>
 
-            <Link className="progression-link" to="/achievements">Prohlédnout achievementy <span>→</span></Link>
+            <Link className="progression-link" to="/achievements">Prohlédnout úspěchy <span>→</span></Link>
           </>
         )}
       </main>

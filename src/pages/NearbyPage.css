@@ -35,7 +35,7 @@
 .nearby-local-position > div:first-child span,
 .nearby-remote-grid article > span {
   color: var(--accent-orange);
-  font-size: 10px;
+  font-size: var(--font-size-10);
   font-weight: 900;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -43,9 +43,9 @@
 
 .nearby-backend-badge {
   max-width: 116px;
-  padding: 6px 8px;
+  padding: var(--space-1-5) var(--space-2);
   border: 1px solid color-mix(in srgb, var(--accent-orange) 45%, transparent);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   text-align: center;
 }
 
@@ -117,14 +117,14 @@
 .nearby-section-heading > div,
 .nearby-local-position > div:first-child {
   display: grid;
-  gap: 2px;
+  gap: var(--space-0-5);
 }
 
 .nearby-switch {
   display: inline-grid;
   grid-template-columns: 44px auto;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   cursor: pointer;
 }
 
@@ -139,7 +139,7 @@
   position: relative;
   width: 44px;
   height: 25px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--surface-3, var(--border-strong));
   transition: background 160ms ease;
 }
@@ -196,7 +196,7 @@
 .nearby-settings small,
 .nearby-local-position small {
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--font-size-12);
   line-height: 1.45;
 }
 
@@ -230,7 +230,7 @@
 
 .nearby-position-state span {
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-12);
   line-height: 1.45;
 }
 

@@ -149,13 +149,17 @@ test("gallery route and primary Profile entry are connected without changing bot
 });
 
 test("viewer supports filtered-list navigation, keyboard, swipe, Catch detail, and URL cleanup", async () => {
-  const [page, photoImage] = await Promise.all([
+  const [page, photoImage, focusTrap] = await Promise.all([
     readFile(new URL("../../../pages/GalleryPage.jsx", import.meta.url), "utf8"),
     readFile(new URL("../../../pages/GalleryPhotoImage.js", import.meta.url), "utf8"),
+    readFile(new URL("../../../shared/hooks/useModalFocusTrap.js", import.meta.url), "utf8"),
   ]);
-  assert.match(page, /event\.key === "Escape"/);
   assert.match(page, /event\.key === "ArrowRight"/);
   assert.match(page, /event\.key === "ArrowLeft"/);
+  assert.match(page, /useModalFocusTrap\(dialogRef/);
+  assert.match(focusTrap, /event\.key === "Escape"/);
+  assert.match(focusTrap, /event\.key !== "Tab"/);
+  assert.match(focusTrap, /last\.focus\(\)/);
   assert.match(page, /onTouchStart/);
   assert.match(page, /to=\{`\/catch\/\$\{item\.catchId\}`\}/);
   assert.match(photoImage, /URL\.revokeObjectURL\(objectUrlRef\.current\)/);

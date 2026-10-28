@@ -50,7 +50,7 @@
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   color: var(--text-on-accent);
-  font-size: 20px;
+  font-size: var(--font-size-20);
   font-weight: 900;
 }
 
@@ -213,17 +213,17 @@
 
 @media (max-width: 420px) {
   .challenge-season-variants {
-    gap: 6px;
+    gap: var(--space-1-5);
   }
 
   .challenge-season-variant {
-    gap: 6px;
-    padding: 9px 7px;
+    gap: var(--space-1-5);
+    padding: var(--space-2-25) var(--space-1-75);
   }
 
   .challenge-season-variant h3,
   .challenge-season-variant-heading > strong {
-    font-size: 11px;
+    font-size: var(--font-size-11);
   }
 }
 

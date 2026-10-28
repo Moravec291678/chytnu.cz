@@ -1,30 +1,30 @@
 .trips-page {
-  padding: 18px 0 calc(24px + env(safe-area-inset-bottom));
+  padding: var(--space-4-5) 0 calc(var(--space-6) + env(safe-area-inset-bottom));
 }
 
 .trips-header {
-  margin: 0 20px 17px;
+  margin: 0 var(--space-5) var(--space-4-25);
 }
 
 .trips-header-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .trips-header h1 {
   color: var(--text-primary);
-  font-size: 34px;
+  font-size: var(--font-size-34);
   font-weight: 900;
   letter-spacing: -1px;
   line-height: 1;
 }
 
 .trips-subtitle {
-  margin-top: 5px;
+  margin-top: var(--space-1-25);
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: var(--font-size-13);
   font-weight: 600;
 }
 
@@ -38,37 +38,37 @@
   border-radius: var(--radius-lg);
   background: var(--surface-1);
   color: var(--text-secondary);
-  font-size: 28px;
+  font-size: var(--font-size-28);
   line-height: 1;
   text-decoration: none;
 }
 
 .trips-section {
-  margin-top: 21px;
+  margin-top: var(--space-5-25);
 }
 
 .trips-section .section-title {
-  margin: 0 20px 10px;
+  margin: 0 var(--space-5) var(--space-2-5);
 }
 
 .trips-empty {
   display: grid;
-  gap: 7px;
-  margin: 12px 20px;
-  padding: 16px;
+  gap: var(--space-1-75);
+  margin: var(--space-3) var(--space-5);
+  padding: var(--space-4);
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: var(--radius-md-roomy);
   background: var(--surface-1);
 }
 
 .trips-empty strong {
   color: var(--text-primary);
-  font-size: 15px;
+  font-size: var(--font-size-15);
 }
 
 .trips-empty p {
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-12);
   line-height: 1.45;
 }
 
@@ -79,35 +79,35 @@
   align-items: center;
   justify-content: center;
   justify-self: stretch;
-  margin-top: 4px;
+  margin-top: var(--space-1);
   border: 1px solid var(--accent-green);
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   background: var(--accent-green);
   color: var(--text-on-accent);
-  font-size: 12px;
+  font-size: var(--font-size-12);
   font-weight: 800;
   text-decoration: none;
 }
 
 .trips-empty-history {
-  margin: 0 20px;
-  padding: 14px;
+  margin: 0 var(--space-5);
+  padding: var(--space-3-5);
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: var(--radius-md);
   background: var(--surface-1);
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-12);
 }
 
 .trips-loading {
   display: grid;
-  gap: 8px;
-  margin: 12px 20px;
+  gap: var(--space-2);
+  margin: var(--space-3) var(--space-5);
 }
 
 .trips-loading span {
   height: 88px;
   border: 1px solid var(--border);
-  border-radius: 15px;
+  border-radius: var(--radius-md-plus);
   background: var(--surface-1);
 }

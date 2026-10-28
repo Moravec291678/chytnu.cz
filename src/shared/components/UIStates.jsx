@@ -1,5 +1,6 @@
 import "./UIStates.css";
 import { getOfflineNoticeCopy } from "./offlineNoticeCopy.js";
+import { Button } from "./UIPrimitives.jsx";
 
 function classes(base, className) {
   return [base, className].filter(Boolean).join(" ");
@@ -17,7 +18,7 @@ export function ErrorState({ title = "Něco se nepodařilo", message, onRetry, r
   return <section className={classes("ui-state ui-state-error", className)} role="alert">
     {title && <h2>{title}</h2>}
     <p>{message}</p>
-    {onRetry && <button type="button" onClick={onRetry}>{retryLabel}</button>}
+    {onRetry && <Button variant="secondary" onClick={onRetry}>{retryLabel}</Button>}
   </section>;
 }
 
@@ -33,7 +34,7 @@ export function PermissionDeniedState({ title = "Povolení nebylo uděleno", des
   return <section className={classes("ui-state ui-state-permission", className)} role="status">
     <h2>{title}</h2>
     <p>{description}</p>
-    {onRetry && <button type="button" onClick={onRetry}>{retryLabel}</button>}
+    {onRetry && <Button variant="secondary" onClick={onRetry}>{retryLabel}</Button>}
   </section>;
 }
 

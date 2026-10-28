@@ -4,12 +4,12 @@
   display: grid;
   place-content: center;
   justify-items: center;
-  gap: 8px;
-  padding: 32px 24px max(32px, env(safe-area-inset-bottom));
+  gap: var(--space-2);
+  padding: var(--space-7) var(--space-6) max(var(--space-7), env(safe-area-inset-bottom));
   overflow: hidden;
   position: relative;
-  background: #0d151e;
-  color: #eff5ff;
+  background: var(--auth-background);
+  color: var(--text-primary);
 }
 
 .launch-splash::before,
@@ -27,9 +27,9 @@
 .launch-splash::before { bottom: 18%; left: -14%; }
 .launch-splash::after { bottom: 12%; left: -8%; opacity: .55; }
 
-.launch-splash-greeting { margin: 0; color: #a9efc5; font-size: clamp(26px, 8vw, 32px); font-weight: 700; }
+.launch-splash-greeting { margin: 0; color: var(--auth-accent-soft); font-size: clamp(26px, 8vw, 32px); font-weight: 700; }
 .launch-splash h1 { margin: 0; font-size: clamp(42px, 12vw, 64px); letter-spacing: -.06em; line-height: 1; }
-.launch-splash-subtitle { margin: 0; color: #829db8; font-size: 17px; font-weight: 600; }
-.launch-splash-loader { width: 18px; height: 18px; margin-top: 28px; border: 2px solid rgb(46 204 113 / 28%); border-top-color: #2ecc71; border-radius: 50%; animation: launch-spin .8s linear infinite; }
+.launch-splash-subtitle { margin: 0; color: var(--text-secondary); font-size: var(--font-size-17); font-weight: 600; }
+.launch-splash-loader { width: 18px; height: 18px; margin-top: var(--space-7-compact); border: 2px solid rgb(46 204 113 / 28%); border-top-color: var(--accent-green); border-radius: 50%; animation: launch-spin .8s linear infinite; }
 
 @keyframes launch-spin { to { transform: rotate(360deg); } }

@@ -89,7 +89,7 @@ function NearbyPage() {
             <h1 id="nearby-title">Okolí</h1>
             <p>Anonymizovaný přehled bez přesné polohy a jmen</p>
           </div>
-          <span className="nearby-backend-badge">BACKEND_REQUIRED</span>
+          <span className="nearby-backend-badge">Zatím nedostupné</span>
         </header>
 
         <section className="nearby-map-empty" aria-labelledby="nearby-map-title">
@@ -97,7 +97,7 @@ function NearbyPage() {
             <svg viewBox="0 0 24 24"><path d="M12 21s7-6.1 7-12a7 7 0 1 0-14 0c0 5.9 7 12 7 12Z" /><circle cx="12" cy="9" r="2.2" /></svg>
           </div>
           <strong id="nearby-map-title">Anonymizované body nejsou dostupné</strong>
-          <p>Vzdálená data vyžadují backend, který sloučí dostatečný počet záznamů do hrubých oblastí. Proto zde nezobrazujeme žádné odhadované body ani počty.</p>
+          <p>Přehled okolí zatím není dostupný. Cizí polohy ani odhadované počty nezobrazujeme.</p>
         </section>
 
         <section className="nearby-settings" aria-labelledby="nearby-settings-title">
@@ -114,7 +114,7 @@ function NearbyPage() {
               <b>{settings.nearbyOptIn ? "Zapnuto" : "Vypnuto"}</b>
             </label>
           </div>
-          <p>Souhlas pouze ukládá vaši preferenci. Dokud není připojen bezpečný agregační backend, nic se neodesílá ani nezveřejňuje.</p>
+          <p>Volba se uloží do tvého profilu. Dokud nebude přehled okolí připravený, nic se neodesílá ani nezveřejňuje.</p>
           <label className="nearby-precision">
             Požadovaná přesnost zveřejnění
             <select
@@ -126,7 +126,7 @@ function NearbyPage() {
               <option value="none">Bez polohy</option>
             </select>
           </label>
-          <small>Přesné GPS souřadnice nejsou pro Nearby povolené.</small>
+          <small>Přesná poloha se nezveřejňuje.</small>
           {settingsStatus === "error" && !settingsMessage && <p className="nearby-error" role="alert">Nastavení soukromí se nepodařilo načíst.</p>}
           {settingsMessage && <p className={settingsStatus === "error" ? "nearby-error" : "nearby-feedback"} role="status">{settingsMessage}</p>}
         </section>
@@ -144,7 +144,7 @@ function NearbyPage() {
           <button className="nearby-check-in" type="button" onClick={checkOwnPosition} disabled={positionStatus === "loading"}>
             {positionStatus === "loading" ? "Ověřuji…" : "Jsem tady"}
           </button>
-          <small>Tlačítko nepublikuje check in. Vzdálené sdílení polohy není bez backendu aktivní.</small>
+          <small>Tlačítko polohu nikam neposílá ani nezveřejňuje.</small>
         </section>
 
         <section className="nearby-remote-grid" aria-label="Stav vzdálených dat v okolí">

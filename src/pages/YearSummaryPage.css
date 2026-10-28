@@ -1,11 +1,11 @@
 .year-summary-page {
   display: grid;
-  gap: 13px;
-  padding: 18px 18px calc(26px + env(safe-area-inset-bottom));
+  gap: var(--space-3-25);
+  padding: var(--space-4-5) var(--space-4-5) calc(var(--space-6-5) + env(safe-area-inset-bottom));
 }
 
 .year-summary-header {
-  margin: 0 2px 2px;
+  margin: 0 var(--space-0-5) var(--space-0-5);
 }
 
 .year-summary-header > a {
@@ -13,24 +13,24 @@
   min-height: 32px;
   align-items: center;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-12);
   font-weight: 700;
   text-decoration: none;
 }
 
 .year-summary-header h1 {
-  margin-top: 7px;
+  margin-top: var(--space-1-75);
   color: var(--text-primary);
-  font-size: 29px;
+  font-size: var(--font-size-29);
   font-weight: 900;
   letter-spacing: -0.7px;
   line-height: 1.1;
 }
 
 .year-summary-header p {
-  margin-top: 4px;
+  margin-top: var(--space-1);
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: var(--font-size-13);
 }
 
 .year-summary-select-label {
@@ -38,18 +38,18 @@
   min-width: 0;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--space-3);
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-12);
   font-weight: 800;
 }
 
 .year-summary-select-label select {
   min-width: 100px;
   min-height: 42px;
-  padding: 0 12px;
+  padding: 0 var(--space-3);
   border: 1px solid var(--border-strong);
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   background: var(--surface-1);
   color: var(--text-primary);
   font: inherit;
@@ -57,7 +57,7 @@
 
 .year-summary-cards {
   display: grid;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .year-summary-card {
@@ -67,10 +67,10 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 3px;
-  padding: 15px;
+  gap: var(--space-0-75);
+  padding: var(--space-3-75);
   border: 1px solid var(--border);
-  border-radius: 18px;
+  border-radius: var(--radius-lg);
   background: var(--surface-1);
   text-align: center;
 }
@@ -87,51 +87,51 @@
 
 .year-summary-card span {
   color: var(--text-secondary);
-  font-size: 14px;
+  font-size: var(--font-size-14);
   font-weight: 700;
 }
 
 .year-summary-card small {
   max-width: 100%;
-  margin-top: 3px;
+  margin-top: var(--space-0-75);
   overflow-wrap: anywhere;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--font-size-11);
 }
 
 .year-summary-card-gold strong {
-  color: var(--accent-gold, #f0a820);
+  color: var(--accent-gold, var(--chart-gold));
 }
 
 .year-summary-state,
 .year-summary-empty {
   min-width: 0;
-  padding: 16px;
+  padding: var(--space-4);
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: var(--radius-md-roomy);
   background: var(--surface-1);
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: var(--font-size-13);
   line-height: 1.5;
 }
 
 .year-summary-empty h2,
 .year-summary-state h2 {
   color: var(--text-primary);
-  font-size: 16px;
+  font-size: var(--font-size-16);
 }
 
 .year-summary-empty p,
 .year-summary-state p {
-  margin-top: 6px;
+  margin-top: var(--space-1-5);
 }
 
 .year-summary-no-catches {
-  padding: 12px 14px;
+  padding: var(--space-3) var(--space-3-5);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-sm-roomy);
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-12);
   line-height: 1.45;
 }
 
@@ -140,7 +140,7 @@
   min-height: 42px;
   align-items: center;
   color: var(--accent-green);
-  font-size: 12px;
+  font-size: var(--font-size-12);
   font-weight: 800;
   text-decoration: none;
 }

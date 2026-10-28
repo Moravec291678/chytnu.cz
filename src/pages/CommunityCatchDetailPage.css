@@ -24,7 +24,7 @@
 .community-detail-backend > span {
   margin-top: var(--space-2);
   color: var(--accent-orange);
-  font-size: 10px;
+  font-size: var(--font-size-10);
   font-weight: 900;
   letter-spacing: 0.08em;
 }
@@ -44,12 +44,12 @@
 
 .community-detail-title-row b {
   flex: 0 0 auto;
-  padding: 6px 9px;
+  padding: var(--space-1-5) var(--space-2-25);
   border: 1px solid var(--border-strong);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--surface-2);
   color: var(--accent-orange);
-  font-size: 11px;
+  font-size: var(--font-size-11);
   text-transform: uppercase;
 }
 
@@ -135,7 +135,7 @@
 
 .community-detail-section-heading span {
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: var(--font-size-10);
   font-weight: 800;
   text-align: right;
 }
@@ -148,7 +148,7 @@
 
 .community-reactions button {
   min-width: 0;
-  min-height: 42px;
+  min-height: 44px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--surface-2);
@@ -202,7 +202,7 @@
 
 .community-comments-list time {
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: var(--font-size-10);
 }
 
 .community-comments-list p {
@@ -213,11 +213,13 @@
 }
 
 .community-comments-list button {
+  min-height: 44px;
+  padding: 0 var(--space-2);
   width: fit-content;
   border: 0;
   background: transparent;
   color: var(--accent-red);
-  font-size: 11px;
+  font-size: var(--font-size-11);
   font-weight: 800;
   cursor: pointer;
 }
@@ -254,7 +256,7 @@
 
 .community-comment-form span {
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--font-size-11);
 }
 
 .community-comment-form button,
@@ -307,7 +309,7 @@
 
 .community-detail-report-overlay {
   position: fixed;
-  z-index: 1300;
+  z-index: var(--z-catch-detail-overlay);
   inset: 0;
   display: grid;
   align-items: end;
@@ -320,7 +322,11 @@
   position: relative;
   display: grid;
   width: min(100%, 487px);
+  max-height: calc(100vh - 2 * var(--space-4));
+  max-height: calc(100dvh - 2 * var(--space-4));
   gap: var(--space-3);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: var(--space-5) var(--space-5) calc(var(--space-5) + env(safe-area-inset-bottom));
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
@@ -329,14 +335,14 @@
 
 .community-detail-report-sheet > span {
   color: var(--accent-orange);
-  font-size: 10px;
+  font-size: var(--font-size-10);
   font-weight: 900;
   letter-spacing: 0.08em;
 }
 
 .community-detail-report-sheet h2 {
   color: var(--text-primary);
-  font-size: 22px;
+  font-size: var(--font-size-22);
 }
 
 .community-detail-report-sheet > p {
@@ -385,7 +391,7 @@
   border-radius: 50%;
   background: var(--surface-2);
   color: var(--text-primary);
-  font-size: 22px;
+  font-size: var(--font-size-22);
   cursor: pointer;
 }
 

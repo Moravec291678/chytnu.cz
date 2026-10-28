@@ -50,7 +50,7 @@ export default function NotificationsPage() {
         }).catch(() => {});
       }
     } catch {
-      setPushState((previous) => ({ ...previous, support: { available: false, reason: "Web Push není v tomto prostředí nakonfigurovaný." } }));
+      setPushState((previous) => ({ ...previous, support: { available: false, reason: "Oznámení na zařízení nejsou v tomto prostředí dostupná." } }));
     }
     return () => { active = false; };
   }, [scope.ownerId]);
@@ -62,8 +62,8 @@ export default function NotificationsPage() {
       if (pushState.subscribed) await notificationAdapter.unsubscribe();
       else await notificationAdapter.subscribe();
       setPushState((previous) => ({ ...previous, permission: notificationAdapter.permission(), subscribed: !previous.subscribed, busy: false, error: "" }));
-    } catch (error) {
-      setPushState((previous) => ({ ...previous, permission: getNotificationAdapter().permission(), busy: false, error: error?.message || "Nastavení push oznámení se nezdařilo." }));
+    } catch {
+      setPushState((previous) => ({ ...previous, permission: getNotificationAdapter().permission(), busy: false, error: "Oznámení se nepodařilo nastavit. Zkus to znovu." }));
     }
   }
 

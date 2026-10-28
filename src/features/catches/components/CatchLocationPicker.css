@@ -1,10 +1,10 @@
 .catch-location-picker-backdrop {
   position: fixed;
-  z-index: 1200;
+  z-index: var(--z-gallery-viewer);
   inset: 0;
   display: grid;
   place-items: center;
-  padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom));
+  padding: max(var(--space-3), env(safe-area-inset-top)) var(--space-3) max(var(--space-3), env(safe-area-inset-bottom));
   background: rgb(3 10 22 / 78%);
   overscroll-behavior: contain;
 }
@@ -14,11 +14,11 @@
   width: min(760px, 100%);
   max-height: 100%;
   grid-template-rows: auto minmax(220px, 1fr) auto auto auto;
-  gap: 12px;
+  gap: var(--space-3);
   overflow: hidden;
-  padding: 16px;
+  padding: var(--space-4);
   border: 1px solid var(--border-strong);
-  border-radius: 20px;
+  border-radius: var(--radius-xl-compact);
   background: var(--surface-1);
   box-shadow: 0 22px 70px rgb(0 0 0 / 38%);
 }
@@ -27,20 +27,20 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .catch-location-picker-header h2 {
   margin: 0;
   color: var(--text-primary);
-  font-size: 19px;
+  font-size: var(--font-size-19);
 }
 
 .catch-location-picker-header p,
 .catch-location-picker-value {
-  margin: 4px 0 0;
+  margin: var(--space-1) 0 0;
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: var(--font-size-13);
 }
 
 .catch-location-picker-close {
@@ -50,17 +50,17 @@
   flex: 0 0 44px;
   place-items: center;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-sm-roomy);
   background: var(--surface-2);
   color: var(--text-primary);
-  font-size: 26px;
+  font-size: var(--font-size-26);
 }
 
 .catch-location-picker-map {
   min-height: 220px;
   overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: var(--radius-md);
   background: var(--surface-2);
   touch-action: pan-x pan-y;
 }
@@ -68,28 +68,28 @@
 .catch-location-picker-coordinates {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: var(--space-2-5);
 }
 
 .catch-location-picker-coordinates label {
   display: grid;
   min-width: 0;
-  gap: 5px;
+  gap: var(--space-1-25);
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-12);
   font-weight: 700;
 }
 
 .catch-location-picker-coordinates input {
   min-width: 0;
   min-height: 44px;
-  padding: 0 10px;
+  padding: 0 var(--space-2-5);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   background: var(--surface-2);
   color: var(--text-primary);
   font: inherit;
-  font-size: 14px;
+  font-size: var(--font-size-14);
 }
 
 .catch-location-picker-value {
@@ -100,14 +100,14 @@
 .catch-location-picker-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 10px;
+  gap: var(--space-2-5);
 }
 
 .catch-location-picker-actions button {
   min-height: 46px;
-  padding: 0 16px;
+  padding: 0 var(--space-4);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-sm-roomy);
   font: inherit;
   font-weight: 800;
 }
@@ -164,9 +164,9 @@
     height: 100%;
     max-height: 100%;
     grid-template-rows: auto minmax(0, 1fr) auto auto auto;
-    gap: 10px;
-    padding: 12px;
-    border-radius: 16px;
+    gap: var(--space-2-5);
+    padding: var(--space-3);
+    border-radius: var(--radius-md-roomy);
   }
 
   .catch-location-picker-map {
@@ -175,7 +175,7 @@
 
   .catch-location-picker-actions button {
     flex: 1;
-    padding: 0 10px;
+    padding: 0 var(--space-2-5);
   }
 }
 

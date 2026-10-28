@@ -1,5 +1,6 @@
 import { createElement } from "react";
 import { getOfflineNoticeCopy } from "../components/offlineNoticeCopy.js";
+import { userFacingErrorMessage } from "../errors/userFacingError.js";
 import { getSyncStatusView, runSyncRetry } from "./syncStatusView.js";
 
 const h = createElement;
@@ -10,8 +11,9 @@ export default function SyncStatus({ sync, isOnline, compact = false }) {
   if (view.kind === "error" || view.kind === "offline") {
     const failed = view.kind === "error";
     const copy = getOfflineNoticeCopy(failed ? "error" : "offline", sync?.pending, sync?.errorCode);
-    const description = failed && sync?.error
-      ? `${sync.error} Místní změny zůstávají uložené ve frontě.` : copy.description;
+    const syncError = failed ? userFacingErrorMessage(sync?.error, "Zkontroluj připojení a zkus synchronizaci znovu.") : "";
+    const description = failed && syncError
+      ? `${syncError} Místní změny zůstávají uložené ve frontě.` : copy.description;
     return h("div", { className: "sync-status-layer" },
       h("aside", { className: `sync-status-card sync-status-${view.kind}`, role: failed ? "alert" : "status",
         "aria-live": failed ? "assertive" : "polite", "aria-atomic": "true" },
@@ -24,7 +26,7 @@ export default function SyncStatus({ sync, isOnline, compact = false }) {
   const isSyncing = view.kind === "syncing" || view.kind === "syncing-compact";
   const title = isSyncing ? "Synchronizuji…" : "Synchronizace dokončena";
   const description = isSyncing
-    ? pendingCount > 0 ? `Zpracovávám ${pendingCount} čekajících operací nebo fotografií.` : "Probíhá synchronizace úlovků, vycházek a fotografií."
+    ? pendingCount > 0 ? `Synchronizuji změny a fotografie. Čeká: ${pendingCount}.` : "Probíhá synchronizace úlovků, vycházek a fotografií."
     : pending > 0 ? `Zbývá ${pending} změn k synchronizaci.` : "Úlovky, vycházky a dostupné fotografie jsou aktuální.";
   const isCompact = view.kind === "syncing-compact";
   const presentedKind = isCompact ? "syncing" : view.kind;

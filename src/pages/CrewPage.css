@@ -36,16 +36,16 @@
 .crew-form-heading span,
 .crew-remote > div:first-child span {
   color: var(--accent-orange);
-  font-size: 10px;
+  font-size: var(--font-size-10);
   font-weight: 900;
   letter-spacing: 0.08em;
 }
 
 .crew-backend-badge {
   max-width: 116px;
-  padding: 6px 8px;
+  padding: var(--space-1-5) var(--space-2);
   border: 1px solid color-mix(in srgb, var(--accent-orange) 45%, transparent);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   text-align: center;
 }
 
@@ -64,24 +64,24 @@
 .crew-form-heading > div,
 .crew-remote > div:first-child {
   display: grid;
-  gap: 2px;
+  gap: var(--space-0-5);
 }
 
 .crew-summary-heading h2,
 .crew-form-heading h2,
 .crew-remote h2 {
   color: var(--text-primary);
-  font-size: 19px;
+  font-size: var(--font-size-19);
   font-weight: 900;
 }
 
 .crew-summary-heading b,
 .crew-form-heading em {
-  padding: 6px 9px;
-  border-radius: 999px;
+  padding: var(--space-1-5) var(--space-2-25);
+  border-radius: var(--radius-pill);
   background: var(--surface-2);
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: var(--font-size-11);
   font-style: normal;
   font-weight: 800;
 }
@@ -95,7 +95,7 @@
 .crew-stat-grid article {
   display: grid;
   min-width: 0;
-  gap: 4px;
+  gap: var(--space-1);
   padding: var(--space-3);
   border-radius: var(--radius-md);
   background: var(--surface-2);
@@ -104,7 +104,7 @@
 .crew-stat-grid span,
 .crew-stat-grid small {
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: var(--font-size-10);
   line-height: 1.35;
 }
 
@@ -124,12 +124,12 @@
 
 .crew-current-member > span {
   color: var(--accent-green);
-  font-size: 10px;
+  font-size: var(--font-size-10);
 }
 
 .crew-current-member div {
   display: grid;
-  gap: 2px;
+  gap: var(--space-0-5);
 }
 
 .crew-current-member strong {
@@ -139,7 +139,7 @@
 
 .crew-current-member small {
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: var(--font-size-11);
 }
 
 .crew-form > label,
@@ -182,7 +182,7 @@
 }
 
 .crew-challenge-config legend {
-  padding: 0 6px;
+  padding: 0 var(--space-1-5);
   color: var(--text-primary);
   font-size: var(--font-size-sm);
   font-weight: 900;
@@ -205,7 +205,7 @@
 
 .crew-challenge-config small {
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--font-size-11);
   line-height: 1.45;
 }
 
@@ -256,7 +256,7 @@
 
 .crew-remote-grid article {
   display: grid;
-  gap: 3px;
+  gap: var(--space-0-75);
   padding: var(--space-3);
   border: 1px dashed var(--border-strong);
   border-radius: var(--radius-md);

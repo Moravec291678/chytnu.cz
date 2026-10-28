@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { DEFAULT_PHOTO_FRAME, normalizePhotoFrame, photoFrameStyle } from "../data/photoFraming.js";
+import { useModalFocusTrap } from "../../../shared/hooks/useModalFocusTrap.js";
 import "./PhotoFrameEditor.css";
 
 function clamp(value, min, max) { return Math.min(max, Math.max(min, value)); }
@@ -7,6 +8,8 @@ function clamp(value, min, max) { return Math.min(max, Math.max(min, value)); }
 export default function PhotoFrameEditor({ photo, onSave, onCancel }) {
   const [frame, setFrame] = useState(() => normalizePhotoFrame(photo));
   const dragRef = useRef(null);
+  const dialogRef = useRef(null);
+  useModalFocusTrap(dialogRef, { onEscape: onCancel });
 
   const move = (event) => {
     const drag = dragRef.current;
@@ -31,7 +34,7 @@ export default function PhotoFrameEditor({ photo, onSave, onCancel }) {
   const nudge = (x, y) => setFrame((current) => ({ ...current, focalX: clamp(current.focalX + x, 0, 1), focalY: clamp(current.focalY + y, 0, 1) }));
 
   return <div className="photo-frame-editor-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onCancel(); }}>
-    <section className="photo-frame-editor" role="dialog" aria-modal="true" aria-labelledby="photo-frame-editor-title">
+    <section ref={dialogRef} tabIndex="-1" className="photo-frame-editor" role="dialog" aria-modal="true" aria-labelledby="photo-frame-editor-title">
       <h2 id="photo-frame-editor-title">Upravit zobrazení fotografie</h2>
       <p className="photo-frame-editor-note">Posuň fotografii tak, aby v rámečku zůstala důležitá část. Originální soubor se nemění.</p>
       <div className="photo-frame-canvas" onPointerDown={startDrag} onPointerMove={move} onPointerUp={endDrag} onPointerCancel={endDrag} onKeyDown={(event) => {

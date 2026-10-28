@@ -99,7 +99,7 @@ export default function SeasonStoryPage() {
       <section className="season-story-page" aria-labelledby="season-story-title">
         <header className="season-story-header">
           <Link to="/profile">← Profil</Link>
-          <span>DETERMINISTIC STORY</span>
+          <span>PŘÍBĚH SEZÓNY</span>
           <h1 id="season-story-title">Příběh sezóny</h1>
           <label>Rok
             <select value={year} onChange={(event) => setYear(Number(event.target.value))}>
@@ -156,7 +156,7 @@ export default function SeasonStoryPage() {
             )}
 
             <button className="season-story-share" type="button" disabled={story.catches === 0 && story.trips === 0} onClick={share}>Sdílet bezpečný souhrn</button>
-            <p className="season-story-share-note">Sdílený text neobsahuje revír, GPS, poznámky, Trip internals ani interní ID.</p>
+            <p className="season-story-share-note">Sdílený text neobsahuje revír, polohu, poznámky ani interní údaje.</p>
             {shareStatus && <p className="season-story-feedback" role="status">{shareStatus}</p>}
             {shareError && <p className="season-story-error" role="alert">{shareError}</p>}
           </>

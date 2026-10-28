@@ -408,8 +408,8 @@ function ProfilePage() {
       </section>
 
       <section className="profile-level-card" aria-label="Rybářský postup">
-        <div><strong>Level {progression.level}</strong><span>{progression.xp} XP{progression.nextThreshold ? ` · další při ${progression.nextThreshold} XP` : ""}</span></div>
-        <div className="profile-progress-bar" role="progressbar" aria-label="Postup do dalšího levelu" aria-valuemin="0" aria-valuemax="100" aria-valuenow={progression.progressPercent}><span style={{ width: `${progression.progressPercent}%` }} /></div>
+        <div><strong>Úroveň {progression.level}</strong><span>{progression.xp} XP{progression.nextThreshold ? ` · další při ${progression.nextThreshold} XP` : ""}</span></div>
+        <div className="profile-progress-bar" role="progressbar" aria-label="Postup do další úrovně" aria-valuemin="0" aria-valuemax="100" aria-valuenow={progression.progressPercent}><span style={{ width: `${progression.progressPercent}%` }} /></div>
       </section>
 
       <section className="profile-stat-grid" aria-label="Souhrn profilu">
@@ -538,9 +538,9 @@ function ProfilePage() {
       </section>
 
       <section className="profile-panel profile-progress" aria-labelledby="progress-title">
-        <div className="profile-progress-heading"><div><h2 id="progress-title">Rybářský postup</h2><p>Vychází z trvale uložených odměn v deníku.</p></div><strong>Level {progression.level}</strong></div>
-        <div className="profile-progress-bar" role="progressbar" aria-label="Postup do dalšího levelu" aria-valuemin="0" aria-valuemax="100" aria-valuenow={progression.progressPercent}><span style={{ width: `${progression.progressPercent}%` }} /></div>
-        <p>{progression.xp} XP{progression.nextThreshold ? ` · další level při ${progression.nextThreshold} XP` : " · dosažen nejvyšší level MVP"}</p>
+        <div className="profile-progress-heading"><div><h2 id="progress-title">Rybářský postup</h2><p>Vychází z trvale uložených odměn v deníku.</p></div><strong>Úroveň {progression.level}</strong></div>
+        <div className="profile-progress-bar" role="progressbar" aria-label="Postup do další úrovně" aria-valuemin="0" aria-valuemax="100" aria-valuenow={progression.progressPercent}><span style={{ width: `${progression.progressPercent}%` }} /></div>
+        <p>{progression.xp} XP{progression.nextThreshold ? ` · další úroveň při ${progression.nextThreshold} XP` : " · dosažena nejvyšší úroveň"}</p>
         <h3>Milníky · {progression.completedAchievementCount}/{progression.achievements.length}</h3>
         <ul className="profile-achievements">{progression.achievements.map((achievement) => <li className={achievement.isCompleted ? "is-complete" : ""} key={achievement.id}><span aria-hidden="true">{achievement.isCompleted ? "✓" : "○"}</span><div><strong>{achievement.name}</strong><small>{achievement.description}</small></div></li>)}</ul>
       </section>

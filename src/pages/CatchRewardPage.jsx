@@ -138,7 +138,7 @@ export default function CatchRewardPage() {
               <strong>{reward.levelUp ? "Nový level" : "Level"} {reward.levelAfter}</strong>
               {levelProgress?.nextThreshold
                 ? <span>{formatXp(xpWithinLevel)} / {formatXp(levelXpRequired)} XP</span>
-                : <span>Maximální level</span>}
+                : <span>Nejvyšší úroveň</span>}
             </div>
             {levelProgress?.nextThreshold && (
               <div

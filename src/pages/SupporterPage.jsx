@@ -8,14 +8,14 @@ const supporterBenefits = [
   "Pokročilé statistiky",
   "Zmrazení série 2×",
   "Export deníku do PDF",
-  "Nápověda ke skrytým achievementům",
+  "Nápověda ke skrytým úspěchům",
   "Vytvoření crew",
   "Badge Supporter",
 ];
 
 const freeFeatures = [
   "Neomezený deník",
-  "XP, levely a achievementy",
+  "XP, úrovně a úspěchy",
   "Feed a okolí podle dostupnosti služby",
   "Základní statistiky",
   "Revíry",
@@ -55,7 +55,7 @@ export default function SupporterPage() {
         </section>
 
         <section className="supporter-list-section" aria-labelledby="supporter-benefits-title">
-          <h2 id="supporter-benefits-title">SUPPORTER VÝHODY</h2>
+          <h2 id="supporter-benefits-title">VÝHODY PODPOROVATELE</h2>
           <ul className="supporter-list">
             {supporterBenefits.map((benefit) => (
               <li key={benefit}>

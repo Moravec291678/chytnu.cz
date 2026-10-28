@@ -3,6 +3,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { formatCoordinates, normalizeCoordinates } from "../data/coordinates.js";
 import { resolveCatchMapStart } from "../data/manualMapLocation.js";
+import { useModalFocusTrap } from "../../../shared/hooks/useModalFocusTrap.js";
 import "./CatchLocationPicker.css";
 
 function parseInputCoordinates(latitude, longitude) {
@@ -20,6 +21,9 @@ export default function CatchLocationPicker({ initialCoordinates, waterCoordinat
   const mapElementRef = useRef(null);
   const mapRef = useRef(null);
   const markerRef = useRef(null);
+  const dialogRef = useRef(null);
+  const closeButtonRef = useRef(null);
+  useModalFocusTrap(dialogRef, { initialFocusRef: closeButtonRef, onEscape: onCancel });
 
   const setPoint = (point, { pan = false } = {}) => {
     const next = normalizeCoordinates(point);
@@ -56,15 +60,12 @@ export default function CatchLocationPicker({ initialCoordinates, waterCoordinat
     }).addTo(map);
     marker.on("dragend", () => setPoint(marker.getLatLng()));
     map.on("click", (event) => setPoint(event.latlng));
-    const handleEscape = (event) => { if (event.key === "Escape") onCancel(); };
-    document.addEventListener("keydown", handleEscape);
     mapRef.current = map;
     markerRef.current = marker;
     const frame = requestAnimationFrame(() => map.invalidateSize());
     return () => {
       cancelAnimationFrame(frame);
       map.remove();
-      document.removeEventListener("keydown", handleEscape);
       document.body.style.overflow = previousBodyOverflow;
       mapRef.current = null;
       markerRef.current = null;
@@ -81,13 +82,13 @@ export default function CatchLocationPicker({ initialCoordinates, waterCoordinat
   };
 
   return <div className="catch-location-picker-backdrop">
-    <section className="catch-location-picker" role="dialog" aria-modal="true" aria-labelledby="catch-location-picker-title">
+    <section ref={dialogRef} tabIndex="-1" className="catch-location-picker" role="dialog" aria-modal="true" aria-labelledby="catch-location-picker-title">
       <header className="catch-location-picker-header">
         <div>
           <h2 id="catch-location-picker-title">Poloha úlovku</h2>
           <p>Posuň mapu, klepni na místo nebo uprav souřadnice.</p>
         </div>
-        <button type="button" className="catch-location-picker-close" onClick={onCancel} aria-label="Zrušit výběr polohy">×</button>
+        <button ref={closeButtonRef} type="button" className="catch-location-picker-close" onClick={onCancel} aria-label="Zrušit výběr polohy">×</button>
       </header>
       <div ref={mapElementRef} className="catch-location-picker-map" role="region" aria-label="Mapa pro výběr polohy úlovku" />
       <div className="catch-location-picker-coordinates">

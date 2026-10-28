@@ -166,11 +166,11 @@
 }
 
 .catch-map-record-badges span {
-  padding: 4px 7px;
+  padding: var(--space-1) var(--space-1-75);
   border-radius: var(--radius-sm);
   background: var(--surface-2);
   color: var(--text-secondary);
-  font-size: 10px;
+  font-size: var(--font-size-10);
   font-weight: 700;
 }
 
@@ -194,7 +194,7 @@
   flex: 0 0 auto;
   flex-direction: column;
   align-items: flex-end;
-  gap: 2px;
+  gap: var(--space-0-5);
   color: var(--text-primary);
   text-align: right;
 }
@@ -256,7 +256,7 @@
 }
 
 .leaflet-popup-content {
-  margin: 11px 13px;
+  margin: var(--space-2-75) var(--space-3-25);
 }
 
 .leaflet-container a.leaflet-popup-close-button {

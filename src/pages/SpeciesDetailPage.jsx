@@ -68,7 +68,7 @@ function SpeciesDetailPage() {
         {favoriteError && <p className="species-favorite-error" role="alert">{favoriteError}</p>}
         {(species?.latinName || selectedSpecies[0]?.speciesLatin) && <p className="species-latin">{species?.latinName || selectedSpecies[0]?.speciesLatin}</p>}
         <h1>{species?.label || selectedSpecies[0]?.species || "Druh"}</h1>
-        {mastery && <Link className="species-mastery-link" to={`/species/${speciesKey}/mastery`}>{mastery.level} z 5 hvězd · Mastery druhu →</Link>}
+        {mastery && <Link className="species-mastery-link" to={`/species/${speciesKey}/mastery`}>{mastery.level} z 5 hvězd · Mistrovství druhu →</Link>}
         <div className="tags">
           {bestWeightCatch && <span className="species-detail-badge">Rekord druhu</span>}
           {bestWeightCatch?.id === personalRecord?.id && <span className="species-detail-badge species-detail-badge-record">Osobní rekord</span>}

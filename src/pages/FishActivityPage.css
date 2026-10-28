@@ -133,7 +133,7 @@
 
 .fish-activity-factor-meter {
   height: 7px;
-  margin-top: 6px;
+  margin-top: var(--space-1-5);
   overflow: hidden;
   border-radius: var(--radius-pill);
   background: var(--surface-3);

@@ -23,7 +23,7 @@ function CommunityUnavailable({ title, children }) {
       <div className="community-empty-mark" aria-hidden="true">↗</div>
       <h2>{title}</h2>
       <p>{children}</p>
-      <span>BACKEND_REQUIRED</span>
+      <span>ZATÍM NEDOSTUPNÉ</span>
     </section>
   );
 }
@@ -41,14 +41,14 @@ function CommunityPage() {
         <header className="community-header">
           <div>
             <h1 id="community-title">Komunita</h1>
-            <p>Soukromí má přednost před komunitním feedem</p>
+            <p>Soukromí má přednost před komunitním přehledem</p>
           </div>
-          <button className="community-search" type="button" disabled aria-label="Hledání vyžaduje komunitní backend">
+          <button className="community-search" type="button" disabled aria-label="Hledání zatím není dostupné">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8" /><path d="m16 16 5 5" /></svg>
           </button>
         </header>
 
-        <nav className="community-tabs" role="tablist" aria-label="Filtr komunitního feedu">
+        <nav className="community-tabs" role="tablist" aria-label="Filtr komunitního přehledu">
           {FEED_TABS.map((item) => (
             <button
               className="community-tab"
@@ -65,7 +65,7 @@ function CommunityPage() {
 
         {tab === "friends" && (
           <CommunityUnavailable title="Feed přátel zatím není dostupný">
-            Bez důvěryhodného seznamu přátel, přihlášení a moderovaného backendu nezobrazujeme žádné uživatele ani počty aktivity.
+            Přehled členů zatím není dostupný. Nezobrazujeme cizí polohy ani počty aktivity.
           </CommunityUnavailable>
         )}
 
@@ -75,11 +75,11 @@ function CommunityPage() {
               <span className="community-nearby-dot" aria-hidden="true" />
               <div>
                 <strong>Okolí je vypnuté</strong>
-                <p>Žádné počty rybářů ani cizí polohy se bez anonymizačního backendu nepočítají.</p>
+                <p>Počty rybářů ani jejich polohy se nezobrazují.</p>
               </div>
             </aside>
-            <CommunityUnavailable title="Nearby feed vyžaduje bezpečnou agregaci">
-              Přesná GPS se nikdy nezobrazuje. Nearby bude možné zapnout až s ochranou minimálního počtu uživatelů a moderací obsahu.
+            <CommunityUnavailable title="Přehled okolí zatím není dostupný">
+              Přesná poloha se nikdy nezobrazuje. Přehled okolí bude dostupný po zavedení ochrany soukromí a moderace obsahu.
             </CommunityUnavailable>
           </>
         )}
@@ -87,7 +87,7 @@ function CommunityPage() {
         {tab === "global" && (
           <section className="community-local-feed" aria-labelledby="community-local-title">
             <header>
-              <div><span>DEV · LOCAL PREVIEW</span><h2 id="community-local-title">Moje veřejné náhledy</h2></div>
+              <div><span>MÍSTNÍ NÁHLED</span><h2 id="community-local-title">Moje veřejné náhledy</h2></div>
               <p>Nic se neodesílá. Zobrazené údaje vznikají z privacy allowlistu pouze v tomto zařízení.</p>
             </header>
             {catchState.loading ? (
@@ -113,7 +113,7 @@ function CommunityPage() {
                         </div>
                         {formatDate(data.caughtAt) && <time dateTime={data.caughtAt}>{formatDate(data.caughtAt)}</time>}
                       </Link>
-                      <footer><span>Reakce nejsou aktivní</span><em>BACKEND_REQUIRED</em></footer>
+                      <footer><span>Reakce zatím nejsou dostupné</span></footer>
                     </article>
                   );
                 })}
@@ -122,10 +122,10 @@ function CommunityPage() {
           </section>
         )}
 
-        <aside className="community-backend-state" aria-label="Stav komunitního backendu">
-          <span>BACKEND_REQUIRED</span>
-          <strong>Multi-user feed není připojený</strong>
-          <p>Přátelé, globální příspěvky, Nearby, reakce a moderace potřebují důvěryhodný vzdálený backend.</p>
+        <aside className="community-backend-state" aria-label="Stav komunity">
+          <span>ZATÍM NEDOSTUPNÉ</span>
+          <strong>Společný přehled zatím není dostupný</strong>
+          <p>Příspěvky ostatních rybářů, reakce a moderace zatím nejsou připravené.</p>
         </aside>
       </section>
     </Layout>

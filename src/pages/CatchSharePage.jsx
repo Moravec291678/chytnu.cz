@@ -8,7 +8,6 @@ import { getCatchRarity } from "../features/catches/utils/rarity.js";
 import { DEFAULT_SPECIES } from "../shared/constants/speciesCatalog.js";
 import { waterRepository } from "../features/waters/data/waterRepository.js";
 import { progressionLedger } from "../features/progression/data/progressionLedger.js";
-import { getEntitlementState } from "../features/entitlements/data/entitlementAccess.js";
 import { getPrimaryAvailablePhoto } from "../features/catches/data/catchPhotos.js";
 import { getPhotoBlobForDisplay } from "../features/catches/data/photoCloudService.js";
 import "./ProgressionPages.css";
@@ -197,9 +196,9 @@ export default function CatchSharePage() {
         <strong>{busy ? "Připravuji obrázek…" : "Uložit obrázek"}</strong>
         <span>Stáhne celou kartu jako PNG</span>
       </button>
-      <button type="button" disabled aria-disabled="true" title="Export PDF zatím není dostupný bez ověření Supporter oprávnění.">
+      <button type="button" disabled aria-disabled="true" aria-describedby="catch-share-pdf-unavailable">
         <strong>Export deníku do PDF</strong>
-        <span>{getEntitlementState(null, "supporter") === "active" ? "Supporter" : "Supporter · nákup zatím nedostupný"}</span>
+        <span id="catch-share-pdf-unavailable">Export do PDF zatím není dostupný.</span>
       </button>
     </section>
     {message && <p className="catch-share-message" role="status">{message}</p>}

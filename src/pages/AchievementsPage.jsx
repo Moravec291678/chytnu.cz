@@ -27,19 +27,19 @@ export default function AchievementsPage() {
       <main className="progression-page achievements-page">
         <header>
           <Link className="progression-back" to="/profile">← Profil</Link>
-          <h1>Achievementy</h1>
+          <h1>Úspěchy</h1>
           <p>{completedVisible} z {visibleAchievements.length} splněno</p>
         </header>
         {loading ? (
-          <p className="loading-state" role="status">Načítám achievementy…</p>
+          <p className="loading-state" role="status">Načítám úspěchy…</p>
         ) : errors ? (
           <p className="progression-item" role="alert">{errors}</p>
         ) : (
           <>
             {catches.length === 0 && trips.length === 0 && (
-              <p className="achievements-no-activity">Zatím bez úlovků a vycházek. Achievementy se průběžně vyhodnocují z tvých záznamů.</p>
+              <p className="achievements-no-activity">Zatím bez úlovků a vycházek. Úspěchy se průběžně vyhodnocují z tvých záznamů.</p>
             )}
-            <nav className="achievements-categories" aria-label="Kategorie achievementů">
+            <nav className="achievements-categories" aria-label="Kategorie úspěchů">
               {groups.map((category) => (
                 <button
                   type="button"
@@ -80,10 +80,10 @@ export default function AchievementsPage() {
                 <h2 id="achievements-hidden-title">Skryté</h2>
                 <div className="achievements-hidden-list">
                   {unearnedHidden.map((item) => (
-                    <span className="achievement-hidden-mark" aria-label="Skrytý achievement" key={item.id}>?</span>
+                    <span className="achievement-hidden-mark" aria-label="Skrytý úspěch" key={item.id}>?</span>
                   ))}
                 </div>
-                <p>Odhalí se, až splníš některý ze skrytých achievementů.</p>
+                <p>Odhalí se, až splníš některý ze skrytých úspěchů.</p>
               </section>
             )}
           </>

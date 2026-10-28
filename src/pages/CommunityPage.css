@@ -128,7 +128,7 @@
   border-radius: 50%;
   background: var(--surface-2);
   color: var(--accent-green);
-  font-size: 28px;
+  font-size: var(--font-size-28);
   font-weight: 800;
 }
 
@@ -150,7 +150,7 @@
 .community-backend-state > span,
 .community-feed-card footer em {
   color: var(--accent-orange);
-  font-size: 10px;
+  font-size: var(--font-size-10);
   font-style: normal;
   font-weight: 900;
   letter-spacing: 0.08em;
@@ -164,12 +164,12 @@
 
 .community-local-feed > header > div {
   display: grid;
-  gap: 2px;
+  gap: var(--space-0-5);
 }
 
 .community-local-feed h2 {
   color: var(--text-primary);
-  font-size: 18px;
+  font-size: var(--font-size-18);
   font-weight: 900;
 }
 
@@ -221,7 +221,7 @@
 
 .community-feed-card h3 {
   color: var(--text-primary);
-  font-size: 21px;
+  font-size: var(--font-size-21);
   font-weight: 900;
 }
 
@@ -232,7 +232,7 @@
 }
 
 .community-feed-metrics b {
-  padding: 6px 9px;
+  padding: var(--space-1-5) var(--space-2-25);
   border-radius: var(--radius-sm);
   background: var(--surface-2);
   color: var(--accent-orange);

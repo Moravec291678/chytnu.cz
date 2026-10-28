@@ -15,7 +15,7 @@
 
 .bottom-nav {
   position: fixed;
-  z-index: 100;
+  z-index: var(--z-nav);
   bottom: 0;
   left: 50%;
   display: flex;
@@ -24,7 +24,7 @@
   min-height: calc(90px + env(safe-area-inset-bottom));
   align-items: center;
   justify-content: space-around;
-  padding: 7px 6px calc(7px + env(safe-area-inset-bottom));
+  padding: var(--space-1-75) var(--space-1-5) calc(var(--space-1-75) + env(safe-area-inset-bottom));
   transform: translateX(-50%);
   border-top: 1px solid var(--border);
   background: var(--surface-1);
@@ -38,8 +38,8 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  padding: 3px 2px;
+  gap: var(--space-1);
+  padding: var(--space-0-75) var(--space-0-5);
   color: var(--text-secondary);
   text-decoration: none;
 }
@@ -59,7 +59,7 @@
 
 .nav-label {
   color: inherit;
-  font-size: 9px;
+  font-size: var(--font-size-9);
   font-weight: 700;
   letter-spacing: 0.45px;
   text-transform: uppercase;
@@ -83,7 +83,7 @@
   background: var(--accent-green);
   box-shadow: 0 4px 18px rgb(var(--accent-green-rgb) / 22%);
   color: var(--text-on-accent);
-  font-size: 34px;
+  font-size: var(--font-size-34);
   font-weight: 600;
   line-height: 1;
   text-decoration: none;
@@ -102,7 +102,7 @@
 
 @media (max-width: 360px) {
   .nav-label {
-    font-size: 8px;
+    font-size: var(--font-size-8);
     letter-spacing: 0.2px;
   }
 

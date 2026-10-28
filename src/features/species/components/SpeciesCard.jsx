@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { Badge, Card } from "../../../shared/components/UIPrimitives.jsx";
 import { MOON_PHASE_EMOJI } from "../../../shared/constants/constants";
 import {
   formatCatchDateTime,
@@ -10,7 +11,7 @@ import "./SpeciesCard.css";
 function SpeciesCard({ speciesKey, data, biggest }) {
   return (
     <Link className="species-card-link" to={`/species/${speciesKey}`}>
-      <div className="species-card">
+      <Card density="comfortable" interactive className="species-card">
         <div className="species-card-main">
           <div className="species-card-icon">🐟</div>
 
@@ -21,19 +22,19 @@ function SpeciesCard({ speciesKey, data, biggest }) {
 
             <div className="tags">
               {biggest.isPersonalBest && (
-                <span className="tag tag-pb">🏆 Osobní rekord</span>
+                <Badge tone="record">🏆 Osobní rekord</Badge>
               )}
 
               {biggest.isSpeciesBest && (
-                <span className="tag tag-species">🥇 Rekord druhu</span>
+                <Badge tone="species">🥇 Rekord druhu</Badge>
               )}
 
               {biggest.result === "released" && (
-                <span className="tag tag-released">↩️ Puštěno</span>
+                <Badge tone="released">↩️ Puštěno</Badge>
               )}
 
               {biggest.result === "kept" && (
-                <span className="tag tag-kept">🧊 Necháno</span>
+                <Badge tone="kept">🧊 Necháno</Badge>
               )}
             </div>
           </div>
@@ -54,7 +55,7 @@ function SpeciesCard({ speciesKey, data, biggest }) {
 
           <p>{MOON_PHASE_EMOJI[biggest.conditions?.moonPhase] || "-"}</p>
         </div>
-      </div>
+      </Card>
     </Link>
   );
 }

@@ -16,6 +16,7 @@ import { MOON_PHASE_EMOJI } from "../shared/constants/moonPhaseEmoji.js";
 import { DEFAULT_SPECIES } from "../shared/constants/constants.js";
 import { getCatchRarity } from "../features/catches/utils/rarity.js";
 import { getVerificationPresentation } from "../features/catches/data/verificationPresentation.js";
+import { useModalFocusTrap } from "../shared/hooks/useModalFocusTrap.js";
 import { formatCatchWeight } from "../features/catches/data/catchWeight.js";
 import ConfirmDialog from "../shared/components/ConfirmDialog";
 import "../features/catches/components/PhotoSyncStatus.css";
@@ -65,6 +66,9 @@ function CatchDetailPage() {
   const [missingCloudPhotoId, setMissingCloudPhotoId] = useState(null);
   const missingCloudPhoto = missingCloudPhotoId === item?.id;
   const [previewPhoto, setPreviewPhoto] = useState(null);
+  const photoDialogRef = useRef(null);
+  const photoCloseRef = useRef(null);
+  useModalFocusTrap(photoDialogRef, { active: Boolean(previewPhoto), initialFocusRef: photoCloseRef, onEscape: () => setPreviewPhoto(null) });
   const primaryPhoto = item ? getPrimaryAvailablePhoto(item) : null;
   const heroPhoto = photos.find((photo) => photo.id === primaryPhoto?.id) ?? photos[0] ?? null;
   const [error, setError] = useState("");
@@ -243,7 +247,7 @@ function CatchDetailPage() {
         : photoLoadFailed ? <p className="catch-photo-unavailable" role="status">{item.photos?.some((photo) => photo.localError?.code === "photo_local_blob_unreadable")
           ? "Fotografii se na tomto zařízení nepodařilo přečíst. " : "Cloudovou fotografii se nepodařilo načíst. "}<button type="button" onClick={retryPhotoLoads}>Zkusit znovu</button></p>
           : hasPendingPhotos && <PhotoSyncStatus className="photo-sync-status catch-photo-sync-status" />}
-      {previewPhoto && <div className="catch-photo-lightbox" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPreviewPhoto(null); }}><section role="dialog" aria-modal="true" aria-label="Náhled fotografie"><button type="button" onClick={() => setPreviewPhoto(null)} aria-label="Zavřít náhled">Zavřít</button><img src={previewPhoto.url} style={photoFrameStyle(previewPhoto)} alt={`Fotografie úlovku – ${item.species}`} /></section></div>}
+      {previewPhoto && <div className="catch-photo-lightbox" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPreviewPhoto(null); }}><section ref={photoDialogRef} tabIndex="-1" role="dialog" aria-modal="true" aria-label="Náhled fotografie"><button ref={photoCloseRef} type="button" onClick={() => setPreviewPhoto(null)} aria-label="Zavřít náhled">Zavřít</button><img src={previewPhoto.url} style={photoFrameStyle(previewPhoto)} alt={`Fotografie úlovku – ${item.species}`} /></section></div>}
       <section className="catch-detail-measures" aria-label="Míry úlovku">
         <div><strong>{Number.isFinite(item.lengthCm) ? formatNumber(item.lengthCm) : "—"}</strong><span>cm</span><small>DÉLKA</small>{isLengthRecord && <em>Nový rekord</em>}</div>
         <div><strong>{Number.isFinite(item.weightKg) ? formatCatchWeight(item) : "—"}</strong><span>kg</span><small>{item.weightSource === "estimated" ? "ODHAD HMOTNOSTI" : "HMOTNOST"}</small>{isPersonalBest && <em>{recognition.personalBestDelta > 0 ? `+${formatNumber(recognition.personalBestDelta, 2)} kg rekord` : "Osobní rekord"}</em>}</div>

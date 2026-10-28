@@ -48,8 +48,14 @@ test("SyncStatus component renders accessible progress/success, compact count an
   const errorCard = error.props.children;
   assert.equal(errorCard.props.role, "alert");
   assert.equal(errorCard.props["aria-live"], "assertive");
+  assert.match(errorCard.props.children[0].props.children[1].props.children, /Dočasná chyba/);
   errorCard.props.children[1].props.onClick();
   assert.equal(retries, 1);
+
+  const technicalError = SyncStatus({ sync: { status: "error", error: new TypeError("FirebaseError: permission-denied at request()") }, isOnline: true });
+  const safeDescription = technicalError.props.children.props.children[0].props.children[1].props.children;
+  assert.match(safeDescription, /Zkontroluj připojení/);
+  assert.doesNotMatch(safeDescription, /FirebaseError|permission-denied/);
 });
 
 test("manual sync and retry controls keep their handlers callable", () => {

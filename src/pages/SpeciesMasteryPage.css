@@ -16,7 +16,7 @@
 
 .mastery-star {
   color: var(--text-muted);
-  font-size: 32px;
+  font-size: var(--font-size-32);
   line-height: 1;
 }
 
@@ -78,7 +78,7 @@
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   color: var(--text-on-accent);
-  font-size: 21px;
+  font-size: var(--font-size-21);
   font-weight: 900;
 }
 
