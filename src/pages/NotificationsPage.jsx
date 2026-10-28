@@ -18,13 +18,22 @@ function formatNotificationDate(value) {
     : "";
 }
 
+function initialPushState() {
+  try {
+    const adapter = getNotificationAdapter();
+    return { support: adapter.support(), permission: adapter.permission(), subscribed: false, busy: false, error: "" };
+  } catch {
+    return { support: { available: false, reason: "Oznámení na zařízení nejsou v tomto prostředí dostupná." }, permission: "default", subscribed: false, busy: false, error: "" };
+  }
+}
+
 export default function NotificationsPage() {
   const scope = useDataScope();
   const navigate = useNavigate();
   const { notifications, unreadCount, loading, error: inboxError, markAsRead, markAllAsRead } = useNotifications();
   const [preferenceOverride, setPreferenceOverride] = useState({ scopeKey: null, value: null });
   const [preferenceError, setPreferenceError] = useState("");
-  const [pushState, setPushState] = useState({ support: null, permission: "default", subscribed: false, busy: false, error: "" });
+  const [pushState, setPushState] = useState(initialPushState);
   const preferences = preferenceOverride.value && preferenceOverride.scopeKey === scope.scopeKey
     ? preferenceOverride.value
     : readPreferences(globalThis.localStorage, scope.scopeKey);
@@ -34,7 +43,6 @@ export default function NotificationsPage() {
     try {
       const notificationAdapter = getNotificationAdapter();
       const support = notificationAdapter.support();
-      setPushState((previous) => ({ ...previous, support, permission: notificationAdapter.permission() }));
       if (support.available && scope.ownerId) {
         notificationAdapter.currentSubscription().then((subscription) => {
           if (!active) return;
@@ -42,9 +50,7 @@ export default function NotificationsPage() {
           if (subscription) void notificationAdapter.refresh().catch(() => {});
         }).catch(() => {});
       }
-    } catch {
-      setPushState((previous) => ({ ...previous, support: { available: false, reason: "Oznámení na zařízení nejsou v tomto prostředí dostupná." } }));
-    }
+    } catch { /* The initial UI already reports unavailable support. */ }
     return () => { active = false; };
   }, [scope.ownerId]);
 
