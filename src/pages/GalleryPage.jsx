@@ -21,12 +21,13 @@ function GalleryTile({ item, scope, onOpen }) {
     observer.observe(ref.current);
     return () => observer.disconnect();
   }, [visible]);
-  return <button ref={ref} type="button" className="gallery-tile" onClick={onOpen} aria-label={`Otevřít fotografii: ${item.species}${item.locationName ? `, ${item.locationName}` : ""}`}>
+  return <div ref={ref} className="gallery-tile">
     <span className="gallery-tile-image">
-      {visible ? <GalleryPhotoImage item={item} scope={scope} style={photoFrameStyle(item)} alt={`${item.species}${item.locationName ? `, ${item.locationName}` : ""}`} loading="lazy" /> : <span className="gallery-missing" aria-hidden="true" />}
+      {visible ? <GalleryPhotoImage item={item} scope={scope} style={photoFrameStyle(item)} alt={`${item.species}${item.locationName ? `, ${item.locationName}` : ""}`} loading="lazy" tile /> : <span className="gallery-missing" aria-hidden="true" />}
       {item.isPrimary && <span className="gallery-primary-badge">Hlavní</span>}
     </span>
-  </button>;
+    <button type="button" className="gallery-tile-open" onClick={onOpen} aria-label={`Otevřít fotografii: ${item.species}${item.locationName ? `, ${item.locationName}` : ""}`} />
+  </div>;
 }
 
 function PhotoViewer({ items, index, scope, onClose, onMove }) {

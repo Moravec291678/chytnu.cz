@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
 import { readFile } from "node:fs/promises";
 import { buildGalleryItems, countActiveGalleryFilters, filterAndSortGallery, getGalleryMissingMessage, getGalleryOptions, getGalleryPhotoLoadRequest } from "./catchGallery.js";
-import GalleryPhotoImage from "../../../pages/GalleryPhotoImage.js";
+import GalleryPhotoImage, { GalleryPhotoFailure } from "../../../pages/GalleryPhotoImage.js";
 
 const catches = [
   { id: "c1", species: "Štika", speciesKey: "esox-lucius", caughtAt: "2026-10-02T12:00:00Z", waterId: "w1", locationName: "Labe", isFavorite: true, weightKg: 4, primaryPhotoId: "p2", photos: [{ id: "p1", blob: new Blob(["a"]) }, { id: "p2", blob: new Blob(["b"]), focalX: 0.2, focalY: 0.8, zoom: 1.4 }] },
@@ -108,8 +108,14 @@ test("Gallery pending photo never asks for re-add; broken cloud copy is actionab
   const photo = { id: "pending", photoId: "pending", catchId: "catch-p", ownerId: "owner-p", cloud: { state: "localOnly" } };
   const pending = renderPhoto(photo);
   assert.match(pending, /Fotografie se synchronizuje/);
-  assert.match(pending, /může synchronizace trvat déle/);
+  assert.match(pending, /photo-sync-status-spinner/);
+  assert.match(pending, /Synchronizuji…/);
+  assert.doesNotMatch(pending, /může synchronizace trvat déle/);
   assert.doesNotMatch(pending, /Přidej ji znovu/);
+
+  const syncing = renderPhoto({ ...photo, cloud: { state: "synced", objectKey: "photo" } });
+  assert.match(syncing, /Synchronizuji…/);
+  assert.doesNotMatch(syncing, /gallery-photo-broken/);
 
   const broken = renderPhoto({ ...photo, cloud: { state: "unavailable" } });
   assert.match(broken, /dostupnost|znovu/i);
@@ -120,6 +126,19 @@ test("Gallery pending photo never asks for re-add; broken cloud copy is actionab
   });
   assert.match(available, /<img/);
   assert.doesNotMatch(available, /Fotografie se synchronizuje/);
+});
+
+test("gallery thumbnails use short broken copy and a readable retry action", () => {
+  const photo = { id: "p", photoId: "p", catchId: "catch-p", ownerId: "owner-p", cloud: { state: "unavailable" } };
+  const broken = renderToStaticMarkup(createElement(MemoryRouter, null, createElement(GalleryPhotoImage, { item: photo, tile: true })));
+  assert.match(broken, /gallery-photo-broken/);
+  assert.match(broken, /Nelze načíst/);
+  assert.match(broken, /Upravit/);
+  assert.doesNotMatch(broken, /U většího počtu/);
+  const retry = renderToStaticMarkup(createElement(GalleryPhotoFailure, { item: photo, tile: true, onRetry: () => {} }));
+  assert.match(retry, /aria-label="Zkusit znovu načíst fotografii"/);
+  assert.match(retry, /Zkusit znovu/);
+  assert.doesNotMatch(retry, /U většího počtu/);
 });
 
 test("date periods and custom ranges use catch dates", () => {
@@ -188,4 +207,8 @@ test("gallery CSS keeps two columns on narrow screens and expands for desktop", 
   assert.match(css, /@media\(min-width:700px\)\{\.gallery-page[\s\S]*?\.gallery-controls\{grid-template-columns:minmax\(220px,380px\) auto/);
   assert.match(css, /\.gallery-filter-backdrop\{position:fixed/);
   assert.match(css, /@media\(min-width:700px\)[\s\S]*?\.gallery-filter-backdrop\{position:absolute/);
+  assert.match(css, /\.gallery-tile-open\{position:absolute;z-index:1/);
+  assert.match(css, /\.gallery-photo-broken button,\.gallery-photo-broken a\{display:inline-flex;min-height:44px/);
+  assert.match(css, /\.gallery-primary-badge\{position:absolute;z-index:2/);
+  assert.match(css, /\.gallery-missing\{min-width:0;max-width:100%/);
 });

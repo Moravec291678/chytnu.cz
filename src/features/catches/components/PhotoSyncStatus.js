@@ -1,9 +1,9 @@
 import { createElement } from "react";
 
-export default function PhotoSyncStatus({ className = "photo-sync-status", compact = false }) {
-  return createElement("span", { className: `${className}${compact ? " photo-sync-status-compact" : ""}`, role: "status", "aria-live": "polite" },
+export default function PhotoSyncStatus({ className = "", compact = false, showHint = false }) {
+  return createElement("span", { className: `photo-sync-status ${className}${compact ? " photo-sync-status-compact" : ""}`, role: "status", "aria-live": "polite", "aria-label": "Fotografie se synchronizuje" },
     createElement("span", { className: "photo-sync-status-spinner", "aria-hidden": "true" }),
-    createElement("span", { className: "photo-sync-status-copy" },
-      createElement("strong", null, "Fotografie se synchronizuje"),
-      !compact && createElement("small", null, "U většího počtu fotografií může synchronizace trvat déle. Aplikaci můžeš dál používat.")));
+    !compact && createElement("span", { className: "photo-sync-status-copy" },
+      createElement("strong", null, "Synchronizuji…"),
+      showHint && createElement("small", null, "Může to chvíli trvat.")));
 }

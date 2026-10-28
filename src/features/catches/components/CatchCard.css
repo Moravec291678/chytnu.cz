@@ -88,8 +88,8 @@
   border-radius: var(--radius-sm-roomy);
   background: var(--surface-2);
   color: var(--text-secondary);
-  font-size: var(--font-size-9);
-  line-height: 1.25;
+  font-size: var(--font-size-20);
+  line-height: 1;
   text-align: center;
 }
 

@@ -1,17 +1,17 @@
 .photo-sync-status {
-  display: flex;
+  display: inline-flex;
   min-width: 0;
   align-items: center;
   justify-content: center;
-  gap: var(--space-2);
+  gap: var(--space-1-5);
   color: var(--text-secondary);
-  text-align: left;
+  text-align: center;
 }
 
 .photo-sync-status-spinner {
-  width: 16px;
-  height: 16px;
-  flex: 0 0 16px;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
   border: 2px solid var(--border-strong);
   border-top-color: var(--accent-blue);
   border-radius: 50%;
@@ -19,8 +19,8 @@
 }
 
 .photo-sync-status-copy { display: flex; min-width: 0; flex-direction: column; gap: var(--space-0-75); }
-.photo-sync-status-copy strong { color: var(--text-primary); font-size: var(--font-size-11); }
-.photo-sync-status-copy small { max-width: 260px; font-size: var(--font-size-10); line-height: 1.4; }
+.photo-sync-status-copy strong { color: var(--text-primary); font-size: var(--font-size-11); white-space: nowrap; }
+.photo-sync-status-copy small { font-size: var(--font-size-10); line-height: 1.4; }
 .photo-sync-status-compact .photo-sync-status-copy small { display: none; }
 
 @keyframes photo-sync-spin { to { transform: rotate(360deg); } }

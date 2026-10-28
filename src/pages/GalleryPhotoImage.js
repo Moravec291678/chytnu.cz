@@ -5,7 +5,15 @@ import { getPhotoAvailability, PHOTO_AVAILABILITY } from "../features/catches/da
 import PhotoSyncStatus from "../features/catches/components/PhotoSyncStatus.js";
 import { Link } from "react-router-dom";
 
-export default function GalleryPhotoImage({ item, scope = null, style, alt, loading, enabled = true }) {
+export function GalleryPhotoFailure({ item, tile = false, permanent = false, message = "", onRetry }) {
+  return createElement("span", { className: "gallery-missing gallery-photo-broken", role: "status", "aria-label": "Fotografii se nepodařilo načíst" },
+    createElement("span", null, tile ? "Nelze načíst" : "Fotografii se nepodařilo načíst"),
+    permanent
+      ? createElement(Link, { to: `/catch/${item.catchId}/edit` }, tile ? "Upravit" : message)
+      : createElement("button", { type: "button", onClick: onRetry, "aria-label": "Zkusit znovu načíst fotografii" }, "Zkusit znovu"));
+}
+
+export default function GalleryPhotoImage({ item, scope = null, style, alt, loading, enabled = true, tile = false }) {
   const [loaded, setLoaded] = useState(null);
   const [retryVersion, setRetryVersion] = useState(0);
   const objectUrlRef = useRef(null);
@@ -40,25 +48,27 @@ export default function GalleryPhotoImage({ item, scope = null, style, alt, load
       image.src = objectUrlRef.current;
     }
   }, [state.blob]);
-  if (state.status === "decode-error") return createElement("span", { className: "gallery-missing" },
-    item.uploadReady === false ? "Soubor je zachovaný, ale nepodporuje ho prohlížeč ani synchronizace. Převeď ho a nahraď." : "Fotografii se v tomto zařízení nepodařilo zobrazit.",
-    createElement("br"), createElement(Link, { to: `/catch/${item.catchId}/edit` }, "Upravit úlovek"));
+  const retry = () => {
+    setLoaded({ item, scopeKey, blob: null, status: "loading", errorCode: "" });
+    setRetryVersion((version) => version + 1);
+  };
+  if (state.status === "decode-error") return createElement("span", { className: "gallery-missing gallery-photo-broken", role: "status", "aria-label": "Fotografii se nepodařilo načíst" },
+    createElement("span", null, tile ? "Nelze načíst" : "Fotografii se v tomto zařízení nepodařilo zobrazit."),
+    createElement(Link, { to: `/catch/${item.catchId}/edit` }, tile ? "Upravit" : "Upravit úlovek"));
   if (availability === PHOTO_AVAILABILITY.PENDING || availability === PHOTO_AVAILABILITY.SYNCING) {
     return createElement(PhotoSyncStatus, { className: "gallery-missing gallery-photo-sync-status" });
   }
-  if (!state.blob) return createElement("span", { className: "gallery-missing" },
-    availability === PHOTO_AVAILABILITY.BROKEN || availability === PHOTO_AVAILABILITY.RETRYABLE_ERROR
-      ? state.errorCode === "cloudinary_asset_missing" || item?.cloud?.state === "unavailable"
-        ? createElement(Link, { to: `/catch/${item.catchId}/edit` }, getGalleryMissingMessage(item, state.errorCode))
-        : state.errorCode === "photo_local_blob_unreadable"
-          ? createElement(Link, { to: `/catch/${item.catchId}/edit` }, "Fotografii se na tomto zařízení nepodařilo přečíst. Nahraď ji.")
-          : state.status === "error"
-            ? createElement("span", null, "Fotografii se nepodařilo načíst. ", createElement("button", { type: "button", onClick: () => {
-          setLoaded({ item, scopeKey, blob: null, status: "loading", errorCode: "" });
-          setRetryVersion((version) => version + 1);
-        } }, "Zkusit znovu"))
-            : getGalleryMissingMessage(item, state.errorCode)
-      : state.status === "loading" ? "Načítám fotografii…" : getGalleryMissingMessage(item, state.errorCode));
+  if (!state.blob) {
+    const permanent = availability === PHOTO_AVAILABILITY.BROKEN
+      || state.errorCode === "cloudinary_asset_missing" || state.errorCode === "photo_local_blob_unreadable"
+      || item?.cloud?.state === "unavailable";
+    if (permanent || availability === PHOTO_AVAILABILITY.RETRYABLE_ERROR) {
+      return createElement(GalleryPhotoFailure, { item, tile, permanent,
+        message: getGalleryMissingMessage(item, state.errorCode), onRetry: retry });
+    }
+    return createElement("span", { className: "gallery-missing" },
+      state.status === "loading" ? "Načítám…" : tile ? "Nelze načíst" : getGalleryMissingMessage(item, state.errorCode));
+  }
   // The callback ref only creates the object URL once the DOM image is mounted.
   // eslint-disable-next-line react-hooks/refs
   return createElement("img", { ref: setImage, style, alt, loading, onError: () => {

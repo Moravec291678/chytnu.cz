@@ -64,10 +64,10 @@ function CatchPhoto({ blob, species, photo, ownerId, catchId }) {
     return <PhotoSyncStatus className="photo-sync-status catch-card-photo-sync" compact />;
   }
   if (availability === PHOTO_AVAILABILITY.BROKEN) {
-    return <div className="catch-card-photo-error" role="status">Fotografii se nepodařilo načíst.</div>;
+    return <div className="catch-card-photo-error" role="status" aria-label="Fotografii se nepodařilo načíst"><span aria-hidden="true">!</span></div>;
   }
   if (availability === PHOTO_AVAILABILITY.RETRYABLE_ERROR) {
-    return <div className="catch-card-photo-error" role="status">Fotografii se teď nepodařilo načíst. Otevři úlovek a zkus to znovu.</div>;
+    return <div className="catch-card-photo-error" role="status" aria-label="Fotografii se nepodařilo načíst. Otevři úlovek a zkus to znovu."><span aria-hidden="true">!</span></div>;
   }
   return photoUrl ? <img className="catch-card-photo" src={photoUrl} alt={`Úlovek – ${species}`} style={photoFrameStyle(photo)} onError={async () => {
     if (attemptedFallback.current || !ownerId || !photo.cloud?.objectKey) { setLoadState("error"); return; }
