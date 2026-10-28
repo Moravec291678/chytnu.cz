@@ -1,20 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
-import {
-  AddCatchPage,
-  CatchDetailPage,
-  GalleryPage,
-  HomePage,
-  JournalPage,
-  ProfilePage,
-  SpeciesDetailPage,
-  SpeciesAlbumPage,
-  StatsPage,
-  TripsPage,
-} from "../pages";
-import TripCreatePage from "../pages/TripCreatePage";
-import TripDetailPage from "../pages/TripDetailPage";
-import TripEditPage from "../pages/TripEditPage";
+import HomePage from "../pages/HomePage";
 import Layout from "../shared/layout/Layout";
 import { Link } from "react-router-dom";
 import { completeOnboarding, isOnboardingComplete } from "../features/preferences/data/preferences.js";
@@ -37,6 +23,18 @@ function RouteAccessGuard() {
 }
 
 const MapPage = lazy(() => import("../pages/MapPage"));
+const JournalPage = lazy(() => import("../pages/JournalPage"));
+const AddCatchPage = lazy(() => import("../pages/AddCatchPage"));
+const CatchDetailPage = lazy(() => import("../pages/CatchDetailPage"));
+const GalleryPage = lazy(() => import("../pages/GalleryPage"));
+const SpeciesDetailPage = lazy(() => import("../pages/SpeciesDetailPage"));
+const SpeciesAlbumPage = lazy(() => import("../pages/SpeciesAlbumPage"));
+const StatsPage = lazy(() => import("../pages/StatsPage"));
+const ProfilePage = lazy(() => import("../pages/ProfilePage"));
+const TripsPage = lazy(() => import("../pages/TripsPage"));
+const TripCreatePage = lazy(() => import("../pages/TripCreatePage"));
+const TripDetailPage = lazy(() => import("../pages/TripDetailPage"));
+const TripEditPage = lazy(() => import("../pages/TripEditPage"));
 const CalendarPage = lazy(() => import("../pages/JournalCalendarPage"));
 const ChallengesPage = lazy(() => import("../pages/ChallengesPage"));
 const AchievementsPage = lazy(() => import("../pages/AchievementsPage"));
@@ -65,6 +63,9 @@ const SeasonStoryPage = lazy(() => import("../pages/SeasonStoryPage"));
 const YearSummaryPage = lazy(() => import("../pages/YearSummaryPage"));
 const SupporterPage = lazy(() => import("../pages/SupporterPage"));
 const LoginPage = lazy(() => import("../pages/LoginPage"));
+const DevelopmentDataIntegrityCheck = import.meta.env.DEV
+  ? lazy(() => import("./DevelopmentDataIntegrityCheck.jsx"))
+  : null;
 
 function PageSuspense({ children }) {
   return <Suspense fallback={<Layout><p className="loading-state" role="status">Načítám obrazovku…</p></Layout>}>{children}</Suspense>;
@@ -126,12 +127,13 @@ function App() {
   if (auth.status === "loading") return <SplashScreen />;
   return (
     <>
+      {DevelopmentDataIntegrityCheck && <Suspense fallback={null}><DevelopmentDataIntegrityCheck /></Suspense>}
       <RouteAccessGuard />
       <Routes>
         <Route path="/" element={<HomeRoute />} />
         <Route path="/login" element={<PageSuspense><LoginPage /></PageSuspense>} />
         <Route path="/onboarding" element={<PageSuspense><OnboardingPage /></PageSuspense>} />
-        <Route path="/journal" element={<JournalPage />} />
+        <Route path="/journal" element={<PageSuspense><JournalPage /></PageSuspense>} />
         <Route path="/journal/calendar" element={<PageSuspense><CalendarPage /></PageSuspense>} />
         <Route path="/journal/map" element={<PageSuspense><MapPage /></PageSuspense>} />
         <Route path="/challenges" element={<PageSuspense><ChallengesPage /></PageSuspense>} />
@@ -140,17 +142,17 @@ function App() {
         <Route path="/streak" element={<PageSuspense><StreakPage /></PageSuspense>} />
         <Route path="/fish-activity" element={<PageSuspense><FishActivityPage /></PageSuspense>} />
         <Route path="/species/:speciesKey/mastery" element={<PageSuspense><SpeciesMasteryPage /></PageSuspense>} />
-        <Route path="/species/:speciesKey" element={<SpeciesDetailPage />} />
-        <Route path="/album" element={<SpeciesAlbumPage />} />
+        <Route path="/species/:speciesKey" element={<PageSuspense><SpeciesDetailPage /></PageSuspense>} />
+        <Route path="/album" element={<PageSuspense><SpeciesAlbumPage /></PageSuspense>} />
         <Route path="/map" element={<Suspense fallback={<Layout><p className="loading-state" role="status">Načítám mapu…</p></Layout>}><MapPage /></Suspense>} />
-        <Route path="/add" element={<AddCatchPage />} />
+        <Route path="/add" element={<PageSuspense><AddCatchPage /></PageSuspense>} />
         <Route path="/catch/:id/reward" element={<PageSuspense><CatchRewardPage /></PageSuspense>} />
         <Route path="/catch/:id/share" element={<PageSuspense><CatchSharePage /></PageSuspense>} />
-        <Route path="/catch/:id" element={<CatchDetailPage />} />
-        <Route path="/catch/:id/edit" element={<AddCatchPage />} />
-        <Route path="/gallery" element={<GalleryPage />} />
-        <Route path="/stats" element={<StatsPage />} />
-        <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/catch/:id" element={<PageSuspense><CatchDetailPage /></PageSuspense>} />
+        <Route path="/catch/:id/edit" element={<PageSuspense><AddCatchPage /></PageSuspense>} />
+        <Route path="/gallery" element={<PageSuspense><GalleryPage /></PageSuspense>} />
+        <Route path="/stats" element={<PageSuspense><StatsPage /></PageSuspense>} />
+        <Route path="/profile" element={<PageSuspense><ProfilePage /></PageSuspense>} />
         <Route path="/privacy" element={<PageSuspense><PrivacyPage /></PageSuspense>} />
         <Route path="/settings" element={<PageSuspense><SettingsPage /></PageSuspense>} />
         <Route path="/notifications" element={<PageSuspense><NotificationsPage /></PageSuspense>} />
@@ -158,10 +160,10 @@ function App() {
         <Route path="/season-story" element={<PageSuspense><SeasonStoryPage /></PageSuspense>} />
         <Route path="/year-summary" element={<PageSuspense><YearSummaryPage /></PageSuspense>} />
         <Route path="/supporter" element={<PageSuspense><SupporterPage /></PageSuspense>} />
-        <Route path="/trips" element={<TripsPage />} />
-        <Route path="/trips/new" element={<TripCreatePage />} />
-        <Route path="/trips/:id" element={<TripDetailPage />} />
-        <Route path="/trips/:id/edit" element={<TripEditPage />} />
+        <Route path="/trips" element={<PageSuspense><TripsPage /></PageSuspense>} />
+        <Route path="/trips/new" element={<PageSuspense><TripCreatePage /></PageSuspense>} />
+        <Route path="/trips/:id" element={<PageSuspense><TripDetailPage /></PageSuspense>} />
+        <Route path="/trips/:id/edit" element={<PageSuspense><TripEditPage /></PageSuspense>} />
         <Route path="/waters" element={<PageSuspense><WatersPage /></PageSuspense>} />
         <Route path="/waters/new" element={<PageSuspense><WaterCreatePage /></PageSuspense>} />
         <Route path="/waters/:waterId/edit" element={<PageSuspense><WaterCreatePage /></PageSuspense>} />

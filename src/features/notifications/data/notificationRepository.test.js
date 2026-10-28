@@ -86,3 +86,14 @@ test("duplicate event IDs do not duplicate an inbox entry or erase its read stat
   assert.equal(notifications[0].readAt, "2026-10-28T11:00:00.000Z");
   assert.equal(notifications[0].title, "Výzva same-event");
 });
+
+test("guest inbox never loads the account-only Firestore transport", async () => {
+  let transportLoads = 0;
+  const repository = createNotificationRepository({ remote: async () => {
+    transportLoads += 1;
+    return makeRemote();
+  } });
+  const scope = { scopeKey: "guest:lazy-transport", ownerId: null };
+  await repository.list(scope);
+  assert.equal(transportLoads, 0);
+});

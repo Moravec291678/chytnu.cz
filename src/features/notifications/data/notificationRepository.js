@@ -1,7 +1,8 @@
 import { validateDataScope } from "../../auth/data/localDataScope.js";
 import { NOTIFICATION_STORE_NAME, openLocalDatabase } from "../../catches/data/catchRepository.js";
 import { createNotificationRecord, mergeNotificationReadState, sortNotificationsNewestFirst } from "./notificationModel.js";
-import { notificationFirestore } from "./notificationFirestore.js";
+
+const loadNotificationFirestore = () => import("./notificationFirestore.js").then((module) => module.notificationFirestore);
 
 function requestResult(request) {
   return new Promise((resolve, reject) => {
@@ -43,7 +44,9 @@ function serializeForFirestore(record) {
   return { id, ownerId, type, title, body, createdAt, readAt, deepLink };
 }
 
-export function createNotificationRepository({ openDatabase = openLocalDatabase, remote = notificationFirestore } = {}) {
+export function createNotificationRepository({ openDatabase = openLocalDatabase, remote = loadNotificationFirestore } = {}) {
+  const remoteEnabled = remote !== null;
+  const resolveRemote = async () => (typeof remote === "function" ? remote() : remote);
   const localList = (scope) => withNotificationStore(openDatabase, "readonly", async (store) => (
     await requestResult(store.index("scopeKey").getAll(scope.scopeKey))
   ));
@@ -55,10 +58,10 @@ export function createNotificationRepository({ openDatabase = openLocalDatabase,
 
   const localGet = (id) => withNotificationStore(openDatabase, "readonly", async (store) => requestResult(store.get(id)));
 
-  async function syncReadState(ownerId, remoteRecord, localRecord, merged) {
+  async function syncReadState(ownerId, remoteStore, remoteRecord, localRecord, merged) {
     if (!merged.readAt || remoteRecord.readAt) return "synced";
     try {
-      await remote.markRead(ownerId, merged.id, merged.readAt);
+      await remoteStore.markRead(ownerId, merged.id, merged.readAt);
       return "synced";
     } catch {
       return "pending";
@@ -66,10 +69,13 @@ export function createNotificationRepository({ openDatabase = openLocalDatabase,
   }
 
   async function syncWithOwner(scope, currentLocal) {
-    if (!scope.ownerId || !remote) return currentLocal;
+    if (!scope.ownerId || !remoteEnabled) return currentLocal;
+    let remoteStore;
+    try { remoteStore = await resolveRemote(); } catch { return currentLocal; }
+    if (!remoteStore) return currentLocal;
     let remoteRecords;
     try {
-      remoteRecords = await remote.list(scope.ownerId);
+      remoteRecords = await remoteStore.list(scope.ownerId);
     } catch {
       return currentLocal;
     }
@@ -88,7 +94,7 @@ export function createNotificationRepository({ openDatabase = openLocalDatabase,
         continue;
       }
       if (merged.readAt && !remoteRecord.readAt) {
-        merged.remoteSyncStatus = await syncReadState(scope.ownerId, remoteRecord, localById.get(merged.id), merged);
+        merged.remoteSyncStatus = await syncReadState(scope.ownerId, remoteStore, remoteRecord, localById.get(merged.id), merged);
       }
       localById.set(merged.id, merged);
       await localPut(merged);
@@ -97,15 +103,15 @@ export function createNotificationRepository({ openDatabase = openLocalDatabase,
     for (const localRecord of localById.values()) {
       if (remoteById.has(localRecord.id) || localRecord.remoteSyncStatus === "local-only") continue;
       try {
-        await remote.create(serializeForFirestore(localRecord));
+        await remoteStore.create(serializeForFirestore(localRecord));
         await localPut({ ...localRecord, remoteSyncStatus: "synced" });
       } catch {
         try {
-          const existingRemote = await remote.get(scope.ownerId, localRecord.id);
+          const existingRemote = await remoteStore.get(scope.ownerId, localRecord.id);
           if (!existingRemote) continue;
           const merged = { ...mergeNotificationReadState(localRecord, createNotificationRecord(existingRemote, scope)), remoteSyncStatus: "synced" };
           if (merged.readAt && !existingRemote.readAt) {
-            merged.remoteSyncStatus = await syncReadState(scope.ownerId, existingRemote, localRecord, merged);
+            merged.remoteSyncStatus = await syncReadState(scope.ownerId, remoteStore, existingRemote, localRecord, merged);
           }
           localById.set(merged.id, merged);
           await localPut(merged);
@@ -122,19 +128,21 @@ export function createNotificationRepository({ openDatabase = openLocalDatabase,
       const record = await withNotificationStore(openDatabase, "readwrite", async (store) => {
         const existing = await requestResult(store.get(normalized.id));
         if (existing) return requireOwnedRecord(existing, normalized.id, scope);
-        const created = { ...normalized, remoteSyncStatus: scope.ownerId && remote ? "pending" : "local-only" };
+        const created = { ...normalized, remoteSyncStatus: scope.ownerId && remoteEnabled ? "pending" : "local-only" };
         await requestResult(store.add(created));
         return created;
       });
       if (record.remoteSyncStatus === "pending") {
         try {
-          const existing = await remote.get(scope.ownerId, record.id);
+          const remoteStore = await resolveRemote();
+          if (!remoteStore) return record;
+          const existing = await remoteStore.get(scope.ownerId, record.id);
           if (existing) {
             const merged = { ...mergeNotificationReadState(record, createNotificationRecord(existing, scope)), remoteSyncStatus: "synced" };
             await localPut(merged);
             return merged;
           }
-          await remote.create(serializeForFirestore(record));
+          await remoteStore.create(serializeForFirestore(record));
           const synced = { ...record, remoteSyncStatus: "synced" };
           await localPut(synced);
           return synced;
@@ -157,12 +165,14 @@ export function createNotificationRepository({ openDatabase = openLocalDatabase,
       const updated = {
         ...existing,
         readAt: now.toISOString(),
-        remoteSyncStatus: scope.ownerId && remote ? "pending" : existing.remoteSyncStatus,
+        remoteSyncStatus: scope.ownerId && remoteEnabled ? "pending" : existing.remoteSyncStatus,
       };
       await localPut(updated);
-      if (scope.ownerId && remote) {
+      if (scope.ownerId && remoteEnabled) {
         try {
-          await remote.markRead(scope.ownerId, id, updated.readAt);
+          const remoteStore = await resolveRemote();
+          if (!remoteStore) return updated;
+          await remoteStore.markRead(scope.ownerId, id, updated.readAt);
           updated.remoteSyncStatus = "synced";
           await localPut(updated);
         } catch { /* Keep the read state locally and retry when the inbox is refreshed. */ }
