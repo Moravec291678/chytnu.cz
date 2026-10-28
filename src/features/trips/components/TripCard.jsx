@@ -16,7 +16,7 @@ function TripCard({ trip, catches = null }) {
       <div className="trip-card-top"><div><h3 className="trip-card-title">{trip.title}</h3><p className="trip-card-meta">{trip.locationName || "Lokalita neuvedena"} · {new Date(trip.startedAt).toLocaleDateString("cs-CZ")}</p></div><span className="trip-card-duration">{formatTripDuration(getTripDurationMs(trip))}</span></div>
       <div className="trip-card-stats">
         <span>{catchesAvailable ? formatTripCatchCount(associated.length) : "Úlovky nedostupné"}</span>
-        {heaviestCatch && <span>max <strong>{formatCatchMeasurements(heaviestCatch)}</strong></span>}
+        {heaviestCatch && <span>nejtěžší <strong>{formatCatchMeasurements(heaviestCatch)}</strong></span>}
         {catchesAvailable && <span>{species.length} {speciesNoun}</span>}
       </div>
       {species.length > 0 && <div className="trip-card-species" aria-label="Druhy zaznamenané na vycházce">

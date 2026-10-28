@@ -1,4 +1,5 @@
-import { formatCatchMeasurements, isMeasuredCatchWeight } from "../../catches/data/catchWeight.js";
+import { formatCatchMeasurements } from "../../catches/data/catchWeight.js";
+import { selectBestCatch } from "../../catches/data/catchSize.js";
 import { isCatchDateEligibleForProgression } from "../../catches/data/catchVerification.js";
 
 export function getTopMethod(catches) {
@@ -64,8 +65,7 @@ export function getTopRevier(catches) {
 }
 
 export function getBiggestCatch(catches, now = new Date()) {
-  return catches.filter((record) => isCatchDateEligibleForProgression(record, now) && isMeasuredCatchWeight(record))
-    .reduce((max, item) => !max || item.weightKg > max.weightKg ? item : max, null);
+  return selectBestCatch(catches.filter((record) => isCatchDateEligibleForProgression(record, now)));
 }
 
 export function getBestWater(catches, waters = []) {

@@ -65,13 +65,13 @@ test("year summary applies Prague calendar years to Catch and Trip start dates",
   assert.equal(result.biggest.id, "included-at-boundary");
 });
 
-test("year summary keeps estimates visible but distinct from a measured record", () => {
+test("year summary excludes estimated-only weights from primary size records", () => {
   const result = buildYearSummary([
     catchRecord({ id: "weighed", weightKg: 4, weightSource: "manual" }),
     catchRecord({ id: "estimated", weightKg: 8, weightSource: "estimated" }),
   ], [], 2026);
   assert.equal(result.biggest.id, "weighed");
-  assert.equal(result.largestRecordedCatch.id, "estimated");
+  assert.equal(result.largestRecordedCatch.id, "weighed");
 });
 
 test("best month is centralized by Prague month Catch count", () => {
@@ -130,8 +130,8 @@ test("season story uses only the selected year and picks measured PB, bait and m
   const result = buildSeasonStory(rows, [], 2026);
   assert.equal(result.catches, 3);
   assert.equal(result.speciesCount, 2);
-  assert.equal(result.bestMoment.record.id, "a");
-  assert.equal(result.bestMoment.kind, "weight-pb");
+  assert.equal(result.bestMoment.record.id, "b");
+  assert.equal(result.bestMoment.kind, "length-pb");
   assert.equal(result.bestBait.label, "Kukuřice");
   assert.equal(result.bestBait.count, 2);
   assert.equal(result.bestMonth.label, "květen");

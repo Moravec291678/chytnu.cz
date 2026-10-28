@@ -1,3 +1,4 @@
+import { hasCatchLength, compareCatchSize } from "../../catches/data/catchSize.js";
 import { isMeasuredCatchWeight } from "../../catches/data/catchWeight.js";
 import { getBiggestCatch } from "../../home/utils/profileStats.js";
 import { normalizeText } from "../../../shared/utils/helpers.js";
@@ -12,10 +13,10 @@ export function getCatchRecordStatus(record, catches = [], now = new Date()) {
     : [];
   const previousPersonalRecord = getBiggestCatch(previousCatches);
   const previousSpeciesRecord = getBiggestCatch(previousSpeciesCatches);
-  const measured = isMeasuredCatchWeight(record);
+  const measured = hasCatchLength(record) || isMeasuredCatchWeight(record);
   return {
-    personalRecord: measured && (!previousPersonalRecord || record.weightKg > previousPersonalRecord.weightKg),
-    speciesRecord: measured && (!previousSpeciesRecord || record.weightKg > previousSpeciesRecord.weightKg),
+    personalRecord: measured && (!previousPersonalRecord || compareCatchSize(record, previousPersonalRecord) > 0),
+    speciesRecord: measured && (!previousSpeciesRecord || compareCatchSize(record, previousSpeciesRecord) > 0),
   };
 }
 

@@ -63,7 +63,7 @@ export default function YearSummaryPage() {
                 <SummaryCard value={summary.catches.toLocaleString("cs-CZ")} label="úlovků" />
                 <SummaryCard
                   value={largest ? formatCatchMeasurements(largest) : "—"}
-                  label="největší ryba"
+                  label="nejlepší úlovek"
                   tone="gold"
                   note={largest?.weightSource === "estimated" ? `${largest.species || "Ryba"} · hmotnost je odhad` : largest?.species || "Zvážená hmotnost není uvedena"}
                 />

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import Layout from "../shared/layout/Layout";
-import { formatCatchMeasurements, isMeasuredCatchWeight } from "../features/catches/data/catchWeight.js";
+import { formatCatchMeasurements } from "../features/catches/data/catchWeight.js";
+import { selectBestCatch } from "../features/catches/data/catchSize.js";
 import { useDataScope } from "../features/auth/context/dataScopeContextValue.js";
 import { useCatches } from "../features/catches/context/useCatches";
 import { useTrips } from "../features/trips/context/useTrips";
@@ -58,9 +59,7 @@ function SpeciesAlbumPage() {
   const currentYear = getSpeciesAlbumYear();
   const seasons = buildSeasonCollections(catches, trips, currentYear);
   const trophies = buildTrophyRecords(catches, DEFAULT_SPECIES);
-  const yearRecord = catches
-    .filter((record) => isMeasuredCatchWeight(record) && getSpeciesAlbumYear(record.caughtAt) === currentYear)
-    .sort((a, b) => b.weightKg - a.weightKg)[0];
+  const yearRecord = selectBestCatch(catches.filter((record) => getSpeciesAlbumYear(record.caughtAt) === currentYear));
   const isLoading = catchState.loading || tripState.loading || progressionLoading || waterLoading;
   const errors = [catchState.error, tripState.error, progressionError, waterError].filter(Boolean);
 
@@ -107,7 +106,7 @@ function SpeciesAlbumPage() {
                 {"★".repeat(stars)}<span>{"☆".repeat(Math.max(0, 5 - stars))}</span>
               </span>
               <span>{formatTripCatchCount(species.catchCount)}</span>
-              <span className="album-record">Rekord {measurement(species.bestWeightKg, "kg")}</span>
+              <span className="album-record">Rekord {species.bestLengthCm !== null ? measurement(species.bestLengthCm, "cm") : measurement(species.bestWeightKg, "kg")}</span>
             </Link>;
           })}</div>
         </section>
@@ -152,8 +151,8 @@ function SpeciesAlbumPage() {
           </div>
           {yearRecord && <article className="album-year-record">
             <span aria-hidden="true">✦</span>
-            <div><p>NEJTĚŽŠÍ ÚLOVEK ROKU {currentYear}</p><strong>{formatCatchMeasurements(yearRecord)}</strong><span>{yearRecord.species || "Druh neuveden"}</span></div>
-            {yearRecord.id && <Link to={`/catch/${yearRecord.id}`} aria-label="Otevřít nejtěžší úlovek roku">›</Link>}
+            <div><p>NEJDELŠÍ ÚLOVEK ROKU {currentYear}</p><strong>{formatCatchMeasurements(yearRecord)}</strong><span>{yearRecord.species || "Druh neuveden"}</span></div>
+            {yearRecord.id && <Link to={`/catch/${yearRecord.id}`} aria-label="Otevřít nejdelší úlovek roku">›</Link>}
           </article>}
           {trophies.length
             ? <div className="album-list album-trophies">{trophies.map((record, index) => {
@@ -164,8 +163,8 @@ function SpeciesAlbumPage() {
                 ? <Link className="album-list-card album-trophy-card" to={`/catch/${record.catch.id}`} key={`${record.speciesKey}-${record.catch.id}`}>{content}</Link>
                 : <article className="album-list-card album-trophy-card" key={`${record.speciesKey}-${index}`}>{content}</article>;
             })}</div>
-            : <p className="album-empty">Rekordy se objeví po uložení hmotnosti úlovku.</p>}
-          {yearRecord && <p className="album-year-note">Roční rekord používá pouze úlovky s uloženým datem a hmotností.</p>}
+            : <p className="album-empty">Rekordy se objeví po uložení délky nebo hmotnosti úlovku.</p>}
+          {yearRecord && <p className="album-year-note">Roční rekord upřednostňuje délku; u starších záznamů bez délky použije hmotnost.</p>}
         </section>
       </>}
   </div></Layout>;

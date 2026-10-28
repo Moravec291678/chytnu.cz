@@ -33,6 +33,7 @@ export function buildGalleryItems(catches = [], { ownerId = null } = {}) {
         isFavorite: Boolean(record.isFavorite),
         isPrimary: photo.id ? photo.id === record.primaryPhotoId || (!record.primaryPhotoId && index === 0) : index === 0,
         weightKg: Number.isFinite(record.weightKg) ? record.weightKg : null,
+        lengthCm: Number.isFinite(record.lengthCm) ? record.lengthCm : null,
         hasLocalBytes: photo.blob instanceof Blob,
       };
     });
@@ -97,6 +98,7 @@ export function filterAndSortGallery(items, filters = {}, now = new Date()) {
       && (!filters.period || !filters.period.startsWith("custom:") || (day && day >= (filters.dateFrom || "") && day <= (filters.dateTo || "9999-99-99")));
   });
   return filtered.sort((a, b) => {
+    if (filters.sort === "longest") return (b.lengthCm ?? -1) - (a.lengthCm ?? -1) || Date.parse(b.caughtAt) - Date.parse(a.caughtAt);
     if (filters.sort === "heaviest") return (b.weightKg ?? -1) - (a.weightKg ?? -1) || Date.parse(b.caughtAt) - Date.parse(a.caughtAt);
     const delta = (Date.parse(a.caughtAt) || 0) - (Date.parse(b.caughtAt) || 0);
     return (filters.sort === "oldest" ? delta : -delta) || String(a.photoId).localeCompare(String(b.photoId));

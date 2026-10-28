@@ -1,9 +1,9 @@
+import { selectBestCatch } from "../../catches/data/catchSize.js";
 import { isMeasuredCatchWeight } from "../../catches/data/catchWeight.js";
 import { isCatchDateEligibleForProgression } from "../../catches/data/catchVerification.js";
 
 function getBiggestCatch(catches, now) {
-  return catches.filter((record) => isCatchDateEligibleForProgression(record, now) && isMeasuredCatchWeight(record))
-    .reduce((best, item) => !best || item.weightKg > best.weightKg ? item : best, null);
+  return selectBestCatch(catches.filter((record) => isCatchDateEligibleForProgression(record, now)));
 }
 
 export function getSpeciesDetail(catches, speciesKey, now = new Date()) {
@@ -16,12 +16,15 @@ export function getSpeciesDetail(catches, speciesKey, now = new Date()) {
       return rightTime - leftTime;
     });
   const biggestCatch = getBiggestCatch(speciesCatches, now);
-  const longestCatch = speciesCatches.filter((item) => isCatchDateEligibleForProgression(item, now) && Number.isFinite(item.lengthCm))
+  const heaviestCatch = speciesCatches.filter((item) => isCatchDateEligibleForProgression(item, now) && isMeasuredCatchWeight(item))
+    .reduce((best, item) => !best || item.weightKg > best.weightKg ? item : best, null);
+  const longestCatch = speciesCatches.filter((item) => isCatchDateEligibleForProgression(item, now) && Number.isFinite(item.lengthCm) && item.lengthCm > 0)
     .reduce((best, item) => !best || item.lengthCm > best.lengthCm ? item : best, null);
 
   return {
     catches: speciesCatches,
     biggestCatch,
+    heaviestCatch,
     longestCatch,
     personalRecord: getBiggestCatch(catches, now),
   };

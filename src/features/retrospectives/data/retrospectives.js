@@ -1,4 +1,5 @@
 import { isMeasuredCatchWeight } from "../../catches/data/catchWeight.js";
+import { selectBestCatch } from "../../catches/data/catchSize.js";
 import { getPragueDateParts } from "../../stats/utils/statsPeriod.js";
 import { normalizeText } from "../../../shared/utils/helpers.js";
 
@@ -91,12 +92,10 @@ export function buildYearSummary(catches, trips, year) {
     return date && getPragueDateParts(date).year === year;
   });
   const measuredWeight = records.filter(isMeasuredCatchWeight).sort((a, b) => b.weightKg - a.weightKg);
-  const recordedWeight = records.filter((record) => Number.isFinite(record.weightKg) && record.weightKg >= 0)
-    .sort((a, b) => b.weightKg - a.weightKg || String(a.id || "").localeCompare(String(b.id || "")));
-  const measuredLength = records.filter((record) => Number.isFinite(record.lengthCm)).sort((a, b) => b.lengthCm - a.lengthCm);
+  const measuredLength = records.filter((record) => Number.isFinite(record.lengthCm) && record.lengthCm > 0).sort((a, b) => b.lengthCm - a.lengthCm);
   const uniqueSpecies = new Set(records.map((r) => r.speciesKey || r.species).filter(Boolean));
   return { year, catches: records.length, trips: datedTrips.length, species: uniqueSpecies.size,
-    biggest: measuredWeight[0] || null, largestRecordedCatch: recordedWeight[0] || null, longest: measuredLength[0] || null,
+    biggest: selectBestCatch(records), largestRecordedCatch: selectBestCatch(records), heaviestMeasuredCatch: measuredWeight[0] || null, longest: measuredLength[0] || null,
     bestMonth: getBestCatchMonth(records), bestMethod: topOrNull(records, (r) => r.method?.key, (r) => r.method?.label),
     bestBait: getBestCatchBait(records),
     recordsWithWeight: measuredWeight.length, recordsWithLength: measuredLength.length };
@@ -124,10 +123,10 @@ function compareCatchIdentity(left, right) {
 }
 
 function selectBestMoment(records) {
+  const best = selectBestCatch(records);
+  if (best && Number.isFinite(best.lengthCm) && best.lengthCm > 0) return { kind: "length-pb", label: "Nejdelší úlovek", record: best };
   const weighted = records.filter(isMeasuredCatchWeight).sort((left, right) => right.weightKg - left.weightKg || compareCatchIdentity(left, right));
   if (weighted[0]) return { kind: "weight-pb", label: "Nejtěžší měřený úlovek", record: weighted[0] };
-  const longest = records.filter((record) => Number.isFinite(record.lengthCm)).sort((left, right) => right.lengthCm - left.lengthCm || compareCatchIdentity(left, right));
-  if (longest[0]) return { kind: "length-pb", label: "Nejdelší měřený úlovek", record: longest[0] };
   const first = [...records].sort(compareCatchIdentity)[0];
   return first ? { kind: "first-catch", label: "První zapsaný úlovek roku", record: first } : null;
 }
@@ -184,7 +183,7 @@ export function buildSeasonStoryWithWaters(catches = [], trips = [], waters = []
     bestBait,
     bestMonth,
     bestMoment,
-    biggest: bestMoment?.kind === "weight-pb" ? bestMoment.record : null,
+    biggest: bestMoment && (bestMoment.kind === "length-pb" || bestMoment.kind === "weight-pb") ? bestMoment.record : null,
     waterCount: new Set(records.map((record) => record.waterId).filter((waterId) => waters.some((water) => water.id === waterId))).size,
     narrative,
   };

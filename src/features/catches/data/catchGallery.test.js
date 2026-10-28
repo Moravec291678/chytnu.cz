@@ -135,6 +135,14 @@ test("sorting newest, oldest, and heaviest produces deterministic photo order", 
   assert.equal(filterAndSortGallery(items, { sort: "heaviest" })[0].catchId, "c2");
 });
 
+test("gallery has a separate longest sort based on catch length", () => {
+  const sorted = filterAndSortGallery([
+    { ...items[0], catchId: "short-heavy", lengthCm: 60, weightKg: 10 },
+    { ...items[1], catchId: "long-light", lengthCm: 100, weightKg: 2 },
+  ], { sort: "longest" });
+  assert.equal(sorted[0].catchId, "long-light");
+});
+
 test("gallery route and primary Profile entry are connected without changing bottom navigation", async () => {
   const [app, profile, layout] = await Promise.all([
     readFile(new URL("../../../app/App.jsx", import.meta.url), "utf8"),

@@ -67,7 +67,7 @@ function ActiveTripCard({ activeTrip, catches = null }) {
         <div className="active-trip-stat">
           <p className="active-trip-stat-value">{heaviestCatch ? formatCatchMeasurements(heaviestCatch) : "—"}</p>
 
-          <p className="active-trip-stat-label">NEJVĚTŠÍ ÚLOVEK</p>
+          <p className="active-trip-stat-label">NEJTĚŽŠÍ ÚLOVEK</p>
         </div>
 
         <div className="active-trip-stat">

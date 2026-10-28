@@ -12,7 +12,7 @@ import "./JournalPage.css";
 
 const EMPTY_FILTERS = { search: "", speciesKey: "", dateFrom: "", dateTo: "", favoriteOnly: false, result: "", methodKey: "", tripId: "", sort: "newest" };
 const SORTS = [
-  ["newest", "Nejnovější"], ["oldest", "Nejstarší"], ["heaviest", "Nejtěžší"],
+  ["newest", "Nejnovější"], ["oldest", "Nejstarší"], ["longest", "Nejdelší"], ["heaviest", "Nejtěžší"],
   ["lightest", "Nejlehčí"], ["longest", "Nejdelší"], ["shortest", "Nejkratší"],
 ];
 

@@ -1,4 +1,5 @@
 import { isMeasuredCatchWeight } from "../../catches/data/catchWeight.js";
+import { hasCatchLength, selectBestCatch } from "../../catches/data/catchSize.js";
 import { DEFAULT_SPECIES } from "../../../shared/constants/speciesCatalog.js";
 import { filterEligibleCatchRecords } from "../../catches/data/catchVerification.js";
 import { SEASONAL_CHALLENGE, SEASONAL_CHALLENGE_RULES, SEASONAL_CHALLENGE_SEASONS } from "../../../product/config/challenges.js";
@@ -18,16 +19,16 @@ const SEASON_MATCHERS = Object.freeze({
     const hour = new Date(timestamp).getHours();
     return hour >= SEASONAL_CHALLENGE_RULES.nightStartHour || hour < SEASONAL_CHALLENGE_RULES.nightEndHour;
   },
-  "measured-carp": (record) => ["commonCarp", "carp"].includes(record.speciesKey) && isMeasuredCatchWeight(record),
+  "measured-carp": (record) => ["commonCarp", "carp"].includes(record.speciesKey) && (hasCatchLength(record) || isMeasuredCatchWeight(record)),
   "measured-predator": (record) => {
     const species = SPECIES_BY_KEY.get(record.speciesKey);
-    return Boolean(species?.isPredator && species.categoryKey !== "salmonids" && isMeasuredCatchWeight(record));
+    return Boolean(species?.isPredator && species.categoryKey !== "salmonids" && (hasCatchLength(record) || isMeasuredCatchWeight(record)));
   },
   "measured-salmonid-or-other": (record) => {
     const species = SPECIES_BY_KEY.get(record.speciesKey);
     return Boolean(species && species.categoryKey !== "cyprinids"
       && (species.categoryKey === "salmonids" || !species.isPredator)
-      && isMeasuredCatchWeight(record));
+      && (hasCatchLength(record) || isMeasuredCatchWeight(record)));
   },
 });
 
@@ -64,11 +65,12 @@ function getSeasonChallenges(season) {
 function buildVariant(catches, periodKey, definition) {
   const matches = catches.filter(definition.matches);
   const progress = Math.min(matches.length, SEASONAL_CHALLENGE.catchGoal);
-  const bestCatch = matches.reduce((best, record) => (
-    isMeasuredCatchWeight(record) && (!best || record.weightKg > best.weightKg)
-      ? { id: record.id, weightKg: record.weightKg }
-      : best
-  ), null);
+  const best = selectBestCatch(matches);
+  const bestCatch = best ? {
+    id: best.id,
+    ...(hasCatchLength(best) ? { lengthCm: best.lengthCm } : {}),
+    ...(isMeasuredCatchWeight(best) ? { weightKg: best.weightKg } : {}),
+  } : null;
   return {
     id: definition.key === "carp" || definition.key === "primary"
       ? `season-${periodKey}`

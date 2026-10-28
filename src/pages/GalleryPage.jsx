@@ -115,7 +115,7 @@ function GalleryPage() {
             </section>
           </div>}
         </div>
-        <label className="gallery-sort-control"><span className="sr-only">Řazení fotografií</span><select value={filters.sort} onChange={(event) => set("sort", event.target.value)}><option value="newest">Nejnovější</option><option value="oldest">Nejstarší</option><option value="heaviest">Největší úlovek</option></select></label>
+        <label className="gallery-sort-control"><span className="sr-only">Řazení fotografií</span><select value={filters.sort} onChange={(event) => set("sort", event.target.value)}><option value="newest">Nejnovější</option><option value="oldest">Nejstarší</option><option value="longest">Nejdelší úlovek</option><option value="heaviest">Nejtěžší úlovek</option></select></label>
       </div>
     </section>
     {state.loading ? <p className="gallery-state" role="status">Načítám fotografie…</p> : state.error ? <p className="gallery-state" role="alert">{state.error}</p> : !allItems.length ? <section className="gallery-state"><p>Zatím tu nejsou žádné fotografie.</p><Link to="/add">Přidat úlovek</Link></section> : !photos.length ? <section className="gallery-state"><p>Nenalezeny žádné fotografie pro zvolené filtry.</p><button type="button" className="gallery-reset" onClick={clearFilters}>Vymazat filtry</button></section> : <div className="gallery-grid">{photos.map((item, index) => <GalleryTile key={`${item.catchId}:${item.photoId}`} item={item} scope={scope} onOpen={() => setViewerIndex(index)} />)}</div>}

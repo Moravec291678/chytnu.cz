@@ -22,9 +22,9 @@ export const SEASONAL_CHALLENGE_SEASONS = Object.freeze([
   { key: "spring", label: "Jaro", months: [2, 3, 4], title: "První úlovek po zimě", description: "Zaznamenej první jarní úlovek.", ruleKey: "any-catch" },
   { key: "summer", label: "Léto", months: [5, 6, 7], title: "Noční rybaření", description: "Zaznamenej letní úlovek mezi 22:00 a 04:00.", ruleKey: "night-catch" },
   { key: "autumn", label: "Podzim", months: [8, 9, 10], title: "Výzvy sezóny", description: "Vyber si cestu podle svého stylu rybolovu.", challenges: [
-    { key: "carp", title: "Kapr", description: "Zaznamenej kapra s uvedenou hmotností.", ruleKey: "measured-carp" },
-    { key: "predator", title: "Dravec", description: "Zaznamenej dravce s uvedenou hmotností.", ruleKey: "measured-predator" },
-    { key: "other", title: "Lososovité / ostatní", description: "Zaznamenej lososovitou nebo jinou nedravou rybu s uvedenou hmotností.", ruleKey: "measured-salmonid-or-other" },
+    { key: "carp", title: "Kapr", description: "Zaznamenej kapra s uvedenou délkou.", ruleKey: "measured-carp" },
+    { key: "predator", title: "Dravec", description: "Zaznamenej dravce s uvedenou délkou.", ruleKey: "measured-predator" },
+    { key: "other", title: "Lososovité / ostatní", description: "Zaznamenej lososovitou nebo jinou nedravou rybu s uvedenou délkou.", ruleKey: "measured-salmonid-or-other" },
   ] },
 ].map((season) => Object.freeze({
   ...season,

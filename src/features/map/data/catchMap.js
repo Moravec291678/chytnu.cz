@@ -1,13 +1,12 @@
 import { normalizeCoordinates, parseCoordinateText } from "../../catches/data/coordinates.js";
-import { isMeasuredCatchWeight } from "../../catches/data/catchWeight.js";
+import { selectBestCatch } from "../../catches/data/catchSize.js";
 
 export function getCatchCoordinates(record) {
   return normalizeCoordinates(record?.coordinates) ?? parseCoordinateText(record?.gpsLocation);
 }
 
 export function buildPrivateCatchMarkers(catches) {
-  const personalRecord = catches.filter(isMeasuredCatchWeight)
-    .reduce((best, record) => !best || record.weightKg > best.weightKg ? record : best, null);
+  const personalRecord = selectBestCatch(catches);
   return catches.flatMap((record) => {
     const coordinates = getCatchCoordinates(record);
     if (!coordinates) return [];

@@ -1,5 +1,6 @@
 import { normalizeText } from "../../../shared/utils/helpers.js";
 import { isMeasuredCatchWeight } from "../../catches/data/catchWeight.js";
+import { compareCatchSize, hasCatchLength } from "../../catches/data/catchSize.js";
 import { isCatchDateEligibleForProgression } from "../../catches/data/catchVerification.js";
 
 function measuredMaximum(records, field) {
@@ -122,7 +123,8 @@ export function buildSeasonCollections(catches, trips, year = getSpeciesAlbumYea
 export function buildTrophyRecords(catches, catalog, limit = 5, now = new Date()) {
   const speciesByKey = new Map(catalog.map((species) => [species.key, species]));
   return catches
-    .filter((record) => isCatchDateEligibleForProgression(record, now) && isMeasuredCatchWeight(record))
+    .filter((record) => isCatchDateEligibleForProgression(record, now)
+      && (hasCatchLength(record) || isMeasuredCatchWeight(record)))
     .map((record) => {
       const species = speciesByKey.get(record.speciesKey);
       return {
@@ -131,6 +133,6 @@ export function buildTrophyRecords(catches, catalog, limit = 5, now = new Date()
         catch: record,
       };
     })
-    .sort((a, b) => b.catch.weightKg - a.catch.weightKg)
+    .sort((a, b) => compareCatchSize(b.catch, a.catch) || String(a.catch.id || "").localeCompare(String(b.catch.id || "")))
     .slice(0, limit);
 }

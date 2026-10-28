@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { formatCatchMeasurements, isMeasuredCatchWeight } from "../features/catches/data/catchWeight.js";
+import { formatCatchMeasurements } from "../features/catches/data/catchWeight.js";
+import { compareCatchSize } from "../features/catches/data/catchSize.js";
 import Layout from "../shared/layout/Layout";
 import { useAuth } from "../features/auth/context/authContextValue.js";
 import { useDataScope } from "../features/auth/context/dataScopeContextValue.js";
@@ -95,12 +96,8 @@ function ProfilePage() {
   const recordCatch = getBiggestCatch(catchState.catches);
   const bestWater = getBestWater(catchState.catches, waters.scopeKey === dataScope.scopeKey ? waters.records : []);
   const trophyCatches = useMemo(
-    () => [...catchState.catches].sort((left, right) => {
-      const weightDelta = (isMeasuredCatchWeight(right) ? right.weightKg : -1) - (isMeasuredCatchWeight(left) ? left.weightKg : -1);
-      if (weightDelta) return weightDelta;
-      const lengthDelta = (Number.isFinite(right.lengthCm) ? right.lengthCm : -1) - (Number.isFinite(left.lengthCm) ? left.lengthCm : -1);
-      return lengthDelta || Date.parse(right.caughtAt) - Date.parse(left.caughtAt);
-    }),
+    () => [...catchState.catches].sort((left, right) => compareCatchSize(right, left)
+      || Date.parse(right.caughtAt) - Date.parse(left.caughtAt)),
     [catchState.catches],
   );
   useEffect(() => {

@@ -37,6 +37,14 @@ test("weight and length sorting use their own measurements in each direction", (
   assert.deepEqual(ids("shortest"), ["heavy-short", "light-long", "unknown"]);
 });
 
+test("longest sorting uses length without allowing heavier shorter catches to win", () => {
+  const measured = [
+    { ...records[0], id: "long", lengthCm: 100 },
+    { ...records[1], id: "heavy", lengthCm: 90, weightKg: 10 },
+  ];
+  assert.deepEqual(filterAndSortCatches(measured, { ...defaults, sort: "longest" }).map((item) => item.id), ["long", "heavy"]);
+});
+
 test("date sorting and empty-filter reset state are deterministic", () => {
   assert.deepEqual(filterAndSortCatches(records, { ...defaults, sort: "oldest" }).map((item) => item.id), ["b", "a"]);
   assert.equal(hasActiveJournalFilters(defaults), false);

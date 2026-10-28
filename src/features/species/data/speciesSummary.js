@@ -1,10 +1,8 @@
-import { isMeasuredCatchWeight } from "../../catches/data/catchWeight.js";
+import { selectBestCatch } from "../../catches/data/catchSize.js";
 
 export function selectSpeciesHighlight(catches) {
   if (!Array.isArray(catches) || catches.length === 0) return null;
-  const measured = catches.filter(isMeasuredCatchWeight);
-  if (measured.length === 0) return catches[0];
-  return measured.reduce((largest, item) => item.weightKg > largest.weightKg ? item : largest);
+  return selectBestCatch(catches) ?? catches[0];
 }
 
 

@@ -2,11 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { selectSpeciesHighlight } from "./speciesSummary.js";
 
-test("species highlight selects the heaviest measured catch even when the newest catch has no weight", () => {
-  const unmeasured = { id: "new", weightKg: null };
+test("species highlight prioritizes length over a shorter heavier catch", () => {
+  const unmeasured = { id: "new" };
   const smaller = { id: "small", weightKg: 2.5 };
-  const largest = { id: "large", weightKg: 7.2 };
-  assert.equal(selectSpeciesHighlight([unmeasured, smaller, largest]), largest);
+  const longest = { id: "long", lengthCm: 100 };
+  const heavier = { id: "large", lengthCm: 70, weightKg: 7.2, weightSource: "manual" };
+  assert.equal(selectSpeciesHighlight([unmeasured, heavier, smaller, longest]), longest);
 });
 
 test("species highlight falls back to the first catch only when no weight is known", () => {

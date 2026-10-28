@@ -150,8 +150,8 @@ function StatsPage() {
             <StatCard label="Zaznamenané úlovky" value={formatNumber(stats.catchCount, 0)} />
             <StatCard label="Různé druhy" value={formatNumber(stats.speciesCount, 0)} />
             {stats.longestLengthCm !== null && <StatCard label="Nejdelší změřený" value={`${formatNumber(stats.longestLengthCm, 0)} cm`} note={`${formatCatchCount(stats.measuredLengthCount)} se známou délkou`} />}
-            {recordCatch && <StatCard label="Nejtěžší za období" value={formatCatchMeasurements(recordCatch)} note={recordCatch.species} />}
-            {allTimeRecord && <StatCard label="Osobní rekord" value={formatCatchMeasurements(allTimeRecord)} note={`${allTimeRecord.species} · ověřená hmotnost`} />}
+            {recordCatch && <StatCard label="Nejlepší úlovek za období" value={formatCatchMeasurements(recordCatch)} note={recordCatch.species} />}
+            {allTimeRecord && <StatCard label="Osobní rekord" value={formatCatchMeasurements(allTimeRecord)} note={allTimeRecord.species} />}
             {patterns.time && <StatCard label="Nejlepší čas" value={patterns.time.labels.join(" · ")} note={`${patterns.time.count}× z ${patterns.time.sampleCount} záznamů`} />}
             {patterns.bait && <StatCard label="Nejlepší nástraha" value={patterns.bait.labels.join(" · ")} note={`${patterns.bait.count}× z ${patterns.bait.sampleCount} záznamů`} />}
             {stats.species[0] && <StatCard label="Nejčastější druh" value={stats.species[0].label} note={`${stats.species[0].count}× v tomto období`} />}

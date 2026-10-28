@@ -17,9 +17,10 @@ test("species detail derives count, ordering, and independent size records from 
   const detail = getSpeciesDetail([carpOld, pike, carpNew], "commonCarp");
 
   assert.deepEqual(detail.catches.map(({ id }) => id), ["carp-new", "carp-old"]);
-  assert.equal(detail.biggestCatch, carpOld);
+  assert.equal(detail.biggestCatch, carpNew);
+  assert.equal(detail.heaviestCatch, carpOld);
   assert.equal(detail.longestCatch, carpNew);
-  assert.equal(detail.personalRecord, pike);
+  assert.equal(detail.personalRecord, carpNew);
 });
 
 test("species detail has no records or fake catches without matching data", () => {

@@ -27,3 +27,12 @@ test("a future-dated Catch cannot earn personal or species record recognition", 
   assert.deepEqual(getCatchRecordStatus(future, [current, future], now), { personalRecord: false, speciesRecord: false });
   assert.deepEqual(getCatchRecordStatus(current, [current, future], now), { personalRecord: true, speciesRecord: true });
 });
+
+test("record comparison prioritizes length and uses measured weight only as a tie-break", () => {
+  const candidate = { id: "long", speciesKey: "pike", lengthCm: 100, caughtAt: "2026-10-27T10:00:00Z" };
+  const history = [{ id: "heavy", speciesKey: "pike", lengthCm: 90, weightKg: 10, weightSource: "manual", caughtAt: "2026-10-26T10:00:00Z" }];
+  assert.deepEqual(getCatchRecordStatus(candidate, history), { personalRecord: true, speciesRecord: true });
+  const tie = { ...candidate, lengthCm: 100, weightKg: 9, weightSource: "manual" };
+  assert.deepEqual(getCatchRecordStatus(tie, [{ ...candidate, id: "tie", weightKg: 8, weightSource: "manual" }]), { personalRecord: true, speciesRecord: true });
+  assert.deepEqual(getCatchRecordStatus({ ...tie, weightKg: 8 }, [{ ...candidate, id: "tie", weightKg: 9, weightSource: "manual" }]), { personalRecord: false, speciesRecord: false });
+});

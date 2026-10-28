@@ -1,5 +1,6 @@
 import { normalizeText } from "../../../shared/utils/helpers.js";
 import { isMeasuredCatchWeight } from "./catchWeight.js";
+import { compareCatchSize, hasCatchLength, selectBestCatch } from "./catchSize.js";
 import { isCatchDateEligibleForProgression } from "./catchVerification.js";
 
 const SEASONS = [
@@ -23,37 +24,30 @@ export function getCatchRecognition(catchRecord, catches, now = new Date()) {
     return { personalBest: false, personalBestDelta: null, speciesRecord: false, seasonRecord: false, newLocation: false };
   }
   const others = catches.filter((record) => record.id !== catchRecord.id && isCatchDateEligibleForProgression(record, now));
-  const measuredOthers = others.filter(isMeasuredCatchWeight);
-  const previousPersonalBest = measuredOthers.reduce(
-    (best, record) => Math.max(best, record.weightKg),
-    Number.NEGATIVE_INFINITY,
-  );
+  const previousPersonalBest = selectBestCatch(others);
   const speciesMatches = others.filter((record) => catchRecord.speciesKey
     ? record.speciesKey === catchRecord.speciesKey
     : normalizeText(record.species ?? "") === normalizeText(catchRecord.species ?? ""));
-  const previousSpeciesBest = speciesMatches.reduce(
-    (best, record) => isMeasuredCatchWeight(record) ? Math.max(best, record.weightKg) : best,
-    Number.NEGATIVE_INFINITY,
-  );
+  const previousSpeciesBest = selectBestCatch(speciesMatches);
   const currentSeason = seasonKey(catchRecord.caughtAt);
-  const previousSeasonBest = others
+  const previousSeasonBest = selectBestCatch(others
     .filter((record) => seasonKey(record.caughtAt) === currentSeason)
-    .reduce(
-      (best, record) => isMeasuredCatchWeight(record) ? Math.max(best, record.weightKg) : best,
-      Number.NEGATIVE_INFINITY,
-    );
+  );
   const normalizedLocation = normalizeText(catchRecord.locationName ?? "");
 
   return {
-    personalBest: isMeasuredCatchWeight(catchRecord)
-      && catchRecord.weightKg >= previousPersonalBest,
-    personalBestDelta: Number.isFinite(previousPersonalBest) && isMeasuredCatchWeight(catchRecord)
-      ? catchRecord.weightKg - previousPersonalBest
-      : null,
-    speciesRecord: isMeasuredCatchWeight(catchRecord)
-      && catchRecord.weightKg >= previousSpeciesBest,
-    seasonRecord: currentSeason !== null && isMeasuredCatchWeight(catchRecord)
-      && catchRecord.weightKg >= previousSeasonBest,
+    personalBest: (hasCatchLength(catchRecord) || isMeasuredCatchWeight(catchRecord))
+      && (!previousPersonalBest || compareCatchSize(catchRecord, previousPersonalBest) >= 0),
+    personalBestDelta: previousPersonalBest && hasCatchLength(catchRecord) && hasCatchLength(previousPersonalBest)
+      ? catchRecord.lengthCm - previousPersonalBest.lengthCm
+      : previousPersonalBest && isMeasuredCatchWeight(catchRecord) && isMeasuredCatchWeight(previousPersonalBest)
+        ? catchRecord.weightKg - previousPersonalBest.weightKg : null,
+    personalBestUnit: !previousPersonalBest || (!hasCatchLength(catchRecord) && !isMeasuredCatchWeight(catchRecord))
+      ? null : hasCatchLength(catchRecord) ? "cm" : "kg",
+    speciesRecord: (hasCatchLength(catchRecord) || isMeasuredCatchWeight(catchRecord))
+      && (!previousSpeciesBest || compareCatchSize(catchRecord, previousSpeciesBest) >= 0),
+    seasonRecord: currentSeason !== null && (hasCatchLength(catchRecord) || isMeasuredCatchWeight(catchRecord))
+      && (!previousSeasonBest || compareCatchSize(catchRecord, previousSeasonBest) >= 0),
     newLocation: Boolean(normalizedLocation)
       && !others.some((record) => normalizeText(record.locationName ?? "") === normalizedLocation),
   };

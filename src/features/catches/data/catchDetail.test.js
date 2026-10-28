@@ -39,6 +39,7 @@ test("catch recognition stays honest without measurement, location, or historica
   assert.deepEqual(getCatchRecognition(current, [current]), {
     personalBest: false,
     personalBestDelta: null,
+    personalBestUnit: null,
     speciesRecord: false,
     seasonRecord: false,
     newLocation: false,
