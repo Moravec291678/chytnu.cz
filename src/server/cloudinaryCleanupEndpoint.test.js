@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createCleanupHandler, validCronAuthorization } from "./cleanup.js";
+import { createCleanupHandler, validCronAuthorization } from "../../api/cloudinary/cleanup.js";
 
 test("photo cleanup cron requires a configured secret and exact bearer value", () => {
   assert.equal(validCronAuthorization("Bearer a-very-long-test-secret", "a-very-long-test-secret"), true);
