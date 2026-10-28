@@ -12,6 +12,20 @@ import {
 
 const makeCatch = (id, extra = {}) => ({ id, speciesKey: "carp", species: "Kapr", locationName: "", photos: [], ...extra });
 
+test("unverified Catch contributes no progression XP, mastery, or achievement progress while legacy XP is preserved", () => {
+  const unverified = makeCatch("unverified", {
+    caughtAt: "2026-10-28T10:00:00.000Z", waterId: "new-water", weightKg: 12,
+    verification: { status: "unverified", reason: "missing-photo" },
+  });
+  const result = calculateProgression([unverified], [], { now: new Date("2026-10-28T12:00:00.000Z") });
+  assert.equal(result.xp, 0);
+  assert.equal(result.speciesCount, 0);
+  assert.equal(result.locationCount, 0);
+  assert.equal(result.achievements.find((item) => item.id === "first-catch").isCompleted, false);
+  assert.deepEqual(result.mastery, []);
+  assert.equal(calculateProgression([makeCatch("legacy")]).xp, 90);
+});
+
 test("XP is derived once from current records and does not change after edit, retry, sync, or restore", () => {
   const catches = [makeCatch("one")];
   const original = calculateProgression(catches).xp;

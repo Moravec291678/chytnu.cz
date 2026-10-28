@@ -12,7 +12,7 @@ async function resetDatabase() {
   });
 }
 
-test("privacy settings persist per account scope and remain private by default", async () => {
+test("privacy settings persist per account scope and use public catch visibility without an explicit preference", async () => {
   await resetDatabase();
   const first = { scopeKey: accountScopeKey("angler-a"), ownerId: "angler-a" };
   const second = { scopeKey: accountScopeKey("angler-b"), ownerId: "angler-b" };
@@ -20,6 +20,7 @@ test("privacy settings persist per account scope and remain private by default",
   await privacyRepository.put({
     profileVisibility: "public",
     defaultCatchVisibility: "public",
+    defaultCatchVisibilityExplicit: true,
     defaultPhotoVisibility: "private",
     defaultLocationPrecision: "approximate",
     privateSpotDefault: false,
@@ -40,9 +41,17 @@ test("privacy settings persist per account scope and remain private by default",
   const isolated = await privacyRepository.get(second);
   assert.equal(isolated.hasSavedSettings, false);
   assert.equal(isolated.profileVisibility, "private");
-  assert.equal(isolated.defaultCatchVisibility, "private");
+  assert.equal(isolated.defaultCatchVisibility, "public");
+  assert.equal(isolated.defaultCatchVisibilityExplicit, false);
   assert.equal(isolated.defaultLocationPrecision, "none");
   assert.equal(isolated.nearbyOptIn, false);
   assert.equal(isolated.nearbyLocationPrecision, "approximate");
   assert.equal(isolated.heatmapGranularity, "off");
+
+  const thirdOwner = "angler-c";
+  const third = { scopeKey: accountScopeKey(thirdOwner), ownerId: thirdOwner };
+  await privacyRepository.put({ defaultCatchVisibility: "private", defaultCatchVisibilityExplicit: true }, third);
+  const explicitPrivate = await privacyRepository.get(third);
+  assert.equal(explicitPrivate.defaultCatchVisibility, "private");
+  assert.equal(explicitPrivate.defaultCatchVisibilityExplicit, true);
 });

@@ -112,9 +112,14 @@
   object-fit: cover;
 }
 
-.catch-photo-manager { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 10px; min-width: 0; }
+.catch-photo-manager { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; min-width: 0; }
 .catch-photo-manager .photo-preview-item { min-width: 0; }
-.photo-preview-primary { border-color: var(--accent-green); }
+.catch-photo-manager .photo-preview-primary { grid-column: 1 / -1; border-color: var(--accent-green); }
+.catch-photo-manager .photo-preview-primary img { width: 100%; max-height: 360px; aspect-ratio: 4 / 3; }
+.catch-photo-manager .photo-preview-thumbnail img { width: 100%; height: 86px; aspect-ratio: 1; }
+.photo-primary-label { display: block; padding: 8px 10px 0; color: var(--text-primary); font-size: 12px; font-weight: 750; }
+.photo-preview-thumbnail .photo-actions { flex-direction: column; padding: 4px; gap: 3px; }
+.photo-preview-thumbnail .photo-action-button { min-height: 36px; padding: 4px; font-size: 11px; }
 .photo-actions { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px; }
 .catch-detail-photo-gallery { display: grid; gap: 8px; margin: 0 20px; min-width: 0; }
 .catch-detail-photo-gallery .photo-preview-item { margin: 0; }
@@ -123,6 +128,7 @@
 .catch-detail-photo-strip button { flex: 0 0 76px; width: 76px; height: 64px; overflow: hidden; padding: 0; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); }
 .catch-detail-photo-strip img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .catch-photo-unavailable { margin: 8px 20px; color: var(--text-secondary); font-size: 13px; }
+.catch-photo-sync-status { justify-content: flex-start; margin: 8px 20px; }
 .catch-photo-lightbox { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 16px; background: rgb(3 9 14 / 88%); }
 .catch-photo-lightbox section { width: min(100%, 900px); max-height: 94vh; }
 .catch-photo-lightbox button { display: block; margin: 0 0 8px auto; }

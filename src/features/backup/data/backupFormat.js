@@ -47,7 +47,7 @@ async function serializeCatch(record) {
 
 export async function createLocalBackupDocument({ catches, trips, privacySettings, progressionEvents, createdAt = new Date() }) {
   if (!Array.isArray(catches) || !Array.isArray(trips)) {
-    throw new Error("Místní úlovky a výpravy se nepodařilo načíst jako úplné záznamy.");
+    throw new Error("Místní úlovky a vycházky se nepodařilo načíst jako úplné záznamy.");
   }
 
   const records = {

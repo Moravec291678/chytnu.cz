@@ -127,6 +127,29 @@ function makeDatabase(initial = { catches: [], trips: [] }, { failWrites = false
   return db;
 }
 
+test("backup preserves Catch verification and capture metadata for later completion", async () => {
+  const photoHash = "a".repeat(64);
+  const photo = {
+    id: "evidence-photo", name: "catch.jpg", type: "image/jpeg", size: 5,
+    blob: new Blob([new Uint8Array([0xff, 0xd8, 0xff, 0x00, 0x00])], { type: "image/jpeg" }), contentSha256: photoHash,
+    captureMetadata: { capturedAt: time, coordinates: { latitude: 50, longitude: 14 } },
+  };
+  const catchRecord = {
+    ...makeCatch(), photos: [photo], catchDateTimeSource: "photo-exif", gpsSource: "photo-exif",
+    verification: {
+      status: "unverified", reason: "missing-trip-or-water-location", photoHash,
+      photoCaptureMetadata: photo.captureMetadata, locationSource: null, gpsAccuracyMeters: null, verifiedAt: null,
+    },
+  };
+  const document = await createLocalBackupDocument({ catches: [catchRecord], trips: [makeTrip()], createdAt: new Date(time) });
+  const restored = makeBackup(document).catches[0];
+  assert.equal(restored.verification.status, "unverified");
+  assert.equal(restored.verification.photoHash, photoHash);
+  assert.equal(restored.photos[0].captureMetadata.coordinates.latitude, 50);
+  assert.equal(restored.catchDateTimeSource, "photo-exif");
+  assert.equal(restored.gpsSource, "photo-exif");
+});
+
 test("empty and related catch/trip backups validate and retain nullable measurements", () => {
   assert.deepEqual(makeBackup(makeDocument({ catches: [], trips: [] })).catches, []);
   const backup = makeBackup();
@@ -175,7 +198,7 @@ test("multiple catches and trips retain their IDs and exact trip links after res
 
 test("privacy and immutable progression events restore transactionally into the selected guest scope", async () => {
   const privacySettings = {
-    profileVisibility: "private", defaultCatchVisibility: "private", defaultPhotoVisibility: "private",
+    profileVisibility: "private", defaultCatchVisibility: "private", defaultCatchVisibilityExplicit: true, defaultPhotoVisibility: "private",
     defaultLocationPrecision: "none", privateSpotDefault: true, nearbyOptIn: false, heatmapOptIn: false,
   };
   const progressionEvents = [{
@@ -199,7 +222,7 @@ test("invalid JSON, unsupported versions, duplicate IDs, and missing trip links 
   assert.throws(() => parseLocalBackupJson("{"), /platný JSON/);
   assert.throws(() => makeBackup({ ...makeDocument(), formatVersion: 2 }), /není podporována/);
   assert.throws(() => makeBackup(makeDocument({ catches: [makeCatch(), makeCatch()], trips: [makeTrip()] })), /duplicitní ID úlovků/);
-  assert.throws(() => makeBackup(makeDocument({ catches: [makeCatch("catch-1", "missing")], trips: [makeTrip()] })), /odkazuje na výpravu/);
+  assert.throws(() => makeBackup(makeDocument({ catches: [makeCatch("catch-1", "missing")], trips: [makeTrip()] })), /odkazuje na vycházku/);
 });
 
 test("photo bytes are decoded and size, type, or base64 corruption is rejected", async () => {
@@ -232,6 +255,18 @@ test("multi-photo backup restores each blob, crop, and the primary photo", () =>
   assert.equal(restored.catches[0].primaryPhotoId, "photo-2");
   assert.equal(restored.catches[0].photos[1].zoom, 1.4);
   assert.equal(restored.catches[0].photos[1].blob.size, photoSize);
+});
+
+test("backup restore preserves a legacy catch with more than four photos", () => {
+  const photoData = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jCioAAAAASUVORK5CYII=";
+  const photoSize = atob(photoData).length;
+  const photos = Array.from({ length: 7 }, (_, index) => ({
+    id: `legacy-photo-${index}`, name: `photo-${index}.png`, type: "image/png", blobSize: photoSize,
+    dataBase64: photoData, focalX: 0.5, focalY: 0.5, zoom: 1,
+  }));
+  const restored = makeBackup(makeDocument({ catches: [{ ...makeCatch(), photos, primaryPhotoId: "legacy-photo-5" }] }));
+  assert.equal(restored.catches[0].photos.length, 7);
+  assert.equal(restored.catches[0].primaryPhotoId, "legacy-photo-5");
 });
 
 test("same IDs with equal or different content are summarized separately", async () => {
@@ -305,7 +340,7 @@ test("preview and invalid validation do not modify the local stores", async () =
   const before = db.snapshot();
   const current = { catches: before.catches, trips: before.trips };
   await summarizeLocalBackupRestore(makeBackup(), current);
-  assert.throws(() => parseLocalBackupDocument(makeDocument({ catches: [makeCatch("bad-link", "missing")], trips: [] })), /odkazuje na výpravu/);
+  assert.throws(() => parseLocalBackupDocument(makeDocument({ catches: [makeCatch("bad-link", "missing")], trips: [] })), /odkazuje na vycházku/);
   assert.deepEqual(db.snapshot(), before);
 });
 

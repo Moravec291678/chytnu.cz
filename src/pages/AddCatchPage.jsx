@@ -14,7 +14,7 @@ import { resolveCatchTripId } from "../features/catches/data/catchTripDefault.js
 import { useTrips } from "../features/trips/context/useTrips";
 import { getActiveTrip } from "../features/trips/data/tripModel.js";
 import { formatCoordinates, parseCoordinateText } from "../features/catches/data/coordinates";
-import { normalizeCatchPrivacy } from "../features/privacy/data/privacyModel";
+import { createCatchPrivacyFromDefaults, DEFAULT_PRIVACY_SETTINGS } from "../features/privacy/data/privacyModel.js";
 import { privacyRepository } from "../features/privacy/data/privacyRepository.js";
 import { readPreferences } from "../features/preferences/data/preferences.js";
 import { useDataScope } from "../features/auth/context/dataScopeContextValue.js";
@@ -22,6 +22,7 @@ import { waterRepository } from "../features/waters/data/waterRepository.js";
 import { findNearestSavedWater } from "../features/waters/data/nearbyWaterMatch.js";
 import { fetchCatchWeather, replaceAutomaticConditions } from "../shared/data/catchWeather.js";
 import { calculateMoonPhase } from "../shared/utils/moonPhase.js";
+import { getLocationAdapter } from "../platform/location/index.js";
 import {
   filterSpeciesCatalog,
   getPrimarySpeciesCategoryKey,
@@ -39,6 +40,10 @@ import { photoFrameStyle } from "../features/catches/data/photoFraming.js";
 import { MAX_PHOTOS_PER_CATCH, normalizePrimaryPhotoId } from "../features/catches/data/catchPhotos.js";
 import { preparePhotoForStorageAndUpload } from "../features/catches/data/photoInput.js";
 import { recordPhotoUploadTrace } from "../features/catches/data/photoUploadTrace.js";
+import { catchDraftRepository } from "../features/catches/data/catchDraftRepository.js";
+import { applySelectedWaterToCatchDraft } from "../features/catches/data/catchDraftModel.js";
+import { readPhotoCaptureMetadata } from "../features/catches/data/photoCaptureMetadata.js";
+import { evaluateCatchVerification, getCatchPhotoHash } from "../features/catches/data/catchVerification.js";
 
 const MOON_PHASES = [
   ["new", "Nov"],
@@ -51,8 +56,7 @@ const MOON_PHASES = [
   ["waningCrescent", "Ubývající srpek"],
 ];
 
-function localDateTime() {
-  const now = new Date();
+function localDateTime(now = new Date()) {
   const pad = (value) => String(value).padStart(2, "0");
   return { date: `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`, time: `${pad(now.getHours())}:${pad(now.getMinutes())}` };
 }
@@ -76,9 +80,16 @@ function AddCatchPage() {
   const { state, createCatch, updateCatch } = useCatches();
   const { state: tripState } = useTrips();
   const scope = useDataScope();
-  const preferenceAppliedScopeRef = useRef(null);
   const privacyTouchedScopeRef = useRef(null);
+  const gpsManuallyEditedRef = useRef(false);
+  const dateTimeManuallyEditedRef = useRef(false);
+  const automaticLocationAttemptedScopeRef = useRef(null);
   const privacyDefaultsAppliedScopeRef = useRef(null);
+  const [privacyDefaultsScopeKey, setPrivacyDefaultsScopeKey] = useState("");
+  const draftRestoredScopeRef = useRef(null);
+  const tripManuallyEditedRef = useRef(false);
+  const [draftReadyScopeKey, setDraftReadyScopeKey] = useState("");
+  const [draftError, setDraftError] = useState("");
   const [availableWaters, setAvailableWaters] = useState([]);
   const [watersError, setWatersError] = useState("");
   const existingCatch = id ? state.catches.find((item) => item.id === id) : null;
@@ -138,6 +149,7 @@ function AddCatchPage() {
           sourceMimeType: selectedPhoto.type, sourceBytes: selectedPhoto.size,
           originalExtension: selectedPhoto.name.split(".").pop().toLowerCase(),
         });
+        const captureMetadata = await readPhotoCaptureMetadata(selectedPhoto);
         const preparedPhoto = await preparePhotoForStorageAndUpload(selectedPhoto);
         recordPhotoUploadTrace(photoId, "blob_created", {
           preparedMimeType: preparedPhoto.type, preparedBytes: preparedPhoto.size, conversion: "jpeg",
@@ -151,11 +163,22 @@ function AddCatchPage() {
         additions.push({ id: photoId, blob: optimizedPhoto,
           name: selectedPhoto.name.replace(/\.[^.]+$/, ".jpg"),
           type: preparedPhoto.type, size: preparedPhoto.size, contentSha256: preparedPhoto.sha256,
+          ...(captureMetadata ? { captureMetadata } : {}),
           uploadReady: true,
           previewUrl });
       }
       const nextPhotos = [...catchData.photos, ...additions];
       setPhotos(nextPhotos);
+      const photoMetadata = additions.find((photo) => photo.captureMetadata)?.captureMetadata;
+      if (photoMetadata?.capturedAt && !dateTimeManuallyEditedRef.current) {
+        const captured = localDateTime(new Date(photoMetadata.capturedAt));
+        setCatchData((previous) => dateTimeManuallyEditedRef.current ? previous : ({ ...previous, catchDate: captured.date, catchTime: captured.time, catchDateTimeSource: "photo-exif" }));
+      }
+      if (photoMetadata?.coordinates && !gpsManuallyEditedRef.current) {
+        setCatchData((previous) => previous.coordinates || previous.gpsLocation
+          ? previous
+          : { ...previous, coordinates: photoMetadata.coordinates, gpsLocation: formatCoordinates(photoMetadata.coordinates), gpsSource: "photo-exif" });
+      }
       if (!catchData.primaryPhotoId && nextPhotos[0]) updateCatchData("primaryPhotoId", nextPhotos[0].id);
       if (selectedPhotos.length > room) setFormError(`Přidáno ${room} fotografií. Limit je ${MAX_PHOTOS_PER_CATCH}.`);
       else setFormError("");
@@ -170,7 +193,9 @@ function AddCatchPage() {
     }
   };
 
-  const [catchData, setCatchData] = useState({
+  const [catchData, setCatchData] = useState(() => {
+    const now = localDateTime();
+    return ({
     weightKg: "",
     weightSource: "estimated",
     lengthCm: "",
@@ -182,11 +207,14 @@ function AddCatchPage() {
     waterId: "",
     waterNumber: "",
 
-    catchDate: localDateTime().date,
-    catchTime: localDateTime().time,
+    catchDate: now.date,
+    catchTime: now.time,
+    catchDateTimeSource: "default",
 
     gpsLocation: "",
     coordinates: null,
+    locationEvidence: null,
+    gpsSource: "default",
 
     depthM: "",
     bottomType: "",
@@ -199,11 +227,14 @@ function AddCatchPage() {
     fishingMethod: "",
     photos: [],
     baits: [], notes: "", isFavorite: false, tripId: location.state?.tripId ?? "",
-    privacy: normalizeCatchPrivacy(null),
+    privacy: createCatchPrivacyFromDefaults(DEFAULT_PRIVACY_SETTINGS),
+    });
   });
+  const draftReady = Boolean(id) || (scope.status === "ready" && draftReadyScopeKey === scope.scopeKey);
+  const privacyDefaultsReady = Boolean(id) || (scope.status === "ready" && privacyDefaultsScopeKey === scope.scopeKey);
   const activeTrip = getActiveTrip(tripState.trips);
   useEffect(() => {
-    if (id || tripState.loading) return;
+    if (id || tripState.loading || tripManuallyEditedRef.current) return;
     const nextTripId = resolveCatchTripId({
       isEditing: false,
       currentTripId: catchData.tripId,
@@ -227,35 +258,74 @@ function AddCatchPage() {
     privacyDefaultsAppliedScopeRef.current = scope.scopeKey;
     let active = true;
     privacyRepository.get(scope).then((defaults) => {
-      if (!active || privacyTouchedScopeRef.current === scope.scopeKey) return;
-      setCatchData((current) => ({
-        ...current,
-        privacy: normalizeCatchPrivacy({
-          visibility: defaults.defaultCatchVisibility,
-          photoVisibility: defaults.defaultPhotoVisibility,
-          privateSpot: defaults.privateSpotDefault,
-          locationPrecision: defaults.defaultLocationPrecision,
-          nearbyEligible: false,
-          heatmapEligible: false,
-        }),
-      }));
+      if (!active) return;
+      if (privacyTouchedScopeRef.current !== scope.scopeKey && draftRestoredScopeRef.current !== scope.scopeKey) {
+        setCatchData((current) => ({ ...current, privacy: createCatchPrivacyFromDefaults(defaults) }));
+      }
+      setPrivacyDefaultsScopeKey(scope.scopeKey);
     }).catch(() => {
-      // Private form defaults remain in place if saved preferences cannot be read.
+      // The public system default remains in place when profile preferences cannot be read.
+      if (active) setPrivacyDefaultsScopeKey(scope.scopeKey);
     });
     return () => { active = false; };
   }, [id, scope]);
+
   useEffect(() => {
-    if (id || !location.state?.preselectedWaterId || !availableWaters.length) return undefined;
+    if (id || !draftReady || scope.status !== "ready" || !scope.scopeKey
+      || automaticLocationAttemptedScopeRef.current === scope.scopeKey) return undefined;
+    automaticLocationAttemptedScopeRef.current = scope.scopeKey;
+    const locationAdapter = getLocationAdapter();
+    if (!locationAdapter.supported) return undefined;
+    locationAdapter.getCurrentPosition({ enableHighAccuracy: false, timeout: 8000, maximumAge: 0 }).then((position) => {
+      const coordinates = { latitude: position.coords.latitude, longitude: position.coords.longitude };
+      if (gpsManuallyEditedRef.current) return;
+      setCatchData((previous) => {
+        if (previous.coordinates || previous.gpsLocation) return previous;
+        return {
+          ...previous,
+          coordinates,
+          gpsLocation: formatCoordinates(coordinates),
+          gpsSource: "live-gps",
+          locationEvidence: {
+            source: "live-gps",
+            capturedAt: new Date(position.timestamp || Date.now()).toISOString(),
+            accuracyMeters: position.coords.accuracy,
+            coordinates,
+          },
+        };
+      });
+    }).catch(() => {
+      // Location is an optional convenience; permission or provider failures never block Add Catch.
+    });
+    return undefined;
+  }, [draftReady, id, scope]);
+
+  useEffect(() => {
+    if ((id && catchData.gpsSource !== "photo-exif") || !catchData.coordinates || !availableWaters.length || manualWaterChoice) return;
+    const nearest = findNearestSavedWater(catchData.coordinates, availableWaters);
+    if (!nearest) return;
+    let active = true;
+    Promise.resolve().then(() => {
+      if (!active) return;
+      setCatchData((previous) => {
+        if (previous.waterId || previous.locationName || manualWaterChoice) return previous;
+        return applySelectedWaterToCatchDraft(previous, nearest.water);
+      });
+    });
+    return () => { active = false; };
+  }, [availableWaters, catchData.coordinates, catchData.coordinates?.latitude, catchData.coordinates?.longitude, catchData.gpsSource, catchData.locationName, catchData.waterId, id, manualWaterChoice]);
+  useEffect(() => {
+    if (id || !draftReady || !location.state?.preselectedWaterId || !availableWaters.length) return undefined;
     const selectedWater = availableWaters.find((water) => water.id === location.state.preselectedWaterId);
     if (!selectedWater) return undefined;
     let active = true;
     Promise.resolve().then(() => {
       if (!active) return;
-      setCatchData((current) => ({ ...current, waterId: selectedWater.id, locationName: selectedWater.name }));
+      setCatchData((current) => applySelectedWaterToCatchDraft(current, selectedWater));
       setManualWaterChoice(true);
     });
     return () => { active = false; };
-  }, [availableWaters, id, location.state]);
+  }, [availableWaters, draftReady, id, location.state]);
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
   const [gpsLoading, setGpsLoading] = useState(false);
@@ -267,18 +337,80 @@ function AddCatchPage() {
   const [loadedId, setLoadedId] = useState("");
 
   useEffect(() => {
-    if (id || scope.status !== "ready" || preferenceAppliedScopeRef.current === scope.scopeKey) return;
-    preferenceAppliedScopeRef.current = scope.scopeKey;
-    const detailed = readPreferences(globalThis.localStorage, scope.scopeKey).detailMode === "detailed";
-    queueMicrotask(() => {
+    if (id) return undefined;
+    if (scope.status !== "ready" || !scope.scopeKey) return undefined;
+    let active = true;
+    const scopeKey = scope.scopeKey;
+    const detailed = readPreferences(globalThis.localStorage, scopeKey).detailMode === "detailed";
+    catchDraftRepository.get(scope).then((draft) => {
+      if (!active) return;
+      setDraftError("");
+      if (draft?.data) {
+        draftRestoredScopeRef.current = scopeKey;
+        const values = {
+          ...draft.data,
+          photos: (draft.data.photos ?? []).map((photo) => {
+            if (!(photo.blob instanceof Blob)) return { ...photo, previewUrl: "" };
+            const previewUrl = URL.createObjectURL(photo.blob);
+            photoUrlsRef.current.add(previewUrl);
+            return { ...photo, previewUrl };
+          }),
+        };
+        manualConditionFieldsRef.current = new Set(Object.entries(values.conditionSources ?? {})
+          .filter(([, source]) => source === "manual").map(([field]) => field));
+        for (const [field, value] of Object.entries(values.conditions ?? {})) {
+          if (value !== "" && value !== null && value !== undefined && values.conditionSources?.[field] !== "auto") {
+            manualConditionFieldsRef.current.add(field);
+          }
+        }
+        automaticConditionsRef.current = Object.fromEntries(Object.entries(values.conditions ?? {})
+          .filter(([field, value]) => value !== "" && value !== null && value !== undefined && values.conditionSources?.[field] === "auto"));
+        setCatchData(values);
+        tripManuallyEditedRef.current = Boolean(draft.uiState?.tripManuallyEdited);
+        gpsManuallyEditedRef.current = Boolean(draft.uiState?.gpsManuallyEdited || values.gpsSource === "manual" || values.gpsSource === "live-gps");
+        dateTimeManuallyEditedRef.current = Boolean(draft.uiState?.dateTimeManuallyEdited || values.catchDateTimeSource === "manual");
+        setManualWaterChoice(Boolean(draft.uiState?.manualWaterChoice || values.waterId || values.locationName));
+        setWaterSuggestionDismissed(Boolean(draft.uiState?.waterSuggestionDismissed));
+        setDisplayFull(draft.uiState?.displayFull ?? detailed);
+        setShowSpeciesPicker(draft.uiState?.showSpeciesPicker ?? detailed);
+        setSelectedSpeciesCategoryKey(getPrimarySpeciesCategoryKey(DEFAULT_SPECIES.find((species) => species.key === values.speciesKey)));
+      } else {
+        draftRestoredScopeRef.current = null;
+        setCatchData((current) => ({
+          ...current,
+          resultKey: detailed && current.resultKey === "released" ? "unspecified" : !detailed && current.resultKey === "unspecified" ? "released" : current.resultKey,
+        }));
+      }
+      setDraftReadyScopeKey(scopeKey);
+    }).catch((error) => {
+      if (!active) return;
+      setDraftError(error.message || "Rozepsaný úlovek se nepodařilo načíst.");
       setDisplayFull(detailed);
       setShowSpeciesPicker(detailed);
       setCatchData((current) => ({
         ...current,
         resultKey: detailed && current.resultKey === "released" ? "unspecified" : !detailed && current.resultKey === "unspecified" ? "released" : current.resultKey,
       }));
+      setDraftReadyScopeKey(scopeKey);
     });
-  }, [id, scope.scopeKey, scope.status]);
+    return () => { active = false; };
+  }, [id, scope]);
+
+  useEffect(() => {
+    if (id || !draftReady || scope.status !== "ready") return undefined;
+    catchDraftRepository.save(catchData, {
+      displayFull,
+      showSpeciesPicker,
+      manualWaterChoice,
+      tripManuallyEdited: tripManuallyEditedRef.current,
+      gpsManuallyEdited: gpsManuallyEditedRef.current,
+      dateTimeManuallyEdited: dateTimeManuallyEditedRef.current,
+      waterSuggestionDismissed,
+    }, scope).then(() => setDraftError("")).catch((error) => {
+      setDraftError(error.message || "Rozepsaný úlovek se nepodařilo uložit.");
+    });
+    return undefined;
+  }, [catchData, displayFull, draftReady, id, manualWaterChoice, scope, showSpeciesPicker, waterSuggestionDismissed]);
 
   useEffect(() => {
     manualConditionFieldsRef.current = new Set();
@@ -304,6 +436,8 @@ function AddCatchPage() {
       }
       automaticConditionsRef.current = Object.fromEntries(Object.entries(values.conditions ?? {}).filter(([field, value]) => value !== "" && value !== null && value !== undefined && values.conditionSources?.[field] === "auto"));
       setCatchData(values);
+      gpsManuallyEditedRef.current = Boolean(values.gpsSource === "manual" || values.gpsSource === "live-gps");
+      dateTimeManuallyEditedRef.current = values.catchDateTimeSource === "manual";
       setManualWaterChoice(Boolean(values.waterId || values.locationName));
       setDisplayFull(true);
       setShowSpeciesPicker(true);
@@ -314,7 +448,6 @@ function AddCatchPage() {
   }, [existingCatch, id, loadedId]);
 
   useEffect(() => {
-    if (!displayFull) return undefined;
     const controller = new AbortController();
     let timer;
     const coordinates = catchData.coordinates;
@@ -341,13 +474,15 @@ function AddCatchPage() {
     });
 
     if (!coordinates || !Number.isFinite(coordinates.latitude) || !Number.isFinite(coordinates.longitude)) {
-      setWeatherStatus({ state: "idle", message: "" });
+      queueMicrotask(() => {
+        if (!controller.signal.aborted) setWeatherStatus({ state: "idle", message: "" });
+      });
       return () => controller.abort();
     }
 
-    setWeatherStatus({ state: "loading", message: "Načítám počasí pro místo a čas úlovku…" });
     timer = setTimeout(async () => {
       try {
+        setWeatherStatus({ state: "loading", message: "Načítám počasí pro místo a čas úlovku…" });
         const values = await fetchCatchWeather(coordinates.latitude, coordinates.longitude, catchData.catchDate, catchData.catchTime, { signal: controller.signal });
         setCatchData((previous) => {
           const conditions = replaceAutomaticConditions(previous.conditions, {}, values, manualConditionFieldsRef.current);
@@ -367,7 +502,28 @@ function AddCatchPage() {
       }
     }, 500);
     return () => { clearTimeout(timer); controller.abort(); };
-  }, [catchData.coordinates, catchData.coordinates?.latitude, catchData.coordinates?.longitude, catchData.catchDate, catchData.catchTime, displayFull]);
+  }, [catchData.coordinates, catchData.coordinates?.latitude, catchData.coordinates?.longitude, catchData.catchDate, catchData.catchTime]);
+
+  const persistDraft = (data = catchData) => catchDraftRepository.save(data, {
+    displayFull,
+    showSpeciesPicker,
+    manualWaterChoice,
+      tripManuallyEdited: tripManuallyEditedRef.current,
+      gpsManuallyEdited: gpsManuallyEditedRef.current,
+    dateTimeManuallyEdited: dateTimeManuallyEditedRef.current,
+    waterSuggestionDismissed,
+  }, scope);
+
+  const handleAddWater = async (event) => {
+    event.preventDefault();
+    setDraftError("");
+    try {
+      await persistDraft();
+      navigate("/waters/new?returnToAddCatch=1", { state: { returnToAddCatch: true } });
+    } catch (error) {
+      setDraftError(error.message || "Rozepsaný úlovek se nepodařilo uložit. Zkus přechod na revíry znovu.");
+    }
+  };
 
   const handleSave = async () => {
     if (savingRef.current) return;
@@ -385,10 +541,31 @@ function AddCatchPage() {
     setSaving(true);
     setFormError("");
     try {
-      const record = createCatchRecord(catchData, selected, DEFAULT_METHODS, existingCatch, DEFAULT_BAITS);
+      let verification = existingCatch?.verification;
+      if (!existingCatch || existingCatch.verification?.status === "unverified") {
+        const usedPhotoHashes = new Set(state.catches
+          .filter((item) => item.id !== existingCatch?.id)
+          .flatMap((item) => [item.verification?.photoHash, ...(item.photos ?? []).map(getCatchPhotoHash)])
+          .filter(Boolean));
+        verification = evaluateCatchVerification({
+          photos: catchData.photos,
+          locationEvidence: catchData.locationEvidence,
+          tripId: catchData.tripId,
+          activeTripId: activeTrip?.id,
+          water: availableWaters.find((item) => item.id === catchData.waterId) ?? null,
+          caughtAt: new Date(`${catchData.catchDate}T${catchData.catchTime || "12:00"}`).toISOString(),
+          now: new Date(),
+          usedPhotoHashes,
+          previousPhotoEvidence: existingCatch?.verification,
+        });
+      }
+      const record = createCatchRecord({ ...catchData, verification }, selected, DEFAULT_METHODS, existingCatch, DEFAULT_BAITS);
       let progressionEventIds = [];
       if (existingCatch) await updateCatch(record);
-      else progressionEventIds = (await createCatch(record))?.progressionEventIds ?? [];
+      else {
+        progressionEventIds = (await createCatch(record))?.progressionEventIds ?? [];
+        await catchDraftRepository.remove(scope).catch(() => {});
+      }
       navigate(existingCatch ? `/catch/${record.id}` : `/catch/${record.id}/reward`, {
         replace: true,
         state: existingCatch ? { saved: true } : { rewardEventIds: progressionEventIds },
@@ -421,7 +598,15 @@ function AddCatchPage() {
   const updateCatchData = (field, value) => {
     setFormError("");
     if (field === "privacy") privacyTouchedScopeRef.current = scope.scopeKey;
-    setCatchData((previous) => updateCatchFormField(previous, field, value));
+    if (field === "waterId" || field === "locationName") setManualWaterChoice(true);
+    if (field === "tripId") tripManuallyEditedRef.current = true;
+    if (field === "catchDate" || field === "catchTime") dateTimeManuallyEditedRef.current = true;
+    if (field === "gpsLocation") gpsManuallyEditedRef.current = true;
+    setCatchData((previous) => ({
+      ...updateCatchFormField(previous, field, value),
+      ...((field === "catchDate" || field === "catchTime") ? { catchDateTimeSource: "manual" } : {}),
+      ...(field === "gpsLocation" ? { gpsSource: "manual", locationEvidence: null } : {}),
+    }));
   };
 
   const togglePinnedSpecies = (speciesId) => {
@@ -471,32 +656,46 @@ function AddCatchPage() {
   };
 
   const updateGpsLocation = (value, coordinates = null) => {
+    gpsManuallyEditedRef.current = true;
     setFormError("");
     setGpsMessage("");
     const parsedCoordinates = coordinates ?? parseCoordinateText(value);
-    setCatchData((previous) => ({ ...previous, gpsLocation: value, coordinates: parsedCoordinates }));
+    setCatchData((previous) => ({ ...previous, gpsLocation: value, coordinates: parsedCoordinates, gpsSource: "manual", locationEvidence: null }));
   };
 
   const useCurrentLocation = () => {
     if (gpsLoading) return;
-    if (!navigator.geolocation) {
+    const locationAdapter = getLocationAdapter();
+    if (!locationAdapter.supported) {
       setFormError("Tento prohlížeč polohu neposkytuje. Souřadnice můžeš zadat ručně.");
       return;
     }
     setGpsLoading(true);
     setFormError("");
     setGpsMessage("");
-    navigator.geolocation.getCurrentPosition((position) => {
+    locationAdapter.getCurrentPosition({ enableHighAccuracy: false, timeout: 10000, maximumAge: 0 }).then((position) => {
       const coordinates = { latitude: position.coords.latitude, longitude: position.coords.longitude };
-      updateGpsLocation(formatCoordinates(coordinates), coordinates);
+      gpsManuallyEditedRef.current = true;
+      setCatchData((previous) => ({
+        ...previous,
+        gpsLocation: formatCoordinates(coordinates),
+        coordinates,
+        gpsSource: "live-gps",
+        locationEvidence: {
+          source: "live-gps",
+          capturedAt: new Date(position.timestamp || Date.now()).toISOString(),
+          accuracyMeters: position.coords.accuracy,
+          coordinates,
+        },
+      }));
       setGpsMessage("Aktuální poloha byla vložena. Úlovek ji uloží až po potvrzení formuláře.");
       setGpsLoading(false);
-    }, (locationError) => {
+    }).catch((locationError) => {
       setFormError(locationError.code === 1
         ? "Poloha nebyla povolena. Úlovek můžeš uložit bez ní nebo souřadnice zadat ručně."
         : "Polohu se nepodařilo zjistit. Úlovek můžeš uložit bez ní nebo souřadnice zadat ručně.");
       setGpsLoading(false);
-    }, { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 });
+    });
   };
   const setPhotos = (photos) => {
     updateCatchData("photos", photos);
@@ -561,19 +760,23 @@ function AddCatchPage() {
           />
 
           {catchData.photos.length > 0 && <div className="catch-photo-manager">
-            {catchData.photos.map((item) => <article className={`photo-preview-item${item.id === catchData.primaryPhotoId ? " photo-preview-primary" : ""}`} key={item.id}>
-              {item.previewUrl ? <img src={item.previewUrl} alt={`Fotografie úlovku – ${item.name}`} style={photoFrameStyle(item)} /> : <p>Fotografie je dostupná pouze po načtení místního souboru.</p>}
-              {item.uploadReady === false && <p className="catch-form-hint" role="status">Původní soubor je uložený v tomto zařízení, ale nepodařilo se ho připravit pro synchronizaci. Zkus fotografii převést na JPG, PNG nebo WebP a nahradit ji.</p>}
-              <div className="photo-actions">
-                <button type="button" className="photo-action-button" aria-pressed={item.id === catchData.primaryPhotoId} onClick={() => updateCatchData("primaryPhotoId", item.id)}>{item.id === catchData.primaryPhotoId ? "★ Hlavní" : "Nastavit hlavní"}</button>
-                {item.previewUrl && <button type="button" className="photo-action-button" onClick={() => { setEditingPhotoId(item.id); setPhotoEditorOpen(true); }}>Upravit výřez</button>}
-                <button type="button" className="photo-action-button" onClick={() => removePhoto(item.id)}>Odebrat</button>
-              </div>
-            </article>)}
+            {[...catchData.photos].sort((left, right) => Number(right.id === catchData.primaryPhotoId) - Number(left.id === catchData.primaryPhotoId)).map((item) => {
+              const isPrimary = item.id === catchData.primaryPhotoId;
+              return <article className={`photo-preview-item${isPrimary ? " photo-preview-primary" : " photo-preview-thumbnail"}`} key={item.id}>
+                {isPrimary && <span className="photo-primary-label">Hlavní fotografie</span>}
+                {item.previewUrl ? <img src={item.previewUrl} alt={`Fotografie úlovku – ${item.name}`} style={photoFrameStyle(item)} /> : <p>Fotografie je dostupná pouze po načtení místního souboru.</p>}
+                {item.uploadReady === false && <p className="catch-form-hint" role="status">Původní soubor je uložený v tomto zařízení, ale nepodařilo se ho připravit pro synchronizaci. Zkus fotografii převést na JPG, PNG nebo WebP a nahradit ji.</p>}
+                <div className="photo-actions">
+                  {!isPrimary && <button type="button" className="photo-action-button" aria-pressed={false} onClick={() => updateCatchData("primaryPhotoId", item.id)}>Nastavit hlavní</button>}
+                  {item.previewUrl && <button type="button" className="photo-action-button" onClick={() => { setEditingPhotoId(item.id); setPhotoEditorOpen(true); }}>Upravit výřez</button>}
+                  <button type="button" className="photo-action-button" onClick={() => removePhoto(item.id)}>Odebrat</button>
+                </div>
+              </article>;
+            })}
           </div>}
           {catchData.photos.length < MAX_PHOTOS_PER_CATCH && <button type="button" onClick={handleAddPhoto} className="photo-upload-button">
               <span className="photo-upload-icon" aria-hidden="true">⌑</span>
-              <span>{catchData.photos.length ? "Přidat fotografie" : `Přidat fotografie${existingCatch ? "" : " · +5 XP"}`}</span>
+              <span>{catchData.photos.length ? "Přidat fotografie" : "Přidat fotografie · ověření úlovku"}</span>
             </button>}
         </section>
         {photoEditorOpen && editingPhoto?.previewUrl && <PhotoFrameEditor photo={editingPhoto} onSave={savePhotoFrame} onCancel={() => { setPhotoEditorOpen(false); setEditingPhotoId(null); }} />}
@@ -797,7 +1000,7 @@ function AddCatchPage() {
                 {availableWaters.map((water) => <option value={water.id} key={water.id}>{water.name}{water.waterNumber ? ` · ${water.waterNumber}` : ""}</option>)}
               </select>
               {watersError && <span className="field-error" role="alert">{watersError}</span>}
-              {!availableWaters.length && !watersError && <span><Link to="/waters/new">Přidat revír →</Link></span>}
+              {!watersError && <span><Link to="/waters/new" onClick={handleAddWater}>＋ Přidat revír</Link></span>}
             </label>
             <label className="input-group input-group-full">
               <span>Revír / lokalita</span>
@@ -947,15 +1150,15 @@ function AddCatchPage() {
         )}
 
         {displayFull && <section className="add-catch-section">
-          <h2>Výprava</h2>
+          <h2>Vycházka</h2>
           <label className="input-group">
-            <span>Zařadit úlovek k výpravě</span>
+            <span>Zařadit úlovek k vycházce</span>
             <select value={catchData.tripId} onChange={(event) => updateCatchData("tripId", event.target.value)} disabled={tripState.loading}>
-              <option value="">Bez výpravy</option>
+              <option value="">Bez vycházky</option>
               {tripState.trips.map((trip) => <option key={trip.id} value={trip.id}>{trip.title}{trip.endedAt ? " · dokončená" : " · aktivní"}</option>)}
             </select>
           </label>
-          {tripState.error && <p role="status">Výpravy se nepodařilo načíst; úlovek lze uložit samostatně.</p>}
+          {tripState.error && <p role="status">Vycházky se nepodařilo načíst; úlovek lze uložit samostatně.</p>}
         </section>}
 
         {displayFull && <section className="add-catch-section">
@@ -1093,9 +1296,10 @@ function AddCatchPage() {
         )}
 
         {formError && <p role="alert" className="catch-form-error">{formError}</p>}
+        {draftError && <p role="alert" className="catch-form-error">{draftError}</p>}
         {state.error && <p role="alert" className="catch-form-error">{state.error}</p>}
         {id && state.loading && <p className="loading-state" role="status">Načítám úlovek…</p>}
-        <button type="button" className="save-catch-button" onClick={handleSave} disabled={saving || photoProcessing || (id && !existingCatch)}>{photoProcessing ? "Připravuji fotografii…" : saving ? "Ukládám…" : id ? "Uložit změny" : "Uložit úlovek"}</button>
+        <button type="button" className="save-catch-button" onClick={handleSave} disabled={saving || photoProcessing || (id && !existingCatch) || (!id && (!draftReady || !privacyDefaultsReady))}>{photoProcessing ? "Připravuji fotografii…" : saving ? "Ukládám…" : id ? "Uložit změny" : "Uložit úlovek"}</button>
       </div>
     </Layout>
   );

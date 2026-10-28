@@ -6,7 +6,8 @@ export const HEATMAP_GRANULARITY = Object.freeze({ CITY: "city", AREA: "area", O
 
 export const DEFAULT_PRIVACY_SETTINGS = Object.freeze({
   profileVisibility: "private",
-  defaultCatchVisibility: CATCH_VISIBILITY.PRIVATE,
+  defaultCatchVisibility: CATCH_VISIBILITY.PUBLIC,
+  defaultCatchVisibilityExplicit: false,
   defaultPhotoVisibility: CATCH_VISIBILITY.PRIVATE,
   defaultLocationPrecision: LOCATION_PRECISION.NONE,
   privateSpotDefault: true,
@@ -34,6 +35,15 @@ export function normalizeCatchPrivacy(value) {
   };
 }
 
+export function createCatchPrivacyFromDefaults(settings = DEFAULT_PRIVACY_SETTINGS) {
+  return normalizeCatchPrivacy({
+    visibility: settings?.defaultCatchVisibility ?? DEFAULT_PRIVACY_SETTINGS.defaultCatchVisibility,
+    photoVisibility: settings?.defaultPhotoVisibility ?? DEFAULT_PRIVACY_SETTINGS.defaultPhotoVisibility,
+    privateSpot: settings?.privateSpotDefault ?? DEFAULT_PRIVACY_SETTINGS.privateSpotDefault,
+    locationPrecision: settings?.defaultLocationPrecision ?? DEFAULT_PRIVACY_SETTINGS.defaultLocationPrecision,
+  });
+}
+
 export function normalizePrivacySettings(value) {
   const privateSpotDefault = value?.privateSpotDefault !== false;
   const legacyPrecision = value?.showExactLocation === true
@@ -45,11 +55,13 @@ export function normalizePrivacySettings(value) {
   const heatmapGranularity = Object.values(HEATMAP_GRANULARITY).includes(value?.heatmapGranularity)
     ? value.heatmapGranularity
     : value?.heatmapOptIn === true ? HEATMAP_GRANULARITY.AREA : HEATMAP_GRANULARITY.OFF;
+  const defaultCatchVisibilityExplicit = value?.defaultCatchVisibilityExplicit === true;
   return {
     profileVisibility: value?.profileVisibility === "public" ? "public" : "private",
-    defaultCatchVisibility: value?.defaultCatchVisibility === CATCH_VISIBILITY.PUBLIC
-      ? CATCH_VISIBILITY.PUBLIC
-      : CATCH_VISIBILITY.PRIVATE,
+    defaultCatchVisibility: defaultCatchVisibilityExplicit && value?.defaultCatchVisibility === CATCH_VISIBILITY.PRIVATE
+      ? CATCH_VISIBILITY.PRIVATE
+      : CATCH_VISIBILITY.PUBLIC,
+    defaultCatchVisibilityExplicit,
     defaultPhotoVisibility: value?.defaultPhotoVisibility === CATCH_VISIBILITY.PUBLIC
       ? CATCH_VISIBILITY.PUBLIC
       : CATCH_VISIBILITY.PRIVATE,

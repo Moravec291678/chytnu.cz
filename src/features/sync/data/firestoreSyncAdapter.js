@@ -17,6 +17,7 @@ import { firebaseAuth, getLocalFirebaseApp } from "../../auth/data/firebaseAuth.
 import { getBackendConfiguration } from "../../auth/data/backendConfig.js";
 import { SyncPortError } from "./syncPort.js";
 import { normalizeCatchPrivacy } from "../../privacy/data/privacyModel.js";
+import { normalizeCatchVerification, normalizeLocationEvidence } from "../../catches/data/catchVerification.js";
 
 const EMULATOR_HOST = "127.0.0.1";
 const EMULATOR_PORT = 8080;
@@ -161,6 +162,8 @@ export function toRemoteRecord(entityType, record, ownerId) {
   return {
     ...common,
     caughtAt: requireValue(record.caughtAt, record.createdAt),
+    catchDateTimeSource: ["manual", "photo-exif"].includes(record.catchDateTimeSource) ? record.catchDateTimeSource : "default",
+    gpsSource: ["manual", "photo-exif", "live-gps"].includes(record.gpsSource) ? record.gpsSource : "default",
     species: requireValue(record.species, ""),
     speciesKey: requireValue(record.speciesKey, ""),
     speciesLatin: requireValue(record.speciesLatin, null),
@@ -174,6 +177,7 @@ export function toRemoteRecord(entityType, record, ownerId) {
     waterId: requireValue(record.waterId, null),
     gpsLocation: requireValue(record.gpsLocation, ""),
     coordinates: requireValue(record.coordinates, null),
+    ...(record.locationEvidence ? { locationEvidence: normalizeLocationEvidence(record.locationEvidence) } : {}),
     waterDepthM: requireValue(record.waterDepthM, null),
     bottomType: requireValue(record.bottomType, null),
     conditions: serializeConditions(record.conditions),
@@ -188,6 +192,7 @@ export function toRemoteRecord(entityType, record, ownerId) {
     notes: requireValue(record.notes, ""),
     isFavorite: Boolean(record.isFavorite),
     privacy: normalizeCatchPrivacy(record.privacy),
+    ...(record.verification ? { verification: normalizeCatchVerification(record.verification) } : {}),
   };
 }
 
@@ -442,6 +447,7 @@ export function createFirestoreSyncAdapter({ now = () => new Date().toISOString(
       const receipt = doc(db, "users", ownerId, "syncOperations", receiptId(operationId, localRevision));
       const stateRef = doc(db, "users", ownerId, "sync", "state");
       const changeRef = doc(db, "users", ownerId, "syncChanges", receiptId(operationId, localRevision));
+      let firestoreStage = "read-sync-transaction-records";
       try {
         const result = await runTransaction(db, async (transaction) => {
           requireActiveOwner(ownerId, currentUserId);
@@ -476,6 +482,7 @@ export function createFirestoreSyncAdapter({ now = () => new Date().toISOString(
             : [];
           const photoIdsToRead = [...new Set([...previousPhotoIds, ...photos.map((photo) => photo.id)])];
           const photoRefs = photoIdsToRead.map((photoId) => catchPhotoRef(db, ownerId, entityId, photoId));
+          firestoreStage = entityType === "catch" ? "read-catch-photo-documents" : "stage-entity-write";
           const photoSnapshots = await Promise.all(photoRefs.map((photoRef) => transaction.get(photoRef)));
           const currentPhotos = new Map(photoIdsToRead.map((photoId, index) => [photoId, photoSnapshots[index]]));
 
@@ -499,6 +506,7 @@ export function createFirestoreSyncAdapter({ now = () => new Date().toISOString(
             deletedAt: null,
             photoState: entityType === "catch" && photos.length > 0 ? "metadata-only" : "none",
           };
+          firestoreStage = `commit-${entityType}-${current ? "update" : "create"}`;
           if (entityType === "catch") {
             const desiredPhotoIds = new Set(photos.map((photo) => photo.id));
             for (const [sortIndex, photo] of photos.entries()) {
@@ -519,7 +527,7 @@ export function createFirestoreSyncAdapter({ now = () => new Date().toISOString(
         });
         requireActiveOwner(ownerId, currentUserId);
         return result;
-      } catch (error) { makePortError(error); }
+      } catch (error) { makePortError(error, firestoreStage); }
     },
 
     async delete({ ownerId, entityType, entityId, expectedRevision, operationId, localRevision }) {
@@ -529,6 +537,7 @@ export function createFirestoreSyncAdapter({ now = () => new Date().toISOString(
       const receipt = doc(db, "users", ownerId, "syncOperations", receiptId(operationId, localRevision));
       const stateRef = doc(db, "users", ownerId, "sync", "state");
       const changeRef = doc(db, "users", ownerId, "syncChanges", receiptId(operationId, localRevision));
+      let firestoreStage = "read-sync-transaction-records";
       try {
         const result = await runTransaction(db, async (transaction) => {
           requireActiveOwner(ownerId, currentUserId);
@@ -554,6 +563,7 @@ export function createFirestoreSyncAdapter({ now = () => new Date().toISOString(
           const photoIds = entityType === "catch"
             ? (current?.photoRefs && typeof current.photoRefs === "object" ? Object.keys(current.photoRefs) : [])
             : [];
+          firestoreStage = entityType === "catch" ? "read-catch-photo-documents" : "stage-entity-delete";
           const photoRefs = photoIds.map((photoId) => catchPhotoRef(db, ownerId, entityId, photoId));
           const photoSnapshots = await Promise.all(photoRefs.map((photoRef) => transaction.get(photoRef)));
           const revision = (currentRevision ?? 0) + 1;
@@ -578,6 +588,7 @@ export function createFirestoreSyncAdapter({ now = () => new Date().toISOString(
             serverRevision: revision, sequence, localRevision, operationDigest: requestDigest,
             kind: "delete", createdAt: now(),
           };
+          firestoreStage = `commit-${entityType}-delete`;
           photoSnapshots.forEach((photoSnapshot, index) => {
             if (photoSnapshot.exists() && !photoSnapshot.data().deleted) {
               transaction.set(photoRefs[index], photoTombstone(photoSnapshot.data(), now()));
@@ -591,7 +602,7 @@ export function createFirestoreSyncAdapter({ now = () => new Date().toISOString(
         });
         requireActiveOwner(ownerId, currentUserId);
         return result;
-      } catch (error) { makePortError(error); }
+      } catch (error) { makePortError(error, firestoreStage); }
     },
 
     async list({ ownerId, entityType, cursor = null, limit: pageSize = 100 }) {

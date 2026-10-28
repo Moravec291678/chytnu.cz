@@ -1,17 +1,36 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { anonymizePublicCoordinates, createPublicCatchProjection, HEATMAP_GRANULARITY, normalizeCatchPrivacy, normalizePrivacySettings } from "./privacyModel.js";
+import { anonymizePublicCoordinates, createCatchPrivacyFromDefaults, createPublicCatchProjection, DEFAULT_PRIVACY_SETTINGS, HEATMAP_GRANULARITY, normalizeCatchPrivacy, normalizePrivacySettings } from "./privacyModel.js";
 
-test("privacy defaults are private and exact location requires location sharing", () => {
+test("new catches default to public visibility while existing Catch normalization stays private", () => {
   assert.deepEqual(normalizeCatchPrivacy(), {
     visibility: "private", photoVisibility: "private", locationPrecision: "none", privateSpot: true,
     nearbyEligible: false, heatmapEligible: false,
   });
   assert.deepEqual(normalizePrivacySettings({ showExactLocation: true }), {
-    profileVisibility: "private", defaultCatchVisibility: "private", defaultPhotoVisibility: "private",
+    profileVisibility: "private", defaultCatchVisibility: "public", defaultCatchVisibilityExplicit: false, defaultPhotoVisibility: "private",
     defaultLocationPrecision: "none", privateSpotDefault: true, nearbyOptIn: false,
     nearbyLocationPrecision: "approximate", heatmapOptIn: false, heatmapGranularity: HEATMAP_GRANULARITY.OFF,
   });
+  assert.equal(DEFAULT_PRIVACY_SETTINGS.defaultCatchVisibility, "public");
+  assert.deepEqual(createCatchPrivacyFromDefaults(), {
+    visibility: "public", photoVisibility: "private", locationPrecision: "none", privateSpot: true,
+    nearbyEligible: false, heatmapEligible: false,
+  });
+});
+
+test("explicit private default is preserved for new catches and onboarding preference writes", () => {
+  const settings = normalizePrivacySettings({
+    defaultCatchVisibility: "private",
+    defaultCatchVisibilityExplicit: true,
+  });
+  assert.equal(settings.defaultCatchVisibility, "private");
+  assert.equal(settings.defaultCatchVisibilityExplicit, true);
+  assert.equal(createCatchPrivacyFromDefaults(settings).visibility, "private");
+
+  const oldImplicitValue = normalizePrivacySettings({ defaultCatchVisibility: "private" });
+  assert.equal(oldImplicitValue.defaultCatchVisibility, "public");
+  assert.equal(oldImplicitValue.defaultCatchVisibilityExplicit, false);
 });
 
 test("nearby precision never normalizes to exact public coordinates", () => {

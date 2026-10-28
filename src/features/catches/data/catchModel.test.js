@@ -68,6 +68,30 @@ test("automatic condition provenance round-trips and legacy values default to ma
   assert.deepEqual(catchToForm(deliberatelyBlank).conditionSources, { airTempC: "manual" });
 });
 
+test("verification and capture-input provenance round-trip without changing legacy catch records", () => {
+  const verification = {
+    status: "verified", reason: "live-gps-active-trip", photoHash: "a".repeat(64),
+    photoCaptureMetadata: { capturedAt: "2026-10-16T12:20:00.000Z", coordinates: { latitude: 49.2, longitude: 16.6 } },
+    locationSource: "live-gps", gpsAccuracyMeters: 15, verifiedAt: "2026-10-16T12:30:00.000Z",
+  };
+  const record = createCatchRecord({
+    ...minimalForm,
+    catchDateTimeSource: "photo-exif",
+    gpsSource: "live-gps",
+    locationEvidence: { source: "live-gps", capturedAt: "2026-10-16T12:29:00.000Z", accuracyMeters: 15, coordinates: { latitude: 49.2, longitude: 16.6 } },
+    verification,
+  }, { key: "carp", label: "Kapr" }, []);
+  const form = catchToForm(record);
+  assert.equal(form.verification.status, "verified");
+  assert.equal(form.verification.photoHash, "a".repeat(64));
+  assert.equal(form.catchDateTimeSource, "photo-exif");
+  assert.equal(form.gpsSource, "live-gps");
+  assert.equal(form.locationEvidence.accuracyMeters, 15);
+  const legacy = catchToForm({ speciesKey: "carp", caughtAt: "2020-01-01T10:00:00.000Z" });
+  assert.equal(legacy.verification, undefined);
+  assert.equal(legacy.catchDateTimeSource, "manual");
+});
+
 test("record has stable local-first metadata and preserves optional nulls", () => {
   const record = createCatchRecord(minimalForm, { key: "carp", label: "Kapr", latinName: "Cyprinus carpio" }, [], null);
   assert.equal(record.schemaVersion, 1);
@@ -151,18 +175,25 @@ test("editing preserves forward-compatible fields, custom choices, and remote ph
   assert.equal(updated.photos[0].blob, blob);
 });
 
-test("legacy photo becomes primary, primary selection stays stable, and photo limits are enforced", () => {
+test("four-photo limit applies to new catches while legacy photos remain manageable", () => {
   const photos = Array.from({ length: MAX_PHOTOS_PER_CATCH }, (_, index) => ({ id: `photo-${index}`, name: `fish-${index}.jpg`, type: "image/jpeg", blob: new Blob([String(index)]) }));
   const legacy = createCatchRecord({ ...minimalForm, photos: [photos[0]] }, { key: "carp", label: "Kapr" }, []);
   assert.equal(legacy.primaryPhotoId, photos[0].id);
-  const selected = createCatchRecord({ ...minimalForm, photos, primaryPhotoId: photos[7].id }, { key: "carp", label: "Kapr" }, []);
-  assert.equal(selected.primaryPhotoId, photos[7].id);
+  const selected = createCatchRecord({ ...minimalForm, photos, primaryPhotoId: photos[3].id }, { key: "carp", label: "Kapr" }, []);
+  assert.equal(selected.primaryPhotoId, photos[3].id);
+  assert.equal(selected.photos.length, 4);
   const framed = createCatchRecord({ ...minimalForm, photos: [{ ...photos[0], focalX: 0.1, focalY: 0.9, zoom: 1.8 }, { ...photos[1], focalX: 0.7, focalY: 0.2, zoom: 1.2 }], primaryPhotoId: photos[1].id }, { key: "carp", label: "Kapr" }, []);
   assert.deepEqual(framed.photos.map(({ focalX, focalY, zoom }) => ({ focalX, focalY, zoom })), [
     { focalX: 0.1, focalY: 0.9, zoom: 1.8 }, { focalX: 0.7, focalY: 0.2, zoom: 1.2 },
   ]);
   assert.equal(catchToForm(framed).photos.length, 2);
-  assert.throws(() => createCatchRecord({ ...minimalForm, photos: [...photos, { ...photos[0], id: "photo-over" }] }, { key: "carp", label: "Kapr" }, []), /nejvýše 10/);
+  assert.throws(() => createCatchRecord({ ...minimalForm, photos: [...photos, { ...photos[0], id: "photo-over" }] }, { key: "carp", label: "Kapr" }, []), /nejvýše 4/);
+  const legacyPhotos = Array.from({ length: 7 }, (_, index) => ({ ...photos[index % photos.length], id: `legacy-${index}` }));
+  const legacyCatch = createCatchRecord({ ...minimalForm, photos: legacyPhotos }, { key: "carp", label: "Kapr" }, [], { photos: legacyPhotos });
+  assert.equal(legacyCatch.photos.length, 7);
+  assert.throws(() => createCatchRecord({ ...minimalForm, photos: [...legacyPhotos, { ...legacyPhotos[0], id: "legacy-added" }] }, { key: "carp", label: "Kapr" }, [], { photos: legacyPhotos }), /nejvýše 7/);
+  const removedLegacyPhoto = createCatchRecord({ ...minimalForm, photos: legacyPhotos.slice(0, 6) }, { key: "carp", label: "Kapr" }, [], { photos: legacyPhotos });
+  assert.equal(removedLegacyPhoto.photos.length, 6);
 });
 
 test("missing weight is not presented as a zero kilogram record", () => {

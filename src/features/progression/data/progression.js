@@ -4,6 +4,7 @@ import { calculateSeasonalChallengeXp } from "./seasonalChallenge.js";
 import { isMeasuredCatchWeight } from "../../catches/data/catchWeight.js";
 import { calculateWeeklyStreak } from "./streakModel.js";
 import { XP_RULES } from "./xpRules.js";
+import { filterEligibleCatchRecords } from "../../catches/data/catchVerification.js";
 export { calculateWeeklyStreak } from "./streakModel.js";
 
 export const MAX_LEVEL = 100;
@@ -38,7 +39,7 @@ const ACHIEVEMENT_DEFINITIONS = [
   { id: "twelve-week-streak", name: "Sezóna v rytmu", description: "Udrž týdenní sérii po dobu 12 týdnů.", category: "Série", xp: 150, completed: ({ weeklyStreak }) => weeklyStreak >= 12 },
   { id: "fifty-two-week-streak", name: "Rok aktivního rybaření", description: "Udrž týdenní sérii po dobu 52 týdnů.", category: "Série", xp: 200, completed: ({ weeklyStreak }) => weeklyStreak >= 52 },
   { id: "night-catch", name: "Noční vlk", description: "Zaznamenej úlovek mezi 22:00 a 04:00.", category: "Skryté", xp: 50, hidden: true, completed: ({ catches }) => catches.some(isNightCatch) },
-  { id: "marathon-trip", name: "Maratonec", description: "Dokonči výpravu trvající alespoň osm hodin.", category: "Skryté", xp: 75, hidden: true, completed: ({ trips }) => trips.some(isMarathonTrip) },
+  { id: "marathon-trip", name: "Maratonec", description: "Dokonči vycházku trvající alespoň osm hodin.", category: "Skryté", xp: 75, hidden: true, completed: ({ trips }) => trips.some(isMarathonTrip) },
 ];
 
 const ACHIEVEMENT_TRACKS = Object.freeze({
@@ -149,6 +150,7 @@ export function getRankForLevel(level) {
 }
 
 export function calculateProgression(catches, trips = [], { now = new Date(), streakFreezes = [] } = {}) {
+  catches = filterEligibleCatchRecords(catches);
   const speciesCount = uniqueKnown(catches, (item) => item.speciesKey || normalizeText(item.species ?? "") || null);
   const locationCount = uniqueKnown(catches, (item) => item.waterId || null);
   const completedTrips = trips.filter((trip) => trip.endedAt).length;

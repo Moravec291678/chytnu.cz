@@ -11,6 +11,7 @@ import { canUseStreakFreeze, calculateWeeklyStreak, getPragueStreakMonthKey, get
 import { XP_RULES } from "./xpRules.js";
 import { getCatchRarity } from "../../catches/utils/rarity.js";
 import { DEFAULT_SPECIES } from "../../../shared/constants/speciesCatalog.js";
+import { filterEligibleCatchRecords, getCatchPhotoHash, isCatchProgressionEligible, isValidPhotoHash } from "../../catches/data/catchVerification.js";
 
 const DEFINITION_VERSION = 2;
 const claimedRewardEventIds = new Set();
@@ -86,7 +87,7 @@ export function buildLedgerProgressionSummary(events, catches = [], trips = [], 
     ...achievement, isCompleted: persistentAchievementIds.has(achievement.id),
   }));
   const masteryEvents = events.filter((event) => event.type === "mastery.milestone");
-  const currentMastery = new Map(calculateSpeciesMastery(catches).map((item) => [item.speciesKey, item]));
+  const currentMastery = new Map(calculateSpeciesMastery(filterEligibleCatchRecords(catches)).map((item) => [item.speciesKey, item]));
   const masterySpecies = new Set([...currentMastery.keys(), ...masteryEvents.map((event) => event.reasonKey.split(":")[1])]);
   const mastery = [...masterySpecies].map((speciesKey) => {
     const item = currentMastery.get(speciesKey) ?? { speciesKey, catchCount: 0, nextLevelAt: 1, xp: 0 };
@@ -231,7 +232,7 @@ export const progressionLedger = {
     ]);
     if (existing) {
       await transactionDone(transaction, db);
-      return { event: existing, isNew: false };
+      return { event: existing, isNew: false, eligible: true };
     }
     if (!catchRecord || catchRecord.scopeKey !== scope.scopeKey) {
       transaction.abort();
@@ -239,13 +240,23 @@ export const progressionLedger = {
       db.close();
       throw new Error("Sdílený úlovek už není dostupný v tomto profilu.");
     }
+    let verifiedPhotoClaim = null;
+    if (catchRecord.verification?.status === "verified" && isValidPhotoHash(catchRecord.verification.photoHash)) {
+      verifiedPhotoClaim = await requestValue(store.get(eventId(scope.scopeKey, `verification.photo.claimed:${catchRecord.verification.photoHash.toLowerCase()}`)));
+    }
+    const xpEligible = isCatchProgressionEligible(catchRecord)
+      && (!catchRecord.verification || verifiedPhotoClaim?.sourceEntityId === catchId);
+    if (!xpEligible) {
+      await transactionDone(transaction, db);
+      return { event: null, isNew: false, eligible: false };
+    }
     const event = makeEvent(scope, {
       reasonKey, type: "share.public", xp: XP_RULES.publicShare,
       sourceEntityType: "catch", sourceEntityId: catchId, occurredAt: new Date().toISOString(),
     }, new Date().toISOString());
     store.add(event);
     await transactionDone(transaction, db);
-    return { event, isNew: true };
+    return { event, isNew: true, eligible: true };
   },
 
   async useStreakFreeze(options, { now = new Date() } = {}) {
@@ -311,7 +322,34 @@ export const progressionLedger = {
       newEvents.push(event);
       return event;
     };
-    const orderedCatches = [...catches].sort((a, b) => Date.parse(a.caughtAt) - Date.parse(b.caughtAt));
+    const allOrderedCatches = [...catches].sort((a, b) => Date.parse(a.caughtAt) - Date.parse(b.caughtAt));
+    const legacyPhotoHashes = new Set();
+    for (const record of allOrderedCatches.filter((item) => !item.verification)) {
+      for (const photo of record.photos ?? []) {
+        const photoHash = getCatchPhotoHash(photo);
+        if (!photoHash || legacyPhotoHashes.has(photoHash)) continue;
+        legacyPhotoHashes.add(photoHash);
+        add({
+          reasonKey: `verification.photo.claimed:${photoHash}`, type: "verification.photo.claimed", xp: 0,
+          sourceEntityType: "catch", sourceEntityId: record.id, occurredAt: record.caughtAt,
+        });
+      }
+    }
+    const progressionCandidates = filterEligibleCatchRecords(catches);
+    const progressionCatches = progressionCandidates.filter((record) => {
+      if (!record.verification) return true;
+      const photoHash = record.verification.photoHash.toLowerCase();
+      const claimReason = `verification.photo.claimed:${photoHash}`;
+      const existingClaim = events.find((event) => event.reasonKey === claimReason);
+      if (existingClaim) return existingClaim.sourceEntityId === record.id;
+      if ((record.photos ?? []).some((photo) => getCatchPhotoHash(photo) === photoHash && photo.localError)) return false;
+      const claim = add({
+        reasonKey: claimReason, type: "verification.photo.claimed", xp: 0,
+        sourceEntityType: "catch", sourceEntityId: record.id, occurredAt: record.caughtAt,
+      });
+      return claim?.sourceEntityId === record.id;
+    });
+    const orderedCatches = progressionCatches.sort((a, b) => Date.parse(a.caughtAt) - Date.parse(b.caughtAt));
     for (const record of orderedCatches) {
       add({ reasonKey: `catch.created:${record.id}`, type: "catch.created", xp: XP_RULES.catch.base, sourceEntityType: "catch", sourceEntityId: record.id, occurredAt: record.caughtAt });
       const catchXp = () => events.filter((event) => event.sourceEntityType === "catch" && event.sourceEntityId === record.id && event.type.startsWith("catch."))
@@ -333,7 +371,7 @@ export const progressionLedger = {
     }
 
     const streakFreezes = events.filter((event) => event.type === "streak.freeze.used");
-    const live = calculateProgression(catches, trips, { now, streakFreezes });
+    const live = calculateProgression(orderedCatches, trips, { now, streakFreezes });
     for (const achievement of live.achievements.filter((item) => item.isCompleted)) {
       const source = achievementSource(achievement.id, orderedCatches, trips, nowIso);
       add({
@@ -341,19 +379,19 @@ export const progressionLedger = {
         sourceEntityType: source.entityType, sourceEntityId: source.entityId, occurredAt: source.occurredAt,
       });
     }
-    for (const item of calculateSpeciesMastery(catches)) {
+    for (const item of calculateSpeciesMastery(orderedCatches)) {
       const speciesCatches = orderedCatches.filter((record) => (record.speciesKey || normalizeText(record.species ?? "")) === item.speciesKey);
       for (const milestone of MASTERY_LEVELS.filter((entry) => item.catchCount >= entry.catches)) {
         const source = speciesCatches[milestone.catches - 1] ?? speciesCatches.at(-1);
         add({ reasonKey: `mastery.milestone:${item.speciesKey}:${milestone.level}`, type: "mastery.milestone", xp: milestone.level === 1 ? 0 : milestone.xp, sourceEntityType: "catch", sourceEntityId: source.id, occurredAt: source.caughtAt });
       }
     }
-    for (const reward of [...listCompletedChallengeRewards(catches, trips), ...listCompletedSeasonalChallengeRewards(catches)]) add({
+    for (const reward of [...listCompletedChallengeRewards(orderedCatches, trips), ...listCompletedSeasonalChallengeRewards(orderedCatches)]) add({
       reasonKey: `challenge.completed:${reward.challengeId}:${reward.periodKey}`, type: "challenge.completed", xp: reward.xp,
       sourceEntityType: reward.sourceEntityType, sourceEntityId: reward.sourceEntityId, periodKey: reward.periodKey,
-      occurredAt: eventOccurredAt(reward.sourceEntityType, reward.sourceEntityId, catches, trips, nowIso),
+      occurredAt: eventOccurredAt(reward.sourceEntityType, reward.sourceEntityId, orderedCatches, trips, nowIso),
     });
-    const streak = calculateWeeklyStreak(catches, now, streakFreezes);
+    const streak = calculateWeeklyStreak(orderedCatches, now, streakFreezes);
     for (const milestone of [4, 12, 52].filter((weeks) => streak.weeks >= weeks)) add({ reasonKey: `streak.milestone:${milestone}`, type: "streak.milestone", xp: 0, sourceEntityType: "system", sourceEntityId: `streak-${milestone}`, occurredAt: streak.lastCatchAt ?? nowIso });
     for (let weeks = 7; weeks <= streak.weeks; weeks += 7) add({ reasonKey: `streak.bonus:${weeks}`, type: "streak.bonus", xp: XP_RULES.streakBonus, sourceEntityType: "system", sourceEntityId: `streak-${weeks}`, occurredAt: streak.lastCatchAt ?? nowIso });
     await transactionDone(transaction, db);
@@ -392,7 +430,7 @@ export function buildCatchRewardFromLedger(events, catchId, summary, eventIds = 
 
 export function getCatchRewardEventIds(events, catchId) {
   return events
-    .filter((event) => event.sourceEntityType === "catch" && event.sourceEntityId === catchId)
+    .filter((event) => event.sourceEntityType === "catch" && event.sourceEntityId === catchId && event.type !== "verification.photo.claimed")
     .map((event) => event.id);
 }
 

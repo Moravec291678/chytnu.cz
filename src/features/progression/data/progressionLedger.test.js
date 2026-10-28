@@ -6,6 +6,7 @@ import { tripRepository } from "../../trips/data/tripRepository.js";
 import { waterRepository } from "../../waters/data/waterRepository.js";
 import { buildCatchRewardFromLedger, buildLedgerProgressionSummary, claimCatchRewardEventIds, getCatchRewardEventIds, progressionLedger, summaryForXp } from "./progressionLedger.js";
 import { xpForLevel } from "./progression.js";
+import { sha256Blob } from "../../catches/data/photoCloudProvider.js";
 
 async function reset() {
   await new Promise((resolve, reject) => {
@@ -37,6 +38,74 @@ test("catch progression events are persistent and idempotent across retries and 
   events = await progressionLedger.list(scope);
   assert.equal(events.filter((event) => event.type === "catch.photo").length, 1);
   assert.equal(events.reduce((sum, event) => sum + event.xp, 0), initialXp + 5);
+});
+
+test("unverified Catch earns zero XP, later verification awards once, and a repeated photo hash earns nothing", async () => {
+  const scope = await reset();
+  const stamp = "2026-10-28T10:00:00.000Z";
+  const photoBlob = new Blob(["evidence photo"], { type: "image/jpeg" });
+  const photoHash = await sha256Blob(photoBlob);
+  const unverified = await catchRepository.put(record("awaiting-proof", {
+    createdAt: stamp, updatedAt: stamp, caughtAt: stamp, speciesKey: "carp", photos: [],
+    verification: { status: "unverified", reason: "missing-photo", photoHash: null, photoCaptureMetadata: null, locationSource: null, gpsAccuracyMeters: null, verifiedAt: null },
+  }), scope);
+  await progressionLedger.reconcile(scope);
+  assert.equal((await progressionLedger.list(scope)).reduce((sum, event) => sum + event.xp, 0), 0);
+
+  const verified = await catchRepository.put({
+    ...unverified,
+    photos: [{ id: "evidence-1", type: "image/jpeg", blob: photoBlob, contentSha256: photoHash }],
+    verification: { status: "verified", reason: "live-gps-active-trip", photoHash, photoCaptureMetadata: null,
+      locationSource: "live-gps", gpsAccuracyMeters: 12, verifiedAt: "2026-10-28T10:01:00.000Z" },
+    sync: { ...unverified.sync, revision: 2 },
+  }, scope);
+  await progressionLedger.reconcile(scope);
+  await progressionLedger.reconcile(scope);
+  let events = await progressionLedger.list(scope);
+  const firstCatchXp = events.filter((event) => event.sourceEntityId === verified.id && event.type.startsWith("catch."))
+    .reduce((sum, event) => sum + event.xp, 0);
+  assert.equal(firstCatchXp, 15);
+  assert.equal(events.filter((event) => event.type === "catch.created" && event.sourceEntityId === verified.id).length, 1);
+  assert.equal(events.filter((event) => event.reasonKey === `verification.photo.claimed:${photoHash}`).length, 1);
+
+  const duplicate = await catchRepository.put(record("same-photo-again", {
+    createdAt: stamp, updatedAt: stamp, caughtAt: stamp, speciesKey: "pike", species: "Štika",
+    photos: [{ id: "evidence-duplicate", type: "image/jpeg", blob: photoBlob, contentSha256: photoHash }],
+    verification: { status: "verified", reason: "live-gps-at-water", photoHash, photoCaptureMetadata: null,
+      locationSource: "live-gps", gpsAccuracyMeters: 12, verifiedAt: "2026-10-28T10:02:00.000Z" },
+  }), scope);
+  await progressionLedger.reconcile(scope);
+  events = await progressionLedger.list(scope);
+  assert.equal(events.some((event) => event.type.startsWith("catch.") && event.sourceEntityId === duplicate.id), false);
+  assert.equal(events.some((event) => event.type === "species.first" && event.sourceEntityId === duplicate.id), false);
+  assert.equal(events.filter((event) => event.reasonKey === `verification.photo.claimed:${photoHash}`).length, 1);
+});
+
+test("sharing an unverified Catch never awards public-share XP", async () => {
+  const scope = await reset();
+  const stored = await catchRepository.put(record("share-unverified", {
+    verification: { status: "unverified", reason: "missing-photo" },
+  }), scope);
+  const result = await progressionLedger.awardPublicShare(stored.id, scope);
+  assert.equal(result.eligible, false);
+  assert.equal(result.event, null);
+  assert.equal((await progressionLedger.list(scope)).some((event) => event.type === "share.public"), false);
+});
+
+test("a photo whose IndexedDB readback failed cannot claim first-time verification XP", async () => {
+  const scope = await reset();
+  const blob = new Blob(["unreadable evidence"], { type: "image/jpeg" });
+  const photoHash = await sha256Blob(blob);
+  await catchRepository.put(record("photo-readback-failed", {
+    photos: [{ id: "broken-evidence", type: "image/jpeg", blob, contentSha256: photoHash,
+      localError: { code: "photo_local_blob_unreadable" } }],
+    verification: { status: "verified", reason: "live-gps-active-trip", photoHash, locationSource: "live-gps",
+      gpsAccuracyMeters: 10, verifiedAt: "2026-10-28T10:01:00.000Z" },
+  }), scope);
+  await progressionLedger.reconcile(scope);
+  const events = await progressionLedger.list(scope);
+  assert.equal(events.some((event) => event.type.startsWith("catch.")), false);
+  assert.equal(events.some((event) => event.type === "verification.photo.claimed"), false);
 });
 
 test("reload, direct reward lookup, edit, and deletion never grant the same reward twice", async () => {

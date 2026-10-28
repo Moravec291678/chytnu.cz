@@ -39,6 +39,23 @@ test("Firestore catch projection writes null when conditions were not recorded",
   assert.equal(toRemoteRecord("catch", record, "angler-1").conditionSources, null);
 });
 
+test("Firestore Catch projection preserves bounded verification evidence for cross-device XP eligibility", () => {
+  const verification = {
+    status: "verified", reason: "photo-date-and-location", photoHash: "a".repeat(64),
+    photoCaptureMetadata: { capturedAt: "2026-10-28T10:00:00.000Z", coordinates: { latitude: 50, longitude: 14 } },
+    locationSource: "photo-exif", gpsAccuracyMeters: null, verifiedAt: "2026-10-28T12:00:00.000Z",
+  };
+  const projected = toRemoteRecord("catch", {
+    id: "verified-catch", ownerId: "angler-1", verification,
+    catchDateTimeSource: "photo-exif", gpsSource: "photo-exif",
+  }, "angler-1");
+  assert.equal(projected.verification.status, "verified");
+  assert.equal(projected.verification.photoHash, "a".repeat(64));
+  assert.equal(projected.verification.photoCaptureMetadata.coordinates.latitude, 50);
+  assert.equal(projected.catchDateTimeSource, "photo-exif");
+  assert.equal(projected.gpsSource, "photo-exif");
+});
+
 test("Firestore catch projection keeps ordered local-only photo metadata and crop fields", () => {
   const record = {
     id: "catch-photo",

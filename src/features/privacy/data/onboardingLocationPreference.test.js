@@ -5,7 +5,8 @@ import { applyOnboardingLocationMode, getOnboardingLocationMode } from "./onboar
 test("onboarding location modes map to scoped privacy precision without changing sharing defaults", () => {
   const base = {
     profileVisibility: "private",
-    defaultCatchVisibility: "private",
+    defaultCatchVisibility: "public",
+    defaultCatchVisibilityExplicit: false,
     defaultPhotoVisibility: "private",
     defaultLocationPrecision: "none",
     privateSpotDefault: true,
@@ -19,10 +20,21 @@ test("onboarding location modes map to scoped privacy precision without changing
     const saved = applyOnboardingLocationMode(base, mode);
     assert.equal(getOnboardingLocationMode(saved), mode);
     assert.equal(saved.scopeKey, base.scopeKey);
-    assert.equal(saved.defaultCatchVisibility, "private");
+    assert.equal(saved.defaultCatchVisibility, "public");
+    assert.equal(saved.defaultCatchVisibilityExplicit, false);
     assert.equal(saved.nearbyOptIn, false);
     assert.equal("coordinates" in saved, false);
   }
+});
+
+test("onboarding leaves an explicitly private new-catch default unchanged", () => {
+  const saved = applyOnboardingLocationMode({
+    defaultCatchVisibility: "private",
+    defaultCatchVisibilityExplicit: true,
+    privateSpotDefault: true,
+  }, "none");
+  assert.equal(saved.defaultCatchVisibility, "private");
+  assert.equal(saved.defaultCatchVisibilityExplicit, true);
 });
 
 test("invalid onboarding location modes are rejected", () => {

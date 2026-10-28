@@ -4,7 +4,8 @@ import {
 import { isGuestScope, recordScopeKey } from "../../auth/data/localDataScope.js";
 import { normalizePrivacySettings } from "../../privacy/data/privacyModel.js";
 import { LOCAL_BACKUP_FORMAT, LOCAL_BACKUP_VERSION } from "./backupFormat.js";
-import { MAX_PHOTOS_PER_CATCH, normalizePrimaryPhotoId } from "../../catches/data/catchPhotos.js";
+import { MAX_LEGACY_PHOTOS_PER_CATCH, normalizePrimaryPhotoId } from "../../catches/data/catchPhotos.js";
+import { normalizeCatchVerification, normalizeLocationEvidence } from "../../catches/data/catchVerification.js";
 
 export const MAX_BACKUP_FILE_BYTES = 100 * 1024 * 1024;
 const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
@@ -112,7 +113,7 @@ function decodeCatch(record, tripIds) {
     fail(`Úlovek ${record.id} obsahuje neplatné ID revíru.`);
   }
   if (record.tripId !== null && (typeof record.tripId !== "string" || !tripIds.has(record.tripId))) {
-    fail(`Úlovek ${record.id} odkazuje na výpravu, která v záloze není.`);
+    fail(`Úlovek ${record.id} odkazuje na vycházku, která v záloze není.`);
   }
   if (record.bottomType !== null && typeof record.bottomType !== "string") fail(`Úlovek ${record.id} obsahuje neplatný typ dna.`);
   requireCoordinates(record.coordinates, `coordinates úlovku ${record.id}`);
@@ -127,7 +128,7 @@ function decodeCatch(record, tripIds) {
   if (!isRecord(record.sync) || !ALLOWED_SYNC_STATUSES.has(record.sync.status) || !Number.isSafeInteger(record.sync.revision) || record.sync.revision < 0) {
     fail(`Úlovek ${record.id} obsahuje neplatná synchronizační metadata.`);
   }
-  if (!Array.isArray(record.photos) || record.photos.length > MAX_PHOTOS_PER_CATCH) fail(`Úlovek ${record.id} obsahuje nepodporovaný počet fotografií.`);
+  if (!Array.isArray(record.photos) || record.photos.length > MAX_LEGACY_PHOTOS_PER_CATCH) fail(`Úlovek ${record.id} obsahuje nepodporovaný počet fotografií.`);
   const photos = record.photos.map((photo) => decodePhoto(photo, record.id));
   requireUniqueIds(photos, `fotografií u úlovku ${record.id}`);
   return {
@@ -135,25 +136,27 @@ function decodeCatch(record, tripIds) {
     ownerId: null,
     photos: photos.map((photo) => ({ ...photo, photoStatus: "local-only" })),
     primaryPhotoId: normalizePrimaryPhotoId(photos, record.primaryPhotoId),
+    ...(record.locationEvidence ? { locationEvidence: normalizeLocationEvidence(record.locationEvidence) } : {}),
+    ...(record.verification ? { verification: normalizeCatchVerification(record.verification) } : {}),
     sync: { status: "local", revision: Math.max(1, record.sync.revision), photoStatus: photos.length ? "local-only" : "none" },
   };
 }
 
 function decodeTrip(record) {
-  if (!isRecord(record)) fail("Záloha obsahuje neplatný záznam výpravy.");
-  requireString(record.id, "ID výpravy");
-  if (record.schemaVersion !== 1) fail(`Výprava ${record.id} používá nepodporovanou verzi dat.`);
-  requireTimestamp(record.createdAt, `createdAt výpravy ${record.id}`);
-  requireTimestamp(record.updatedAt, `updatedAt výpravy ${record.id}`);
-  requireTimestamp(record.startedAt, `startedAt výpravy ${record.id}`);
-  requireTimestamp(record.endedAt, `endedAt výpravy ${record.id}`, true);
-  requireString(record.title, `název výpravy ${record.id}`);
-  if (typeof record.locationName !== "string") fail(`Výprava ${record.id} obsahuje neplatnou lokalitu.`);
-  if (record.methodKey !== null && typeof record.methodKey !== "string") fail(`Výprava ${record.id} obsahuje neplatnou metodu.`);
+  if (!isRecord(record)) fail("Záloha obsahuje neplatný záznam vycházky.");
+  requireString(record.id, "ID vycházky");
+  if (record.schemaVersion !== 1) fail(`Vycházka ${record.id} používá nepodporovanou verzi dat.`);
+  requireTimestamp(record.createdAt, `createdAt vycházky ${record.id}`);
+  requireTimestamp(record.updatedAt, `updatedAt vycházky ${record.id}`);
+  requireTimestamp(record.startedAt, `startedAt vycházky ${record.id}`);
+  requireTimestamp(record.endedAt, `endedAt vycházky ${record.id}`, true);
+  requireString(record.title, `název vycházky ${record.id}`);
+  if (typeof record.locationName !== "string") fail(`Vycházka ${record.id} obsahuje neplatnou lokalitu.`);
+  if (record.methodKey !== null && typeof record.methodKey !== "string") fail(`Vycházka ${record.id} obsahuje neplatnou metodu.`);
   if (!isRecord(record.sync) || !ALLOWED_SYNC_STATUSES.has(record.sync.status) || !Number.isSafeInteger(record.sync.revision) || record.sync.revision < 0) {
-    fail(`Výprava ${record.id} obsahuje neplatná synchronizační metadata.`);
+    fail(`Vycházka ${record.id} obsahuje neplatná synchronizační metadata.`);
   }
-  if (record.endedAt && Date.parse(record.endedAt) < Date.parse(record.startedAt)) fail(`Výprava ${record.id} končí před svým začátkem.`);
+  if (record.endedAt && Date.parse(record.endedAt) < Date.parse(record.startedAt)) fail(`Vycházka ${record.id} končí před svým začátkem.`);
   return { ...record, ownerId: null, sync: { status: "local", revision: Math.max(1, record.sync.revision) } };
 }
 
@@ -191,13 +194,13 @@ export function parseLocalBackupDocument(document) {
   if (document.formatVersion !== LOCAL_BACKUP_VERSION) fail(`Verze zálohy ${document.formatVersion ?? "neznámá"} není podporována.`);
   requireTimestamp(document.createdAt, "createdAt zálohy");
   if (!isRecord(document.records) || !Array.isArray(document.records.catches) || !Array.isArray(document.records.trips)) {
-    fail("Záloha neobsahuje úplný seznam úlovků a výprav.");
+    fail("Záloha neobsahuje úplný seznam úlovků a vycházek.");
   }
-  const tripIds = requireUniqueIds(document.records.trips, "výprav");
+  const tripIds = requireUniqueIds(document.records.trips, "vycházek");
   const trips = document.records.trips.map(decodeTrip);
   const catches = document.records.catches.map((record) => decodeCatch(record, tripIds));
   requireUniqueIds(catches, "úlovků");
-  if (trips.filter((trip) => !trip.endedAt).length > 1) fail("Záloha obsahuje více než jednu aktivní výpravu.");
+  if (trips.filter((trip) => !trip.endedAt).length > 1) fail("Záloha obsahuje více než jednu aktivní vycházku.");
   const hasPrivacySettings = Object.hasOwn(document.records, "privacySettings");
   const hasProgressionEvents = Object.hasOwn(document.records, "progressionEvents");
   if (hasPrivacySettings && document.records.privacySettings !== null && !isRecord(document.records.privacySettings)) {
@@ -359,7 +362,7 @@ export async function restoreLocalBackup(backup, mode, options, openDatabase = o
             for (const record of scopedBackupTrips) {
               const existing = tripMap.get(record.id);
               if (!existing) tripsToWrite.push(record);
-              else if (!recordsMatchWithinTransaction(record, existing, "trip")) conflicts.push(`výprava ${record.id}`);
+              else if (!recordsMatchWithinTransaction(record, existing, "trip")) conflicts.push(`vycházka ${record.id}`);
               else skippedCount += 1;
             }
             if (conflicts.length) fail(`Sloučení zastaveno: stejná ID mají odlišný obsah (${conflicts.slice(0, 3).join(", ")}${conflicts.length > 3 ? "…" : ""}). Zvol nahrazení jen tehdy, pokud chceš celý místní deník nahradit zálohou.`);
@@ -386,7 +389,7 @@ export async function restoreLocalBackup(backup, mode, options, openDatabase = o
               }
             }
             const finalTrips = [...scopedExistingTrips, ...tripsToWrite];
-            if (finalTrips.filter((trip) => !trip.endedAt).length > 1) fail("Sloučení by vytvořilo více aktivních výprav. Místní data zůstala beze změny.");
+            if (finalTrips.filter((trip) => !trip.endedAt).length > 1) fail("Sloučení by vytvořilo více aktivních vycházek. Místní data zůstala beze změny.");
             importedCatchCount = catchesToWrite.length;
             importedTripCount = tripsToWrite.length;
           } else {

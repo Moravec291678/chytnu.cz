@@ -1,4 +1,5 @@
-export const MAX_PHOTOS_PER_CATCH = 10;
+export const MAX_PHOTOS_PER_CATCH = 4;
+export const MAX_LEGACY_PHOTOS_PER_CATCH = 10;
 
 export function getPrimaryPhoto(record) {
   const photos = Array.isArray(record?.photos) ? record.photos : [];

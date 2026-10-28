@@ -2,7 +2,8 @@ import { normalizeCoordinates, parseCoordinateText } from "./coordinates.js";
 import { normalizeCatchPrivacy } from "../../privacy/data/privacyModel.js";
 import { estimateFishWeight, formatEstimatedWeight } from "./lengthWeightRelationships.js";
 import { hasCustomPhotoFrame, normalizePhotoFrame } from "./photoFraming.js";
-import { MAX_PHOTOS_PER_CATCH, normalizePrimaryPhotoId } from "./catchPhotos.js";
+import { MAX_LEGACY_PHOTOS_PER_CATCH, MAX_PHOTOS_PER_CATCH, normalizePrimaryPhotoId } from "./catchPhotos.js";
+import { normalizeCatchVerification, normalizeLocationEvidence } from "./catchVerification.js";
 
 const CONDITION_SOURCE_FIELDS = ["airTempC", "waterTempC", "pressureHpa", "windKmh", "moonPhase"];
 
@@ -60,8 +61,9 @@ export function validateCatchForm(data) {
 }
 
 export function createCatchRecord(data, species, methods, existing = null, baitCatalog = []) {
-  if (!Array.isArray(data.photos) || data.photos.length > MAX_PHOTOS_PER_CATCH) {
-    throw new RangeError(`Úlovek může mít nejvýše ${MAX_PHOTOS_PER_CATCH} fotografií.`);
+  const allowedPhotoCount = existing ? Math.max(MAX_PHOTOS_PER_CATCH, existing.photos?.length ?? 0) : MAX_PHOTOS_PER_CATCH;
+  if (!Array.isArray(data.photos) || data.photos.length > allowedPhotoCount || data.photos.length > MAX_LEGACY_PHOTOS_PER_CATCH) {
+    throw new RangeError(`Úlovek může mít nejvýše ${allowedPhotoCount} fotografií.`);
   }
   const numeric = (value) => {
     if (value === null || value === undefined || String(value).trim() === "") return null;
@@ -124,11 +126,19 @@ export function createCatchRecord(data, species, methods, existing = null, baitC
     waterNumber: numeric(data.waterNumber),
     gpsLocation: data.gpsLocation.trim(),
     coordinates: normalizeCoordinates(data.coordinates) ?? parseCoordinateText(data.gpsLocation),
+    ...((data.locationEvidence || existing?.locationEvidence) && normalizeLocationEvidence(data.locationEvidence ?? existing?.locationEvidence)
+      ? { locationEvidence: normalizeLocationEvidence(data.locationEvidence ?? existing?.locationEvidence) } : {}),
     waterDepthM: numeric(data.depthM),
     bottomType: data.bottomType || null,
     conditions: Object.keys(conditions).length ? conditions : null,
     conditionSources,
     caughtAt,
+    catchDateTimeSource: ["manual", "photo-exif"].includes(data.catchDateTimeSource)
+      ? data.catchDateTimeSource
+      : existing?.catchDateTimeSource ?? "default",
+    gpsSource: ["manual", "photo-exif", "live-gps"].includes(data.gpsSource)
+      ? data.gpsSource
+      : existing?.gpsSource ?? "default",
     tripId: data.tripId || null,
     method: method ? { key: method.key, label: method.label, isCustom: false } : existingMethod,
     baits: data.baits.map((key) => existingBaits.get(key) ?? ({ key, label: baitCatalog.find((bait) => bait.key === key)?.label ?? key, isCustom: !baitCatalog.some((bait) => bait.key === key) })),
@@ -138,6 +148,7 @@ export function createCatchRecord(data, species, methods, existing = null, baitC
     notes: data.notes.trim(),
     isFavorite: Boolean(data.isFavorite),
     privacy: normalizeCatchPrivacy(data.privacy ?? existing?.privacy),
+    ...(data.verification || existing?.verification ? { verification: normalizeCatchVerification(data.verification ?? existing?.verification) } : {}),
   };
 }
 
@@ -161,7 +172,9 @@ export function catchToForm(record) {
     locationName: record.locationName ?? "", waterId: record.waterId ?? "", waterNumber: number(record.waterNumber),
     catchDate: `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`,
     catchTime: `${pad(date.getHours())}:${pad(date.getMinutes())}`,
+    catchDateTimeSource: record.catchDateTimeSource ?? "manual",
     gpsLocation: record.gpsLocation ?? "", coordinates: record.coordinates ?? null, depthM: number(record.waterDepthM),
+    gpsSource: record.gpsSource ?? ((record.coordinates || record.gpsLocation) ? "manual" : "default"),
     bottomType: record.bottomType ?? "", speciesKey: record.speciesKey,
     resultKey: record.result ?? "unspecified", fishingMethod: record.method?.key ?? "",
     conditions,
@@ -170,5 +183,7 @@ export function catchToForm(record) {
     primaryPhotoId: normalizePrimaryPhotoId(record.photos ?? [], record.primaryPhotoId),
     notes: record.notes ?? "", isFavorite: Boolean(record.isFavorite), tripId: record.tripId ?? "",
     privacy: normalizeCatchPrivacy(record.privacy),
+    locationEvidence: normalizeLocationEvidence(record.locationEvidence),
+    ...(record.verification ? { verification: normalizeCatchVerification(record.verification) } : {}),
   };
 }

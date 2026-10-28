@@ -59,7 +59,7 @@ try {
     conditions: { airTempC: 11, moonPhase: "full" },
     conditionSources: { airTempC: "auto", moonPhase: "auto" },
     waterDepthM: null, bottomType: null, tripId, method: null, baits: [], result: "released",
-    photos: Array.from({ length: 10 }, (_, index) => ({ id: `photo-${index + 1}`, name: `kapr-${index + 1}.jpg`, type: "image/jpeg", blob: photoBlob, focalX: 0.2, focalY: 0.8, zoom: 1.4 })),
+    photos: Array.from({ length: 4 }, (_, index) => ({ id: `photo-${index + 1}`, name: `kapr-${index + 1}.jpg`, type: "image/jpeg", blob: photoBlob, focalX: 0.2, focalY: 0.8, zoom: 1.4 })),
     notes: "emulator integration fixture", isFavorite: false, sync: { status: "local", revision: 1 },
   }, accountScope);
 
@@ -81,11 +81,11 @@ try {
   assert.deepEqual(remoteCatch.data().conditions, { airTempC: 11, moonPhase: "full" });
   assert.deepEqual(remoteCatch.data().conditionSources, { airTempC: "auto", moonPhase: "auto" });
   assert.equal("photos" in remoteCatch.data(), false, "Photo metadata must not share the Catch document");
-  assert.equal(Object.keys(remoteCatch.data().photoRefs).length, 10, "Catch retains at most ten stable photo references");
+  assert.equal(Object.keys(remoteCatch.data().photoRefs).length, 4, "new Catch retains at most four stable photo references");
   assert.equal("photoIds" in remoteCatch.data(), false);
   assert.equal(remoteCatch.data().primaryPhotoId, "photo-1");
   const remotePhotos = await getDocs(collection(db, "users", ownerId, "catches", catchId, "photos"));
-  assert.equal(remotePhotos.size, 10, "each photo is stored and validated as its own document");
+  assert.equal(remotePhotos.size, 4, "each photo is stored and validated as its own document");
   const firstRemotePhoto = remotePhotos.docs.find((photo) => photo.id === "photo-1").data();
   assert.deepEqual({ id: firstRemotePhoto.id, name: firstRemotePhoto.name, type: firstRemotePhoto.type, size: firstRemotePhoto.size, focalX: firstRemotePhoto.focalX, focalY: firstRemotePhoto.focalY, zoom: firstRemotePhoto.zoom }, {
     id: "photo-1", name: "kapr-1.jpg", type: "image/jpeg", size: 3,
@@ -109,7 +109,7 @@ try {
   await catchRepository.put({
     ...changedCatch,
     updatedAt: new Date().toISOString(),
-    photos: changedCatch.photos.slice(0, 9).map((photo, index) => index === 0 ? { ...photo, focalX: 0.3 } : photo),
+    photos: changedCatch.photos.slice(0, 3).map((photo, index) => index === 0 ? { ...photo, focalX: 0.3 } : photo),
     primaryPhotoId: "photo-2",
     sync: { ...changedCatch.sync, status: "local", revision: changedCatch.sync.revision + 1 },
   }, accountScope);
@@ -117,9 +117,9 @@ try {
   assert.equal(photoMutationSync.status, "success", photoMutationSync.error);
   const updatedRemoteCatch = await getDoc(doc(db, "users", ownerId, "catches", catchId));
   const updatedRemotePhoto = await getDoc(doc(db, "users", ownerId, "catches", catchId, "photos", "photo-1"));
-  const removedRemotePhoto = await getDoc(doc(db, "users", ownerId, "catches", catchId, "photos", "photo-10"));
+  const removedRemotePhoto = await getDoc(doc(db, "users", ownerId, "catches", catchId, "photos", "photo-4"));
   assert.equal(updatedRemoteCatch.data().primaryPhotoId, "photo-2", "primary selection is synced with the Catch");
-  assert.deepEqual(Object.keys(updatedRemoteCatch.data().photoRefs), Array.from({ length: 9 }, (_, index) => `photo-${index + 1}`));
+  assert.deepEqual(Object.keys(updatedRemoteCatch.data().photoRefs), Array.from({ length: 3 }, (_, index) => `photo-${index + 1}`));
   assert.equal(updatedRemotePhoto.data().focalX, 0.3, "per-photo crop changes are synced to the photo document");
   assert.equal(removedRemotePhoto.data().deleted, true, "photo removal leaves a durable child tombstone");
 
@@ -185,7 +185,7 @@ try {
   await firestoreService.run(ownerId);
   assert.equal((await getDoc(doc(db, "users", ownerId, "waters", waterId))).data().deleted, true);
 
-  console.log("Firestore sync emulator passed: authenticated Trip/Catch/Water writes, ten separately validated ordered photo documents, crop/primary/photo-delete synchronization, retained local Blob, exact operation replay, remote delta pull, idempotent resync, Catch/photo tombstones, and clean outbox.");
+  console.log("Firestore sync emulator passed: authenticated Trip/Catch/Water writes, four-photo new Catch limit, separately validated ordered photo documents, crop/primary/photo-delete synchronization, retained local Blob, exact operation replay, remote delta pull, idempotent resync, Catch/photo tombstones, and clean outbox.");
 } finally {
   await deleteApp(app);
 }
