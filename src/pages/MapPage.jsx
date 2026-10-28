@@ -55,6 +55,7 @@ function MapPage() {
   const selectedMarker = markers.find((marker) => marker.id === selectedCatchId);
   const [tileError, setTileError] = useState(false);
   const [mapError, setMapError] = useState("");
+  const [mapRetry, setMapRetry] = useState(0);
 
   useEffect(() => {
     if (!mapNode.current || markers.length === 0) return undefined;
@@ -104,7 +105,9 @@ function MapPage() {
       active = false;
       map?.remove();
     };
-  }, [markers, navigate, selectedCatchId, setSearchParams]);
+  }, [markers, navigate, selectedCatchId, setSearchParams, mapRetry]);
+
+  const retryMap = () => { setMapError(""); setTileError(false); setMapRetry((value) => value + 1); };
 
   return <Layout><div className="catch-map-page">
     <header className="catch-map-header">
@@ -122,8 +125,8 @@ function MapPage() {
       : markers.length === 0
       ? <section className="catch-map-empty"><h2>Zatím bez bodů na mapě</h2><p>GPS lze přidat při vytvoření nebo úpravě úlovku. Poloha se nikdy nezískává bez tvé akce.</p></section>
       : <>
-        {mapError ? <p className="catch-map-error" role="alert">{mapError}</p> : <div className="catch-map-canvas" ref={mapNode} role="region" aria-label={`Mapa · ${markers.length} ${markers.length === 1 ? "úlovek" : "úlovků"}`} />}
-        {tileError && !mapError && <p className="catch-map-note" role="status">Mapový podklad není momentálně dostupný. Uložené body se nezměnily.</p>}
+        {mapError ? <div className="catch-map-error" role="alert"><p>{mapError}</p><button type="button" onClick={retryMap}>Zkusit znovu</button></div> : <div className="catch-map-canvas" ref={mapNode} role="region" aria-label={`Mapa · ${markers.length} ${markers.length === 1 ? "úlovek" : "úlovků"}`} />}
+        {tileError && !mapError && <p className="catch-map-note" role="status">Mapový podklad není momentálně dostupný. Uložené body se nezměnily. <button type="button" onClick={retryMap}>Načíst znovu</button></p>}
         <p className="catch-map-count">{locatedCatchCountLabel(markers.length)}</p>
         <div className="catch-map-legend" aria-label="Legenda mapy">
           <span><i className="catch-map-legend-record" />Osobní rekord</span>

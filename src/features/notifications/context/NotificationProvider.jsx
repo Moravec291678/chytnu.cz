@@ -5,6 +5,7 @@ import { useOptionalSync } from "../../sync/context/syncContextValue.js";
 import { progressionNotificationInput, sortNotificationsNewestFirst, stableNotificationId } from "../data/notificationModel.js";
 import { notificationRepository } from "../data/notificationRepository.js";
 import { NotificationContext } from "./notificationContextValue.js";
+import { userFacingErrorMessage } from "../../../shared/errors/userFacingError.js";
 
 const emptyState = { scopeKey: null, notifications: [], loading: true, error: "" };
 
@@ -41,7 +42,7 @@ export function NotificationProvider({ children }) {
       return notifications;
     } catch (error) {
       setState((previous) => previous.scopeKey === scope.scopeKey
-        ? { ...previous, loading: false, error: error?.message || "Oznámení se nepodařilo načíst." }
+        ? { ...previous, loading: false, error: userFacingErrorMessage(error, "Oznámení se nepodařilo načíst. Zkus to znovu.") }
         : previous);
       return [];
     }

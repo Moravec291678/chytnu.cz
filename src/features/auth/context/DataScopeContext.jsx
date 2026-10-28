@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { accountScopeKey } from "../data/localDataScope.js";
 import { getActiveGuestScopeKey } from "../../catches/data/catchRepository.js";
 import { useAuth } from "./authContextValue.js";
+import { userFacingErrorMessage } from "../../../shared/errors/userFacingError.js";
 import { DataScopeContext } from "./dataScopeContextValue.js";
 
 const loadingState = Object.freeze({ status: "loading", scopeKey: null, kind: null, ownerId: null, error: "" });
@@ -17,7 +18,7 @@ export function DataScopeProvider({ children }) {
     getActiveGuestScopeKey().then((scopeKey) => {
       if (active) setGuestState({ status: "ready", scopeKey, kind: "guest", ownerId: null, error: "" });
     }).catch((error) => {
-      if (active) setGuestState({ ...loadingState, status: "error", error: error?.message || "Místní profil se nepodařilo načíst." });
+      if (active) setGuestState({ ...loadingState, status: "error", error: userFacingErrorMessage(error, "Místní profil se nepodařilo načíst. Zkus to znovu.") });
     });
     return () => { active = false; };
   }, [authStatus, userId]);
