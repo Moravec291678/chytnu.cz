@@ -15,6 +15,7 @@ import { buildPrivateCatchMarkers } from "../features/map/data/catchMap";
 import { MOON_PHASE_EMOJI } from "../shared/constants/moonPhaseEmoji.js";
 import { DEFAULT_SPECIES } from "../shared/constants/constants.js";
 import { getCatchRarity } from "../features/catches/utils/rarity.js";
+import { getVerificationPresentation } from "../features/catches/data/verificationPresentation.js";
 import { formatCatchWeight } from "../features/catches/data/catchWeight.js";
 import ConfirmDialog from "../shared/components/ConfirmDialog";
 import "../features/catches/components/PhotoSyncStatus.css";
@@ -165,6 +166,7 @@ function CatchDetailPage() {
   const isLengthRecord = isNewLengthRecord(item, state.catches);
   const hasMapLocation = buildPrivateCatchMarkers([item]).length > 0;
   const rarity = getCatchRarity(item, DEFAULT_SPECIES);
+  const verificationCopy = getVerificationPresentation(item.verification);
   const displayedPhotoIds = new Set(photos.map((photo) => photo.id));
   const unresolvedPhotos = (item.photos ?? []).filter((photo) => !displayedPhotoIds.has(photo.id));
   const hasPendingPhotos = unresolvedPhotos.some((photo) => [PHOTO_AVAILABILITY.PENDING, PHOTO_AVAILABILITY.SYNCING]
@@ -209,13 +211,16 @@ function CatchDetailPage() {
           {isSpeciesRecord && <span className="catch-detail-badge catch-detail-badge-species">Rekord druhu</span>}
           {item.method?.label && <span className="catch-detail-badge catch-detail-badge-method">{item.method.label}</span>}
           {item.isFavorite && <span className="catch-detail-badge">Oblíbený</span>}
-          {item.verification?.status === "unverified" && <span className="catch-detail-badge">Neověřený úlovek · 0 XP</span>}
-          {item.verification?.status === "verified" && <span className="catch-detail-badge catch-detail-badge-positive">Ověřený úlovek</span>}
+          {item.verification && <span className={item.verification.status === "verified" ? "catch-detail-badge catch-detail-badge-positive" : "catch-detail-badge"}>{verificationCopy.label}</span>}
           {item.result === "released" && <span className="catch-detail-badge catch-detail-badge-positive">Puštěno</span>}
           {item.result === "kept" && <span className="catch-detail-badge catch-detail-badge-danger">Ponecháno</span>}
         </div>
-        {item.verification?.status === "unverified" && <p className="catch-detail-date" role="status">
-          Zatím bez XP. Úlovek můžeš doplnit později; datum a polohu lze načíst z EXIF podporované fotografie.
+        {item.verification?.level === "limited" && <p className="catch-detail-date" role="status">
+          {verificationCopy.message}
+          {" "}<Link to={`/catch/${item.id}/edit`}>Doplnit úlovek</Link>
+        </p>}
+        {item.verification?.status === "unverified" && item.verification?.level !== "limited" && <p className="catch-detail-date" role="status">
+          Úlovek uložen. <span>Zatím bez XP.</span> Fotku a údaje o čase či místě můžeš doplnit později.
           {" "}<Link to={`/catch/${item.id}/edit`}>Doplnit úlovek</Link>
         </p>}
       </section>

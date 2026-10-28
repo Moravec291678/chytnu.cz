@@ -122,3 +122,14 @@ test("trophy records rank the five heaviest measured catches and respect the req
   ]);
   assert.deepEqual(buildTrophyRecords([], catalog), []);
 });
+
+test("future Catch stays in collection counts but cannot claim a personal or trophy record", () => {
+  const now = new Date("2026-10-28T12:00:00.000Z");
+  const current = { id: "current", speciesKey: "carp", caughtAt: "2026-10-28T10:00:00.000Z", weightKg: 5, lengthCm: 80 };
+  const future = { id: "future", speciesKey: "carp", caughtAt: "2026-10-29T10:00:00.000Z", weightKg: 100, lengthCm: 150 };
+  const album = buildSpeciesAlbum([current, future], catalog, [], now);
+  assert.equal(album[0].catchCount, 2);
+  assert.equal(album[0].bestWeightKg, 5);
+  assert.equal(album[0].bestLengthCm, 80);
+  assert.deepEqual(buildTrophyRecords([current, future], catalog, 5, now).map(({ catch: record }) => record.id), ["current"]);
+});

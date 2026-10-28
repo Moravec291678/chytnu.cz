@@ -27,7 +27,7 @@ test("seasonal XP is issued once for each completed seasonal challenge across ye
     { speciesKey: "commonCarp", species: "Kapr obecný", weightKg: 6, caughtAt: "2026-10-01T08:00:00" },
     { caughtAt: "2026-07-01T23:00:00" },
   ];
-  assert.equal(calculateSeasonalChallengeXp(catches), 300);
+  assert.equal(calculateSeasonalChallengeXp(catches, new Date("2027-02-18T12:00:00.000Z")), 300);
   assert.equal(buildSeasonalChallenge(catches, new Date(2026, 11, 18)).completed, true);
   assert.equal(buildSeasonalChallenge(catches, new Date(2027, 0, 18)).id, "season-2027-winter");
 });

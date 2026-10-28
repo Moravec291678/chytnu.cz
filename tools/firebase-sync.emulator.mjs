@@ -56,8 +56,10 @@ try {
     species: "Kapr", speciesKey: "carp", speciesLatin: null, weightKg: null, lengthCm: null,
     girthCm: null, fightMinutes: null, locationName: "Labe", waterNumber: null, gpsLocation: "50.087, 14.421",
     coordinates: { latitude: 50.087, longitude: 14.421 },
+    gpsSource: "manual-map",
     conditions: { airTempC: 11, moonPhase: "full" },
     conditionSources: { airTempC: "auto", moonPhase: "auto" },
+    verification: { status: "unverified", level: "limited", reason: "missing-location", photoHash: null, photoCaptureMetadata: null, locationSource: null, gpsAccuracyMeters: null, verifiedAt: null },
     waterDepthM: null, bottomType: null, tripId, method: null, baits: [], result: "released",
     photos: Array.from({ length: 4 }, (_, index) => ({ id: `photo-${index + 1}`, name: `kapr-${index + 1}.jpg`, type: "image/jpeg", blob: photoBlob, focalX: 0.2, focalY: 0.8, zoom: 1.4 })),
     notes: "emulator integration fixture", isFavorite: false, sync: { status: "local", revision: 1 },
@@ -78,6 +80,8 @@ try {
   assert.equal(remoteWater.data().name, "Labe");
   assert.equal(remoteWater.data().id, waterId);
   assert.deepEqual(remoteCatch.data().coordinates, { latitude: 50.087, longitude: 14.421 });
+  assert.equal(remoteCatch.data().gpsSource, "manual-map");
+  assert.equal(remoteCatch.data().verification.level, "limited");
   assert.deepEqual(remoteCatch.data().conditions, { airTempC: 11, moonPhase: "full" });
   assert.deepEqual(remoteCatch.data().conditionSources, { airTempC: "auto", moonPhase: "auto" });
   assert.equal("photos" in remoteCatch.data(), false, "Photo metadata must not share the Catch document");

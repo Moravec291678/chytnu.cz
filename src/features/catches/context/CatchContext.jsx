@@ -3,10 +3,12 @@ import { CatchContext } from "./catchContextValue";
 import { catchRepository, retainSessionPhotoBlob } from "../data/catchRepository";
 import { useDataScope } from "../../auth/context/dataScopeContextValue.js";
 import { getCatchRewardEventIds, progressionLedger } from "../../progression/data/progressionLedger.js";
+import { serverProgressionClaimRepository } from "../../progression/data/serverProgressionClaimRepository.js";
 import { preserveSyncedPhotoMetadata } from "../data/photoMetadata.js";
 import { requestPhotoStorageDurability } from "../data/photoStorageDurability.js";
 import { sha256Blob } from "../data/photoCloudProvider.js";
 import { verifyPhotoBlobReadback } from "../data/photoLocalBlob.js";
+import { userFacingErrorMessage } from "../../../shared/errors/userFacingError.js";
 import { recordPhotoUploadTrace } from "../data/photoUploadTrace.js";
 const initialState = {
   catches: [],
@@ -100,7 +102,7 @@ export function CatchProvider({ children }) {
       catches.sort((a, b) => new Date(b.caughtAt) - new Date(a.caughtAt));
       dispatch({ type: "LOAD_CATCHES", payload: catches });
     } catch (error) {
-      dispatch({ type: "SET_ERROR", payload: error.message || "Úlovky se nepodařilo načíst." });
+      dispatch({ type: "SET_ERROR", payload: userFacingErrorMessage(error, "Úlovky se nepodařilo načíst. Zkus to znovu.") });
     }
   }, [scope]);
 
@@ -119,6 +121,9 @@ export function CatchProvider({ children }) {
   const createCatch = useCallback(async (record) => {
     if (scope.status !== "ready") throw new Error("Místní profil se ještě načítá.");
     const storedRecord = await catchRepository.put(record, scope);
+    if (storedRecord.ownerId) await serverProgressionClaimRepository.enqueue(storedRecord.id, {
+      ownerId: storedRecord.ownerId, scopeKey: scope.scopeKey,
+    }).catch(() => {});
     await persistAndVerifyPhotos(record, storedRecord);
     if ((storedRecord.photos ?? []).some((photo) => photo.blob instanceof Blob)) void requestPhotoStorageDurability();
     const progression = await progressionLedger.reconcile(scope);
@@ -133,6 +138,9 @@ export function CatchProvider({ children }) {
     const latestRecord = await catchRepository.get(record.id, scope);
     const safeRecord = latestRecord ? await preserveSyncedPhotoMetadata(record, latestRecord) : record;
     const storedRecord = await catchRepository.put(safeRecord, scope);
+    if (storedRecord.ownerId) await serverProgressionClaimRepository.enqueue(storedRecord.id, {
+      ownerId: storedRecord.ownerId, scopeKey: scope.scopeKey,
+    }).catch(() => {});
     await persistAndVerifyPhotos(safeRecord, storedRecord);
     if ((storedRecord.photos ?? []).some((photo) => photo.blob instanceof Blob)) void requestPhotoStorageDurability();
     await progressionLedger.reconcileCatch(storedRecord, scope);
@@ -166,6 +174,7 @@ export function CatchProvider({ children }) {
   const deleteCatch = useCallback(async (id) => {
     if (scope.status !== "ready") throw new Error("Místní profil se ještě načítá.");
     await catchRepository.delete(id, scope);
+    if (scope.ownerId) await serverProgressionClaimRepository.remove(id, scope.ownerId).catch(() => {});
     if (activeScopeKey.current !== scope.scopeKey) return;
     dispatch({ type: "DELETE_CATCH", payload: id });
     window.dispatchEvent(new Event("chytnu:outbox-changed"));

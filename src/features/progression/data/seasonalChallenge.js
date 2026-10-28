@@ -107,7 +107,7 @@ export function buildSeasonalChallenge(catches, now = new Date()) {
   }
   const season = SEASONS.find((item) => item.months.includes(now.getMonth()));
   const periodKey = getSeasonKey(now);
-  const seasonCatches = getChallengesBySeason(filterEligibleCatchRecords(catches)).get(periodKey) ?? [];
+  const seasonCatches = getChallengesBySeason(filterEligibleCatchRecords(catches, { now })).get(periodKey) ?? [];
   const variants = getSeasonChallenges(season).map((definition) => buildVariant(seasonCatches, periodKey, definition));
   const primary = variants[0];
   return {
@@ -128,12 +128,12 @@ export function buildSeasonalChallenge(catches, now = new Date()) {
   };
 }
 
-export function calculateSeasonalChallengeXp(catches) {
-  return listCompletedSeasonalChallengeRewards(catches).reduce((total, reward) => total + reward.xp, 0);
+export function calculateSeasonalChallengeXp(catches, now = new Date()) {
+  return listCompletedSeasonalChallengeRewards(catches, now).reduce((total, reward) => total + reward.xp, 0);
 }
 
-export function listCompletedSeasonalChallengeRewards(catches) {
-  catches = filterEligibleCatchRecords(catches);
+export function listCompletedSeasonalChallengeRewards(catches, now = new Date()) {
+  catches = filterEligibleCatchRecords(catches, { now });
   const challenges = getChallengesBySeason(catches);
   return [...challenges].flatMap(([key, records]) => {
     const seasonKey = key.slice(key.indexOf("-") + 1);

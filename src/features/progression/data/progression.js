@@ -150,11 +150,11 @@ export function getRankForLevel(level) {
 }
 
 export function calculateProgression(catches, trips = [], { now = new Date(), streakFreezes = [] } = {}) {
-  catches = filterEligibleCatchRecords(catches);
+  catches = filterEligibleCatchRecords(catches, { now });
   const speciesCount = uniqueKnown(catches, (item) => item.speciesKey || normalizeText(item.species ?? "") || null);
   const locationCount = uniqueKnown(catches, (item) => item.waterId || null);
   const completedTrips = trips.filter((trip) => trip.endedAt).length;
-  const questXp = calculateQuestXp(catches, trips);
+  const questXp = calculateQuestXp(catches, trips, now);
   const mastery = calculateSpeciesMastery(catches);
   const streak = calculateWeeklyStreak(catches, now, streakFreezes);
   const catchXp = catches.reduce((total, item) => {
@@ -166,7 +166,7 @@ export function calculateProgression(catches, trips = [], { now = new Date(), st
   const masteryXp = mastery.reduce((total, item) => total + item.xp - MASTERY_LEVELS[0].xp, 0);
   const streakXp = Math.floor(streak.weeks / 7) * XP_RULES.streakBonus;
   const locationXp = locationCount * XP_RULES.newWater;
-  const seasonalXp = calculateSeasonalChallengeXp(catches);
+  const seasonalXp = calculateSeasonalChallengeXp(catches, now);
   const maxCatchWeight = catches.reduce((maximum, item) => (
     isMeasuredCatchWeight(item) ? Math.max(maximum, item.weightKg) : maximum
   ), 0);

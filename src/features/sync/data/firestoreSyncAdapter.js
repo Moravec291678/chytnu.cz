@@ -163,7 +163,7 @@ export function toRemoteRecord(entityType, record, ownerId) {
     ...common,
     caughtAt: requireValue(record.caughtAt, record.createdAt),
     catchDateTimeSource: ["manual", "photo-exif"].includes(record.catchDateTimeSource) ? record.catchDateTimeSource : "default",
-    gpsSource: ["manual", "photo-exif", "live-gps"].includes(record.gpsSource) ? record.gpsSource : "default",
+    gpsSource: ["manual", "manual-map", "photo-exif", "live-gps"].includes(record.gpsSource) ? record.gpsSource : "default",
     species: requireValue(record.species, ""),
     speciesKey: requireValue(record.speciesKey, ""),
     speciesLatin: requireValue(record.speciesLatin, null),

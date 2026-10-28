@@ -136,7 +136,7 @@ export function createCatchRecord(data, species, methods, existing = null, baitC
     catchDateTimeSource: ["manual", "photo-exif"].includes(data.catchDateTimeSource)
       ? data.catchDateTimeSource
       : existing?.catchDateTimeSource ?? "default",
-    gpsSource: ["manual", "photo-exif", "live-gps"].includes(data.gpsSource)
+    gpsSource: ["manual", "manual-map", "photo-exif", "live-gps"].includes(data.gpsSource)
       ? data.gpsSource
       : existing?.gpsSource ?? "default",
     tripId: data.tripId || null,

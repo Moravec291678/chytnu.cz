@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { getAvailableProfileStats, getBestWater, getReleasedPercentage } from "./profileStats.js";
+import { getAvailableProfileStats, getBestWater, getBiggestCatch, getReleasedPercentage } from "./profileStats.js";
 
 test("release percentage uses only records with a known outcome", () => {
   assert.equal(getReleasedPercentage([{ result: "released" }, { result: "kept" }, { result: "unspecified" }]), 50);
@@ -42,6 +42,14 @@ test("best Water is derived only from catches linked to a stable Water ID", () =
   assert.deepEqual({ id: best.id, name: best.name, catchCount: best.catchCount, water: best.water.name }, {
     id: "lipno", name: "Lipno", catchCount: 2, water: "Lipno",
   });
+});
+
+test("future Catch remains data but cannot become the displayed personal record", () => {
+  const now = new Date("2026-10-28T12:00:00.000Z");
+  const future = { id: "future", caughtAt: "2026-10-29T10:00:00.000Z", weightKg: 100, weightSource: "manual" };
+  const current = { id: "current", caughtAt: "2026-10-28T10:00:00.000Z", weightKg: 5, weightSource: "manual" };
+  assert.equal(getBiggestCatch([current, future], now), current);
+  assert.equal(getBiggestCatch([future], now), null);
 });
 
 test("best Water is absent when there is no linked, named catch", () => {

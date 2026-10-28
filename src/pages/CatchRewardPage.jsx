@@ -8,6 +8,7 @@ import { formatCatchMeasurements } from "../features/catches/data/catchWeight.js
 import { getCatchRarity } from "../features/catches/utils/rarity.js";
 import { DEFAULT_SPECIES } from "../shared/constants/speciesCatalog.js";
 import { getCatchRecordStatus } from "../features/progression/data/catchReward.js";
+import { getVerificationPresentation } from "../features/catches/data/verificationPresentation.js";
 import "./ProgressionPages.css";
 
 const BREAKDOWN_LABELS = {
@@ -83,6 +84,7 @@ export default function CatchRewardPage() {
       .map(([key]) => key === "personalRecord" ? "Osobní rekord" : "Rekord druhu"),
   ].filter(Boolean);
   const rarity = getCatchRarity(record, DEFAULT_SPECIES);
+  const verificationCopy = getVerificationPresentation(record.verification);
 
   return <Layout>
     <div className="catch-reward-screen">
@@ -109,8 +111,12 @@ export default function CatchRewardPage() {
         </header>
 
         {reward ? <>
+          {reward.xp === 0 && <section className="catch-reward-panel" aria-live="polite">
+            <h2>Úlovek uložen</h2>
+            <p className="catch-reward-empty">Zatím bez XP</p>
+          </section>}
           <section className="catch-reward-panel" aria-labelledby="catch-reward-earned-title">
-            <h2 id="catch-reward-earned-title">Získáno</h2>
+            <h2 id="catch-reward-earned-title">{reward.xp === 0 ? "Další postup" : "Získáno"}</h2>
             {rewardRows.length > 0 ? (
               <ul className="catch-reward-list">
                 {rewardRows.map(({ key, label, xp }) => (
@@ -165,9 +171,14 @@ export default function CatchRewardPage() {
           </p>
         )}
       </div>
-      {record.verification?.status === "unverified" && (
+      {record.verification?.level === "limited" ? (
         <p className="catch-reward-unavailable" role="status">
-          Neověřený úlovek · 0 XP. Fotografie a údaje můžeš doplnit později; datum a polohu lze načíst z EXIF podporované fotografie.
+          <strong>{verificationCopy.label}</strong><br />{verificationCopy.message}
+          <Link to={`/catch/${record.id}/edit`}> Doplnit úlovek</Link>
+        </p>
+      ) : record.verification?.status === "unverified" && (
+        <p className="catch-reward-unavailable" role="status">
+          <strong>{verificationCopy.label}</strong><br />{verificationCopy.message}
           <Link to={`/catch/${record.id}/edit`}> Doplnit úlovek</Link>
         </p>
       )}

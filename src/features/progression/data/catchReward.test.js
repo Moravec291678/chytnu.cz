@@ -19,3 +19,11 @@ test("record status compares real catches and excludes estimated weights", () =>
     { personalRecord: false, speciesRecord: false },
   );
 });
+
+test("a future-dated Catch cannot earn personal or species record recognition", () => {
+  const now = new Date("2026-10-28T12:00:00.000Z");
+  const future = { id: "future", speciesKey: "carp", caughtAt: "2026-10-29T10:00:00.000Z", weightKg: 100, weightSource: "manual" };
+  const current = { id: "current", speciesKey: "carp", caughtAt: "2026-10-28T10:00:00.000Z", weightKg: 5, weightSource: "manual" };
+  assert.deepEqual(getCatchRecordStatus(future, [current, future], now), { personalRecord: false, speciesRecord: false });
+  assert.deepEqual(getCatchRecordStatus(current, [current, future], now), { personalRecord: true, speciesRecord: true });
+});

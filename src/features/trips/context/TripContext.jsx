@@ -5,6 +5,7 @@ import { endTripRecord } from "../data/tripModel";
 import { useDataScope } from "../../auth/context/dataScopeContextValue.js";
 import { updateTripRecord } from "../data/tripModel.js";
 import { progressionLedger } from "../../progression/data/progressionLedger.js";
+import { userFacingErrorMessage } from "../../../shared/errors/userFacingError.js";
 
 const initialState = { trips: [], loading: true, error: "" };
 
@@ -32,7 +33,7 @@ export function TripProvider({ children }) {
       trips.sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt));
       dispatch({ type: "LOAD", trips });
     } catch (error) {
-      dispatch({ type: "ERROR", message: error.message || "Vycházky se nepodařilo načíst." });
+      dispatch({ type: "ERROR", message: userFacingErrorMessage(error, "Vycházky se nepodařilo načíst. Zkus to znovu.") });
     }
   }, [scope]);
   useEffect(() => {

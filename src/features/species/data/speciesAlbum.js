@@ -1,5 +1,6 @@
 import { normalizeText } from "../../../shared/utils/helpers.js";
 import { isMeasuredCatchWeight } from "../../catches/data/catchWeight.js";
+import { isCatchDateEligibleForProgression } from "../../catches/data/catchVerification.js";
 
 function measuredMaximum(records, field) {
   return records.reduce((maximum, record) => {
@@ -9,7 +10,7 @@ function measuredMaximum(records, field) {
   }, null);
 }
 
-export function buildSpeciesAlbum(catches, catalog, mastery = []) {
+export function buildSpeciesAlbum(catches, catalog, mastery = [], now = new Date()) {
   const grouped = new Map();
   const masteryBySpecies = new Map(mastery.map((item) => [item.speciesKey, item]));
   for (const record of catches) {
@@ -21,6 +22,7 @@ export function buildSpeciesAlbum(catches, catalog, mastery = []) {
 
   return catalog.map((species) => {
     const records = grouped.get(species.key) ?? [];
+    const progressionRecords = records.filter((record) => isCatchDateEligibleForProgression(record, now));
     const speciesMastery = masteryBySpecies.get(species.key);
     const timestamps = records.map((record) => Date.parse(record.caughtAt)).filter(Number.isFinite).sort((a, b) => a - b);
     return {
@@ -29,10 +31,10 @@ export function buildSpeciesAlbum(catches, catalog, mastery = []) {
       catchCount: records.length,
       masteryLevel: speciesMastery?.level ?? 0,
       stars: speciesMastery?.stars ?? 0,
-      bestWeightCatch: measuredMaximum(records, "weightKg"),
-      bestLengthCatch: measuredMaximum(records, "lengthCm"),
-      bestWeightKg: measuredMaximum(records, "weightKg")?.weightKg ?? null,
-      bestLengthCm: measuredMaximum(records, "lengthCm")?.lengthCm ?? null,
+      bestWeightCatch: measuredMaximum(progressionRecords, "weightKg"),
+      bestLengthCatch: measuredMaximum(progressionRecords, "lengthCm"),
+      bestWeightKg: measuredMaximum(progressionRecords, "weightKg")?.weightKg ?? null,
+      bestLengthCm: measuredMaximum(progressionRecords, "lengthCm")?.lengthCm ?? null,
       firstCaughtAt: timestamps.length ? new Date(timestamps[0]).toISOString() : null,
       lastCaughtAt: timestamps.length ? new Date(timestamps.at(-1)).toISOString() : null,
     };
@@ -117,10 +119,10 @@ export function buildSeasonCollections(catches, trips, year = getSpeciesAlbumYea
   return [...collections.values()].sort((a, b) => b.latestTimestamp - a.latestTimestamp);
 }
 
-export function buildTrophyRecords(catches, catalog, limit = 5) {
+export function buildTrophyRecords(catches, catalog, limit = 5, now = new Date()) {
   const speciesByKey = new Map(catalog.map((species) => [species.key, species]));
   return catches
-    .filter((record) => isMeasuredCatchWeight(record))
+    .filter((record) => isCatchDateEligibleForProgression(record, now) && isMeasuredCatchWeight(record))
     .map((record) => {
       const species = speciesByKey.get(record.speciesKey);
       return {

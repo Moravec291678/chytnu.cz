@@ -44,8 +44,8 @@ function dailyTasks(catches, trips, now) {
   ];
 }
 
-export function calculateQuestXp(catches, trips = []) {
-  const rewards = listCompletedChallengeRewards(catches, trips);
+export function calculateQuestXp(catches, trips = [], now = new Date()) {
+  const rewards = listCompletedChallengeRewards(catches, trips, now);
   const sum = (id) => rewards.filter((reward) => reward.challengeId === id).reduce((total, reward) => total + reward.xp, 0);
   const dailyCatchXp = sum("daily-catch");
   const dailySpeciesXp = sum("daily-species");
@@ -58,8 +58,8 @@ export function calculateQuestXp(catches, trips = []) {
   };
 }
 
-export function listCompletedChallengeRewards(catches, trips = []) {
-  catches = filterEligibleCatchRecords(catches);
+export function listCompletedChallengeRewards(catches, trips = [], now = new Date()) {
+  catches = filterEligibleCatchRecords(catches, { now });
   const dailyCatchDays = new Set();
   const speciesByDay = new Map();
   const waterVisitsByWeek = new Map();
@@ -137,7 +137,7 @@ function weeklyTasks(catches, now) {
 }
 
 export function buildChallengeOverview(catches, trips = [], now = new Date()) {
-  catches = filterEligibleCatchRecords(catches);
+  catches = filterEligibleCatchRecords(catches, { now });
   const daily = dailyTasks(catches, trips, now);
   const weekly = weeklyTasks(catches, now);
   const decorate = (tasks) => tasks.map((task) => ({

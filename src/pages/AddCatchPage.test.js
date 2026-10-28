@@ -61,3 +61,21 @@ test("Add Catch photo manager keeps the primary photo dominant, shows legacy thu
   assert.match(styles, /\.catch-photo-manager \.photo-preview-primary \{ grid-column: 1 \/ -1;/);
   assert.match(styles, /\.catch-photo-manager \.photo-preview-thumbnail img \{[^}]*height: 86px/s);
 });
+
+test("Add Catch map picker applies a manual-map source and keeps the form on the draft-backed page", async () => {
+  const [source, picker] = await Promise.all([
+    readFile(new URL("./AddCatchPage.jsx", import.meta.url), "utf8"),
+    readFile(new URL("../features/catches/components/CatchLocationPicker.jsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(source, /const CatchLocationPicker = lazy\(\(\) => import\("\.\.\/features\/catches\/components\/CatchLocationPicker\.jsx"\)\)/);
+  assert.match(source, /<Suspense fallback=\{<div className="catch-location-picker-backdrop"/);
+  assert.doesNotMatch(source, /^import CatchLocationPicker from/m);
+  assert.match(source, /<CatchLocationPicker[\s\S]*initialCoordinates=\{catchData\.coordinates \?\? parseCoordinateText\(catchData\.gpsLocation\)\}[\s\S]*waterCoordinates=\{selectedWater\?\.coordinates\}/);
+  assert.match(source, /applyManualMapLocation\(catchData, coordinates\)/);
+  assert.match(source, /await persistDraft\(nextData, \{/);
+  assert.match(source, /Upravit polohu na mapě|Vybrat místo na mapě/);
+  assert.match(picker, /draggable: true/);
+  assert.match(picker, /map\.on\("click"/);
+  assert.match(picker, /Zeměpisná šířka/);
+  assert.match(picker, /Použít tuto polohu/);
+});

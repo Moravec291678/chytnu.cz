@@ -41,7 +41,7 @@ test("Firestore catch projection writes null when conditions were not recorded",
 
 test("Firestore Catch projection preserves bounded verification evidence for cross-device XP eligibility", () => {
   const verification = {
-    status: "verified", reason: "photo-date-and-location", photoHash: "a".repeat(64),
+    status: "verified", level: "strong", reason: "photo-date-and-location", photoHash: "a".repeat(64),
     photoCaptureMetadata: { capturedAt: "2026-10-28T10:00:00.000Z", coordinates: { latitude: 50, longitude: 14 } },
     locationSource: "photo-exif", gpsAccuracyMeters: null, verifiedAt: "2026-10-28T12:00:00.000Z",
   };
@@ -50,10 +50,34 @@ test("Firestore Catch projection preserves bounded verification evidence for cro
     catchDateTimeSource: "photo-exif", gpsSource: "photo-exif",
   }, "angler-1");
   assert.equal(projected.verification.status, "verified");
+  assert.equal(projected.verification.level, "strong");
   assert.equal(projected.verification.photoHash, "a".repeat(64));
   assert.equal(projected.verification.photoCaptureMetadata.coordinates.latitude, 50);
   assert.equal(projected.catchDateTimeSource, "photo-exif");
   assert.equal(projected.gpsSource, "photo-exif");
+});
+
+test("Firestore Catch projection preserves standard trust backed by a matching Trip", () => {
+  const projected = toRemoteRecord("catch", {
+    id: "trip-verified-catch", ownerId: "angler-1",
+    verification: {
+      status: "verified", level: "standard", reason: "trip-time-match", photoHash: "b".repeat(64),
+      photoCaptureMetadata: null, locationSource: "trip", gpsAccuracyMeters: null,
+      verifiedAt: "2026-10-28T12:00:00.000Z",
+    },
+  }, "angler-1");
+  assert.equal(projected.verification.status, "verified");
+  assert.equal(projected.verification.level, "standard");
+  assert.equal(projected.verification.locationSource, "trip");
+});
+
+test("Firestore Catch projection preserves manual-map location provenance", () => {
+  const projected = toRemoteRecord("catch", {
+    id: "map-catch", ownerId: "angler-1", gpsSource: "manual-map",
+    coordinates: { latitude: 49.25, longitude: 16.65 },
+  }, "angler-1");
+  assert.equal(projected.gpsSource, "manual-map");
+  assert.deepEqual(projected.coordinates, { latitude: 49.25, longitude: 16.65 });
 });
 
 test("Firestore catch projection keeps ordered local-only photo metadata and crop fields", () => {

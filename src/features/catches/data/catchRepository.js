@@ -9,7 +9,7 @@ import {
 import { readPhotoBlob } from "./photoLocalBlob.js";
 
 const DATABASE_NAME = "chytnu-local";
-export const DATABASE_VERSION = 8;
+export const DATABASE_VERSION = 9;
 export const CATCH_STORE_NAME = "catches";
 export const TRIP_STORE_NAME = "trips";
 export const WATER_STORE_NAME = "waters";
@@ -24,6 +24,7 @@ export const PROGRESSION_EVENT_STORE_NAME = "progressionEvents";
 export const ACTIVE_GUEST_SCOPE_KEY = "activeGuestScope";
 export const PHOTO_BINARY_STORE_NAME = "photoBinaries";
 export const NOTIFICATION_STORE_NAME = "notifications";
+export const SERVER_PROGRESSION_CLAIM_STORE_NAME = "serverProgressionClaims";
 
 const sessionPhotoBlobs = new Map();
 function sessionPhotoBlobKey(scopeKey, catchId, photoId) { return JSON.stringify([scopeKey, catchId, photoId]); }
@@ -256,6 +257,12 @@ export function openLocalDatabase() {
         : db.createObjectStore(NOTIFICATION_STORE_NAME, { keyPath: "id" });
       if (!notifications.indexNames.contains("scopeKey")) notifications.createIndex("scopeKey", "scopeKey", { unique: false });
       if (!notifications.indexNames.contains("createdAt")) notifications.createIndex("createdAt", "createdAt", { unique: false });
+      const progressionClaims = db.objectStoreNames.contains(SERVER_PROGRESSION_CLAIM_STORE_NAME)
+        ? transaction.objectStore(SERVER_PROGRESSION_CLAIM_STORE_NAME)
+        : db.createObjectStore(SERVER_PROGRESSION_CLAIM_STORE_NAME, { keyPath: "id" });
+      if (!progressionClaims.indexNames.contains("ownerId")) progressionClaims.createIndex("ownerId", "ownerId", { unique: false });
+      if (!progressionClaims.indexNames.contains("scopeKey")) progressionClaims.createIndex("scopeKey", "scopeKey", { unique: false });
+      if (!progressionClaims.indexNames.contains("status")) progressionClaims.createIndex("status", "status", { unique: false });
 
       if (event.oldVersion < 5) {
         const createdAt = new Date().toISOString();
@@ -324,11 +331,26 @@ async function listScopedRecords(storeName, scopeKey) {
   return storeName === CATCH_STORE_NAME ? hydratePhotoBinaryRecords(records, scopeKey) : records;
 }
 
+async function listScopedMetadata(storeName, scopeKey) {
+  const db = await openLocalDatabase();
+  try {
+    const transaction = db.transaction(storeName, "readonly");
+    return await requestValue(transaction.objectStore(storeName).index("scopeKey").getAll(scopeKey));
+  } finally { db.close(); }
+}
+
 async function getScopedRecord(storeName, id, scopeKey) {
   let record = await runStoreOperation(storeName, "get", "readonly", id);
   if (!record) return undefined;
   if (recordScopeKey(record) !== scopeKey) throw new Error("Záznam nepatří do aktivního profilu.");
   if (storeName === CATCH_STORE_NAME) [record] = await hydratePhotoBinaryRecords([record], scopeKey);
+  return record;
+}
+
+async function getScopedMetadataRecord(storeName, id, scopeKey) {
+  const record = await runStoreOperation(storeName, "get", "readonly", id);
+  if (!record) return undefined;
+  if (recordScopeKey(record) !== scopeKey) throw new Error("Záznam nepatří do aktivního profilu.");
   return record;
 }
 
@@ -374,9 +396,17 @@ export const catchRepository = {
     const { scopeKey } = requireRepositoryScope(options);
     return listScopedRecords(CATCH_STORE_NAME, scopeKey);
   },
+  listMetadata: (options) => {
+    const { scopeKey } = requireRepositoryScope(options);
+    return listScopedMetadata(CATCH_STORE_NAME, scopeKey);
+  },
   get: (id, options) => {
     const { scopeKey } = requireRepositoryScope(options);
     return getScopedRecord(CATCH_STORE_NAME, id, scopeKey);
+  },
+  getMetadata: (id, options) => {
+    const { scopeKey } = requireRepositoryScope(options);
+    return getScopedMetadataRecord(CATCH_STORE_NAME, id, scopeKey);
   },
   put: async (record, options) => {
     const requestedScope = requireRepositoryScope(options);

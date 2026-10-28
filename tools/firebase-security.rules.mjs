@@ -14,6 +14,9 @@ const photoPath = (userId, catchId, photoId) => `${catchPath(userId, catchId)}/p
 const tripPath = (userId, tripId) => `users/${userId}/trips/${tripId}`;
 const notificationPath = (userId, notificationId) => `users/${userId}/notifications/${notificationId}`;
 const pushSubscriptionPath = (userId, subscriptionId) => `users/${userId}/pushSubscriptions/${subscriptionId}`;
+const serverProgressionEventPath = (userId, eventId) => `users/${userId}/serverProgressionEvents/${eventId}`;
+const serverProgressionStatePath = (userId, catchId) => `users/${userId}/serverProgressionCatchState/${catchId}`;
+const serverProgressionSummaryPath = (userId) => `users/${userId}/serverProgressionState/summary`;
 
 function makeTrip(id, ownerId) {
   return {
@@ -240,6 +243,38 @@ test("Web Push subscription je owner-scoped a přijímá pouze omezený endpoint
   await assertFails(setDoc(doc(aliceDb, pushSubscriptionPath("angler-a", "bad-owner")), { ...subscription, ownerId: "angler-b" }));
   await assertFails(getDocs(collection(bob.firestore(), "users/angler-a/pushSubscriptions")));
   await assertFails(setDoc(doc(bob.firestore(), pushSubscriptionPath("angler-a", "spoofed")), subscription));
+});
+
+test("server progression shadow ledger je owner-readable a klient jej nemůže falšovat", async () => {
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    const db = context.firestore();
+    await setDoc(doc(db, serverProgressionEventPath("angler-a", "catch-created-catch-a")), {
+      id: "catch-created-catch-a", ownerId: "angler-a", catchId: "catch-a", type: "catch.created", xp: 10,
+    });
+    await setDoc(doc(db, serverProgressionStatePath("angler-a", "catch-a")), {
+      ownerId: "angler-a", catchId: "catch-a", level: "standard", awardedXp: 10,
+    });
+    await setDoc(doc(db, serverProgressionSummaryPath("angler-a")), {
+      ownerId: "angler-a", legacyBaselineXp: 250,
+    });
+  });
+  const ownEvent = doc(alice.firestore(), serverProgressionEventPath("angler-a", "catch-created-catch-a"));
+  const ownState = doc(alice.firestore(), serverProgressionStatePath("angler-a", "catch-a"));
+  const ownSummary = doc(alice.firestore(), serverProgressionSummaryPath("angler-a"));
+  assert.equal((await assertSucceeds(getDoc(ownEvent))).data().xp, 10);
+  assert.equal((await assertSucceeds(getDoc(ownState))).data().level, "standard");
+  assert.equal((await assertSucceeds(getDoc(ownSummary))).data().legacyBaselineXp, 250);
+  await assertFails(updateDoc(ownSummary, { legacyBaselineXp: 0 }));
+  await assertFails(setDoc(doc(alice.firestore(), serverProgressionEventPath("angler-a", "forged")), {
+    id: "forged", ownerId: "angler-a", catchId: "catch-a", type: "catch.created", xp: 1000,
+  }));
+  await assertFails(updateDoc(ownEvent, { xp: 1000 }));
+  await assertFails(setDoc(doc(alice.firestore(), serverProgressionStatePath("angler-a", "other-catch")), {
+    ownerId: "angler-a", catchId: "other-catch", level: "strong", awardedXp: 1000,
+  }));
+  await assertFails(getDoc(doc(bob.firestore(), serverProgressionEventPath("angler-a", "catch-created-catch-a"))));
+  await assertFails(getDoc(doc(bob.firestore(), serverProgressionStatePath("angler-a", "catch-a"))));
+  await assertFails(getDoc(doc(bob.firestore(), serverProgressionSummaryPath("angler-a"))));
 });
 
 test("pravidla odmítnou převzetí vlastníka, změnu chráněných polí i neznámá pole", async () => {

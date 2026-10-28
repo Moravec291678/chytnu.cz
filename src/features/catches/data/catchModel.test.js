@@ -4,6 +4,8 @@ import { catchToForm, createCatchRecord, updateCatchFormField, validateCatchForm
 import { getBiggestCatch } from "../../home/utils/profileStats.js";
 import { estimateFishWeight } from "./lengthWeightRelationships.js";
 import { MAX_PHOTOS_PER_CATCH } from "./catchPhotos.js";
+import { applyManualMapLocation } from "./manualMapLocation.js";
+import { evaluateCatchVerification } from "./catchVerification.js";
 
 const minimalForm = {
   speciesKey: "carp", catchDate: "2026-10-16", catchTime: "12:30",
@@ -83,6 +85,7 @@ test("verification and capture-input provenance round-trip without changing lega
   }, { key: "carp", label: "Kapr" }, []);
   const form = catchToForm(record);
   assert.equal(form.verification.status, "verified");
+  assert.equal(form.verification.level, "standard");
   assert.equal(form.verification.photoHash, "a".repeat(64));
   assert.equal(form.catchDateTimeSource, "photo-exif");
   assert.equal(form.gpsSource, "live-gps");
@@ -90,6 +93,82 @@ test("verification and capture-input provenance round-trip without changing lega
   const legacy = catchToForm({ speciesKey: "carp", caughtAt: "2020-01-01T10:00:00.000Z" });
   assert.equal(legacy.verification, undefined);
   assert.equal(legacy.catchDateTimeSource, "manual");
+});
+
+test("Catch create and form round-trip preserve all verification trust levels", () => {
+  const proof = {
+    photoHash: "b".repeat(64), locationSource: "live-gps", verifiedAt: "2026-10-16T12:30:00.000Z",
+  };
+  for (const [level, status] of [["strong", "verified"], ["standard", "verified"], ["limited", "unverified"], ["unverified", "unverified"]]) {
+    const record = createCatchRecord({
+      ...minimalForm,
+      verification: {
+        status, level, reason: "test", ...proof,
+      },
+    }, { key: "carp", label: "Kapr" }, []);
+    const restored = catchToForm(record);
+    assert.equal(record.verification.level, level);
+    assert.equal(restored.verification.level, level);
+    assert.equal(restored.verification.status, status);
+  }
+});
+
+test("manual map location source round-trips separately from live GPS evidence", () => {
+  const liveEvidence = { source: "live-gps", capturedAt: "2026-10-16T12:29:00.000Z", accuracyMeters: 15, coordinates: { latitude: 49.2, longitude: 16.6 } };
+  const record = createCatchRecord({
+    ...minimalForm,
+    gpsSource: "manual-map",
+    gpsLocation: "49.25, 16.65",
+    coordinates: { latitude: 49.25, longitude: 16.65 },
+    locationEvidence: liveEvidence,
+  }, { key: "carp", label: "Kapr" }, []);
+  const form = catchToForm(record);
+  assert.equal(record.gpsSource, "manual-map");
+  assert.equal(form.gpsSource, "manual-map");
+  assert.deepEqual(form.coordinates, { latitude: 49.25, longitude: 16.65 });
+  assert.deepEqual(form.locationEvidence, liveEvidence);
+});
+
+test("manual map selection survives save and edit, while only matching EXIF can verify it", () => {
+  const selectedPoint = { latitude: 50.123456, longitude: 14.123456 };
+  const exifPoint = { latitude: 50.1235, longitude: 14.1235 };
+  const hash = "d".repeat(64);
+  const blob = new Blob(["original image bytes"], { type: "image/jpeg" });
+  const withMapPoint = applyManualMapLocation({
+    ...minimalForm,
+    photos: [{ id: "original-photo", type: "image/jpeg", blob, contentSha256: hash,
+      captureMetadata: { capturedAt: "2026-10-28T08:15:00.000Z", coordinates: exifPoint } }],
+  }, selectedPoint);
+  const record = createCatchRecord(withMapPoint, { key: "carp", label: "Kapr" }, []);
+  const editForm = catchToForm(record);
+  assert.equal(record.gpsSource, "manual-map");
+  assert.equal(editForm.gpsSource, "manual-map");
+  assert.deepEqual(editForm.coordinates, selectedPoint);
+  assert.equal(editForm.gpsLocation, "50.123456, 14.123456");
+  assert.deepEqual(editForm.photos[0].captureMetadata.coordinates, exifPoint);
+
+  const corroborated = evaluateCatchVerification({
+    photos: editForm.photos, coordinates: editForm.coordinates, gpsSource: editForm.gpsSource,
+    caughtAt: "2026-10-28T08:15:00.000Z", now: new Date("2026-10-28T20:00:00.000Z"),
+  });
+  assert.equal(corroborated.level, "strong");
+  assert.equal(corroborated.locationSource, "photo-exif");
+
+  const mapOnly = evaluateCatchVerification({
+    photos: [{ id: "without-exif", type: "image/jpeg", blob, contentSha256: hash }],
+    coordinates: editForm.coordinates, gpsSource: editForm.gpsSource,
+    caughtAt: "2026-10-28T08:15:00.000Z", now: new Date("2026-10-28T20:00:00.000Z"),
+  });
+  assert.equal(mapOnly.level, "limited");
+
+  const conflictingExif = evaluateCatchVerification({
+    photos: [{ id: "different-exif-point", type: "image/jpeg", blob, contentSha256: hash,
+      captureMetadata: { capturedAt: "2026-10-28T08:15:00.000Z", coordinates: { latitude: 49, longitude: 13 } } }],
+    coordinates: editForm.coordinates, gpsSource: editForm.gpsSource,
+    caughtAt: "2026-10-28T08:15:00.000Z", now: new Date("2026-10-28T20:00:00.000Z"),
+  });
+  assert.equal(conflictingExif.level, "unverified");
+  assert.equal(conflictingExif.reason, "exif-location-mismatch");
 });
 
 test("record has stable local-first metadata and preserves optional nulls", () => {

@@ -8,10 +8,10 @@ import {
 import { listCompletedChallengeRewards } from "./challenges.js";
 import { listCompletedSeasonalChallengeRewards } from "./seasonalChallenge.js";
 import { canUseStreakFreeze, calculateWeeklyStreak, getPragueStreakMonthKey, getPragueStreakWeekKey } from "./streakModel.js";
-import { XP_RULES } from "./xpRules.js";
+import { calculateLimitedCatchXpForDay, XP_RULES } from "./xpRules.js";
 import { getCatchRarity } from "../../catches/utils/rarity.js";
 import { DEFAULT_SPECIES } from "../../../shared/constants/speciesCatalog.js";
-import { filterEligibleCatchRecords, getCatchPhotoHash, isCatchProgressionEligible, isValidPhotoHash } from "../../catches/data/catchVerification.js";
+import { CATCH_VERIFICATION_LEVEL, filterEligibleCatchRecords, getCatchPhotoHash, isCatchDateEligibleForProgression, isCatchProgressionEligible, isValidPhotoHash } from "../../catches/data/catchVerification.js";
 
 const DEFINITION_VERSION = 2;
 const claimedRewardEventIds = new Set();
@@ -61,7 +61,7 @@ export function summaryForXp(xp) {
 }
 
 const BREAKDOWN_KEYS = Object.freeze({
-  "catch.created": "catchXp", "catch.photo": "catchXp", "catch.context": "catchXp",
+  "catch.created": "catchXp", "catch.photo": "catchXp", "catch.context": "catchXp", "catch.limited": "catchXp",
   "species.first": "speciesXp", "water.first": "locationXp", "water.created": "locationXp",
   "achievement.unlocked": "achievementXp", "mastery.milestone": "masteryXp",
   "streak.milestone": "streakXp", "streak.bonus": "streakXp",
@@ -87,7 +87,7 @@ export function buildLedgerProgressionSummary(events, catches = [], trips = [], 
     ...achievement, isCompleted: persistentAchievementIds.has(achievement.id),
   }));
   const masteryEvents = events.filter((event) => event.type === "mastery.milestone");
-  const currentMastery = new Map(calculateSpeciesMastery(filterEligibleCatchRecords(catches)).map((item) => [item.speciesKey, item]));
+  const currentMastery = new Map(calculateSpeciesMastery(filterEligibleCatchRecords(catches, { now })).map((item) => [item.speciesKey, item]));
   const masterySpecies = new Set([...currentMastery.keys(), ...masteryEvents.map((event) => event.reasonKey.split(":")[1])]);
   const mastery = [...masterySpecies].map((speciesKey) => {
     const item = currentMastery.get(speciesKey) ?? { speciesKey, catchCount: 0, nextLevelAt: 1, xp: 0 };
@@ -324,7 +324,7 @@ export const progressionLedger = {
     };
     const allOrderedCatches = [...catches].sort((a, b) => Date.parse(a.caughtAt) - Date.parse(b.caughtAt));
     const legacyPhotoHashes = new Set();
-    for (const record of allOrderedCatches.filter((item) => !item.verification)) {
+    for (const record of allOrderedCatches.filter((item) => !item.verification && isCatchDateEligibleForProgression(item, now))) {
       for (const photo of record.photos ?? []) {
         const photoHash = getCatchPhotoHash(photo);
         if (!photoHash || legacyPhotoHashes.has(photoHash)) continue;
@@ -335,7 +335,7 @@ export const progressionLedger = {
         });
       }
     }
-    const progressionCandidates = filterEligibleCatchRecords(catches);
+    const progressionCandidates = filterEligibleCatchRecords(catches, { now });
     const progressionCatches = progressionCandidates.filter((record) => {
       if (!record.verification) return true;
       const photoHash = record.verification.photoHash.toLowerCase();
@@ -356,6 +356,36 @@ export const progressionLedger = {
         .reduce((total, event) => total + event.xp, 0);
       if ((record.photos ?? []).length > 0) add({ reasonKey: `catch.photo:${record.id}`, type: "catch.photo", xp: Math.max(0, XP_RULES.catch.photo - catchXp()), sourceEntityType: "catch", sourceEntityId: record.id, occurredAt: record.caughtAt });
       if (hasContext(record)) add({ reasonKey: `catch.context:${record.id}`, type: "catch.context", xp: Math.max(0, XP_RULES.catch.gpsAndWeather - catchXp()), sourceEntityType: "catch", sourceEntityId: record.id, occurredAt: record.caughtAt });
+    }
+    const claimedPhotoHashes = new Map(events
+      .filter((event) => event.type === "verification.photo.claimed")
+      .map((event) => [event.reasonKey.slice("verification.photo.claimed:".length), event.sourceEntityId]));
+    const limitedRecords = allOrderedCatches.filter((record) => (
+      record.verification?.status === "unverified"
+      && record.verification?.level === CATCH_VERIFICATION_LEVEL.LIMITED
+      && isCatchDateEligibleForProgression(record, now)
+    ));
+    for (const record of limitedRecords) {
+      const reasonKey = `catch.limited:${record.id}`;
+      if (existingIds.has(eventId(scope.scopeKey, reasonKey))) continue;
+      const hash = record.verification?.photoHash?.toLowerCase();
+      if (!isValidPhotoHash(hash) || !(record.photos ?? []).some((photo) => getCatchPhotoHash(photo) === hash && !photo.localError)) continue;
+      const owner = claimedPhotoHashes.get(hash);
+      if (owner && owner !== record.id) continue;
+      if (!owner) {
+        add({
+          reasonKey: `verification.photo.claimed:${hash}`, type: "verification.photo.claimed", xp: 0,
+          sourceEntityType: "catch", sourceEntityId: record.id, occurredAt: record.caughtAt,
+        });
+        claimedPhotoHashes.set(hash, record.id);
+      }
+      const normalCatchXp = hasContext(record) ? XP_RULES.catch.gpsAndWeather
+        : (record.photos ?? []).length > 0 ? XP_RULES.catch.photo : XP_RULES.catch.base;
+      add({
+        reasonKey, type: "catch.limited",
+        xp: calculateLimitedCatchXpForDay(normalCatchXp, events, nowIso),
+        sourceEntityType: "catch", sourceEntityId: record.id, occurredAt: record.caughtAt,
+      });
     }
     const firstBySpecies = new Map();
     for (const record of orderedCatches) {
@@ -386,7 +416,7 @@ export const progressionLedger = {
         add({ reasonKey: `mastery.milestone:${item.speciesKey}:${milestone.level}`, type: "mastery.milestone", xp: milestone.level === 1 ? 0 : milestone.xp, sourceEntityType: "catch", sourceEntityId: source.id, occurredAt: source.caughtAt });
       }
     }
-    for (const reward of [...listCompletedChallengeRewards(orderedCatches, trips), ...listCompletedSeasonalChallengeRewards(orderedCatches)]) add({
+    for (const reward of [...listCompletedChallengeRewards(orderedCatches, trips, now), ...listCompletedSeasonalChallengeRewards(orderedCatches, now)]) add({
       reasonKey: `challenge.completed:${reward.challengeId}:${reward.periodKey}`, type: "challenge.completed", xp: reward.xp,
       sourceEntityType: reward.sourceEntityType, sourceEntityId: reward.sourceEntityId, periodKey: reward.periodKey,
       occurredAt: eventOccurredAt(reward.sourceEntityType, reward.sourceEntityId, orderedCatches, trips, nowIso),

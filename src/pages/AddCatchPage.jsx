@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   DEFAULT_BAITS,
@@ -44,6 +44,8 @@ import { catchDraftRepository } from "../features/catches/data/catchDraftReposit
 import { applySelectedWaterToCatchDraft } from "../features/catches/data/catchDraftModel.js";
 import { readPhotoCaptureMetadata } from "../features/catches/data/photoCaptureMetadata.js";
 import { evaluateCatchVerification, getCatchPhotoHash } from "../features/catches/data/catchVerification.js";
+import { applyManualMapLocation } from "../features/catches/data/manualMapLocation.js";
+import { userFacingErrorMessage } from "../shared/errors/userFacingError.js";
 
 const MOON_PHASES = [
   ["new", "Nov"],
@@ -55,6 +57,8 @@ const MOON_PHASES = [
   ["lastQuarter", "Poslední čtvrt"],
   ["waningCrescent", "Ubývající srpek"],
 ];
+
+const CatchLocationPicker = lazy(() => import("../features/catches/components/CatchLocationPicker.jsx"));
 
 function localDateTime(now = new Date()) {
   const pad = (value) => String(value).padStart(2, "0");
@@ -102,6 +106,7 @@ function AddCatchPage() {
     return () => { active = false; };
   }, [scope]);
   const [photoProcessing, setPhotoProcessing] = useState(false);
+  const [locationPickerOpen, setLocationPickerOpen] = useState(false);
   const [photoEditorOpen, setPhotoEditorOpen] = useState(false);
   const [editingPhotoId, setEditingPhotoId] = useState(null);
   const [showSpeciesPicker, setShowSpeciesPicker] = useState(() => readPreferences(globalThis.localStorage, scope.scopeKey).detailMode === "detailed");
@@ -301,7 +306,8 @@ function AddCatchPage() {
   }, [draftReady, id, scope]);
 
   useEffect(() => {
-    if ((id && catchData.gpsSource !== "photo-exif") || !catchData.coordinates || !availableWaters.length || manualWaterChoice) return;
+    if ((id && catchData.gpsSource !== "photo-exif") || catchData.gpsSource === "manual-map"
+      || !catchData.coordinates || !availableWaters.length || manualWaterChoice) return;
     const nearest = findNearestSavedWater(catchData.coordinates, availableWaters);
     if (!nearest) return;
     let active = true;
@@ -331,6 +337,7 @@ function AddCatchPage() {
   const [gpsLoading, setGpsLoading] = useState(false);
   const [gpsMessage, setGpsMessage] = useState("");
   const [weatherStatus, setWeatherStatus] = useState({ state: "idle", message: "" });
+  const [weatherRetry, setWeatherRetry] = useState(0);
   const manualConditionFieldsRef = useRef(new Set());
   const automaticConditionsRef = useRef({});
   const savingRef = useRef(false);
@@ -367,7 +374,8 @@ function AddCatchPage() {
           .filter(([field, value]) => value !== "" && value !== null && value !== undefined && values.conditionSources?.[field] === "auto"));
         setCatchData(values);
         tripManuallyEditedRef.current = Boolean(draft.uiState?.tripManuallyEdited);
-        gpsManuallyEditedRef.current = Boolean(draft.uiState?.gpsManuallyEdited || values.gpsSource === "manual" || values.gpsSource === "live-gps");
+        gpsManuallyEditedRef.current = Boolean(draft.uiState?.gpsManuallyEdited
+          || ["manual", "manual-map", "live-gps"].includes(values.gpsSource));
         dateTimeManuallyEditedRef.current = Boolean(draft.uiState?.dateTimeManuallyEdited || values.catchDateTimeSource === "manual");
         setManualWaterChoice(Boolean(draft.uiState?.manualWaterChoice || values.waterId || values.locationName));
         setWaterSuggestionDismissed(Boolean(draft.uiState?.waterSuggestionDismissed));
@@ -436,7 +444,7 @@ function AddCatchPage() {
       }
       automaticConditionsRef.current = Object.fromEntries(Object.entries(values.conditions ?? {}).filter(([field, value]) => value !== "" && value !== null && value !== undefined && values.conditionSources?.[field] === "auto"));
       setCatchData(values);
-      gpsManuallyEditedRef.current = Boolean(values.gpsSource === "manual" || values.gpsSource === "live-gps");
+      gpsManuallyEditedRef.current = ["manual", "manual-map", "live-gps"].includes(values.gpsSource);
       dateTimeManuallyEditedRef.current = values.catchDateTimeSource === "manual";
       setManualWaterChoice(Boolean(values.waterId || values.locationName));
       setDisplayFull(true);
@@ -498,13 +506,13 @@ function AddCatchPage() {
         });
         setWeatherStatus({ state: "loaded", message: "Dostupné počasí bylo doplněno; ruční hodnoty zůstávají beze změny." });
       } catch (error) {
-        if (!controller.signal.aborted) setWeatherStatus({ state: "error", message: error.message || "Počasí pro tento čas není dostupné. Úlovek lze uložit i bez něj." });
+        if (!controller.signal.aborted) setWeatherStatus({ state: "error", message: userFacingErrorMessage(error, "Počasí pro tento čas není dostupné. Úlovek lze uložit i bez něj.") });
       }
     }, 500);
     return () => { clearTimeout(timer); controller.abort(); };
-  }, [catchData.coordinates, catchData.coordinates?.latitude, catchData.coordinates?.longitude, catchData.catchDate, catchData.catchTime]);
+  }, [catchData.coordinates, catchData.coordinates?.latitude, catchData.coordinates?.longitude, catchData.catchDate, catchData.catchTime, weatherRetry]);
 
-  const persistDraft = (data = catchData) => catchDraftRepository.save(data, {
+  const persistDraft = (data = catchData, uiOverrides = {}) => catchDraftRepository.save(data, {
     displayFull,
     showSpeciesPicker,
     manualWaterChoice,
@@ -512,7 +520,30 @@ function AddCatchPage() {
       gpsManuallyEdited: gpsManuallyEditedRef.current,
     dateTimeManuallyEdited: dateTimeManuallyEditedRef.current,
     waterSuggestionDismissed,
+    ...uiOverrides,
   }, scope);
+
+  const applyMapLocation = async (coordinates) => {
+    gpsManuallyEditedRef.current = true;
+    const nextData = applyManualMapLocation(catchData, coordinates);
+    setCatchData(nextData);
+    setManualWaterChoice(true);
+    setWaterSuggestionDismissed(false);
+    setGpsMessage("Poloha byla ručně vybrána na mapě.");
+    setLocationPickerOpen(false);
+    if (!id && draftReady && scope.status === "ready") {
+      try {
+        await persistDraft(nextData, {
+          manualWaterChoice: true,
+          gpsManuallyEdited: true,
+          waterSuggestionDismissed: false,
+        });
+        setDraftError("");
+      } catch (error) {
+        setDraftError(error.message || "Ručně vybraná poloha se nepodařila uložit do rozepsaného úlovku.");
+      }
+    }
+  };
 
   const handleAddWater = async (event) => {
     event.preventDefault();
@@ -552,6 +583,9 @@ function AddCatchPage() {
           locationEvidence: catchData.locationEvidence,
           tripId: catchData.tripId,
           activeTripId: activeTrip?.id,
+          trips: tripState.trips,
+          coordinates: catchData.coordinates,
+          gpsSource: catchData.gpsSource,
           water: availableWaters.find((item) => item.id === catchData.waterId) ?? null,
           caughtAt: new Date(`${catchData.catchDate}T${catchData.catchTime || "12:00"}`).toISOString(),
           now: new Date(),
@@ -589,7 +623,9 @@ function AddCatchPage() {
     .filter(Boolean);
   const filteredUnpinnedSpecies = filteredSpecies.filter((species) => !quickSpeciesIds.includes(species.key));
   const nearestWater = findNearestSavedWater(catchData.coordinates, availableWaters);
-  const waterSuggestion = !catchData.waterId && !manualWaterChoice && !waterSuggestionDismissed ? nearestWater : null;
+  const selectedWater = availableWaters.find((water) => water.id === catchData.waterId) ?? null;
+  const waterSuggestion = !catchData.waterId && (!manualWaterChoice || catchData.gpsSource === "manual-map")
+    && !waterSuggestionDismissed ? nearestWater : null;
   const selectedSpeciesCategory = getSpeciesCategory(selectedSpeciesCategoryKey);
   const categorySpecies = selectedSpeciesCategoryKey
     ? getSpeciesForCategory(selectedSpeciesCategoryKey, filteredSpecies)
@@ -978,6 +1014,11 @@ function AddCatchPage() {
           </div>
         </section>
 
+        {!displayFull && <button type="button" className="quick-map-location-button" onClick={() => setLocationPickerOpen(true)}>
+          <span>{catchData.coordinates ? "Upravit polohu na mapě" : "Přidat polohu na mapě"}</span>
+          {catchData.coordinates && <small>{catchData.gpsLocation || formatCoordinates(catchData.coordinates)}</small>}
+        </button>}
+
         {displayFull && <section className="add-catch-section">
           <h2>Místo a čas</h2>
 
@@ -1063,6 +1104,7 @@ function AddCatchPage() {
                     onChange={(e) => updateGpsLocation(e.target.value)}
                   />
                   <span className="gps-actions"><button type="button" className="photo-action-button" onClick={useCurrentLocation} disabled={gpsLoading}>{gpsLoading ? "Zjišťuji polohu…" : "Použít aktuální polohu"}</button>{catchData.gpsLocation && <button type="button" className="photo-action-button" onClick={() => updateGpsLocation("")}>Odstranit GPS</button>}</span>
+                  <span className="gps-actions"><button type="button" className="photo-action-button" onClick={() => setLocationPickerOpen(true)}>{id ? "Upravit polohu na mapě" : catchData.coordinates ? "Upravit polohu na mapě" : "Vybrat místo na mapě"}</button></span>
                   {waterSuggestion && <div className="water-suggestion" role="status"><span>Nejbližší uložený revír: <strong>{waterSuggestion.water.name}</strong>{waterSuggestion.water.waterNumber ? ` · ${waterSuggestion.water.waterNumber}` : ""} ({waterSuggestion.distanceMeters} m). Návrh podle GPS může být nepřesný.</span><button type="button" onClick={applyWaterSuggestion}>Použít</button><button type="button" aria-label="Skrýt návrh revíru" onClick={() => setWaterSuggestionDismissed(true)}>×</button></div>}
                   {gpsMessage && <small className="gps-message" role="status">{gpsMessage}</small>}
                 </label>
@@ -1163,7 +1205,7 @@ function AddCatchPage() {
 
         {displayFull && <section className="add-catch-section">
           <h2>Podmínky</h2>
-          {weatherStatus.message && <p className={`catch-weather-status catch-weather-status-${weatherStatus.state}`} role="status">{weatherStatus.message}</p>}
+          {weatherStatus.message && <div className={`catch-weather-status catch-weather-status-${weatherStatus.state}`} role="status"><span>{weatherStatus.message}</span>{weatherStatus.state === "error" && <button type="button" onClick={() => setWeatherRetry((value) => value + 1)}>Zkusit znovu</button>}</div>}
           <div className="measurements-grid conditions-grid">
             <label className="input-group">
               <span>Vzduch (°C)</span>
@@ -1301,6 +1343,14 @@ function AddCatchPage() {
         {id && state.loading && <p className="loading-state" role="status">Načítám úlovek…</p>}
         <button type="button" className="save-catch-button" onClick={handleSave} disabled={saving || photoProcessing || (id && !existingCatch) || (!id && (!draftReady || !privacyDefaultsReady))}>{photoProcessing ? "Připravuji fotografii…" : saving ? "Ukládám…" : id ? "Uložit změny" : "Uložit úlovek"}</button>
       </div>
+      {locationPickerOpen && <Suspense fallback={<div className="catch-location-picker-backdrop">
+        <section className="catch-location-picker" role="status" aria-live="polite">Načítám mapu…</section>
+      </div>}><CatchLocationPicker
+        initialCoordinates={catchData.coordinates ?? parseCoordinateText(catchData.gpsLocation)}
+        waterCoordinates={selectedWater?.coordinates}
+        onCancel={() => setLocationPickerOpen(false)}
+        onConfirm={applyMapLocation}
+      /></Suspense>}
     </Layout>
   );
 }

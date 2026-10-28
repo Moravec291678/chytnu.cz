@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { catchDraftRepository, CATCH_DRAFT_TTL_MS, CATCH_DRAFT_VERSION } from "./catchDraftRepository.js";
 import { applySelectedWaterToCatchDraft } from "./catchDraftModel.js";
+import { applyManualMapLocation } from "./manualMapLocation.js";
 import { accountScopeKey, createGuestScopeKey } from "../../auth/data/localDataScope.js";
 
 const scope = () => ({ scopeKey: createGuestScopeKey(), ownerId: null });
@@ -70,6 +71,20 @@ test("drafts are isolated by profile, versioned, and expire after seven days", a
   assert.equal((await catchDraftRepository.get(secondScope, now))?.data, undefined);
   assert.equal((await catchDraftRepository.get(firstScope, now)).version, CATCH_DRAFT_VERSION);
   assert.equal(await catchDraftRepository.get(firstScope, now + CATCH_DRAFT_TTL_MS), null);
+});
+
+test("manual map coordinates and source survive draft persistence and reload", async () => {
+  const activeScope = scope();
+  const data = {
+    ...applyManualMapLocation({ speciesKey: "commonCarp", notes: "Vybraný bod", gpsSource: "default", photos: [] },
+      { latitude: 49.123456, longitude: 14.123456 }),
+  };
+  await catchDraftRepository.save(data, {}, activeScope);
+  const restored = await catchDraftRepository.get(activeScope);
+  assert.equal(restored.data.gpsSource, "manual-map");
+  assert.deepEqual(restored.data.coordinates, data.coordinates);
+  assert.equal(restored.data.gpsLocation, data.gpsLocation);
+  assert.equal(restored.data.notes, data.notes);
 });
 
 test("Add Catch routes to Add Water only after saving the draft and returns with the created water selected", async () => {

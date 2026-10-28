@@ -1,7 +1,7 @@
 import "fake-indexeddb/auto";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { openLocalDatabase, getActiveGuestScopeKey, catchRepository, outboxRepository, PHOTO_BINARY_STORE_NAME, CATCH_STORE_NAME, NOTIFICATION_STORE_NAME } from "./catchRepository.js";
+import { openLocalDatabase, getActiveGuestScopeKey, catchRepository, outboxRepository, PHOTO_BINARY_STORE_NAME, CATCH_STORE_NAME, NOTIFICATION_STORE_NAME, SERVER_PROGRESSION_CLAIM_STORE_NAME } from "./catchRepository.js";
 import { sha256Blob } from "./photoCloudProvider.js";
 import { tripRepository } from "../../trips/data/tripRepository.js";
 
@@ -69,9 +69,10 @@ test("v2 to v4 upgrade preserves existing catches, trips, photos, and starts wit
   const catches = await catchRepository.list(scope);
   const trips = await tripRepository.list(scope);
   const db = await openLocalDatabase();
-  assert.equal(db.version, 8);
-  assert.deepEqual([...db.objectStoreNames].sort(), ["appMeta", "catches", "localProfiles", "notifications", "outbox", "photoBinaries", "privacySettings", "progressionEvents", "syncConflicts", "syncState", "trips", "waterChat", "waters"]);
+  assert.equal(db.version, 9);
+  assert.deepEqual([...db.objectStoreNames].sort(), ["appMeta", "catches", "localProfiles", "notifications", "outbox", "photoBinaries", "privacySettings", "progressionEvents", "serverProgressionClaims", "syncConflicts", "syncState", "trips", "waterChat", "waters"]);
   assert.ok(db.transaction(NOTIFICATION_STORE_NAME).objectStore(NOTIFICATION_STORE_NAME).indexNames.contains("scopeKey"));
+  assert.ok(db.transaction(SERVER_PROGRESSION_CLAIM_STORE_NAME).objectStore(SERVER_PROGRESSION_CLAIM_STORE_NAME).indexNames.contains("ownerId"));
   db.close();
   assert.equal(catches[0].id, "old-catch");
   assert.equal(catches[0].tripId, "old-trip");

@@ -77,6 +77,18 @@ test("public coordinate anonymization only emits validated coarse coordinates", 
   assert.equal(anonymizePublicCoordinates({ latitude: 95, longitude: 14 }, "approximate"), null);
 });
 
+test("a public Catch with a manually mapped private spot never exposes its precise coordinates", () => {
+  const projection = createPublicCatchProjection({
+    species: "Kapr", speciesKey: "commonCarp", caughtAt: "2026-10-19T10:00:00.000Z",
+    gpsSource: "manual-map", gpsLocation: "49.123456, 14.654321",
+    coordinates: { latitude: 49.123456, longitude: 14.654321 },
+    privacy: { visibility: "public", photoVisibility: "private", privateSpot: true, locationPrecision: "none" },
+  });
+  assert.equal("coordinates" in projection, false);
+  assert.equal("gpsLocation" in projection, false);
+  assert.equal("locationArea" in projection, false);
+});
+
 test("heatmap granularity is normalized and legacy opt-in maps to area", () => {
   assert.equal(normalizePrivacySettings({ heatmapGranularity: "city" }).heatmapOptIn, true);
   assert.equal(normalizePrivacySettings({ heatmapGranularity: "off", heatmapOptIn: true }).heatmapOptIn, false);

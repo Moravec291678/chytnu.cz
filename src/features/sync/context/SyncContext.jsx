@@ -15,6 +15,8 @@ import { SyncContext } from "./syncContextValue.js";
 import { attachSyncLifecycle } from "./syncLifecycle.js";
 import { getPullRetryAt, mergeSyncForce } from "./syncRetry.js";
 import { preparePhotoSyncService } from "./photoSyncPreparation.js";
+import { serverProgressionClaimService } from "../../progression/data/serverProgressionClaimService.js";
+import { userFacingErrorMessage } from "../../../shared/errors/userFacingError.js";
 
 const initialState = { status: "idle", sent: 0, applied: 0, conflicts: 0, pending: 0, failed: 0, pullPending: 0, error: "", errorCode: "", errorEndpoint: "", nextRetryAt: null, lastResult: "never", showSyncStatus: false, presentationId: null };
 
@@ -66,7 +68,7 @@ export function SyncProvider({ children }) {
         const summary = await updateSummary(userId);
         setState((previous) => ({ ...previous, ...summary, status: "offline", error: "" }));
       } catch (error) {
-        setState((previous) => ({ ...previous, status: "error", error: error?.message || "Místní frontu se nepodařilo načíst." }));
+        setState((previous) => ({ ...previous, status: "error", error: userFacingErrorMessage(error, "Místní frontu se nepodařilo načíst. Zkus synchronizaci znovu.") }));
       }
       return;
     }
@@ -114,6 +116,7 @@ export function SyncProvider({ children }) {
       const finalResult = photoResult.uploaded > 0
         ? await serviceRef.current.run(userId, { force })
         : result;
+      void serverProgressionClaimService.process(userId).catch(() => {});
       // A successful aggregate run alone cannot prove a particular photo was acknowledged.
       await catchRepository.list({ ownerId: userId, scopeKey: accountScopeKey(userId) }).then((records) => {
         if (firebaseAuth.currentUserId() === userId) recordSyncedPhotoTraces(records);

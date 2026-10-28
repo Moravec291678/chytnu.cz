@@ -121,7 +121,8 @@ function CatchCard({ catchedFish, isPersonalRecord = false }) {
               {catchedFish.result === "kept" && (
                 <span className="catch-card-tag catch-card-tag-kept">Ponecháno</span>
               )}
-              {catchedFish.verification?.status === "unverified" && <span className="catch-card-tag catch-card-tag-unverified">Neověřený úlovek</span>}
+              {catchedFish.verification?.level === "limited" && <span className="catch-card-tag catch-card-tag-unverified">Omezené ověření</span>}
+              {catchedFish.verification?.status === "unverified" && catchedFish.verification?.level !== "limited" && <span className="catch-card-tag catch-card-tag-unverified">Neověřený úlovek</span>}
               {catchedFish.tripTitle && <span className="catch-card-tag">Vycházka: {catchedFish.tripTitle}</span>}
             </div>
           </div>

@@ -323,6 +323,22 @@ service cloud.firestore {
       allow delete: if signedInAs(userId) && resource.data.ownerId == userId;
     }
 
+    // Server-generated shadow rewards are readable by their owner but never client-writable.
+    match /users/{userId}/serverProgressionEvents/{eventId} {
+      allow get, list: if signedInAs(userId) && resource.data.ownerId == userId;
+      allow create, update, delete: if false;
+    }
+
+    match /users/{userId}/serverProgressionCatchState/{catchId} {
+      allow get, list: if signedInAs(userId) && resource.data.ownerId == userId;
+      allow create, update, delete: if false;
+    }
+
+    match /users/{userId}/serverProgressionState/{stateId} {
+      allow get, list: if signedInAs(userId) && resource.data.ownerId == userId;
+      allow create, update, delete: if false;
+    }
+
     match /users/{userId}/catches/{catchId} {
       allow get, list: if signedInAs(userId);
       allow create: if validSyncWrite(userId, 'catch', catchId, request.resource.data)

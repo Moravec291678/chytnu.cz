@@ -62,3 +62,14 @@ test("length badges are shown only for an actual new length record", () => {
   assert.equal(isNewLengthRecord(current, [current, catchRecord("tie", { lengthCm: 75 })]), false);
   assert.equal(isNewLengthRecord({ ...current, lengthCm: null }, [current]), false);
 });
+
+test("future catches and future records cannot earn catch-recognition badges", () => {
+  const now = new Date("2026-10-28T12:00:00.000Z");
+  const future = catchRecord("future", { caughtAt: "2026-10-29T10:00:00.000Z", lengthCm: 120, weightKg: 30 });
+  const current = catchRecord("current", { caughtAt: "2026-10-28T10:00:00.000Z", lengthCm: 80, weightKg: 5 });
+  assert.deepEqual(getCatchRecognition(future, [current, future], now), {
+    personalBest: false, personalBestDelta: null, speciesRecord: false, seasonRecord: false, newLocation: false,
+  });
+  assert.equal(isNewLengthRecord(future, [current, future], now), false);
+  assert.equal(isNewLengthRecord(current, [current, future], now), true);
+});

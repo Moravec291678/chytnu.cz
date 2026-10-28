@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { buildChallengeOverview } from "./challenges.js";
 import { buildSeasonalChallenge, listCompletedSeasonalChallengeRewards } from "./seasonalChallenge.js";
 import { listCompletedChallengeRewards } from "./challenges.js";
+import { calculateProgression } from "./progression.js";
 
 const catches = [
   { id: "old", speciesKey: "carp", locationName: "Labe", waterId: "water-labe", caughtAt: "2026-06-08T10:00:00.000Z" },
@@ -38,11 +39,33 @@ test("unverified catches do not complete XP-oriented daily, weekly, or seasonal 
   assert.equal(buildSeasonalChallenge([record], now).variants[0].progress, 0);
   assert.deepEqual(listCompletedChallengeRewards([record]), []);
   assert.deepEqual(listCompletedSeasonalChallengeRewards([record]), []);
+  const limited = { ...record, id: "limited-carp", verification: { status: "unverified", level: "limited", photoHash: "a".repeat(64) } };
+  assert.equal(buildChallengeOverview([limited], [], now).daily.find((item) => item.id === "daily-catch").progress, 0);
+  assert.equal(buildSeasonalChallenge([limited], now).variants[0].progress, 0);
+  assert.deepEqual(listCompletedChallengeRewards([limited]), []);
 });
 
 test("malformed dates do not falsely count toward challenge progress", () => {
   const overview = buildChallengeOverview([{ id: "bad", speciesKey: "carp", caughtAt: "invalid" }], [], new Date("2026-06-17T14:00:00.000Z"));
   assert.ok([...overview.daily, ...overview.weekly].every((task) => !task.completed && task.progress === 0));
+});
+
+test("future catches stay stored but cannot earn challenge, seasonal, or progression rewards", () => {
+  const now = new Date("2026-10-28T12:00:00.000Z");
+  const future = ["commonCarp", "northernPike", "europeanPerch"].map((speciesKey, index) => ({
+    id: `future-${index}`, speciesKey, caughtAt: "2026-10-29T10:00:00.000Z", waterId: `water-${index}`,
+    weightKg: 30, lengthCm: 110, photos: [{ id: `future-photo-${index}` }],
+  }));
+  const overview = buildChallengeOverview(future, [], now);
+  assert.ok([...overview.daily, ...overview.weekly].every((task) => task.progress === 0));
+  assert.deepEqual(listCompletedChallengeRewards(future, [], now), []);
+  assert.ok(buildSeasonalChallenge(future, now).variants.every((variant) => variant.progress === 0));
+  assert.deepEqual(listCompletedSeasonalChallengeRewards(future, now), []);
+  const progression = calculateProgression(future, [], { now });
+  assert.equal(progression.xp, 0);
+  assert.equal(progression.speciesCount, 0);
+  assert.deepEqual(progression.mastery, []);
+  assert.equal(progression.achievements.some((item) => item.isCompleted), false);
 });
 
 test("species challenges require stable species IDs and use Prague day and week boundaries", () => {

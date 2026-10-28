@@ -1,5 +1,6 @@
 import { normalizeText } from "../../../shared/utils/helpers.js";
 import { isMeasuredCatchWeight } from "./catchWeight.js";
+import { isCatchDateEligibleForProgression } from "./catchVerification.js";
 
 const SEASONS = [
   { key: "winter", months: [11, 0, 1] },
@@ -17,8 +18,11 @@ function seasonKey(value) {
   return `${year}-${season.key}`;
 }
 
-export function getCatchRecognition(catchRecord, catches) {
-  const others = catches.filter((record) => record.id !== catchRecord.id);
+export function getCatchRecognition(catchRecord, catches, now = new Date()) {
+  if (!isCatchDateEligibleForProgression(catchRecord, now)) {
+    return { personalBest: false, personalBestDelta: null, speciesRecord: false, seasonRecord: false, newLocation: false };
+  }
+  const others = catches.filter((record) => record.id !== catchRecord.id && isCatchDateEligibleForProgression(record, now));
   const measuredOthers = others.filter(isMeasuredCatchWeight);
   const previousPersonalBest = measuredOthers.reduce(
     (best, record) => Math.max(best, record.weightKg),
@@ -55,10 +59,11 @@ export function getCatchRecognition(catchRecord, catches) {
   };
 }
 
-export function isNewLengthRecord(catchRecord, catches) {
-  if (!Number.isFinite(catchRecord?.lengthCm)) return false;
+export function isNewLengthRecord(catchRecord, catches, now = new Date()) {
+  if (!Number.isFinite(catchRecord?.lengthCm) || !isCatchDateEligibleForProgression(catchRecord, now)) return false;
   const previousLengths = (catches || [])
     .filter((record) => record.id !== catchRecord.id
+      && isCatchDateEligibleForProgression(record, now)
       && (catchRecord.speciesKey ? record.speciesKey === catchRecord.speciesKey : record.species === catchRecord.species)
       && Number.isFinite(record.lengthCm))
     .map((record) => record.lengthCm);
