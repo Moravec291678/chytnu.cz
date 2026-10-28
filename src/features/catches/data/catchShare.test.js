@@ -18,6 +18,7 @@ test("share payload is explicitly limited to non-location catch details", () => 
   assert.equal(JSON.stringify(shareData).includes("50.1"), false);
   assert.equal(JSON.stringify(shareData).includes("Soukrom"), false);
   assert.match(formatCatchShareText(shareData), /Štika/);
+  assert.ok(formatCatchShareText(shareData).indexOf("82 cm") < formatCatchShareText(shareData).indexOf("5,25 kg"));
   assert.equal(getCatchShareFileName(shareData), "chytnucz-stika.png");
 });
 

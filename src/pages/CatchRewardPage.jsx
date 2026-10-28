@@ -4,7 +4,7 @@ import Layout from "../shared/layout/Layout";
 import { useCatches } from "../features/catches/context/useCatches";
 import { useProgression } from "../features/progression/context/progressionContextValue.js";
 import { claimCatchRewardEventIds, getCatchRewardEventIds } from "../features/progression/data/progressionLedger.js";
-import { formatCatchWeight } from "../features/catches/data/catchWeight.js";
+import { formatCatchMeasurements } from "../features/catches/data/catchWeight.js";
 import { getCatchRarity } from "../features/catches/utils/rarity.js";
 import { DEFAULT_SPECIES } from "../shared/constants/speciesCatalog.js";
 import { getCatchRecordStatus } from "../features/progression/data/catchReward.js";
@@ -98,12 +98,11 @@ export default function CatchRewardPage() {
         <header className="catch-reward-hero">
           <span className={`catch-reward-rarity catch-reward-rarity--${rarity.color}`}>{rarity.label}</span>
           <h1>{record.species}</h1>
-          {Number.isFinite(record.weightKg)
-            ? <strong className="catch-reward-weight">{formatCatchWeight(record)} kg</strong>
+          {formatCatchMeasurements(record)
+            ? <strong className="catch-reward-weight">{formatCatchMeasurements(record)}</strong>
             : <strong className="catch-reward-weight catch-reward-weight--empty">Záznam úlovku</strong>}
           <p className="catch-reward-record-info">
             {[
-              Number.isFinite(record.lengthCm) ? `${record.lengthCm.toLocaleString("cs-CZ")} cm` : null,
               ...highlights,
             ].filter(Boolean).join(" · ") || "Úlovek přidaný do tvého deníku"}
           </p>
@@ -166,6 +165,12 @@ export default function CatchRewardPage() {
           </p>
         )}
       </div>
+      {record.verification?.status === "unverified" && (
+        <p className="catch-reward-unavailable" role="status">
+          Neověřený úlovek · 0 XP. Fotografie a údaje můžeš doplnit později; datum a polohu lze načíst z EXIF podporované fotografie.
+          <Link to={`/catch/${record.id}/edit`}> Doplnit úlovek</Link>
+        </p>
+      )}
       <footer className="catch-reward-actions">
         {reward && <Link className="catch-reward-share" to={`/catch/${record.id}/share`}>Sdílet kartu</Link>}
         <Link className="catch-reward-done" to={`/catch/${record.id}`}>Hotovo</Link>

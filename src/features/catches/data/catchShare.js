@@ -33,8 +33,8 @@ export function createCatchShareData(record, water = null) {
 
 export function formatCatchShareText(data) {
   const measurements = [
-    data.weightKg !== null ? `${data.weightSource === "estimated" ? "≈ " : ""}${data.weightKg.toLocaleString("cs-CZ")} kg${data.weightSource === "estimated" ? " (odhad)" : ""}` : null,
     data.lengthCm !== null ? `${data.lengthCm.toLocaleString("cs-CZ")} cm` : null,
+    data.weightKg !== null ? `${data.weightSource === "estimated" ? "≈ " : ""}${data.weightKg.toLocaleString("cs-CZ")} kg${data.weightSource === "estimated" ? " (odhad)" : ""}` : null,
   ].filter(Boolean);
   const date = data.caughtAt
     ? new Intl.DateTimeFormat("cs-CZ", { dateStyle: "medium" }).format(new Date(data.caughtAt))
