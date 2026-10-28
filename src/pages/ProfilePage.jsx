@@ -383,8 +383,8 @@ function ProfilePage() {
       setBackup(null);
       setSummary(null);
       setMessage(mode === "replace"
-        ? `Záloha byla obnovena. Úlovky: ${result.catches}; vycházky: ${result.trips}.`
-        : `Sloučení dokončeno. Přibylo úlovků: ${result.catches}; vycházek: ${result.trips}. Shodných záznamů přeskočeno: ${result.skipped}.`);
+        ? `Záloha byla obnovena. Úlovky: ${result.catches}; vycházky: ${result.trips}; oznámení: ${result.notifications}.`
+        : `Sloučení dokončeno. Přibylo úlovků: ${result.catches}; vycházek: ${result.trips}; oznámení: ${result.notifications}. Shodných záznamů přeskočeno: ${result.skipped}.`);
     } catch (restoreError) {
       setError(restoreError?.message || "Obnovu se nepodařilo dokončit. Místní data zůstala zachována.");
     } finally {
@@ -518,8 +518,8 @@ function ProfilePage() {
           </button>
           {backup && summary && <div className="profile-restore-preview" aria-live="polite">
             <p><strong>Náhled zálohy</strong></p>
-            <p>{formatCount(summary.catchCount, "úlovek", "úlovky", "úlovků")} · {formatCount(summary.tripCount, "vycházka", "vycházky", "vycházek")} · {formatCount(summary.photoCount, "fotografie", "fotografie", "fotografií")}</p>
-            <p>{summary.duplicateCount} ID už v deníku ({summary.unchangedCount} shodných, {summary.conflictCount} s odlišným obsahem).</p>
+            <p>{formatCount(summary.catchCount, "úlovek", "úlovky", "úlovků")} · {formatCount(summary.tripCount, "vycházka", "vycházky", "vycházek")} · {formatCount(summary.photoCount, "fotografie", "fotografie", "fotografií")} · oznámení: {summary.notificationCount ?? 0}</p>
+            <p>{summary.duplicateCount} ID už existují ({summary.unchangedCount} shodných, {summary.conflictCount} s odlišným obsahem).</p>
             <label className="profile-restore-mode">Způsob obnovení
               <select value={mode} onChange={(event) => setMode(event.target.value)} disabled={restoring}>
                 <option value="merge">Sloučit, zachovat místní záznamy</option>

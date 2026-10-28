@@ -33,10 +33,11 @@ function makeCatch(id = "catch-1", tripId = "trip-1") {
   };
 }
 
-function makeDocument({ catches = [makeCatch()], trips = [makeTrip()], privacySettings, progressionEvents } = {}) {
+function makeDocument({ catches = [makeCatch()], trips = [makeTrip()], privacySettings, progressionEvents, notifications } = {}) {
   const records = { catches, trips };
   if (privacySettings !== undefined) records.privacySettings = privacySettings;
   if (progressionEvents !== undefined) records.progressionEvents = progressionEvents;
+  if (notifications !== undefined) records.notifications = notifications;
   return { format: LOCAL_BACKUP_FORMAT, formatVersion: LOCAL_BACKUP_VERSION, createdAt: time, records };
 }
 
@@ -45,8 +46,8 @@ function makeBackup(document = makeDocument()) {
 }
 
 function makeDatabase(initial = { catches: [], trips: [] }, { failWrites = false } = {}) {
-  const initialStores = { catches: [], trips: [], outbox: [], privacySettings: [], progressionEvents: [], ...initial };
-  const keyFor = (store, row) => store === "outbox" ? row.sequence : store === "privacySettings" ? row.scopeKey : row.id;
+  const initialStores = { catches: [], trips: [], outbox: [], privacySettings: [], progressionEvents: [], notifications: [], photoBinaries: [], ...initial };
+  const keyFor = (store, row) => store === "outbox" ? row.sequence : store === "privacySettings" ? row.scopeKey : store === "photoBinaries" ? row.key : row.id;
   const committed = Object.fromEntries(Object.entries(initialStores).map(([store, rows]) => [store, new Map(rows.map((row) => [keyFor(store, row), structuredClone(row)]))]));
   let nextSequence = 0;
   const db = {
@@ -89,6 +90,17 @@ function makeDatabase(initial = { catches: [], trips: [] }, { failWrites = false
                   queueMicrotask(() => {
                     if (transaction.aborted) return;
                     request.result = [...working[name].values()].find((row) => row[indexName] === value);
+                    request.onsuccess?.();
+                  });
+                  return request;
+                },
+                getAll(value) {
+                  const request = {};
+                  queueMicrotask(() => {
+                    if (transaction.aborted) return;
+                    request.result = [...working[name].values()].filter((row) => indexName === "catchPhoto"
+                      ? row.scopeKey === value[0] && row.catchId === value[1]
+                      : row[indexName] === value).map((row) => structuredClone(row));
                     request.onsuccess?.();
                   });
                   return request;
@@ -137,17 +149,112 @@ test("backup preserves Catch verification and capture metadata for later complet
   const catchRecord = {
     ...makeCatch(), photos: [photo], catchDateTimeSource: "photo-exif", gpsSource: "photo-exif",
     verification: {
-      status: "unverified", reason: "missing-trip-or-water-location", photoHash,
-      photoCaptureMetadata: photo.captureMetadata, locationSource: null, gpsAccuracyMeters: null, verifiedAt: null,
+      status: "unverified", level: "limited", reason: "missing-trip-or-water-location", photoHash,
+      photoCaptureMetadata: photo.captureMetadata, locationSource: "photo-exif", gpsAccuracyMeters: null, verifiedAt: null,
     },
   };
   const document = await createLocalBackupDocument({ catches: [catchRecord], trips: [makeTrip()], createdAt: new Date(time) });
   const restored = makeBackup(document).catches[0];
   assert.equal(restored.verification.status, "unverified");
+  assert.equal(restored.verification.level, "limited");
   assert.equal(restored.verification.photoHash, photoHash);
   assert.equal(restored.photos[0].captureMetadata.coordinates.latitude, 50);
   assert.equal(restored.catchDateTimeSource, "photo-exif");
   assert.equal(restored.gpsSource, "photo-exif");
+});
+
+test("legacy backups need no trust or manual-map fields and leave newer local notifications untouched", async () => {
+  const legacyCatch = makeCatch("legacy-no-new-fields");
+  delete legacyCatch.verification;
+  delete legacyCatch.locationEvidence;
+  delete legacyCatch.gpsSource;
+  delete legacyCatch.catchDateTimeSource;
+  const legacyDocument = makeDocument({ catches: [legacyCatch], trips: [makeTrip()] });
+  const parsed = makeBackup(legacyDocument);
+  assert.equal(parsed.catches[0].verification, undefined);
+  assert.equal(parsed.notifications, undefined);
+
+  const existingNotification = {
+    id: "newer-notification", type: "challenge", title: "Výzva", body: "Dokončena", createdAt: time,
+    readAt: null, deepLink: "/challenges", scopeKey: guestOptions.scopeKey, ownerId: null, remoteSyncStatus: "local-only",
+  };
+  const db = makeDatabase({ notifications: [existingNotification] });
+  await restoreLocalBackup(parsed, "replace", guestOptions, async () => db);
+  assert.deepEqual(db.snapshot().notifications, [existingNotification], "legacy replace does not delete a store absent from the backup format");
+});
+
+test("new backup round-trips manual-map evidence, notification read state, and scoped restore data", async () => {
+  const photoBlob = new Blob([new Uint8Array([0xff, 0xd8, 0xff, 0x00, 0x00])], { type: "image/jpeg" });
+  const catchRecord = {
+    ...makeCatch("manual-map-catch"),
+    gpsSource: "manual-map",
+    coordinates: { latitude: 49.1234, longitude: 14.6543 },
+    locationEvidence: { source: "manual-map", coordinates: { latitude: 49.1234, longitude: 14.6543 }, accuracyMeters: null, capturedAt: time },
+    verification: { status: "unverified", level: "limited", reason: "missing-live-evidence", photoHash: "a".repeat(64) },
+    photos: [{ id: "restored-photo", name: "catch.jpg", type: "image/jpeg", blob: photoBlob, focalX: 0.3, focalY: 0.7, zoom: 1.2 }],
+  };
+  const notifications = [{ id: "notification-1", type: "challenge", title: "Výzva dokončena", body: "Získal jsi odměnu.",
+    createdAt: time, readAt: "2026-10-16T13:00:00.000Z", deepLink: "/challenges", scopeKey: "account:source", ownerId: "source",
+    remoteSyncStatus: "synced" }];
+  const document = await createLocalBackupDocument({ catches: [catchRecord], trips: [makeTrip()], notifications, createdAt: new Date(time) });
+  const parsed = makeBackup(document);
+  assert.equal(parsed.catches[0].gpsSource, "manual-map");
+  assert.deepEqual(parsed.catches[0].coordinates, catchRecord.coordinates);
+  assert.equal(parsed.catches[0].locationEvidence, null, "manual map remains separate from live GPS evidence");
+  assert.equal(parsed.catches[0].verification.level, "limited");
+  assert.equal(parsed.catches[0].photos[0].zoom, 1.2);
+  assert.equal(parsed.notifications[0].readAt, notifications[0].readAt);
+
+  const db = makeDatabase();
+  const restored = await restoreLocalBackup(parsed, "replace", guestOptions, async () => db);
+  assert.equal(restored.notifications, 1);
+  assert.deepEqual(db.snapshot().catches[0].coordinates, catchRecord.coordinates);
+  assert.equal(db.snapshot().catches[0].gpsSource, "manual-map");
+  assert.equal(db.snapshot().catches[0].photos[0].blob, undefined, "Catch metadata must not inline binary photo data");
+  assert.equal(db.snapshot().photoBinaries[0].catchId, catchRecord.id);
+  assert.equal(db.snapshot().photoBinaries[0].size, photoBlob.size);
+  assert.deepEqual(new Uint8Array(db.snapshot().photoBinaries[0].bytes), new Uint8Array(await photoBlob.arrayBuffer()));
+  assert.deepEqual(db.snapshot().notifications[0], {
+    id: "notification-1", type: "challenge", title: "Výzva dokončena", body: "Získal jsi odměnu.",
+    createdAt: time, readAt: notifications[0].readAt, deepLink: "/challenges", scopeKey: guestOptions.scopeKey,
+    ownerId: null, remoteSyncStatus: "local-only",
+  });
+});
+
+test("backup restore keeps legacy and verified-legacy progression state alongside newer trust levels", async () => {
+  const legacy = makeCatch("legacy-catch");
+  const verifiedLegacy = {
+    ...makeCatch("verified-legacy-catch"),
+    verification: {
+      status: "verified", reason: "photo-capture-time", photoHash: "b".repeat(64),
+      locationSource: "photo-exif", verifiedAt: time,
+    },
+  };
+  const limited = {
+    ...makeCatch("limited-catch"),
+    verification: { status: "unverified", level: "limited", reason: "missing-location", photoHash: "c".repeat(64) },
+  };
+  const progressionEvents = [legacy, verifiedLegacy, limited].map((catchRecord, index) => ({
+    id: `guest:old|catch.created:${catchRecord.id}`, scopeKey: "guest:old", ownerId: null,
+    type: "catch.created", reasonKey: `catch.created:${catchRecord.id}`, xp: [10, 10, 2][index],
+    sourceEntityType: "catch", sourceEntityId: catchRecord.id, definitionVersion: 1,
+    periodKey: null, occurredAt: time, createdAt: time, sync: { status: "local", revision: 1 },
+  }));
+  const backup = makeBackup(makeDocument({
+    catches: [legacy, verifiedLegacy, limited], trips: [makeTrip()], progressionEvents,
+  }));
+  const db = makeDatabase();
+
+  await restoreLocalBackup(backup, "replace", guestOptions, async () => db);
+
+  const restored = db.snapshot();
+  const byId = new Map(restored.catches.map((catchRecord) => [catchRecord.id, catchRecord]));
+  assert.equal(byId.get("legacy-catch").verification, undefined, "legacy record is not migrated or degraded");
+  assert.equal(byId.get("verified-legacy-catch").verification.status, "verified");
+  assert.equal(byId.get("verified-legacy-catch").verification.level, "standard", "legacy verified proof receives its compatible trust level");
+  assert.equal(byId.get("limited-catch").verification.level, "limited");
+  assert.deepEqual(restored.progressionEvents.map((event) => event.xp), [10, 10, 2]);
+  assert.ok(restored.progressionEvents.every((event) => event.scopeKey === guestOptions.scopeKey));
 });
 
 test("empty and related catch/trip backups validate and retain nullable measurements", () => {
@@ -352,7 +459,7 @@ test("replace writes catches and trips together; a database failure preserves bo
   const failingDb = makeDatabase({ catches: [oldCatch], trips: [oldTrip] }, { failWrites: true });
   await assert.rejects(restoreLocalBackup(makeBackup(), "replace", guestOptions, async () => failingDb), /přerušena|nepodařilo/);
   assert.deepEqual(failingDb.snapshot(), {
-    catches: [oldCatch], trips: [oldTrip], outbox: [], privacySettings: [], progressionEvents: [],
+    catches: [oldCatch], trips: [oldTrip], outbox: [], privacySettings: [], progressionEvents: [], notifications: [], photoBinaries: [],
   });
   assert.equal(db.snapshot().catches[0].id, "old-catch");
   await restoreLocalBackup(makeBackup(), "replace", guestOptions, async () => db);

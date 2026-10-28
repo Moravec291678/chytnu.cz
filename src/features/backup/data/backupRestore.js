@@ -1,18 +1,19 @@
 import {
-  openLocalDatabase, OUTBOX_STORE_NAME, PRIVACY_STORE_NAME, PROGRESSION_EVENT_STORE_NAME, queueOutboxOperation,
+  openLocalDatabase, OUTBOX_STORE_NAME, PRIVACY_STORE_NAME, PROGRESSION_EVENT_STORE_NAME, NOTIFICATION_STORE_NAME, PHOTO_BINARY_STORE_NAME, queueOutboxOperation,
 } from "../../catches/data/catchRepository.js";
 import { isGuestScope, recordScopeKey } from "../../auth/data/localDataScope.js";
 import { normalizePrivacySettings } from "../../privacy/data/privacyModel.js";
 import { LOCAL_BACKUP_FORMAT, LOCAL_BACKUP_VERSION } from "./backupFormat.js";
 import { MAX_LEGACY_PHOTOS_PER_CATCH, normalizePrimaryPhotoId } from "../../catches/data/catchPhotos.js";
 import { normalizeCatchVerification, normalizeLocationEvidence } from "../../catches/data/catchVerification.js";
+import { createNotificationRecord } from "../../notifications/data/notificationModel.js";
 
 export const MAX_BACKUP_FILE_BYTES = 100 * 1024 * 1024;
 const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
 const ALLOWED_PHOTO_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const ALLOWED_SYNC_STATUSES = new Set(["local", "metadata-synced"]);
 const CONDITION_SOURCE_FIELDS = new Set(["airTempC", "waterTempC", "pressureHpa", "windKmh", "moonPhase"]);
-const STORES = ["catches", "trips", OUTBOX_STORE_NAME, PRIVACY_STORE_NAME, PROGRESSION_EVENT_STORE_NAME];
+const STORES = ["catches", "trips", OUTBOX_STORE_NAME, PRIVACY_STORE_NAME, PROGRESSION_EVENT_STORE_NAME, NOTIFICATION_STORE_NAME, PHOTO_BINARY_STORE_NAME];
 
 function fail(message) {
   throw new Error(message);
@@ -189,6 +190,15 @@ function decodeProgressionEvent(record) {
   };
 }
 
+function decodeNotification(record) {
+  if (!isRecord(record)) fail("Záloha obsahuje neplatné oznámení.");
+  try {
+    return createNotificationRecord(record, { scopeKey: "guest:backup-validation", ownerId: null });
+  } catch {
+    fail("Záloha obsahuje neplatné oznámení.");
+  }
+}
+
 export function parseLocalBackupDocument(document) {
   if (!isRecord(document) || document.format !== LOCAL_BACKUP_FORMAT) fail("Soubor není záloha ChytnuCz.");
   if (document.formatVersion !== LOCAL_BACKUP_VERSION) fail(`Verze zálohy ${document.formatVersion ?? "neznámá"} není podporována.`);
@@ -203,22 +213,26 @@ export function parseLocalBackupDocument(document) {
   if (trips.filter((trip) => !trip.endedAt).length > 1) fail("Záloha obsahuje více než jednu aktivní vycházku.");
   const hasPrivacySettings = Object.hasOwn(document.records, "privacySettings");
   const hasProgressionEvents = Object.hasOwn(document.records, "progressionEvents");
+  const hasNotifications = Object.hasOwn(document.records, "notifications");
   if (hasPrivacySettings && document.records.privacySettings !== null && !isRecord(document.records.privacySettings)) {
     fail("Záloha obsahuje neplatné nastavení soukromí.");
   }
   if (hasProgressionEvents && !Array.isArray(document.records.progressionEvents)) {
     fail("Záloha obsahuje neplatný seznam událostí postupu.");
   }
+  if (hasNotifications && !Array.isArray(document.records.notifications)) fail("Záloha obsahuje neplatný seznam oznámení.");
   const privacySettings = hasPrivacySettings && document.records.privacySettings
     ? normalizePrivacySettings(document.records.privacySettings)
     : hasPrivacySettings ? null : undefined;
   const progressionEvents = hasProgressionEvents
     ? document.records.progressionEvents.map(decodeProgressionEvent)
     : undefined;
+  const notifications = hasNotifications ? document.records.notifications.map(decodeNotification) : undefined;
   if (progressionEvents) requireUniqueIds(progressionEvents.map((event) => ({ id: event.reasonKey })), "událostí postupu");
+  if (notifications) requireUniqueIds(notifications, "oznámení");
   return {
     format: document.format, formatVersion: document.formatVersion, createdAt: document.createdAt,
-    catches, trips, privacySettings, progressionEvents,
+    catches, trips, privacySettings, progressionEvents, notifications,
   };
 }
 
@@ -283,10 +297,25 @@ export async function summarizeLocalBackupRestore(backup, current) {
     if (await recordsAreEqual(normalize(incoming), normalize(existing))) unchanged += 1;
     else conflicts += 1;
   }
+  const currentNotifications = new Map((current.notifications ?? []).map((record) => [record.id, record]));
+  for (const incoming of backup.notifications ?? []) {
+    const existing = currentNotifications.get(incoming.id);
+    if (!existing) continue;
+    const comparable = (record) => {
+      const fields = { ...record };
+      delete fields.scopeKey;
+      delete fields.ownerId;
+      delete fields.remoteSyncStatus;
+      return fields;
+    };
+    if (JSON.stringify(comparable(incoming)) === JSON.stringify(comparable(existing))) unchanged += 1;
+    else conflicts += 1;
+  }
   return {
     catchCount: backup.catches.length,
     tripCount: backup.trips.length,
     photoCount: backup.catches.reduce((count, record) => count + record.photos.length, 0),
+    notificationCount: backup.notifications?.length ?? 0,
     duplicateCount: unchanged + conflicts,
     unchangedCount: unchanged,
     conflictCount: conflicts,
@@ -305,6 +334,22 @@ export async function restoreLocalBackup(backup, mode, options, openDatabase = o
   if (mode !== "merge" && mode !== "replace") fail("Vyber způsob obnovení zálohy.");
   const scopeKey = options?.scopeKey;
   if (!isGuestScope(scopeKey) || options?.ownerId) fail("Zálohu lze obnovit pouze do místního profilu.");
+  const preparedCatchData = await Promise.all(backup.catches.map(async (record) => {
+    const binaries = [];
+    const photos = await Promise.all((record.photos ?? []).map(async (photo) => {
+      if (!(photo.blob instanceof Blob)) return photo;
+      let bytes;
+      try { bytes = await photo.blob.arrayBuffer(); }
+      catch { fail(`Fotografii ${photo.name ?? photo.id} se nepodařilo bezpečně připravit k obnovení.`); }
+      const { blob, ...metadata } = photo;
+      binaries.push({
+        key: JSON.stringify([scopeKey, record.id, photo.id]), scopeKey, catchId: record.id, photoId: photo.id,
+        type: blob.type || photo.type || "application/octet-stream", size: bytes.byteLength, bytes,
+      });
+      return metadata;
+    }));
+    return { record: { ...record, photos }, binaries };
+  }));
   const db = await openDatabase();
   return new Promise((resolve, reject) => {
     let transaction;
@@ -312,6 +357,7 @@ export async function restoreLocalBackup(backup, mode, options, openDatabase = o
     let failure;
     let importedCatchCount = backup.catches.length;
     let importedTripCount = backup.trips.length;
+    let importedNotificationCount = backup.notifications?.length ?? 0;
     let skippedCount = 0;
     const rejectOnce = (error) => {
       if (settled) return;
@@ -325,17 +371,22 @@ export async function restoreLocalBackup(backup, mode, options, openDatabase = o
       const tripStore = transaction.objectStore("trips");
       const privacyStore = transaction.objectStore(PRIVACY_STORE_NAME);
       const progressionStore = transaction.objectStore(PROGRESSION_EVENT_STORE_NAME);
-      Promise.all([readAll(catchStore), readAll(tripStore), readAll(privacyStore), readAll(progressionStore)]).then(([
+      const notificationStore = transaction.objectStore(NOTIFICATION_STORE_NAME);
+      const photoBinaryStore = transaction.objectStore(PHOTO_BINARY_STORE_NAME);
+      Promise.all([readAll(catchStore), readAll(tripStore), readAll(privacyStore), readAll(progressionStore), readAll(notificationStore)]).then(([
         existingCatches, existingTrips, existingPrivacy, existingProgression,
+        existingNotifications,
       ]) => {
         if (settled) return;
         try {
           const scopedBackupCatches = backup.catches.map((record) => ({ ...record, ownerId: null, scopeKey }));
+          const photoBinariesByCatchId = new Map(preparedCatchData.map(({ record, binaries }) => [record.id, binaries]));
           const scopedBackupTrips = backup.trips.map((record) => ({ ...record, ownerId: null, scopeKey }));
           const scopedExistingCatches = existingCatches.filter((record) => recordScopeKey(record) === scopeKey);
           const scopedExistingTrips = existingTrips.filter((record) => recordScopeKey(record) === scopeKey);
           const scopedExistingPrivacy = existingPrivacy.find((record) => record.scopeKey === scopeKey) ?? null;
           const scopedExistingProgression = existingProgression.filter((record) => record.scopeKey === scopeKey);
+          const scopedExistingNotifications = existingNotifications.filter((record) => record.scopeKey === scopeKey);
           const incomingPrivacy = backup.privacySettings === undefined ? undefined : backup.privacySettings
             ? { ...normalizePrivacySettings(backup.privacySettings), scopeKey, ownerId: null, updatedAt: new Date().toISOString() }
             : null;
@@ -343,10 +394,16 @@ export async function restoreLocalBackup(backup, mode, options, openDatabase = o
             ...event, id: `${scopeKey}|${event.reasonKey}`, scopeKey, ownerId: null,
             sync: { status: "local", revision: Math.max(1, event.sync?.revision ?? 1) },
           }));
+          const incomingNotifications = backup.notifications === undefined ? undefined : backup.notifications.map((record) => ({
+            ...record, scopeKey, ownerId: null, remoteSyncStatus: "local-only",
+          }));
+          const notificationMap = new Map(scopedExistingNotifications.map((record) => [record.id, record]));
           let catchesToWrite = scopedBackupCatches;
           let tripsToWrite = scopedBackupTrips;
           let catchesToDelete = [];
           let tripsToDelete = [];
+          let notificationsToWrite = [];
+          let notificationsToDelete = [];
           const catchMap = new Map(scopedExistingCatches.map((record) => [record.id, record]));
           const tripMap = new Map(scopedExistingTrips.map((record) => [record.id, record]));
           if (mode === "merge") {
@@ -388,10 +445,27 @@ export async function restoreLocalBackup(backup, mode, options, openDatabase = o
                 }
               }
             }
+            if (incomingNotifications) {
+              const comparable = (record) => {
+                const fields = { ...record };
+                delete fields.scopeKey;
+                delete fields.ownerId;
+                delete fields.remoteSyncStatus;
+                return fields;
+              };
+              for (const record of incomingNotifications) {
+                const existing = notificationMap.get(record.id);
+                if (!existing) notificationsToWrite.push(record);
+                else if (JSON.stringify(comparable(existing)) !== JSON.stringify(comparable(record))) {
+                  fail(`Sloučení zastaveno: oznámení ${record.id} má odlišný obsah.`);
+                } else skippedCount += 1;
+              }
+            }
             const finalTrips = [...scopedExistingTrips, ...tripsToWrite];
             if (finalTrips.filter((trip) => !trip.endedAt).length > 1) fail("Sloučení by vytvořilo více aktivních vycházek. Místní data zůstala beze změny.");
             importedCatchCount = catchesToWrite.length;
             importedTripCount = tripsToWrite.length;
+            importedNotificationCount = notificationsToWrite.length;
           } else {
             const backupCatchIds = new Set(scopedBackupCatches.map((record) => record.id));
             const backupTripIds = new Set(scopedBackupTrips.map((record) => record.id));
@@ -413,6 +487,19 @@ export async function restoreLocalBackup(backup, mode, options, openDatabase = o
               }
               return true;
             });
+            if (incomingNotifications) {
+              const backupNotificationIds = new Set(incomingNotifications.map((record) => record.id));
+              notificationsToDelete = scopedExistingNotifications.filter((record) => !backupNotificationIds.has(record.id));
+              notificationsToWrite = incomingNotifications.filter((record) => {
+                const existing = notificationMap.get(record.id);
+                if (existing && JSON.stringify({ ...existing, scopeKey: undefined, ownerId: undefined, remoteSyncStatus: undefined })
+                  === JSON.stringify({ ...record, scopeKey: undefined, ownerId: undefined, remoteSyncStatus: undefined })) {
+                  skippedCount += 1;
+                  return false;
+                }
+                return true;
+              });
+            }
           }
           if (mode === "replace") {
             if (incomingPrivacy !== undefined) privacyStore.delete(scopeKey);
@@ -437,8 +524,16 @@ export async function restoreLocalBackup(backup, mode, options, openDatabase = o
               .forEach((operation) => outboxStore.delete(operation.sequence));
             request.onerror = () => transaction.abort();
           };
-          catchesToDelete.forEach((record) => { removePendingFor("catch", record.id); catchStore.delete(record.id); });
+          catchesToDelete.forEach((record) => {
+            removePendingFor("catch", record.id);
+            catchStore.delete(record.id);
+            const binaryRequest = photoBinaryStore.index("catchPhoto").getAll([scopeKey, record.id]);
+            binaryRequest.onsuccess = () => binaryRequest.result.forEach((binary) => photoBinaryStore.delete(binary.key));
+            binaryRequest.onerror = () => transaction.abort();
+          });
           tripsToDelete.forEach((record) => { removePendingFor("trip", record.id); tripStore.delete(record.id); });
+          notificationsToDelete.forEach((record) => notificationStore.delete(record.id));
+          notificationsToWrite.forEach((record) => notificationStore.put(record));
           tripsToWrite.forEach((record) => {
             removePendingFor("trip", record.id);
             queueOutboxOperation(transaction, {
@@ -448,12 +543,21 @@ export async function restoreLocalBackup(backup, mode, options, openDatabase = o
             }, (revision) => tripStore.put({ ...record, sync: { ...(record.sync ?? {}), status: "local", revision } }));
           });
           catchesToWrite.forEach((record) => {
+            (photoBinariesByCatchId.get(record.id) ?? []).forEach((binary) => photoBinaryStore.put(binary));
+            const preparedRecord = preparedCatchData.find((entry) => entry.record.id === record.id)?.record ?? record;
+            const retainedPhotoIds = new Set((preparedRecord.photos ?? []).map((photo) => photo.id));
+            const previousBinaries = photoBinaryStore.index("catchPhoto").getAll([scopeKey, record.id]);
+            previousBinaries.onsuccess = () => previousBinaries.result
+              .filter((binary) => !retainedPhotoIds.has(binary.photoId))
+              .forEach((binary) => photoBinaryStore.delete(binary.key));
+            previousBinaries.onerror = () => transaction.abort();
             removePendingFor("catch", record.id);
             queueOutboxOperation(transaction, {
               entityType: "catch", entityId: record.id, operation: "upsert",
               localRevision: record.sync?.revision ?? 1,
               scopeKey,
-            }, (revision) => catchStore.put({ ...record, sync: { ...(record.sync ?? {}), status: "local", revision } }));
+            }, (revision) => catchStore.put({ ...preparedRecord, ownerId: null, scopeKey,
+              sync: { ...(record.sync ?? {}), status: "local", revision } }));
           });
         } catch (error) {
           failure = error;
@@ -467,7 +571,7 @@ export async function restoreLocalBackup(backup, mode, options, openDatabase = o
         if (settled) return;
         settled = true;
         db.close();
-        resolve({ catches: importedCatchCount, trips: importedTripCount, skipped: skippedCount, mode });
+        resolve({ catches: importedCatchCount, trips: importedTripCount, notifications: importedNotificationCount, skipped: skippedCount, mode });
       };
       transaction.onerror = () => rejectOnce(failure ?? transaction.error ?? new Error("Zálohu se nepodařilo obnovit. Místní data zůstala zachována."));
       transaction.onabort = () => rejectOnce(failure ?? transaction.error ?? new Error("Obnova byla přerušena. Místní data zůstala zachována."));

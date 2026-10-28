@@ -45,7 +45,7 @@ async function serializeCatch(record) {
   };
 }
 
-export async function createLocalBackupDocument({ catches, trips, privacySettings, progressionEvents, createdAt = new Date() }) {
+export async function createLocalBackupDocument({ catches, trips, privacySettings, progressionEvents, notifications, createdAt = new Date() }) {
   if (!Array.isArray(catches) || !Array.isArray(trips)) {
     throw new Error("Místní úlovky a vycházky se nepodařilo načíst jako úplné záznamy.");
   }
@@ -56,6 +56,9 @@ export async function createLocalBackupDocument({ catches, trips, privacySetting
   };
   if (privacySettings !== undefined) records.privacySettings = privacySettings ? { ...privacySettings } : null;
   if (progressionEvents !== undefined) records.progressionEvents = progressionEvents.map((event) => ({ ...event }));
+  if (notifications !== undefined) records.notifications = notifications.map(({ id, type, title, body, createdAt: notificationCreatedAt, readAt, deepLink }) => ({
+    id, type, title, body, createdAt: notificationCreatedAt, readAt: readAt ?? null, deepLink,
+  }));
   return {
     format: LOCAL_BACKUP_FORMAT,
     formatVersion: LOCAL_BACKUP_VERSION,
