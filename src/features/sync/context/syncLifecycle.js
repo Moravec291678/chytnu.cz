@@ -15,12 +15,12 @@ export function attachSyncLifecycle({ windowObject = window, documentObject = do
   RESUME_EVENTS.forEach((eventName) => windowObject.addEventListener(eventName, trigger));
   windowObject.addEventListener("online", trigger);
   documentObject.addEventListener("visibilitychange", onVisibility);
-  const timer = windowObject.setInterval(trigger, intervalMs);
+  const timer = intervalMs > 0 ? windowObject.setInterval(trigger, intervalMs) : null;
   return () => {
     disposed = true;
     RESUME_EVENTS.forEach((eventName) => windowObject.removeEventListener(eventName, trigger));
     windowObject.removeEventListener("online", trigger);
     documentObject.removeEventListener("visibilitychange", onVisibility);
-    windowObject.clearInterval(timer);
+    if (timer !== null) windowObject.clearInterval(timer);
   };
 }

@@ -193,9 +193,21 @@ export function SyncProvider({ children }) {
     }
     void runSync();
     const retry = () => void runSync();
-    const detachLifecycle = attachSyncLifecycle({ runSync: retry });
+    const detachLifecycle = attachSyncLifecycle({ runSync: retry, intervalMs: 0 });
+    let disposed = false;
+    let unsubscribe = null;
+    let fallback = null;
+    const startFallback = () => {
+      if (!disposed && !fallback) fallback = attachSyncLifecycle({ runSync: retry });
+    };
+    import("../data/firestoreSyncAdapter.js").then(({ subscribeToOwnerSyncChanges }) => {
+      if (!disposed) unsubscribe = subscribeToOwnerSyncChanges(userId, retry, startFallback);
+    }).catch(startFallback);
     window.addEventListener("chytnu:outbox-changed", retry);
     return () => {
+      disposed = true;
+      unsubscribe?.();
+      fallback?.();
       detachLifecycle();
       window.removeEventListener("chytnu:outbox-changed", retry);
     };

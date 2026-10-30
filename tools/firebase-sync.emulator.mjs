@@ -12,7 +12,7 @@ import { collection, connectFirestoreEmulator, doc, getDoc, getDocs, getFirestor
 import "fake-indexeddb/auto";
 import { catchRepository, outboxRepository } from "../src/features/catches/data/catchRepository.js";
 import { createCloudinaryPhotoDeletionService } from "../src/server/cloudinaryPhotoDeletion.js";
-import { createFirestoreSyncAdapter, toRemoteRecord } from "../src/features/sync/data/firestoreSyncAdapter.js";
+import { createFirestoreSyncAdapter, toRemoteRecord, subscribeToOwnerSyncChanges } from "../src/features/sync/data/firestoreSyncAdapter.js";
 import { createSyncPort } from "../src/features/sync/data/syncPort.js";
 import { createSyncService } from "../src/features/sync/data/syncService.js";
 import { tripRepository } from "../src/features/trips/data/tripRepository.js";
@@ -72,7 +72,16 @@ try {
 
   const queuedBeforeFirstSync = await outboxRepository.list();
   assert.equal(queuedBeforeFirstSync.length, 3, `Unexpected outbox before first sync: ${JSON.stringify(queuedBeforeFirstSync)}`);
+  let stopRealtime;
+  let realtimeTimeout;
+  const realtimeChange = new Promise((resolve, reject) => {
+    realtimeTimeout = setTimeout(() => reject(new Error("Realtime change was not delivered")), 10_000);
+    stopRealtime = subscribeToOwnerSyncChanges(ownerId, (sequence) => { if (sequence > 0) resolve(sequence); }, reject,
+      { db, getCurrentUserId: () => auth.currentUser?.uid });
+  });
   const first = await firestoreService.run(ownerId);
+  try { assert.ok(await realtimeChange > 0); }
+  finally { clearTimeout(realtimeTimeout); stopRealtime(); }
   assert.equal(first.status, "success", first.error);
   assert.equal(first.sent, 3, `Unexpected first sync result: ${JSON.stringify(first)}; outbox: ${JSON.stringify(await outboxRepository.list())}`);
   assert.equal((await outboxRepository.list()).length, 0);

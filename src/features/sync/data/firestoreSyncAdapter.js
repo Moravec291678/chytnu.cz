@@ -7,6 +7,7 @@ import {
   getFirestore,
   limit,
   orderBy,
+  onSnapshot,
   query,
   runTransaction,
   startAfter,
@@ -39,6 +40,19 @@ function requireActiveOwner(ownerId, getCurrentUserId) {
   if (!ownerId || getCurrentUserId() !== ownerId) {
     throw new SyncPortError("permission_denied", "Přihlášený účet se změnil. Synchronizace byla zastavena.");
   }
+}
+
+export function subscribeToOwnerSyncChanges(ownerId, onChange, onError, { db = getConfiguredFirestore(), getCurrentUserId = () => firebaseAuth.currentUserId() } = {}) {
+  requireActiveOwner(ownerId, getCurrentUserId);
+  const latest = query(collection(db, "users", ownerId, "syncChanges"), orderBy("sequence", "desc"), limit(1));
+  let lastSequence = null;
+  return onSnapshot(latest, (snapshot) => {
+    if (getCurrentUserId() !== ownerId || snapshot.metadata.hasPendingWrites) return;
+    const sequence = snapshot.docs[0]?.data()?.sequence ?? 0;
+    if (sequence === lastSequence) return;
+    lastSequence = sequence;
+    onChange(sequence);
+  }, onError);
 }
 
 export function normalizeFirebaseError(error) {
