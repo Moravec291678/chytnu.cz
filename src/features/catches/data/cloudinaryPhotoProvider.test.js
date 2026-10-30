@@ -42,7 +42,7 @@ test("signed upload uses only the server grant, fixed image endpoint, and verifi
     },
     async requestUploadVerification(body) {
       verified = true;
-      assert.deepEqual(body, { catchId, photoId, bytes: blob.size, format: "jpg" });
+      assert.deepEqual(body, { catchId, photoId, bytes: blob.size, format: "jpg", sha256 });
       return { verified: true, bytes: blob.size, format: "jpg" };
     },
   });
@@ -234,4 +234,23 @@ test("empty or mismatched Cloudinary response cannot reach verification", async 
     }), { code: "cloudinary_response_mismatch" });
     assert.equal(verified, false);
   }
+});
+
+test("interrupted upload recovery verifies the same SHA-256 without another Cloudinary upload", async () => {
+  let networkCalls = 0;
+  const provider = createCloudinaryPhotoProvider({ fetchImpl: async () => { networkCalls += 1; throw new Error("unexpected upload"); } });
+  const input = { ownerId, catchId, photoId, objectKey, size: blob.size, contentType: blob.type, sha256 };
+  const verified = await provider.recoverUpload({ ...input, requestUploadVerification: async (body) => {
+    assert.deepEqual(body, { catchId, photoId, bytes: blob.size, format: "jpg", sha256 });
+    return { verified: true, bytes: blob.size, format: "jpg" };
+  } });
+  assert.equal(verified, true);
+  assert.equal(networkCalls, 0);
+  for (const [status, code] of [[404, "asset_not_found"], [409, "upload_response_mismatch"]]) {
+    assert.equal(await provider.recoverUpload({ ...input, requestUploadVerification: async () => {
+      throw Object.assign(new Error("not recoverable"), { status, code });
+    } }), false);
+  }
+  await assert.rejects(provider.recoverUpload({ ...input, objectKey: "foreign", requestUploadVerification: async () => ({ verified: true }) }),
+    { code: "invalid_photo_identity" });
 });

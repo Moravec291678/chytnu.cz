@@ -10,6 +10,7 @@ import {
   PHOTO_BINARY_STORE_NAME,
 } from "../../catches/data/catchRepository.js";
 import { accountScopeKey, isGuestScope, recordScopeKey } from "../../auth/data/localDataScope.js";
+import { logicalSyncKey } from "./syncLifecycleState.js";
 
 const STORES = { catch: "catches", trip: "trips", water: "waters" };
 
@@ -55,7 +56,7 @@ export async function readSyncSummary(ownerId) {
       requestResult(transaction.objectStore(SYNC_STATE_STORE_NAME).get(ownerId)),
     ]);
     const scoped = operations.filter((operation) => operation.ownerId === ownerId);
-    const lastFailed = scoped.find((operation) => operation.lastError);
+    const lastFailed = scoped.find((operation) => operation.status === "failed" && operation.lastError);
     const pendingPulls = Array.isArray(syncState?.pendingPulls) ? syncState.pendingPulls : [];
     const lastPendingPull = pendingPulls.at(-1);
     const retryAt = [
@@ -63,7 +64,8 @@ export async function readSyncSummary(ownerId) {
       ...pendingPulls.filter((operation) => operation.retryable && operation.nextAttemptAt).map((operation) => operation.nextAttemptAt),
     ].sort()[0] ?? null;
     return {
-      pending: scoped.filter((operation) => operation.status !== "conflict").length,
+      pending: new Set(scoped.filter((operation) => operation.status !== "conflict").map(logicalSyncKey)).size,
+      outboxCount: scoped.filter((operation) => operation.status !== "conflict").length,
       failed: scoped.filter((operation) => operation.status === "failed").length,
       pullPending: pendingPulls.length,
       pullErrorMessage: lastPendingPull?.errorMessage ?? "",

@@ -1,68 +1,31 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { getSyncPendingCount, getSyncStatusView, SYNC_STATUS_COMPACT_DELAY_MS } from "./syncStatusView.js";
-import { runManualSync, runSyncRetry } from "./syncStatusView.js";
+import { getSyncPendingCount, getSyncStatusView, runManualSync, runSyncRetry, SYNC_STATUS_COMPACT_DELAY_MS } from "./syncStatusView.js";
 import SyncStatus from "./SyncStatus.js";
 
-test("sync overlay stays absent for idle and no-op periodic sync states", () => {
-  assert.equal(getSyncStatusView({ status: "idle" }).kind, "hidden");
-  assert.equal(getSyncStatusView({ status: "syncing", showSyncStatus: false }).kind, "hidden");
-  assert.equal(getSyncStatusView({ status: "success", showSyncStatus: false }).kind, "hidden");
+test("short, offline, retrying and completed sync never show a global banner", () => {
+  assert.equal(SYNC_STATUS_COMPACT_DELAY_MS, 2_500);
+  for (const status of ["idle", "local-pending", "retry-wait", "synced", "user-action-required"]) {
+    assert.equal(getSyncStatusView({ status, showSyncStatus: true }, true, true).kind, "hidden");
+  }
+  assert.equal(getSyncStatusView({ status: "syncing", showSyncStatus: true }, true, false).kind, "hidden");
+  assert.equal(getSyncStatusView({ status: "syncing", showSyncStatus: true }, false, true).kind, "hidden");
 });
 
-test("meaningful progress and success have a polite status; errors remain visible through retry", () => {
-  assert.equal(getSyncStatusView({ status: "syncing", showSyncStatus: true }).kind, "syncing");
-  assert.equal(getSyncStatusView({ status: "success", showSyncStatus: true }).kind, "success");
-  assert.equal(getSyncStatusView({ status: "error", showSyncStatus: false }).kind, "error");
-  assert.equal(getSyncStatusView({ status: "syncing", error: "retry in progress", showSyncStatus: true }).kind, "error");
-  assert.equal(getSyncStatusView({ status: "offline" }, false).kind, "offline");
+test("long active sync has only a small delayed accessible indicator without technical operation count", () => {
+  assert.equal(getSyncPendingCount({ pending: 1, pullPending: 0 }), 1);
+  assert.deepEqual(getSyncStatusView({ status: "syncing", showSyncStatus: true, pending: 10 }, true, true), { kind: "syncing" });
+  const view = SyncStatus({ sync: { status: "syncing", showSyncStatus: true, pending: 10 }, isOnline: true, compact: true });
+  assert.equal(view.props.role, "status");
+  assert.equal(view.props["aria-label"], "Synchronizace probíhá");
+  assert.match(view.props.className, /minimal/);
+  assert.equal(JSON.stringify(view).includes("10"), false);
+  assert.equal(SyncStatus({ sync: { status: "retry-wait", error: "timeout" }, isOnline: true, compact: true }), null);
 });
 
-test("significant sync minimizes after the presentation delay and hides its counter at zero", () => {
-  assert.equal(SYNC_STATUS_COMPACT_DELAY_MS, 1_500);
-  assert.equal(getSyncPendingCount({ pending: 2, pullPending: 1 }), 3);
-  assert.deepEqual(getSyncStatusView({ status: "syncing", showSyncStatus: true, pending: 2, pullPending: 1 }, true, false), { kind: "syncing", pending: 3 });
-  assert.deepEqual(getSyncStatusView({ status: "syncing", showSyncStatus: true, pending: 2, pullPending: 1 }, true, true), { kind: "syncing-compact", pending: 3 });
-  assert.equal(getSyncStatusView({ status: "syncing", showSyncStatus: true, pending: 0, pullPending: 0 }, true, true).kind, "hidden");
-  assert.equal(getSyncStatusView({ status: "syncing", showSyncStatus: false, pending: 0 }, true, true).kind, "hidden");
-});
-
-test("SyncStatus component renders accessible progress/success, compact count and Retry", () => {
-  assert.equal(SyncStatus({ sync: { status: "idle" }, isOnline: true }), null);
-  const progress = SyncStatus({ sync: { status: "syncing", showSyncStatus: true }, isOnline: true });
-  const progressCard = progress.props.children;
-  assert.equal(progressCard.props.role, "status");
-  assert.equal(progressCard.props["aria-live"], "polite");
-  assert.equal(progressCard.props["aria-busy"], true, "a retry immediately presents the actual active sync state");
-  const compact = SyncStatus({ sync: { status: "syncing", showSyncStatus: true, pending: 2, pullPending: 1 }, isOnline: true, compact: true });
-  const compactIndicator = compact.props.children;
-  assert.match(compactIndicator.props.className, /sync-status-compact/);
-  assert.equal(compactIndicator.props.role, "status");
-  assert.equal(compactIndicator.props["aria-live"], "polite");
-  assert.equal(compactIndicator.props.children[0].props.children.props.children, "3");
-  const success = SyncStatus({ sync: { status: "success", showSyncStatus: true }, isOnline: true });
-  assert.equal(success.props.children.props.role, "status");
-
-  let retries = 0;
-  const error = SyncStatus({ sync: { status: "error", error: "Dočasná chyba", retry: () => { retries += 1; } }, isOnline: true });
-  const errorCard = error.props.children;
-  assert.equal(errorCard.props.role, "alert");
-  assert.equal(errorCard.props["aria-live"], "assertive");
-  assert.match(errorCard.props.children[0].props.children[1].props.children, /Dočasná chyba/);
-  errorCard.props.children[1].props.onClick();
-  assert.equal(retries, 1);
-
-  const technicalError = SyncStatus({ sync: { status: "error", error: new TypeError("FirebaseError: permission-denied at request()") }, isOnline: true });
-  const safeDescription = technicalError.props.children.props.children[0].props.children[1].props.children;
-  assert.match(safeDescription, /Zkontroluj připojení/);
-  assert.doesNotMatch(safeDescription, /FirebaseError|permission-denied/);
-});
-
-test("manual sync and retry controls keep their handlers callable", () => {
+test("manual sync remains available in detail", () => {
   let manualRuns = 0;
   let retries = 0;
   assert.equal(runManualSync({ syncNow: () => ++manualRuns }), 1);
   assert.equal(runSyncRetry({ retry: () => ++retries }), 1);
-  assert.equal(manualRuns, 1);
-  assert.equal(retries, 1);
 });

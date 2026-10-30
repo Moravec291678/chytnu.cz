@@ -71,7 +71,7 @@ test("sign endpoint accepts only authenticated owner metadata and returns a cons
   const response = await request(harness.api.signUpload, { body: { catchId, photoId, size: 1024, contentType: "image/jpeg", sha256 } });
   const publicId = cloudinaryPublicId(ownerId, catchId, photoId);
   assert.equal(response.statusCode, 200, JSON.stringify(response.body));
-  assert.deepEqual(response.body.params, { public_id: publicId, type: "authenticated", overwrite: true });
+  assert.deepEqual(response.body.params, { public_id: publicId, type: "authenticated", overwrite: true, context: `sha256=${sha256}` });
   assert.equal(response.body.resourceType, "image");
   assert.equal(response.body.signature, "b".repeat(64));
   assert.equal(harness.signed[0].secret, "test-only-secret");
@@ -244,9 +244,20 @@ test("Cloudinary upload response is verified against actual authenticated image 
   const harness = createHarness();
   const response = await request(harness.api.verifyUpload, { body: { catchId, photoId, bytes: 1024, format: "jpg" } });
   assert.deepEqual(response.body, { verified: true, bytes: 1024, format: "jpg" });
-  assert.deepEqual(harness.reads.find((item) => item.resource).resource, [cloudinaryPublicId(ownerId, catchId, photoId), { resource_type: "image", type: "authenticated" }]);
+  assert.deepEqual(harness.reads.find((item) => item.resource).resource, [cloudinaryPublicId(ownerId, catchId, photoId), { resource_type: "image", type: "authenticated", context: true }]);
   const mismatch = createHarness({ resource: { public_id: "foreign/public/id", resource_type: "image", type: "authenticated", bytes: 1024, format: "jpg" } });
   assert.equal((await request(mismatch.api.verifyUpload, { body: { catchId, photoId, bytes: 1024, format: "jpg" } })).statusCode, 409);
+});
+
+test("recovery accepts only a cloud asset carrying the signed SHA-256 context", async () => {
+  const resource = { public_id: cloudinaryPublicId(ownerId, catchId, photoId), resource_type: "image",
+    type: "authenticated", bytes: 1024, format: "jpg", context: { custom: { sha256 } } };
+  const valid = createHarness({ resource });
+  assert.equal((await request(valid.api.verifyUpload, { body: { catchId, photoId, bytes: 1024, format: "jpg", sha256 } })).statusCode, 200);
+  const different = createHarness({ resource: { ...resource, context: { custom: { sha256: "b".repeat(64) } } } });
+  assert.equal((await request(different.api.verifyUpload, { body: { catchId, photoId, bytes: 1024, format: "jpg", sha256 } })).statusCode, 409);
+  const legacy = createHarness({ resource: { ...resource, context: undefined } });
+  assert.equal((await request(legacy.api.verifyUpload, { body: { catchId, photoId, bytes: 1024, format: "jpg", sha256 } })).statusCode, 409);
 });
 
 test("deletion just before verify-upload rejects the stale upload without reading Cloudinary", async () => {

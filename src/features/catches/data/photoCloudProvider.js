@@ -9,6 +9,16 @@ export const PHOTO_CLOUD_STATE = Object.freeze({
   UNAVAILABLE: "unavailable",
 });
 
+export function isPhotoCloudReady(photo, expected = null) {
+  const cloud = photo?.cloud;
+  return cloud?.state === PHOTO_CLOUD_STATE.SYNCED
+    && typeof cloud.provider === "string" && cloud.provider.length > 0
+    && typeof cloud.objectKey === "string" && cloud.objectKey.length > 0
+    && /^[a-f0-9]{64}$/.test(cloud.sha256 ?? "")
+    && (!expected || (cloud.provider === expected.provider
+      && cloud.objectKey === expected.objectKey && cloud.sha256 === expected.sha256));
+}
+
 export const nonePhotoCloudProvider = Object.freeze({
   id: "none",
   isAvailable: async () => false,

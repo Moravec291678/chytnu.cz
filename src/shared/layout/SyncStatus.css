@@ -1,88 +1,29 @@
-.sync-status-layer {
+.sync-status-minimal {
   position: fixed;
   z-index: var(--z-floating-status);
-  inset: 0;
+  right: 12px;
+  bottom: calc(92px + env(safe-area-inset-bottom));
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface-1);
   pointer-events: none;
 }
 
-.sync-status-layer > * {
-  pointer-events: auto;
-}
-
-.sync-status-card {
-  position: absolute;
-  right: 12px;
-  bottom: calc(90px + env(safe-area-inset-bottom) + 8px);
-  left: 12px;
-  width: min(calc(100% - 24px), 463px);
-  margin: 0 auto;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-floating);
-}
-
-.sync-status-card {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2-75);
-  padding: var(--space-2-75) var(--space-3-75);
-  background: var(--surface-1);
-  color: var(--text-primary);
-  animation: sync-status-enter 180ms ease-out both;
-  transition: width 220ms ease, height 220ms ease, padding 220ms ease, border-radius 220ms ease, opacity 180ms ease;
-}
-
-.sync-status-card strong { font-size: var(--font-size-12); }
-.sync-status-card p { margin: var(--space-0-75) 0 0; color: var(--text-secondary); font-size: var(--font-size-11); line-height: 1.4; }
-.sync-status-success { border-color: rgb(var(--accent-green-rgb) / 45%); }
-.sync-status-success strong { color: var(--accent-green); }
-.sync-status-error { border-color: rgb(var(--accent-red-rgb) / 45%); background: var(--accent-red-soft); }
-.sync-status-error strong { color: var(--accent-red); }
-.sync-status-offline { border-color: rgb(var(--accent-blue-rgb) / 35%); background: var(--accent-blue-soft); }
-.sync-status-retry { min-height: 40px; flex: 0 0 auto; padding: 0 var(--space-2-5); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface-1); color: var(--text-primary); font: inherit; font-size: var(--font-size-11); font-weight: 800; }
-.sync-status-retry:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 2px; }
-.sync-status-indicator {
-  position: relative;
-  width: 17px;
-  height: 17px;
-  flex: 0 0 17px;
-}
-
-.sync-status-indicator::before {
-  position: absolute;
-  inset: 0;
+.sync-status-minimal-spinner {
+  width: 16px;
+  height: 16px;
   border: 2px solid var(--border-strong);
   border-top-color: var(--accent-green);
   border-radius: 50%;
-  animation: sync-status-spin 800ms linear infinite;
-  content: "";
-}
-
-.sync-status-compact { right: 14px; bottom: calc(100px + env(safe-area-inset-bottom)); left: auto; display: grid; width: 44px; height: 44px; min-height: 44px; place-items: center; padding: 0; border-radius: 50%; pointer-events: none; }
-.sync-status-indicator-count { display: grid; width: 34px; height: 34px; flex: 0 0 34px; place-items: center; color: var(--text-primary); font-size: var(--font-size-12); font-weight: 800; font-variant-numeric: tabular-nums; }
-.sync-status-indicator-count::before { inset: 1px; border-width: 2px; }
-.sync-status-count { position: relative; }
-.sync-status-compact .sync-status-copy { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-
-@keyframes sync-status-enter {
-  from { opacity: 0; transform: translateY(5px); }
-  to { opacity: 1; transform: translateY(0); }
+  animation: sync-status-spin 850ms linear infinite;
 }
 
 @keyframes sync-status-spin { to { transform: rotate(360deg); } }
 
-@media (min-width: 700px) {
-  .sync-status-card {
-    top: max(16px, env(safe-area-inset-top));
-    right: max(16px, calc((100vw - 1100px) / 2));
-    bottom: auto;
-    left: auto;
-    width: min(420px, calc(100% - 32px));
-  }
-  .sync-status-card.sync-status-compact { top: auto; right: 16px; bottom: calc(100px + env(safe-area-inset-bottom)); width: 44px; }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .sync-status-card { animation: none; transition: none; }
-  .sync-status-indicator::before { animation: none; }
+  .sync-status-minimal-spinner { animation: none; }
 }

@@ -23,6 +23,7 @@ export function NotificationProvider({ children }) {
   const sync = useOptionalSync();
   const [state, setState] = useState(emptyState);
   const seenProgressionRef = useRef({ scopeKey: null, ids: new Set() });
+  const syncIncidentRef = useRef(null);
 
   const publishNotification = useCallback(async (input) => {
     if (scope.status !== "ready") return null;
@@ -76,18 +77,36 @@ export function NotificationProvider({ children }) {
   }, [progression.events, progression.loading, publishNotification, scope.scopeKey, scope.status]);
 
   useEffect(() => {
-    if (scope.status !== "ready" || sync?.status !== "error") return;
-    const day = new Date().toISOString().slice(0, 10);
+    if (sync?.status === "synced") syncIncidentRef.current = null;
+    if (scope.status !== "ready" || state.loading || state.scopeKey !== scope.scopeKey || sync?.status !== "user-action-required") return;
+    if (syncIncidentRef.current?.scopeKey !== scope.scopeKey) {
+      syncIncidentRef.current = { scopeKey: scope.scopeKey,
+        id: state.notifications.find((item) => item.type === "sync_problem" && !item.readAt)?.id
+          ?? stableNotificationId("sync", scope.scopeKey, Date.now()) };
+    }
+    if (state.notifications.some((item) => item.id === syncIncidentRef.current.id)) return;
     const copy = NOTIFICATION_COPY.syncProblem;
     void publishNotification({
-      id: stableNotificationId("sync", scope.scopeKey, sync.errorCode || "sync-problem", day),
+      id: syncIncidentRef.current.id,
       type: "sync_problem",
       title: copy.title,
       body: copy.body,
       createdAt: new Date().toISOString(),
       deepLink: copy.deepLink,
     }).catch(() => {});
-  }, [publishNotification, scope.scopeKey, scope.status, sync?.errorCode, sync?.status]);
+  }, [publishNotification, scope.scopeKey, scope.status, state.loading, state.scopeKey, state.notifications, sync?.errorCode, sync?.status]);
+
+  useEffect(() => {
+    if (scope.status !== "ready" || sync?.status !== "synced" || state.scopeKey !== scope.scopeKey) return;
+    for (const notification of state.notifications) {
+      if (notification.type === "sync_problem" && !notification.readAt) {
+        void notificationRepository.markRead(notification.id, { scopeKey: scope.scopeKey, ownerId: scope.ownerId })
+          .then((resolved) => setState((previous) => previous.scopeKey === scope.scopeKey
+            ? { ...previous, notifications: previous.notifications.map((item) => item.id === resolved.id ? resolved : item) }
+            : previous)).catch(() => {});
+      }
+    }
+  }, [scope.ownerId, scope.scopeKey, scope.status, state.notifications, state.scopeKey, sync?.status]);
 
   const markAsRead = useCallback(async (id) => {
     const notification = await notificationRepository.markRead(id, { scopeKey: scope.scopeKey, ownerId: scope.ownerId });
@@ -103,7 +122,8 @@ export function NotificationProvider({ children }) {
     return notifications;
   }, [scope.ownerId, scope.scopeKey]);
 
-  const notifications = useMemo(() => state.scopeKey === scope.scopeKey ? state.notifications : [], [scope.scopeKey, state.notifications, state.scopeKey]);
+  const notifications = useMemo(() => state.scopeKey === scope.scopeKey
+    ? state.notifications.filter((item) => item.type !== "sync_problem" || !item.readAt) : [], [scope.scopeKey, state.notifications, state.scopeKey]);
   const unreadCount = notifications.reduce((count, notification) => count + (notification.readAt ? 0 : 1), 0);
   const value = useMemo(() => ({
     notifications,

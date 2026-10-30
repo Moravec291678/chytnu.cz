@@ -45,7 +45,8 @@ export function describeSyncFailure(error, operation = {}) {
   const safeName = /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(sourceName) ? sourceName : "Error";
   const providerCode = provider && /^[A-Za-z0-9_./:-]{1,100}$/.test(provider) ? provider : null;
   const retryable = typeof error?.retryable === "boolean" ? error.retryable
-    : code !== "permission_denied" && code !== "unauthenticated" && code !== "rules_schema_rejection";
+    : !["permission_denied", "unauthenticated", "rules_schema_rejection", "firebase_token_invalid",
+      "missing_firebase_user", "ownership_denied", "invalid_auth_header"].includes(code);
   return Object.freeze({
     code,
     message: USER_MESSAGES[code],

@@ -14,6 +14,7 @@ import { getBackendConfiguration } from "../../auth/data/backendConfig.js";
 import { SyncContext } from "./syncContextValue.js";
 import { attachSyncLifecycle } from "./syncLifecycle.js";
 import { getPullRetryAt, mergeSyncForce } from "./syncRetry.js";
+import { completedSyncState, SYNC_LIFECYCLE_STATE } from "../data/syncLifecycleState.js";
 import { preparePhotoSyncService } from "./photoSyncPreparation.js";
 import { serverProgressionClaimService } from "../../progression/data/serverProgressionClaimService.js";
 import { userFacingErrorMessage } from "../../../shared/errors/userFacingError.js";
@@ -25,6 +26,7 @@ function online() {
 }
 
 function reportSyncDiagnostic(diagnostic) {
+  if (typeof window === "undefined" || new URLSearchParams(window.location.search).get("debug") !== "1") return;
   let mode = "unknown";
   try { mode = getBackendConfiguration().mode; } catch { /* Auth reports invalid configuration separately. */ }
   if (!["emulator", "staging", "production"].includes(mode)) return;
@@ -66,9 +68,9 @@ export function SyncProvider({ children }) {
     if (!online()) {
       try {
         const summary = await updateSummary(userId);
-        setState((previous) => ({ ...previous, ...summary, status: "offline", error: "" }));
+        setState((previous) => ({ ...previous, ...summary, status: SYNC_LIFECYCLE_STATE.LOCAL_PENDING, error: "", showSyncStatus: false }));
       } catch (error) {
-        setState((previous) => ({ ...previous, status: "error", error: userFacingErrorMessage(error, "Místní frontu se nepodařilo načíst. Zkus synchronizaci znovu.") }));
+        setState((previous) => ({ ...previous, status: SYNC_LIFECYCLE_STATE.RETRY_WAIT, error: userFacingErrorMessage(error, "Místní frontu se nepodařilo načíst. Zkus synchronizaci znovu."), showSyncStatus: false }));
       }
       return;
     }
@@ -79,10 +81,8 @@ export function SyncProvider({ children }) {
     }
     const startingSummary = await updateSummary(userId).catch(() => null);
     setState((previous) => ({ ...previous, ...(startingSummary ?? {}), status: "syncing", presentationId: Date.now(),
-      error: startingSummary?.pullErrorMessage || previous.error,
-      errorCode: startingSummary?.pullErrorCode || previous.errorCode,
-      showSyncStatus: manual || previous.status === "error" || previous.status === "offline"
-        || (startingSummary?.pending ?? previous.pending) > 0 || (startingSummary?.pullPending ?? 0) > 0 }));
+      error: "", errorCode: "", errorEndpoint: "",
+      showSyncStatus: true }));
     try {
       if (!serviceRef.current) {
         const { createFirestoreSyncAdapter } = await import("../data/firestoreSyncAdapter.js");
@@ -124,19 +124,16 @@ export function SyncProvider({ children }) {
       if (photoResult.status === "error" && finalResult.status === "success") {
         finalResult.status = "error";
         finalResult.error = photoResult.error;
-        finalResult.errorCode = describeSyncFailure({ code: photoResult.errorCode }).code;
+        const photoFailure = describeSyncFailure({ code: photoResult.errorCode });
+        finalResult.errorCode = photoFailure.code;
+        finalResult.retryable = photoFailure.retryable;
         finalResult.errorEndpoint = photoResult.errorEndpoint ?? "";
       }
       const summary = await updateSummary(userId);
-      const deferredPullFailure = summary.pullPending > 0;
-      const finalStatus = finalResult.status === "success" && deferredPullFailure ? "error" : finalResult.status;
-      const finalError = finalResult.error || (deferredPullFailure ? summary.pullErrorMessage : "");
-      const finalErrorCode = finalResult.errorCode || (deferredPullFailure ? summary.pullErrorCode : "");
-      const finalRetryable = finalResult.status === "error" ? finalResult.retryable !== false : summary.pullRetryable;
-      const meaningful = manual || result.status === "error" || photoResult.status === "error"
-        || (finalResult.sent ?? 0) > 0 || (finalResult.applied ?? 0) > 0
-        || (photoResult.uploaded ?? 0) > 0 || (photoResult.deleted ?? 0) > 0
-        || summary.pending > 0 || summary.failed > 0 || summary.pullPending > 0;
+      const finalError = finalResult.error || summary.pullErrorMessage || summary.lastError || photoResult.error || "";
+      const finalErrorCode = finalResult.errorCode || summary.pullErrorCode || summary.lastErrorCode || photoResult.errorCode || "";
+      const finalRetryable = finalResult.status === "error" ? finalResult.retryable !== false : summary.pullPending > 0 ? summary.pullRetryable : true;
+      const finalStatus = completedSyncState({ result: finalResult, photoResult, summary, retryable: finalRetryable });
       setState({
         ...initialState,
         ...summary,
@@ -144,20 +141,20 @@ export function SyncProvider({ children }) {
         sent: (finalResult.sent ?? 0) + (photoResult.uploaded ?? 0) + (photoResult.deleted ?? 0),
         applied: finalResult.applied ?? 0,
         conflicts: Math.max(finalResult.conflicts ?? 0, summary.conflicts),
-        error: finalError,
-        errorCode: finalErrorCode,
+        error: finalStatus === SYNC_LIFECYCLE_STATE.SYNCED ? "" : finalError,
+        errorCode: finalStatus === SYNC_LIFECYCLE_STATE.SYNCED ? "" : finalErrorCode,
         errorEndpoint: finalResult.errorEndpoint ?? summary.lastErrorEndpoint ?? "",
-        nextRetryAt: finalStatus === "error" ? summary.nextRetryAt ?? getPullRetryAt(finalRetryable) : summary.nextRetryAt,
+        nextRetryAt: finalStatus === SYNC_LIFECYCLE_STATE.RETRY_WAIT ? summary.nextRetryAt ?? getPullRetryAt(true) : summary.nextRetryAt,
         lastResult: finalStatus,
-        showSyncStatus: finalStatus === "error" || finalStatus === "offline" || meaningful,
+        showSyncStatus: false,
       });
       if ((result.applied ?? 0) > 0) window.dispatchEvent(new Event("chytnu:local-data-restored"));
     } catch (error) {
       const summary = await updateSummary(userId).catch(() => initialState);
       const failure = describeSyncFailure(error);
       reportSyncDiagnostic({ event: "pull-failed", ...failure });
-      setState((previous) => ({ ...previous, ...summary, status: "error", error: failure.message,
-        errorCode: failure.code, nextRetryAt: getPullRetryAt(failure.retryable) }));
+      setState((previous) => ({ ...previous, ...summary, status: failure.retryable ? SYNC_LIFECYCLE_STATE.RETRY_WAIT : SYNC_LIFECYCLE_STATE.USER_ACTION_REQUIRED,
+        error: failure.message, errorCode: failure.code, nextRetryAt: failure.retryable ? getPullRetryAt(true) : null, showSyncStatus: false }));
     } finally {
       runningRef.current = false;
       if (rerunRef.current) {
@@ -178,9 +175,9 @@ export function SyncProvider({ children }) {
       const summary = await updateSummary(userId).catch(() => null);
       if (!active) return;
       if (summary) setState((previous) => previous.status === "syncing" ? { ...previous, ...summary } : previous);
-      timer = window.setTimeout(refreshProgress, 750);
+      timer = window.setTimeout(refreshProgress, 10_000);
     };
-    timer = window.setTimeout(refreshProgress, 400);
+    timer = window.setTimeout(refreshProgress, 2_000);
     return () => { active = false; window.clearTimeout(timer); };
   }, [state.status, state.showSyncStatus, updateSummary, userId]);
 
@@ -213,12 +210,6 @@ export function SyncProvider({ children }) {
 
   const retry = useCallback(() => runSync(true, true), [runSync]);
   const syncNow = useCallback(() => runSync(true, true), [runSync]);
-  useEffect(() => {
-    if (state.status !== "success" || !state.showSyncStatus) return undefined;
-    const timer = window.setTimeout(() => setState((previous) => previous.status === "success"
-      ? { ...previous, showSyncStatus: false } : previous), 3_500);
-    return () => window.clearTimeout(timer);
-  }, [state.status, state.showSyncStatus]);
   const backendMode = (() => { try { return getBackendConfiguration().mode; } catch { return "unavailable"; } })();
   const providerId = getPhotoCloudProvider()?.id ?? "none";
   return <SyncContext.Provider value={{ ...state, retry, syncNow, backendMode, providerId, syncEnabled: Boolean(userId && authStatus === "ready") }}>{children}</SyncContext.Provider>;

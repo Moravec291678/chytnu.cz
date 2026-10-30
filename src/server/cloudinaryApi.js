@@ -260,6 +260,7 @@ export function createCloudinaryApi({
         public_id: cloudinaryPublicId(uid, body.catchId, body.photoId),
         type: "authenticated",
         overwrite: true,
+        context: `sha256=${body.sha256}`,
         timestamp,
       };
       const signature = cloudinary.utils.api_sign_request(params, env.CLOUDINARY_API_SECRET);
@@ -269,7 +270,7 @@ export function createCloudinaryApi({
         resourceType: "image",
         timestamp,
         signature,
-        params: { public_id: params.public_id, type: params.type, overwrite: params.overwrite },
+        params: { public_id: params.public_id, type: params.type, overwrite: params.overwrite, context: params.context },
       });
     } catch (error) {
       return safeError(res, error);
@@ -277,10 +278,11 @@ export function createCloudinaryApi({
   }
 
   async function verifyUpload(req, res) {
-    const request = await prepare(req, res, ["catchId", "photoId", "bytes", "format"], "verify");
+    const request = await prepare(req, res, ["catchId", "photoId", "bytes", "format", "sha256"], "verify");
     if (!request) return;
     const { uid, body } = request;
-    if (!Number.isInteger(body.bytes) || typeof body.format !== "string") {
+    if (!Number.isInteger(body.bytes) || typeof body.format !== "string"
+      || (body.sha256 !== undefined && (typeof body.sha256 !== "string" || !SHA_PATTERN.test(body.sha256)))) {
       return send(res, 400, { error: "invalid_upload_response", message: "Upload response is invalid." });
     }
     try {
@@ -290,13 +292,14 @@ export function createCloudinaryApi({
       }
       const cloudinary = await getCloudinary(env);
       const resource = await cloudinary.api.resource(cloudinaryPublicId(uid, body.catchId, body.photoId), {
-        resource_type: "image", type: "authenticated",
+        resource_type: "image", type: "authenticated", context: true,
       });
       const format = expectedFormat(access.photoRecord.type);
       if (resource.public_id !== cloudinaryPublicId(uid, body.catchId, body.photoId)
         || resource.resource_type !== "image" || resource.type !== "authenticated"
         || resource.bytes !== access.photoRecord.size || body.bytes !== resource.bytes
-        || resource.format !== format || body.format !== resource.format) {
+        || resource.format !== format || body.format !== resource.format
+        || (body.sha256 !== undefined && resource.context?.custom?.sha256 !== body.sha256)) {
         return send(res, 409, { error: "upload_response_mismatch", message: "Uploaded photo could not be verified." });
       }
       return send(res, 200, { verified: true, bytes: resource.bytes, format: resource.format });

@@ -1,5 +1,6 @@
 import { normalizeText } from "../../../shared/utils/helpers.js";
 import { getPhotoAvailability, PHOTO_AVAILABILITY, PHOTO_SYNC_HELP } from "./photoAvailability.js";
+import { isPhotoCloudReady } from "./photoCloudProvider.js";
 
 function dateKey(value) {
   const date = new Date(value);
@@ -42,7 +43,9 @@ export function buildGalleryItems(catches = [], { ownerId = null } = {}) {
 
 /** Resolve local bytes first, then allow remote lookup only within the matching ready account scope. */
 export function getGalleryPhotoLoadRequest(item, scope) {
-  if (item?.blob instanceof Blob) return { kind: "local", blob: item.blob };
+  if (item?.blob instanceof Blob && !(item.localError?.code === "photo_local_blob_unreadable" && isPhotoCloudReady(item))) {
+    return { kind: "local", blob: item.blob };
+  }
   if (!item || typeof item !== "object" || !item.ownerId || !item.catchId || !item.photoId
     || scope?.status !== "ready" || scope.ownerId !== item.ownerId || !scope.scopeKey) {
     return { kind: "missing", blob: null };

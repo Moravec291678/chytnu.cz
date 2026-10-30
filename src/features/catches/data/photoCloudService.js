@@ -8,6 +8,7 @@ import { resolveApiUrl } from "../../../platform/api.js";
 import {
   createPhotoObjectKey,
   getPhotoCloudProvider,
+  isPhotoCloudReady,
   nonePhotoCloudProvider,
   PHOTO_CLOUD_STATE,
   preparePhotoForCloud,
@@ -204,10 +205,7 @@ export function createPhotoCloudService({
         const objectKey = createPhotoObjectKey(ownerId, record.id, photo.id);
         const cloud = safePhotoCloud(photo);
         if (photo.uploadReady !== false && cloud.state === PHOTO_CLOUD_STATE.UNAVAILABLE && cloud.objectKey === objectKey && cloud.sha256 === sha256) continue;
-        if (cloud.state === PHOTO_CLOUD_STATE.SYNCED
-          && cloud.provider === provider.id
-          && cloud.objectKey === objectKey
-          && cloud.sha256 === sha256) continue;
+        if (isPhotoCloudReady(photo, { provider: provider.id, objectKey, sha256 })) continue;
         const accepted = await queue.enqueue({
           ownerId,
           catchId: record.id,
@@ -238,12 +236,14 @@ export function createPhotoCloudService({
     return { queued, needsAttention };
   }
 
-  async function saveSyncedPhotoMetadata(job, photoCloud) {
+  async function saveSyncedPhotoMetadata(job, photoCloud, { recovered = false } = {}) {
     const scope = { ownerId: job.ownerId, scopeKey: accountScopeKey(job.ownerId) };
     const record = await catches.get(job.catchId, scope);
     if (!record) return false;
     const photo = (record.photos ?? []).find((item) => item.id === job.photoId);
-    if (!photo?.blob || await sha256Blob(photo.blob) !== job.sha256) return false;
+    if (!photo || (recovered
+      ? photo.cloud?.sha256 && photo.cloud.sha256 !== job.sha256
+      : !(photo.blob instanceof Blob) || await sha256Blob(photo.blob) !== job.sha256)) return false;
     const photos = record.photos.map((item) => item.id === job.photoId ? { ...item, cloud: photoCloud } : item);
     await catches.put({
       ...record,
@@ -257,19 +257,17 @@ export function createPhotoCloudService({
   async function processUpload(operation) {
     const job = operation.photoCloud;
     const scope = { ownerId: operation.ownerId, scopeKey: operation.scopeKey };
+    const catchRecord = await catches.get(job.catchId, scope);
+    const photo = catchRecord?.photos?.find((item) => item.id === job.photoId);
+    if (isPhotoCloudReady(photo, job)) {
+      await queue.complete(operation.operationId, operation.localRevision);
+      return { uploaded: 0, deleted: 0 };
+    }
     if (!await isCatchMetadataSynced(job.ownerId, job.catchId)) {
       return { uploaded: 0, deleted: 0, deferred: true };
     }
-    const catchRecord = await catches.get(job.catchId, scope);
-    const photo = catchRecord?.photos?.find((item) => item.id === job.photoId);
-    if (!(photo?.blob instanceof Blob)) {
-      if (photo?.cloud?.state === PHOTO_CLOUD_STATE.SYNCED && photo.cloud.provider === job.provider
-        && photo.cloud.objectKey === job.objectKey && photo.cloud.sha256 === job.sha256) {
-        await queue.complete(operation.operationId, operation.localRevision);
-        return { uploaded: 0, deleted: 0 };
-      }
-      throw Object.assign(new Error("Lokální data fotografie už nejsou dostupná."), { code: "photo_blob_missing" });
-    }
+    if (!photo) throw Object.assign(new Error("Lokální data fotografie už nejsou dostupná."), { code: "photo_blob_missing" });
+    const previousStage = operation.photoCloud?.state;
     const stage = async (value) => {
       if (!await queue.setStage(operation.operationId, operation.localRevision, value)) {
         throw Object.assign(new Error("Photo upload job byl mezitím nahrazen novější verzí."), { code: "photo_job_superseded" });
@@ -278,9 +276,32 @@ export function createPhotoCloudService({
         verifying: "photo_verifying", persisting: "photo_persisting" })[value];
       if (diagnosticStage) recordPhotoUploadTrace(job.photoId, diagnosticStage, { bytes: job.size, mimeType: job.contentType });
     };
-    await stage("preparing");
-    if (await sha256Blob(photo.blob) !== job.sha256) throw Object.assign(new Error("Lokální data fotografie neodpovídají upload jobu."), { code: "photo_content_mismatch" });
+    let localBlobError = null;
+    if (photo.blob instanceof Blob) {
+      try {
+        if (await sha256Blob(photo.blob) !== job.sha256) throw Object.assign(new Error("Lokální data fotografie neodpovídají upload jobu."), { code: "photo_content_mismatch" });
+      } catch (error) {
+        if (photoBlobErrorCode(error) !== PHOTO_LOCAL_BLOB_UNREADABLE) throw error;
+        localBlobError = error;
+      }
+    } else localBlobError = Object.assign(new Error("Lokální data fotografie už nejsou dostupná."), { code: "photo_blob_missing" });
     if (photo.uploadReady === false) throw Object.assign(new Error("Fotografii se nepodařilo převést. Zkus znovu synchronizovat, nebo vyber fotografii z Photos znovu."), { code: "photo_prepare_failed" });
+    const shouldRecover = operation.status === "failed" || ["uploading", "verifying", "persisting"].includes(previousStage);
+    if (shouldRecover && typeof provider.recoverUpload === "function") {
+      const recovered = await provider.recoverUpload({ ...job, requestUploadVerification: (payload) => authenticatedRequest("/api/cloudinary/verify-upload", payload) });
+      if (recovered) {
+        if (!isActive(getCurrentOwnerId, operation.ownerId)) return { uploaded: 0, deleted: 0, stopped: true };
+        if (!await queue.isCurrent(operation.operationId, operation.localRevision)) return { uploaded: 0, deleted: 0 };
+        const saved = await saveSyncedPhotoMetadata(job, { state: PHOTO_CLOUD_STATE.SYNCED, provider: job.provider,
+          objectKey: job.objectKey, sha256: job.sha256 }, { recovered: true });
+        if (!saved) throw new Error("Cloudová fotografie byla ověřena, ale místní metadata se nepodařilo uložit.");
+        await queue.complete(operation.operationId, operation.localRevision);
+        recordPhotoUploadTrace(job.photoId, "photo_synced", { bytes: job.size, mimeType: job.contentType });
+        return { uploaded: 1, deleted: 0 };
+      }
+    }
+    if (localBlobError) throw localBlobError;
+    await stage("preparing");
     const prepared = await prepare(photo);
     const blob = prepared.original;
     const actualHash = await sha256Blob(blob);

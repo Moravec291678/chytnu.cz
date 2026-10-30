@@ -10,6 +10,7 @@ import { createPhotoCloudService } from "./photoCloudService.js";
 import { createAuthenticatedPhotoEndpointCaller } from "./photoCloudService.js";
 import { createCloudinaryPhotoProvider } from "./cloudinaryPhotoProvider.js";
 import { createPhotoObjectKey, nonePhotoCloudProvider, PHOTO_CLOUD_STATE } from "./photoCloudProvider.js";
+import { readSyncSummary } from "../../sync/data/localSyncRepository.js";
 
 const databaseName = "chytnu-local";
 const fixedNow = Date.parse("2026-10-21T12:00:00.000Z");
@@ -43,7 +44,7 @@ function makeCatch(ownerId, id, photos, primaryPhotoId = photos[0]?.id ?? null) 
 
 function createFakeProvider(id = "fake") {
   const objects = new Map();
-  const calls = { uploads: [], downloads: [], deletes: [], stages: [] };
+  const calls = { uploads: [], downloads: [], deletes: [], stages: [], recoveries: [] };
   const failures = { upload: 0, uploadAfterWrite: 0, download: 0, delete: 0 };
   return {
     id, objects, calls, failures, available: true,
@@ -75,6 +76,11 @@ function createFakeProvider(id = "fake") {
     async getMetadata({ objectKey }) {
       const object = objects.get(objectKey);
       return object ? { size: object.blob.size, contentType: object.contentType, sha256: object.sha256 } : null;
+    },
+    async recoverUpload(input) {
+      calls.recoveries.push(input);
+      const object = objects.get(input.objectKey);
+      return Boolean(object && object.sha256 === input.sha256 && object.blob.size === input.size && object.contentType === input.contentType);
     },
   };
 }
@@ -166,6 +172,57 @@ test("multiple photos upload independently; primary and crop edits do not upload
   }, scope);
   await service.run(ownerId);
   assert.equal(provider.calls.uploads.length, 2, "primary and crop metadata changes do not re-upload unchanged bytes");
+});
+
+test("one Catch with four photos ends with zero logical pending operations", async () => {
+  await resetDatabase();
+  const ownerId = "four-photo-owner";
+  const scope = { ownerId, scopeKey: accountScopeKey(ownerId) };
+  await catchRepository.put(makeCatch(ownerId, "catch-four", [1, 2, 3, 4].map((number) => makePhoto(`p${number}`))), scope);
+  const provider = createFakeProvider();
+  assert.equal((await makeService(ownerId, provider).run(ownerId)).uploaded, 4);
+  assert.equal((await readSyncSummary(ownerId)).pending, 1, "Catch metadata is one logical pending item");
+  await acknowledgeCatchOperations(ownerId);
+  assert.equal((await readSyncSummary(ownerId)).pending, 0);
+  assert.equal((await readSyncSummary(ownerId)).lastError, "");
+});
+
+test("stale photo upload operation with cloud-ready metadata is removed without uploading", async () => {
+  await resetDatabase();
+  const ownerId = "ready-photo-owner";
+  const scope = { ownerId, scopeKey: accountScopeKey(ownerId) };
+  await catchRepository.put(makeCatch(ownerId, "catch-ready", [makePhoto("p1")]), scope);
+  const provider = createFakeProvider();
+  await makeService(ownerId, provider).run(ownerId);
+  const photo = (await catchRepository.get("catch-ready", scope)).photos[0];
+  await photoCloudOutboxRepository.enqueue({ ownerId, catchId: "catch-ready", photoId: "p1", operation: "upload",
+    provider: provider.id, objectKey: photo.cloud.objectKey, sha256: photo.cloud.sha256, size: photo.size, contentType: photo.type });
+  assert.equal((await photoCloudOutboxRepository.list()).length, 1);
+  await makeService(ownerId, provider).run(ownerId);
+  assert.equal((await photoCloudOutboxRepository.list()).length, 0);
+  assert.equal(provider.calls.uploads.length, 1);
+});
+
+test("app restart after Cloudinary accepted an upload but before local completion verifies and finishes it", async () => {
+  await resetDatabase();
+  const ownerId = "interrupted-photo-owner";
+  const scope = { ownerId, scopeKey: accountScopeKey(ownerId) };
+  const photo = makePhoto("p1", "uploaded before iPhone backgrounding");
+  await catchRepository.put(makeCatch(ownerId, "catch-interrupted", [photo]), scope);
+  const provider = createFakeProvider();
+  await createPhotoCloudService({ provider, getCurrentOwnerId: () => ownerId, isCatchMetadataSynced: async () => false,
+    now: () => fixedNow }).run(ownerId);
+  const job = (await photoCloudOutboxRepository.list())[0];
+  provider.objects.set(job.photoCloud.objectKey, { blob: photo.blob, sha256: job.photoCloud.sha256, contentType: photo.type });
+  await photoCloudOutboxRepository.setStage(job.operationId, job.localRevision, "uploading");
+  assert.equal((await readSyncSummary(ownerId)).pending, 1);
+  const resumed = await makeService(ownerId, provider).run(ownerId);
+  assert.equal(resumed.uploaded, 1);
+  assert.equal(provider.calls.uploads.length, 0, "confirmed existing asset must not be sent twice");
+  assert.equal((await catchRepository.get("catch-interrupted", scope)).photos[0].cloud.state, PHOTO_CLOUD_STATE.SYNCED);
+  assert.equal((await photoCloudOutboxRepository.list()).length, 0);
+  await acknowledgeCatchOperations(ownerId);
+  assert.equal((await readSyncSummary(ownerId)).pending, 0);
 });
 
 test("NotFoundError in one IndexedDB photo Blob is isolated while readable photos still upload", async () => {
@@ -364,7 +421,7 @@ test("iPhone-like File restored from IndexedDB preserves its bytes through uploa
   assert.deepEqual(await provider.calls.uploads[0].blob.arrayBuffer(), await file.arrayBuffer());
 });
 
-test("failed synced metadata persistence keeps upload job retryable", async () => {
+test("upload success and interrupted local completion recover after reload without duplicate upload", async () => {
   await resetDatabase();
   const ownerId = "metadata-write-owner";
   const scope = { ownerId, scopeKey: accountScopeKey(ownerId) };
@@ -387,10 +444,12 @@ test("failed synced metadata persistence keeps upload job retryable", async () =
   const service = createPhotoCloudService({ provider, catches, isCatchMetadataSynced: async () => true, getCurrentOwnerId: () => ownerId, now: () => fixedNow });
   assert.equal((await service.run(ownerId)).status, "error");
   assert.equal((await photoCloudOutboxRepository.list()).length, 1);
-  assert.equal((await service.run(ownerId, { force: true })).status, "success");
+  assert.equal((await makeService(ownerId, provider).run(ownerId, { force: true })).status, "success");
   assert.equal((await photoCloudOutboxRepository.list()).length, 0);
   assert.equal((await catchRepository.get("catch-metadata-write", scope)).photos[0].cloud.state, PHOTO_CLOUD_STATE.SYNCED);
   assert.equal(provider.objects.size, 1);
+  assert.equal(provider.calls.uploads.length, 1, "recovery verifies the cloud asset rather than uploading again");
+  assert.equal(provider.calls.recoveries.length, 1);
 });
 
 test("pending upload survives a service restart, retries, and uses the same object key after an ambiguous success", async () => {
@@ -404,6 +463,7 @@ test("pending upload survives a service restart, retries, and uses the same obje
   const failed = await firstService.run(ownerId);
   assert.equal(failed.status, "error");
   assert.equal((await photoCloudOutboxRepository.list()).length, 1);
+  assert.notEqual((await readSyncSummary(ownerId)).lastError, "");
   assert.equal((await catchRepository.get("catch-retry", scope)).photos[0].cloud.state, PHOTO_CLOUD_STATE.UPLOAD_FAILED);
   assert.equal(provider.objects.size, 0, "network failure leaves the original bytes and pending job local");
 
@@ -414,6 +474,8 @@ test("pending upload survives a service restart, retries, and uses the same obje
   assert.equal(new Set(provider.calls.uploads.map((call) => call.objectKey)).size, 1);
   assert.equal(provider.objects.size, 1);
   assert.equal((await photoCloudOutboxRepository.list()).length, 0);
+  assert.equal((await readSyncSummary(ownerId)).lastError, "", "successful retry removes the stale error");
+  assert.equal((await readSyncSummary(ownerId)).failed, 0);
 
   const uploaded = await catchRepository.get("catch-retry", scope);
   provider.failures.uploadAfterWrite = 1;
@@ -426,6 +488,7 @@ test("pending upload survives a service restart, retries, and uses the same obje
   assert.equal(provider.objects.size, 1, "same deterministic key is overwritten after an ambiguous response");
   assert.equal((await makeService(ownerId, provider).run(ownerId, { force: true })).status, "success");
   assert.equal(provider.objects.size, 1, "idempotent retry does not create another object");
+  assert.equal(provider.calls.uploads.length, 3, "ambiguous successful replacement is verified without a second upload");
   assert.equal(new Set(provider.calls.uploads.map((call) => call.objectKey)).size, 1);
 });
 

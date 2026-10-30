@@ -101,6 +101,7 @@ export function createCloudinaryPhotoProvider({ fetchImpl = globalThis.fetch, ap
       await input.onStage?.("verifying");
       const verified = await input.requestUploadVerification({
         catchId: input.catchId, photoId: input.photoId, bytes: result.bytes, format: result.format,
+        sha256: input.sha256,
       });
       if (verified?.verified !== true || verified.bytes !== input.size || verified.format !== expectedFormat) {
         throw providerError("Cloudinary asset could not be verified by the server.", "cloudinary_verification_failed");
@@ -142,6 +143,24 @@ export function createCloudinaryPhotoProvider({ fetchImpl = globalThis.fetch, ap
       if (!input?.ownerId || !input?.catchId || !input?.photoId
         || input.objectKey !== createPhotoObjectKey(input.ownerId, input.catchId, input.photoId)) return null;
       return input.requestMetadata?.({ catchId: input.catchId, photoId: input.photoId }) ?? null;
+    },
+    async recoverUpload(input) {
+      if (input.objectKey !== createPhotoObjectKey(input.ownerId, input.catchId, input.photoId)
+        || !/^[a-f0-9]{64}$/.test(input.sha256 ?? "")) {
+        throw providerError("Photo cloud key is invalid.", "invalid_photo_identity");
+      }
+      const format = ({ "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" })[input.contentType];
+      if (!format || !Number.isInteger(input.size) || input.size < 1) return false;
+      try {
+        const result = await input.requestUploadVerification({
+          catchId: input.catchId, photoId: input.photoId, bytes: input.size, format, sha256: input.sha256,
+        });
+        return result?.verified === true && result.bytes === input.size && result.format === format;
+      } catch (error) {
+        if ((error?.status === 404 && error?.code === "asset_not_found")
+          || (error?.status === 409 && error?.code === "upload_response_mismatch")) return false;
+        throw error;
+      }
     },
   });
 }
