@@ -16,7 +16,7 @@ import {
 } from "./photoCloudProvider.js";
 
 function due(operation, now, force) {
-  if (operation.status === "conflict") return force && operation.lastErrorCode === PHOTO_LOCAL_BLOB_UNREADABLE;
+  if (operation.status === "conflict") return force && [PHOTO_LOCAL_BLOB_UNREADABLE, "photo_blob_missing"].includes(operation.lastErrorCode);
   if (operation.status !== "failed") return true;
   return force || !operation.nextAttemptAt || Date.parse(operation.nextAttemptAt) <= now;
 }
@@ -104,6 +104,14 @@ function photoEndpointError(path, response, result) {
   return error;
 }
 
+function tokenReadError(error, path) {
+  const permanent = ["auth/user-disabled", "auth/user-token-expired", "auth/invalid-user-token", "auth/user-not-found"]
+    .includes(error?.code);
+  return Object.assign(new Error("Přihlášení k fotografiím se nepodařilo obnovit."), {
+    code: permanent ? "firebase_token_invalid" : "token_refresh_failed", endpoint: path,
+  });
+}
+
 export function createAuthenticatedPhotoEndpointCaller({
   getIdToken = (forceRefresh) => firebaseAuth.currentIdToken(forceRefresh),
   fetchImpl = globalThis.fetch,
@@ -112,7 +120,7 @@ export function createAuthenticatedPhotoEndpointCaller({
   return async function callAuthenticatedPhotoEndpoint(path, payload, { responseType = "json" } = {}) {
     let idToken;
     try { idToken = await getIdToken(false); }
-    catch { throw Object.assign(new Error("Firebase přihlášení nelze ověřit."), { code: "firebase_token_invalid", endpoint: path }); }
+    catch (error) { throw tokenReadError(error, path); }
     if (!idToken) throw Object.assign(new Error("Pro synchronizaci fotografií je potřeba přihlášení."), { code: "missing_firebase_user", endpoint: path });
 
     const send = async (token) => {
@@ -137,7 +145,7 @@ export function createAuthenticatedPhotoEndpointCaller({
     let attempt = await send(idToken);
     if (attempt.response.status === 401 && ["invalid_auth", "firebase_token_expired"].includes(attempt.result.error)) {
       try { idToken = await getIdToken(true); }
-      catch { throw Object.assign(new Error("Obnovení Firebase přihlášení se nezdařilo."), { code: "token_refresh_failed", status: 401, endpoint: path }); }
+      catch (error) { throw tokenReadError(error, path); }
       if (!idToken) throw Object.assign(new Error("Firebase přihlášení po obnovení není dostupné."), { code: "token_refresh_failed", status: 401, endpoint: path });
       attempt = await send(idToken);
       if (attempt.response.status === 401 && ["invalid_auth", "firebase_token_expired"].includes(attempt.result.error)) {
@@ -247,7 +255,9 @@ export function createPhotoCloudService({
             errorName: failure.name, operationStage: failure.photoStage || "photo-hash-local-blob", retryable: false });
           await catches.setPhotoLocalError?.(record.id, photo.id, { code: PHOTO_LOCAL_BLOB_UNREADABLE,
             errorName: failure.name, stage: failure.photoStage || "photo-hash-local-blob" }, scope).catch(() => {});
-          if (safePhotoCloud(photo).state !== PHOTO_CLOUD_STATE.SYNCED) {
+          const recoverableJob = existingJobs.some((entry) => entry.ownerId === ownerId
+            && entry.operation === "photo-upload" && entry.photoCloud?.catchId === record.id && entry.photoCloud?.photoId === photo.id);
+          if (!recoverableJob && safePhotoCloud(photo).state !== PHOTO_CLOUD_STATE.SYNCED) {
             needsAttention = true;
             await catches.setPhotoCloudState(record.id, photo.id, { state: PHOTO_CLOUD_STATE.UNAVAILABLE,
               provider: null, objectKey: null, sha256: null }, scope).catch(() => {});
@@ -343,7 +353,7 @@ export function createPhotoCloudService({
       }
     } else localBlobError = Object.assign(new Error("Lokální data fotografie už nejsou dostupná."), { code: "photo_blob_missing" });
     if (photo.uploadReady === false) throw Object.assign(new Error("Fotografii se nepodařilo převést. Zkus znovu synchronizovat, nebo vyber fotografii z Photos znovu."), { code: "photo_prepare_failed" });
-    const shouldRecover = operation.status === "failed" || ["uploading", "verifying", "persisting"].includes(previousStage);
+    const shouldRecover = Boolean(localBlobError) || operation.status === "conflict" || operation.status === "failed" || ["uploading", "verifying", "persisting"].includes(previousStage);
     if (shouldRecover && typeof provider.recoverUpload === "function") {
       const recovered = await provider.recoverUpload({ ...job, requestUploadVerification: (payload) => authenticatedRequest("/api/cloudinary/verify-upload", payload) });
       if (recovered) {
@@ -451,7 +461,6 @@ export function createPhotoCloudService({
     const queued = reconciliation.queued;
     if (!await provider.isAvailable({ ownerId })) return { status: "local-only", uploaded: 0, deleted: 0, queued };
     try { await provider.reconcileUploads?.(); } catch { /* Firestore outbox reconciliation can still recover interrupted native uploads. */ }
-    let needsAttention = reconciliation.needsAttention;
     let uploaded = 0;
     let deleted = 0;
     let error = null;
@@ -462,7 +471,16 @@ export function createPhotoCloudService({
       while (!stopScheduling && isVisible() && isActive(getCurrentOwnerId, ownerId)) {
         const operation = operations[nextOperationIndex++];
         if (!operation) return;
-        if (operation.ownerId !== ownerId || !due(operation, now(), force)) continue;
+        if (operation.ownerId !== ownerId) continue;
+        // Confirmed READY metadata supersedes even terminal or backoff-only stale jobs.
+        if (operation.operation === "photo-upload") {
+          const record = await catches.get(operation.photoCloud.catchId, { ownerId, scopeKey: accountScopeKey(ownerId) });
+          if (isPhotoCloudReady(record?.photos?.find((photo) => photo.id === operation.photoCloud.photoId), operation.photoCloud)) {
+            await queue.complete(operation.operationId, operation.localRevision);
+            continue;
+          }
+        }
+        if (!due(operation, now(), force)) continue;
       try {
         const result = operation.operation === "photo-upload"
           ? await processUpload(operation)
@@ -512,7 +530,12 @@ export function createPhotoCloudService({
       }
     };
     await Promise.all(Array.from({ length: Math.min(2, operations.length) }, () => processNextOperation()));
-    needsAttention ||= Boolean(error && photoBlobErrorCode(error) === PHOTO_LOCAL_BLOB_UNREADABLE);
+    const remainingJobs = await queue.list();
+    const latestRecords = await catches.list({ ownerId, scopeKey: accountScopeKey(ownerId) });
+    const needsAttention = latestRecords.some((record) => (record.photos ?? []).some((photo) =>
+      photo.localError?.code === PHOTO_LOCAL_BLOB_UNREADABLE && !isPhotoCloudReady(photo)
+      && !remainingJobs.some((job) => job.ownerId === ownerId && job.photoCloud?.catchId === record.id
+        && job.photoCloud?.photoId === photo.id && job.status !== "conflict")));
     return { status: error && !needsAttention ? "error" : needsAttention ? "partial" : isVisible() ? "success" : "deferred", uploaded, deleted, queued,
       needsAttention: Boolean(needsAttention), error: error?.message ?? "",
       errorCode: needsAttention && photoBlobErrorCode(error) !== PHOTO_LOCAL_BLOB_UNREADABLE ? PHOTO_LOCAL_BLOB_UNREADABLE

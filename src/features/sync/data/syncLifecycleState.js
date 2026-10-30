@@ -7,12 +7,12 @@ export const SYNC_LIFECYCLE_STATE = Object.freeze({
 });
 
 const ACTION_CODES = new Set(["permission_denied", "unauthenticated", "rules_schema_rejection",
-  "firebase_token_invalid", "missing_firebase_user", "ownership_denied", "invalid_auth_header"]);
+  "firebase_token_invalid", "missing_firebase_user", "ownership_denied", "invalid_auth_header", "photo_blob_missing", "photo_content_mismatch", "invalid_photo_identity"]);
 
 export function completedSyncState({ result, photoResult, summary, retryable = true }) {
-  if (summary.conflicts > 0 || photoResult?.needsAttention || (result.status === "error" && !retryable)
+  if (summary.conflicts > 0 || summary.photoConflicts > 0 || photoResult?.needsAttention || (result.status === "error" && !retryable)
     || (summary.pullPending > 0 && !summary.pullRetryable)
-    || ACTION_CODES.has(summary.lastErrorCode) || ACTION_CODES.has(photoResult?.errorCode)) {
+    || (summary.failed > 0 && ACTION_CODES.has(summary.lastErrorCode)) || ACTION_CODES.has(photoResult?.errorCode)) {
     return SYNC_LIFECYCLE_STATE.USER_ACTION_REQUIRED;
   }
   if (result.status === "error" || photoResult?.status === "error" || summary.failed > 0 || summary.pullPending > 0) {

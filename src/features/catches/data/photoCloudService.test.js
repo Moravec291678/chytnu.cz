@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { completedSyncState } from "../../sync/data/syncLifecycleState.js";
+import { describeSyncFailure } from "../../sync/data/syncDiagnostics.js";
 import { IDBFactory } from "fake-indexeddb";
 import "fake-indexeddb/auto";
 import { accountScopeKey } from "../../auth/data/localDataScope.js";
@@ -287,6 +289,8 @@ test("stale photo upload operation with cloud-ready metadata is removed without 
   await photoCloudOutboxRepository.enqueue({ ownerId, catchId: "catch-ready", photoId: "p1", operation: "upload",
     provider: provider.id, objectKey: photo.cloud.objectKey, sha256: photo.cloud.sha256, size: photo.size, contentType: photo.type });
   assert.equal((await photoCloudOutboxRepository.list()).length, 1);
+  const [stale] = await photoCloudOutboxRepository.list();
+  await outboxRepository.markConflict(stale.operationId, "stale missing blob", "photo_blob_missing");
   await makeService(ownerId, provider).run(ownerId);
   assert.equal((await photoCloudOutboxRepository.list()).length, 0);
   assert.equal(provider.calls.uploads.length, 1);
@@ -423,9 +427,13 @@ test("missing local bytes stay preserved and become terminal with a re-add state
   let [job] = await photoCloudOutboxRepository.list();
   assert.equal(job.status, "conflict");
   assert.equal(job.lastErrorCode, "photo_blob_missing");
+  const blockedSummary = await readSyncSummary(ownerId);
+  assert.equal(blockedSummary.photoConflicts, 1);
+  assert.equal(blockedSummary.lastErrorCode, "photo_blob_missing");
+  assert.equal(completedSyncState({ result: { status: "success" }, summary: blockedSummary }), "user-action-required");
   assert.equal(job.photoCloud.state, "failed_terminal");
   assert.equal((await catchRepository.get(catchRecord.id, scope)).photos[0].cloud.state, PHOTO_CLOUD_STATE.UNAVAILABLE);
-  assert.equal((await service.run(ownerId, { force: true })).status, "success");
+  assert.equal((await service.run(ownerId, { force: true })).status, "error");
   [job] = await photoCloudOutboxRepository.list();
   assert.equal(job.status, "conflict", "force retry does not spin a job without local bytes");
   assert.equal(provider.calls.uploads.length, 0);
@@ -885,4 +893,61 @@ test("native file cleanup waits for Firestore acknowledgement of verified photo 
   await acknowledgeCatchOperations(ownerId);
   await service.finalizeNativeUploads(ownerId);
   assert.deepEqual(acknowledged, ["native-op"]);
+});
+
+
+test("manual sync recovers terminal unreadable photo from cloud, clears attention, errors and pending", async () => {
+  await resetDatabase();
+  const ownerId = "manual-recovery";
+  const scope = { ownerId, scopeKey: accountScopeKey(ownerId) };
+  const original = makePhoto("p1", "durable original");
+  const { sha256Blob } = await import("./photoCloudProvider.js");
+  const sha256 = await sha256Blob(original.blob);
+  const catchId = "manual-catch";
+  const objectKey = createPhotoObjectKey(ownerId, catchId, original.id);
+  await catchRepository.put(makeCatch(ownerId, catchId, [original]), scope);
+  await photoCloudOutboxRepository.enqueue({ ownerId, catchId, photoId: original.id, operation: "upload",
+    provider: "fake", objectKey, sha256, size: original.size, contentType: original.type });
+  const [job] = await photoCloudOutboxRepository.list();
+  await outboxRepository.markConflict(job.operationId, "unreadable", "photo_local_blob_unreadable");
+  const broken = new (class extends Blob {
+    async arrayBuffer() { throw new DOMException("missing", "NotFoundError"); }
+  })(["durable original"], { type: original.type });
+  const breakPhoto = (record) => record && ({ ...record, photos: record.photos.map((photo) => ({ ...photo, blob: broken })) });
+  const catches = { ...catchRepository,
+    async list(scope) { return (await catchRepository.list(scope)).map(breakPhoto); },
+    async get(id, scope) { return breakPhoto(await catchRepository.get(id, scope)); },
+  };
+  const provider = createFakeProvider();
+  provider.objects.set(objectKey, { blob: original.blob, sha256, contentType: original.type });
+  const service = createPhotoCloudService({ provider, catches, getCurrentOwnerId: () => ownerId,
+    isCatchMetadataSynced: async () => true, now: () => fixedNow });
+  const recover = provider.recoverUpload.bind(provider);
+  provider.recoverUpload = async () => { throw Object.assign(new Error("temporary network"), { code: "photo_cloud_network_error" }); };
+  const temporary = await service.run(ownerId, { force: true });
+  assert.equal(temporary.needsAttention, false);
+  assert.equal(completedSyncState({ result: { status: "success" }, photoResult: temporary,
+    summary: await readSyncSummary(ownerId) }), "retry-wait");
+  provider.recoverUpload = recover;
+  const photoResult = await service.run(ownerId, { force: true });
+  assert.equal(photoResult.needsAttention, false);
+  assert.equal(provider.calls.uploads.length, 0);
+  assert.equal(provider.calls.recoveries.length, 1);
+  await acknowledgeCatchOperations(ownerId);
+  const summary = await readSyncSummary(ownerId);
+  assert.equal(summary.pending, 0);
+  assert.equal(summary.lastError, "");
+  assert.equal(summary.nextRetryAt, null);
+  assert.equal((await photoCloudOutboxRepository.list()).length, 0);
+  assert.equal(completedSyncState({ result: { status: "success" }, photoResult, summary }), "synced");
+});
+
+test("token acquisition network failure retries; revoked session still requires action", async () => {
+  for (const [code, retryable] of [["auth/network-request-failed", true], ["auth/user-disabled", false]]) {
+    const request = createAuthenticatedPhotoEndpointCaller({ getIdToken: async () => { throw { code }; } });
+    await assert.rejects(request("/api/cloudinary/sign", {}), (error) => {
+      assert.equal(describeSyncFailure(error).retryable, retryable);
+      return true;
+    });
+  }
 });

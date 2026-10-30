@@ -18,3 +18,9 @@ test("later success clears retry state and one Catch plus photos is one logical 
   assert.equal(completedSyncState({ result: { status: "success" }, summary: { ...summary, pending: 1 } }), SYNC_LIFECYCLE_STATE.LOCAL_PENDING);
   assert.equal(logicalSyncKey({ entityType: "photoCloud", photoCloud: { catchId: "a" } }), logicalSyncKey({ entityType: "catch", entityId: "a" }));
 });
+
+
+test("stale auth error without an outstanding failed operation does not block success", () => {
+  assert.equal(completedSyncState({ result: { status: "success" }, summary: { ...summary,
+    lastErrorCode: "firebase_token_invalid" } }), "synced");
+});
