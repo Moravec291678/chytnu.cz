@@ -67,6 +67,22 @@ export function SyncProvider({ children }) {
     }
     if (!online()) {
       try {
+        if (!photoCloudServiceRef.current) {
+          const localPhotoProvider = getPhotoCloudProvider();
+          await preparePhotoSyncService({ serviceRef: photoCloudServiceRef, providerRef: photoCloudProviderRef,
+            provider: localPhotoProvider, ownerId: userId,
+            createService: (provider) => createPhotoCloudService({ provider,
+          onPhotoReady: async () => {
+            await serviceRef.current?.run(userId);
+            window.dispatchEvent(new Event("chytnu:local-data-restored"));
+          }, getCurrentOwnerId: () => {
+              try { return firebaseAuth.currentUserId(); } catch { return null; }
+            } }),
+          });
+        }
+        await photoCloudServiceRef.current?.reconcileLocalQueue(userId);
+      } catch { /* Offline local Catch data remains durable; this pass only queues eligible photo work. */ }
+      try {
         const summary = await updateSummary(userId);
         setState((previous) => ({ ...previous, ...summary, status: SYNC_LIFECYCLE_STATE.LOCAL_PENDING, error: "", showSyncStatus: false }));
       } catch (error) {
@@ -97,7 +113,11 @@ export function SyncProvider({ children }) {
         providerRef: photoCloudProviderRef,
         provider: photoCloudProvider,
         ownerId: userId,
-        createService: (provider) => createPhotoCloudService({ provider, getCurrentOwnerId: () => {
+        createService: (provider) => createPhotoCloudService({ provider,
+          onPhotoReady: async () => {
+            await serviceRef.current?.run(userId);
+            window.dispatchEvent(new Event("chytnu:local-data-restored"));
+          }, getCurrentOwnerId: () => {
           try { return firebaseAuth.currentUserId(); } catch { return null; }
         } }),
         });
@@ -116,6 +136,7 @@ export function SyncProvider({ children }) {
       const finalResult = photoResult.uploaded > 0
         ? await serviceRef.current.run(userId, { force })
         : result;
+      await photoService.finalizeNativeUploads(userId).catch(() => {});
       void serverProgressionClaimService.process(userId).catch(() => {});
       // A successful aggregate run alone cannot prove a particular photo was acknowledged.
       await catchRepository.list({ ownerId: userId, scopeKey: accountScopeKey(userId) }).then((records) => {
@@ -204,12 +225,14 @@ export function SyncProvider({ children }) {
       if (!disposed) unsubscribe = subscribeToOwnerSyncChanges(userId, retry, startFallback);
     }).catch(startFallback);
     window.addEventListener("chytnu:outbox-changed", retry);
+    window.addEventListener("chytnu:native-photo-upload-changed", retry);
     return () => {
       disposed = true;
       unsubscribe?.();
       fallback?.();
       detachLifecycle();
       window.removeEventListener("chytnu:outbox-changed", retry);
+      window.removeEventListener("chytnu:native-photo-upload-changed", retry);
     };
   }, [authStatus, runSync, userId]);
 
@@ -222,7 +245,8 @@ export function SyncProvider({ children }) {
 
   const retry = useCallback(() => runSync(true, true), [runSync]);
   const syncNow = useCallback(() => runSync(true, true), [runSync]);
+  const hideStatus = useCallback(() => setState((previous) => ({ ...previous, showSyncStatus: false })), []);
   const backendMode = (() => { try { return getBackendConfiguration().mode; } catch { return "unavailable"; } })();
   const providerId = getPhotoCloudProvider()?.id ?? "none";
-  return <SyncContext.Provider value={{ ...state, retry, syncNow, backendMode, providerId, syncEnabled: Boolean(userId && authStatus === "ready") }}>{children}</SyncContext.Provider>;
+  return <SyncContext.Provider value={{ ...state, retry, syncNow, hideStatus, backendMode, providerId, syncEnabled: Boolean(userId && authStatus === "ready") }}>{children}</SyncContext.Provider>;
 }

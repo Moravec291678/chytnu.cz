@@ -31,6 +31,10 @@ function safePhotoCloud(photo) {
   return photo?.cloud ?? { state: PHOTO_CLOUD_STATE.LOCAL_ONLY, provider: null, objectKey: null, sha256: null };
 }
 
+async function acknowledgeNativeUpload(provider, operationId) {
+  try { await provider.acknowledgeUpload?.({ operationId }); } catch { /* Durable local outbox remains the recovery source. */ }
+}
+
 async function normalizeLegacyPhotoIds(catches, ownerId, now, normalizeLegacyPhoto = preparePhotoForStorageAndUpload, { force = false } = {}) {
   const scope = { ownerId, scopeKey: accountScopeKey(ownerId) };
   const records = await catches.list(scope);
@@ -88,12 +92,15 @@ async function normalizeLegacyPhotoIds(catches, ownerId, now, normalizeLegacyPho
 }
 
 function photoEndpointError(path, response, result) {
-  const code = result.error ?? (response.status === 429 ? "rate_limited" : "photo_cloud_failed");
+  const code = result.error === "photo_not_available" && result.providerStatus === 404 ? "cloudinary_asset_missing"
+    : result.error === "photo_not_available" ? "photo_metadata_not_ready"
+    : result.error ?? (response.status === 429 ? "rate_limited" : "photo_cloud_failed");
   const error = Object.assign(new Error(response.status === 401 ? "Přihlášení k fotografiím se nezdařilo."
     : response.status === 403 ? "K této fotografii nemáš přístup."
       : response.status === 429 ? "Cloudové úložiště dočasně omezuje požadavky."
         : response.status >= 500 ? "Server cloudových fotografií dočasně není dostupný."
-          : "Cloudový požadavek na fotografii nebyl přijat."), { code, status: response.status, endpoint: path });
+          : "Cloudový požadavek na fotografii nebyl přijat."), { code, status: response.status, endpoint: path,
+    ...(Number.isInteger(result.providerStatus) ? { providerStatus: result.providerStatus } : {}) });
   return error;
 }
 
@@ -102,7 +109,7 @@ export function createAuthenticatedPhotoEndpointCaller({
   fetchImpl = globalThis.fetch,
   apiUrl = resolveApiUrl,
 } = {}) {
-  return async function callAuthenticatedPhotoEndpoint(path, payload) {
+  return async function callAuthenticatedPhotoEndpoint(path, payload, { responseType = "json" } = {}) {
     let idToken;
     try { idToken = await getIdToken(false); }
     catch { throw Object.assign(new Error("Firebase přihlášení nelze ověřit."), { code: "firebase_token_invalid", endpoint: path }); }
@@ -122,6 +129,7 @@ export function createAuthenticatedPhotoEndpointCaller({
         throw Object.assign(new Error("Server pro cloudové fotografie není dostupný."), { code: "photo_cloud_network_error", endpoint: path });
       }
       let result;
+      if (response.ok && responseType === "blob") return { response, result: await response.blob() };
       try { result = await response.json(); } catch { result = {}; }
       return { response, result };
     };
@@ -143,6 +151,33 @@ export function createAuthenticatedPhotoEndpointCaller({
 
 const callAuthenticatedPhotoEndpoint = createAuthenticatedPhotoEndpointCaller();
 
+function safeDiagnosticCode(code) {
+  return typeof code === "string" && /^[a-z0-9_:-]{1,64}$/i.test(code) ? code : "unknown";
+}
+
+/** Runs the same authenticated metadata and binary delivery checks used by the app, but never returns or logs photo bytes. */
+export async function inspectPhotoDelivery({ catchId, photoId, authenticatedRequest = callAuthenticatedPhotoEndpoint, now = () => Date.now() }) {
+  const timestamp = new Date(now()).toISOString();
+  const result = { timestamp, metadataStatus: null, deliveryStatus: null, providerStatus: null, errorCode: null };
+  try {
+    await authenticatedRequest("/api/cloudinary/metadata", { catchId, photoId });
+    result.metadataStatus = 200;
+  } catch (error) {
+    result.metadataStatus = Number.isInteger(error?.status) ? error.status : null;
+    result.providerStatus = Number.isInteger(error?.providerStatus) ? error.providerStatus : null;
+    result.errorCode = safeDiagnosticCode(error?.code);
+  }
+  try {
+    await authenticatedRequest("/api/cloudinary/export", { catchId, photoId }, { responseType: "blob" });
+    result.deliveryStatus = 200;
+  } catch (error) {
+    result.deliveryStatus = Number.isInteger(error?.status) ? error.status : null;
+    result.providerStatus ??= Number.isInteger(error?.providerStatus) ? error.providerStatus : null;
+    result.errorCode ??= safeDiagnosticCode(error?.code);
+  }
+  return result;
+}
+
 export function createPhotoCloudService({
   provider = nonePhotoCloudProvider,
   resolveProvider = (providerId) => providerId === provider.id ? provider : null,
@@ -161,12 +196,14 @@ export function createPhotoCloudService({
   prepare = (photo) => preparePhotoForCloud(photo),
   normalizeLegacyPhoto = preparePhotoForStorageAndUpload,
   authenticatedRequest = callAuthenticatedPhotoEndpoint,
+  onPhotoReady = async () => {},
 } = {}) {
   let inFlight = null;
   let rerunRequested = false;
   let rerunForce = false;
   let rerunOwnerId = null;
   let preflightOwnerId = null;
+  const photoMetadataWriteLocks = new Map();
 
   async function prepareLegacyPhotoIds(ownerId, options = {}) {
     const result = await normalizeLegacyPhotoIds(catches, ownerId, now, normalizeLegacyPhoto, options);
@@ -174,7 +211,22 @@ export function createPhotoCloudService({
     return result;
   }
 
+  async function withPhotoMetadataWriteLock(ownerId, catchId, action) {
+    const lockKey = `${ownerId}:${catchId}`;
+    const previous = photoMetadataWriteLocks.get(lockKey) ?? Promise.resolve();
+    let release;
+    const current = new Promise((resolve) => { release = resolve; });
+    photoMetadataWriteLocks.set(lockKey, current);
+    await previous;
+    try { return await action(); }
+    finally {
+      release();
+      if (photoMetadataWriteLocks.get(lockKey) === current) photoMetadataWriteLocks.delete(lockKey);
+    }
+  }
+
   async function reconcileUploads(ownerId, { force = false } = {}) {
+    if (provider.id === "none") return { queued: 0, needsAttention: false };
     const existingJobs = await queue.list();
     const scope = { ownerId, scopeKey: accountScopeKey(ownerId) };
     const records = await catches.list(scope);
@@ -237,21 +289,23 @@ export function createPhotoCloudService({
   }
 
   async function saveSyncedPhotoMetadata(job, photoCloud, { recovered = false } = {}) {
-    const scope = { ownerId: job.ownerId, scopeKey: accountScopeKey(job.ownerId) };
-    const record = await catches.get(job.catchId, scope);
-    if (!record) return false;
-    const photo = (record.photos ?? []).find((item) => item.id === job.photoId);
-    if (!photo || (recovered
-      ? photo.cloud?.sha256 && photo.cloud.sha256 !== job.sha256
-      : !(photo.blob instanceof Blob) || await sha256Blob(photo.blob) !== job.sha256)) return false;
-    const photos = record.photos.map((item) => item.id === job.photoId ? { ...item, cloud: photoCloud } : item);
-    await catches.put({
-      ...record,
-      photos,
-      updatedAt: new Date(now()).toISOString(),
-      sync: { ...(record.sync ?? {}), status: "local", revision: (record.sync?.revision ?? 0) + 1 },
-    }, scope);
-    return true;
+    return withPhotoMetadataWriteLock(job.ownerId, job.catchId, async () => {
+      const scope = { ownerId: job.ownerId, scopeKey: accountScopeKey(job.ownerId) };
+      const record = await catches.get(job.catchId, scope);
+      if (!record) return false;
+      const photo = (record.photos ?? []).find((item) => item.id === job.photoId);
+      if (!photo || (recovered
+        ? photo.cloud?.sha256 && photo.cloud.sha256 !== job.sha256
+        : !(photo.blob instanceof Blob) || await sha256Blob(photo.blob) !== job.sha256)) return false;
+      const photos = record.photos.map((item) => item.id === job.photoId ? { ...item, cloud: photoCloud } : item);
+      await catches.put({
+        ...record,
+        photos,
+        updatedAt: new Date(now()).toISOString(),
+        sync: { ...(record.sync ?? {}), status: "local", revision: (record.sync?.revision ?? 0) + 1 },
+      }, scope);
+      return true;
+    });
   }
 
   async function processUpload(operation) {
@@ -260,6 +314,7 @@ export function createPhotoCloudService({
     const catchRecord = await catches.get(job.catchId, scope);
     const photo = catchRecord?.photos?.find((item) => item.id === job.photoId);
     if (isPhotoCloudReady(photo, job)) {
+
       await queue.complete(operation.operationId, operation.localRevision);
       return { uploaded: 0, deleted: 0 };
     }
@@ -268,6 +323,8 @@ export function createPhotoCloudService({
     }
     if (!photo) throw Object.assign(new Error("Lokální data fotografie už nejsou dostupná."), { code: "photo_blob_missing" });
     const previousStage = operation.photoCloud?.state;
+    const nativeStatus = await provider.getUploadStatus?.({ operationId: operation.operationId });
+    if (["queued", "uploading"].includes(nativeStatus?.state)) return { uploaded: 0, deleted: 0, deferred: true };
     const stage = async (value) => {
       if (!await queue.setStage(operation.operationId, operation.localRevision, value)) {
         throw Object.assign(new Error("Photo upload job byl mezitím nahrazen novější verzí."), { code: "photo_job_superseded" });
@@ -296,7 +353,9 @@ export function createPhotoCloudService({
           objectKey: job.objectKey, sha256: job.sha256 }, { recovered: true });
         if (!saved) throw new Error("Cloudová fotografie byla ověřena, ale místní metadata se nepodařilo uložit.");
         await queue.complete(operation.operationId, operation.localRevision);
+
         recordPhotoUploadTrace(job.photoId, "photo_synced", { bytes: job.size, mimeType: job.contentType });
+        await onPhotoReady(job).catch(() => {});
         return { uploaded: 1, deleted: 0 };
       }
     }
@@ -318,6 +377,7 @@ export function createPhotoCloudService({
       }
     };
     await provider.upload({
+      operationId: operation.operationId,
       ownerId: job.ownerId,
       catchId: job.catchId,
       photoId: job.photoId,
@@ -344,12 +404,15 @@ export function createPhotoCloudService({
     if (!saved) throw new Error("Cloudinary upload proběhl, ale metadata fotografie se nepodařilo potvrdit místně.");
     recordPhotoUploadTrace(job.photoId, "local_metadata_persisted");
     await queue.complete(operation.operationId, operation.localRevision);
+
     recordPhotoUploadTrace(job.photoId, "photo_synced", { bytes: job.size, mimeType: job.contentType });
+    await onPhotoReady(job).catch(() => {});
     return { uploaded: 1, deleted: 0 };
   }
 
   async function processDelete(operation) {
     const job = operation.photoCloud;
+    await provider.cancelUploadsForPhoto?.({ ownerId: job.ownerId, catchId: job.catchId, photoId: job.photoId });
     if (job.dependsOnCatchOperationId) {
       const pendingCatchOperations = await operationOutbox.list();
       if (pendingCatchOperations.some((item) => item.operationId === job.dependsOnCatchOperationId)) {
@@ -384,18 +447,22 @@ export function createPhotoCloudService({
     if (!isVisible()) return { status: "deferred", uploaded: 0, deleted: 0, queued: 0 };
     if (preflightOwnerId !== ownerId) await prepareLegacyPhotoIds(ownerId, { force });
     preflightOwnerId = null;
-    if (!await provider.isAvailable({ ownerId })) return { status: "local-only", uploaded: 0, deleted: 0, queued: 0 };
     const reconciliation = await reconcileUploads(ownerId, { force });
     const queued = reconciliation.queued;
+    if (!await provider.isAvailable({ ownerId })) return { status: "local-only", uploaded: 0, deleted: 0, queued };
+    try { await provider.reconcileUploads?.(); } catch { /* Firestore outbox reconciliation can still recover interrupted native uploads. */ }
     let needsAttention = reconciliation.needsAttention;
     let uploaded = 0;
     let deleted = 0;
     let error = null;
     const operations = await queue.list();
-    for (const operation of operations) {
-      if (!isVisible()) break;
-      if (operation.ownerId !== ownerId || !due(operation, now(), force)) continue;
-      if (!isActive(getCurrentOwnerId, ownerId)) break;
+    let nextOperationIndex = 0;
+    let stopScheduling = false;
+    const processNextOperation = async () => {
+      while (!stopScheduling && isVisible() && isActive(getCurrentOwnerId, ownerId)) {
+        const operation = operations[nextOperationIndex++];
+        if (!operation) return;
+        if (operation.ownerId !== ownerId || !due(operation, now(), force)) continue;
       try {
         const result = operation.operation === "photo-upload"
           ? await processUpload(operation)
@@ -404,10 +471,10 @@ export function createPhotoCloudService({
             : null;
         uploaded += result?.uploaded ?? 0;
         deleted += result?.deleted ?? 0;
-        if (result?.stopped) break;
+        if (result?.stopped) { stopScheduling = true; return; }
       } catch (failure) {
         if (failure?.code === "photo_job_superseded") continue;
-        error = failure;
+        error ??= failure;
         const job = operation.photoCloud;
         const localBlobUnreadable = photoBlobErrorCode(failure) === PHOTO_LOCAL_BLOB_UNREADABLE;
         const failureCode = localBlobUnreadable ? PHOTO_LOCAL_BLOB_UNREADABLE : failure?.code;
@@ -423,24 +490,28 @@ export function createPhotoCloudService({
         });
         if (operation.operation === "photo-upload") {
           const scope = { ownerId, scopeKey: accountScopeKey(ownerId) };
-          const latest = terminal ? await catches.get(job.catchId, scope).catch(() => null) : null;
-          const latestPhoto = latest?.photos?.find((photo) => photo.id === job.photoId);
-          if (!terminal || latestPhoto?.cloud?.state !== PHOTO_CLOUD_STATE.SYNCED) {
-            await catches.setPhotoCloudState(job.catchId, job.photoId, {
-              state: terminal ? PHOTO_CLOUD_STATE.UNAVAILABLE : PHOTO_CLOUD_STATE.UPLOAD_FAILED,
-              provider: job.provider,
-              objectKey: job.objectKey,
-              sha256: job.sha256,
-              ...(terminal ? { errorCode: failureCode } : {}),
-            }, scope).catch(() => {});
-          }
-          if (localBlobUnreadable) await catches.setPhotoLocalError?.(job.catchId, job.photoId, {
-            code: PHOTO_LOCAL_BLOB_UNREADABLE, errorName: failure.name,
-            stage: failure.photoStage || "photo-hash-local-blob" }, scope).catch(() => {});
+          await withPhotoMetadataWriteLock(ownerId, job.catchId, async () => {
+            const latest = terminal ? await catches.get(job.catchId, scope).catch(() => null) : null;
+            const latestPhoto = latest?.photos?.find((photo) => photo.id === job.photoId);
+            if (!terminal || latestPhoto?.cloud?.state !== PHOTO_CLOUD_STATE.SYNCED) {
+              await catches.setPhotoCloudState(job.catchId, job.photoId, {
+                state: terminal ? PHOTO_CLOUD_STATE.UNAVAILABLE : PHOTO_CLOUD_STATE.UPLOAD_FAILED,
+                provider: job.provider,
+                objectKey: job.objectKey,
+                sha256: job.sha256,
+                ...(terminal ? { errorCode: failureCode } : {}),
+              }, scope).catch(() => {});
+            }
+            if (localBlobUnreadable) await catches.setPhotoLocalError?.(job.catchId, job.photoId, {
+              code: PHOTO_LOCAL_BLOB_UNREADABLE, errorName: failure.name,
+              stage: failure.photoStage || "photo-hash-local-blob" }, scope).catch(() => {});
+          });
         }
-        if (failure?.code !== "photo_prepare_failed" && !localBlobUnreadable) break;
+        if (failure?.code !== "photo_prepare_failed" && !localBlobUnreadable) { stopScheduling = true; return; }
       }
-    }
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(2, operations.length) }, () => processNextOperation()));
     needsAttention ||= Boolean(error && photoBlobErrorCode(error) === PHOTO_LOCAL_BLOB_UNREADABLE);
     return { status: error && !needsAttention ? "error" : needsAttention ? "partial" : isVisible() ? "success" : "deferred", uploaded, deleted, queued,
       needsAttention: Boolean(needsAttention), error: error?.message ?? "",
@@ -451,6 +522,27 @@ export function createPhotoCloudService({
 
   return Object.freeze({
     normalizeLegacyPhotoIds: prepareLegacyPhotoIds,
+    async finalizeNativeUploads(ownerId) {
+      if (!isActive(getCurrentOwnerId, ownerId)) return;
+      const pending = await operationOutbox.list();
+      const native = await provider.listPendingUploads?.() ?? [];
+      for (const upload of native) {
+        if (upload.ownerId !== ownerId || pending.some((item) => item.ownerId === ownerId
+          && item.entityId === upload.catchId)) continue;
+        const record = await catches.get(upload.catchId, { ownerId, scopeKey: accountScopeKey(ownerId) });
+        const photo = record?.photos?.find((item) => item.id === upload.photoId);
+        if (record?.sync?.status === "metadata-synced" && isPhotoCloudReady(photo)
+          && photo.cloud.sha256 === upload.sha256 && isActive(getCurrentOwnerId, ownerId)) {
+          await acknowledgeNativeUpload(provider, upload.operationId);
+        }
+      }
+    },
+    async reconcileLocalQueue(ownerId, options = {}) {
+      if (!ownerId || !isActive(getCurrentOwnerId, ownerId)) return { queued: 0, needsAttention: false };
+      if (preflightOwnerId !== ownerId) await prepareLegacyPhotoIds(ownerId, options);
+      preflightOwnerId = null;
+      return reconcileUploads(ownerId, options);
+    },
     run(ownerId, options) {
       if (inFlight) {
         rerunRequested = true;
@@ -513,14 +605,27 @@ export function createPhotoCloudService({
         }
         return null;
       }
-      const blob = await downloadProvider.download({
-        ownerId,
-        catchId,
-        photoId: photo.id,
-        objectKey: photo.cloud.objectKey,
-        sha256: photo.cloud.sha256,
-        requestDownloadGrant: (photo) => authenticatedRequest("/api/cloudinary/delivery", photo),
-      });
+      const deliveryStart = globalThis.performance?.now?.() ?? Date.now();
+      recordPhotoUploadTrace(photo.id, "photo_delivery_started", { catchId, bytes: photo.size, mimeType: photo.type });
+      let blob;
+      try {
+        blob = await downloadProvider.download({
+          ownerId,
+          catchId,
+          photoId: photo.id,
+          objectKey: photo.cloud.objectKey,
+          sha256: photo.cloud.sha256,
+          requestPhotoDownload: (photo) => authenticatedRequest("/api/cloudinary/export", photo, { responseType: "blob" }),
+          requestDownloadGrant: (photo) => authenticatedRequest("/api/cloudinary/delivery", photo),
+        });
+      } catch (error) {
+        recordPhotoUploadTrace(photo.id, "photo_delivery_fail", { catchId, bytes: photo.size, mimeType: photo.type,
+          durationMs: (globalThis.performance?.now?.() ?? Date.now()) - deliveryStart,
+          httpStatus: error?.status, providerStatus: error?.providerStatus, errorCode: error?.code });
+        throw error;
+      }
+      recordPhotoUploadTrace(photo.id, "photo_delivery_pass", { catchId, bytes: blob?.size ?? 0, mimeType: photo.type,
+        durationMs: (globalThis.performance?.now?.() ?? Date.now()) - deliveryStart, httpStatus: 200 });
       if (!(blob instanceof Blob)) {
         if (blob === null) throw Object.assign(new Error("Cloudinary asset is missing."), { code: "cloudinary_asset_missing" });
         return null;

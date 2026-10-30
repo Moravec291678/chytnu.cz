@@ -36,3 +36,14 @@ test("Google redirect pauses deletion until user returns", async () => {
   });
   assert.deepEqual(result, { redirected: true });
 });
+
+
+test("account deletion cancels native uploads only for the authenticated scope", async () => {
+  const cancelled = [];
+  await deleteCloudAccount(scope, "", {
+    reauthenticate: async () => true, idToken: async () => "synthetic-token",
+    cancelNativeUploads: async (value) => cancelled.push(value.ownerId),
+    request: async () => ({ ok: true }), clearLocal: async () => {}, signOut: async () => {},
+  });
+  assert.deepEqual(cancelled, ["A"]);
+});

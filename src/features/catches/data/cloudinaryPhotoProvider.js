@@ -1,3 +1,4 @@
+import { Capacitor } from "@capacitor/core";
 import { createPhotoObjectKey, sha256Blob } from "./photoCloudProvider.js";
 import { PRODUCT_LIMITS } from "../../../product/config/limits.js";
 
@@ -5,6 +6,7 @@ const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const MAX_PHOTO_BYTES = PRODUCT_LIMITS.photoBytes;
 import { readPhotoBlob } from "./photoLocalBlob.js";
 import { resolveApiUrl } from "../../../platform/api.js";
+import { createPhotoUploadTransport } from "./photoUploadTransport.js";
 
 const CLOUDINARY_API_ORIGIN = "https://api.cloudinary.com";
 
@@ -28,7 +30,9 @@ function grantParams(grant) {
   return grant;
 }
 
-export function createCloudinaryPhotoProvider({ fetchImpl = globalThis.fetch, apiUrl = resolveApiUrl } = {}) {
+export function createCloudinaryPhotoProvider({ fetchImpl = globalThis.fetch, apiUrl = resolveApiUrl,
+  getPlatform = () => Capacitor.getPlatform(), transport = null } = {}) {
+  const uploadTransport = transport ?? createPhotoUploadTransport({ platform: getPlatform, webFetch: fetchImpl });
   async function available() {
     try {
       const response = await fetchImpl(apiUrl("/api/cloudinary/capability"), { method: "GET", credentials: "same-origin" });
@@ -49,7 +53,8 @@ export function createCloudinaryPhotoProvider({ fetchImpl = globalThis.fetch, ap
       }
       // IndexedDB may restore a persisted File. Copy its bytes into a fresh in-memory
       // Blob before FormData/fetch; WebKit can otherwise upload an empty body.
-      const uploadBlob = new Blob([await readPhotoBlob(input.blob, "photo-upload-memory-copy")], { type: input.contentType });
+      const uploadBytes = await readPhotoBlob(input.blob, "photo-upload-memory-copy");
+      const uploadBlob = new Blob([uploadBytes], { type: input.contentType });
       if (uploadBlob.size !== input.size || await sha256Blob(uploadBlob) !== input.sha256) {
         throw providerError("Obsah fotografie neodpovídá ověřeným metadatům.", "photo_content_mismatch");
       }
@@ -66,36 +71,39 @@ export function createCloudinaryPhotoProvider({ fetchImpl = globalThis.fetch, ap
       if (grant.params.public_id !== expectedPublicId) {
         throw providerError("Cloudinary authorization targets a different asset.", "invalid_photo_identity");
       }
-      const form = new FormData();
-      form.append("file", uploadBlob, `${input.photoId}.${input.contentType === "image/jpeg" ? "jpg" : input.contentType.slice(6)}`);
-      for (const [key, value] of Object.entries(grant.params)) form.append(key, String(value));
-      form.append("api_key", grant.apiKey);
-      form.append("timestamp", String(grant.timestamp));
-      form.append("signature", grant.signature);
+      const expectedFormat = ({ "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" })[input.contentType];
       let uploadResponse;
       let result;
       await input.onStage?.("uploading");
       input.onDiagnostic?.("cloud_upload_started", { bytes: uploadBlob.size, mimeType: uploadBlob.type });
+      const fields = Object.fromEntries(Object.entries({ ...grant.params,
+        api_key: grant.apiKey, timestamp: grant.timestamp, signature: grant.signature,
+      }).map(([key, value]) => [key, String(value)]));
       try {
-        uploadResponse = await fetchImpl(`${CLOUDINARY_API_ORIGIN}/v1_1/${encodeURIComponent(grant.cloudName)}/image/upload`, {
-          method: "POST", body: form,
-        });
-        result = await readJson(uploadResponse);
-      } catch {
-        input.onDiagnostic?.("cloud_upload_fail", { errorCode: "cloudinary_network_error" });
-        throw providerError("Cloudinary image upload failed because of a network error.", "cloudinary_network_error");
+        const transported = await uploadTransport.enqueueUpload({ operationId: input.operationId || globalThis.crypto.randomUUID(),
+          ownerId: input.ownerId, catchId: input.catchId, photoId: input.photoId,
+          bytes: uploadBytes, contentType: input.contentType, blob: uploadBlob,
+          sha256: input.sha256,
+          fileName: `${input.photoId}.${input.contentType === "image/jpeg" ? "jpg" : input.contentType.slice(6)}`,
+          uploadURL: `${CLOUDINARY_API_ORIGIN}/v1_1/${encodeURIComponent(grant.cloudName)}/image/upload`, fields });
+        uploadResponse = { status: transported.httpStatus, ok: transported.state === "completed" };
+        result = transported.body ?? { bytes: input.size, format: expectedFormat };
+        if (!uploadResponse.ok) throw Object.assign(providerError("Cloudinary did not accept the image upload.", "cloudinary_upload_failed"), { status: transported.httpStatus });
+      } catch (error) {
+        const status = error?.status;
+        const code = (status === 420 || status === 429) || error?.code === "cloudinary_rate_limited" ? "cloudinary_rate_limited" : error?.code || "cloudinary_upload_failed";
+        input.onDiagnostic?.("cloud_upload_fail", { errorCode: code, httpStatus: status });
+        throw Object.assign(providerError("Cloudinary image upload failed.", code), Number.isInteger(status) ? { status } : {});
       }
-      if (!uploadResponse.ok) {
-        const status = uploadResponse.status === 420 || uploadResponse.status === 429 ? "cloudinary_rate_limited" : "cloudinary_upload_failed";
-        input.onDiagnostic?.("cloud_upload_fail", { errorCode: status, httpStatus: uploadResponse.status });
-        throw Object.assign(providerError("Cloudinary did not accept the image upload.", status), { status: uploadResponse.status });
-      }
-      const expectedFormat = ({ "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" })[input.contentType];
-      input.onDiagnostic?.("cloud_upload_response", { httpStatus: uploadResponse.status, bytes: result.bytes, format: result.format, resourceType: result.resource_type });
-      if (result.public_id !== expectedPublicId || result.resource_type !== "image"
-        || result.type !== "authenticated" || result.bytes !== input.size || result.format !== expectedFormat) {
-        input.onDiagnostic?.("cloud_upload_fail", { errorCode: "cloudinary_response_mismatch" });
-        throw providerError("Cloudinary returned metadata that does not match this photo.", "cloudinary_response_mismatch");
+      if (getPlatform() === "ios") {
+        result = { bytes: input.size, format: expectedFormat };
+      } else {
+        input.onDiagnostic?.("cloud_upload_response", { httpStatus: uploadResponse.status, bytes: result.bytes, format: result.format, resourceType: result.resource_type });
+        if (result.public_id !== expectedPublicId || result.resource_type !== "image"
+          || result.type !== "authenticated" || result.bytes !== input.size || result.format !== expectedFormat) {
+          input.onDiagnostic?.("cloud_upload_fail", { errorCode: "cloudinary_response_mismatch" });
+          throw providerError("Cloudinary returned metadata that does not match this photo.", "cloudinary_response_mismatch");
+        }
       }
       input.onDiagnostic?.("cloud_upload_pass", { bytes: result.bytes, format: result.format });
       await input.onStage?.("verifying");
@@ -108,9 +116,25 @@ export function createCloudinaryPhotoProvider({ fetchImpl = globalThis.fetch, ap
       }
       return { objectKey: expectedKey };
     },
+    getUploadStatus: uploadTransport.getUploadStatus,
+    listPendingUploads: uploadTransport.listPendingUploads,
+    reconcileUploads: uploadTransport.reconcileUploads,
+    acknowledgeUpload: uploadTransport.acknowledgeUpload,
+    cancelUpload: uploadTransport.cancelUpload,
+    cancelUploadsForPhoto: uploadTransport.cancelUploadsForPhoto,
+    cancelUploadsForOwner: uploadTransport.cancelUploadsForOwner,
     async download(input) {
       const expectedKey = createPhotoObjectKey(input.ownerId, input.catchId, input.photoId);
       if (input.objectKey !== expectedKey) throw providerError("Photo cloud key is invalid.", "invalid_photo_identity");
+      // Browser fetch of Cloudinary's authenticated download URL is cross-origin and
+      // requires CORS. Use the authenticated same-origin proxy, which verifies the
+      // asset hash before streaming its bytes to the device.
+      if (typeof input.requestPhotoDownload === "function") {
+        const blob = await input.requestPhotoDownload({ catchId: input.catchId, photoId: input.photoId });
+        if (blob === null) return null;
+        if (!(blob instanceof Blob)) throw providerError("Photo download response is invalid.", "cloudinary_download_failed");
+        return blob;
+      }
       for (let attempt = 0; attempt < 2; attempt += 1) {
         const grant = await input.requestDownloadGrant({ catchId: input.catchId, photoId: input.photoId });
         let url;

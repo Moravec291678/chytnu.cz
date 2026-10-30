@@ -1,15 +1,18 @@
 const KEY = "chytnu:photo-upload-trace:v1";
 const EVENT = "chytnu:photo-upload-trace-changed";
-const STAGES = new Set(["photo_selected", "photo_preparing", "blob_created", "photo_prepared", "indexeddb_saved", "job_created", "photo_queued", "sign_started", "sign_pass", "sign_fail", "cloud_upload_started", "cloud_upload_response", "cloud_upload_pass", "cloud_upload_fail", "photo_uploaded", "verify_started", "verify_pass", "verify_fail", "photo_verifying", "photo_persisting", "local_metadata_persisted", "photo_synced", "firestore_synced", "local_blob_failure", "upload_fail"]);
-const ERRORS = new Set(["missing_firebase_user", "invalid_auth", "firebase_token_invalid", "firebase_token_expired", "token_refresh_failed", "ownership_denied", "cloudinary_upload_failed", "cloudinary_upload_timeout", "cloudinary_network_error", "cloudinary_verification_failed", "photo_cloud_network_error", "photo_not_owned", "invalid_photo", "photo_prepare_failed", "photo_unsupported", "photo_too_large", "photo_local_blob_unreadable", "photo_local_blob_readback_failed", "photo_local_blob_hash_mismatch", "rate_limited", "invalid_grant", "upload_response_mismatch"]);
+const STAGES = new Set(["photo_selected", "photo_preparing", "blob_created", "photo_prepared", "indexeddb_saved", "job_created", "photo_queued", "sign_started", "sign_pass", "sign_fail", "cloud_upload_started", "cloud_upload_response", "cloud_upload_pass", "cloud_upload_fail", "photo_uploaded", "verify_started", "verify_pass", "verify_fail", "photo_verifying", "photo_persisting", "local_metadata_persisted", "photo_synced", "firestore_synced", "photo_delivery_started", "photo_delivery_pass", "photo_delivery_fail", "photo_image_rendered", "photo_image_decode_fail", "local_blob_failure", "upload_fail"]);
+const ERRORS = new Set(["missing_firebase_user", "invalid_auth", "firebase_token_invalid", "firebase_token_expired", "token_refresh_failed", "ownership_denied", "cloudinary_upload_failed", "cloudinary_upload_timeout", "cloudinary_network_error", "cloudinary_verification_failed", "cloudinary_download_failed", "photo_not_available", "photo_not_owned", "provider_download_failed", "invalid_photo", "photo_prepare_failed", "photo_unsupported", "photo_too_large", "photo_local_blob_unreadable", "photo_local_blob_readback_failed", "photo_local_blob_hash_mismatch", "rate_limited", "invalid_grant", "upload_response_mismatch"]);
 const TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "image/gif", "image/avif", "application/octet-stream"]);
 const FORMATS = ["jpg", "jpeg", "png", "webp", "heic", "heif", "gif", "avif", "unknown"];
 function sanitize(photoId, stage, details = {}, timestamp = Date.now()) {
   if (typeof photoId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(photoId) || !STAGES.has(stage)) return null;
   const entry = { photoId, stage, timestamp: Number.isFinite(timestamp) ? timestamp : Date.now() };
+  if (typeof details.catchId === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(details.catchId)) entry.catchId = details.catchId;
   for (const key of ["bytes", "sourceBytes", "preparedBytes"]) if (Number.isSafeInteger(details[key]) && details[key] >= 0) entry[key] = details[key];
+  if (Number.isFinite(details.durationMs) && details.durationMs >= 0) entry.durationMs = Math.round(details.durationMs);
   for (const key of ["mimeType", "sourceMimeType", "preparedMimeType"]) if (TYPES.has(details[key])) entry[key] = details[key];
   if (Number.isInteger(details.httpStatus) && details.httpStatus >= 100 && details.httpStatus <= 599) entry.httpStatus = details.httpStatus;
+  if (Number.isInteger(details.providerStatus) && details.providerStatus >= 100 && details.providerStatus <= 599) entry.providerStatus = details.providerStatus;
   if (details.errorCode) entry.errorCode = ERRORS.has(details.errorCode) ? details.errorCode : "unknown";
   if (typeof details.retryable === "boolean") entry.retryable = details.retryable;
   if (["NotFoundError", "DataError", "TypeError", "InvalidStateError", "AbortError", "SecurityError"].includes(details.errorName)) entry.errorName = details.errorName;

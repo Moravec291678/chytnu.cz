@@ -27,6 +27,18 @@ test("trace rejects invalid stages and sanitizes restored storage", () => {
   assert.deepEqual(trace.read(), [{ photoId: "photo", stage: "sign_pass", timestamp: 1 }]);
 });
 
+test("delivery timings and Cloudinary HTTP statuses are retained without URLs or credentials", () => {
+  const trace = createPhotoUploadTrace();
+  trace.record("photo-a", "photo_delivery_fail", {
+    durationMs: 321.4, httpStatus: 502, providerStatus: 401,
+    url: "https://api.cloudinary.com/private", token: "secret", photoBytes: "secret",
+  });
+  assert.deepEqual(trace.read()[0], {
+    photoId: "photo-a", stage: "photo_delivery_fail", timestamp: trace.read()[0].timestamp,
+    durationMs: 321, httpStatus: 502, providerStatus: 401,
+  });
+});
+
 test("storage and listener failures never interrupt upload", () => {
   const trace = createPhotoUploadTrace({ storage: { getItem() { throw Error(); }, setItem() { throw Error(); } }, onChange() { throw Error(); } });
   assert.doesNotThrow(() => trace.record("photo", "blob_created", { sourceBytes: 20, preparedBytes: 10, conversion: "jpeg", originalExtension: "heic" }));

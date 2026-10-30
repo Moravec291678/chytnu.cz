@@ -23,8 +23,16 @@ npm run android:open
 npm run android:run
 ```
 
-Web/PWA development remains `npm run dev` and `npm run build`. Rebuild and sync after changing web assets. iOS is not generated on this Windows host.
+Web/PWA development remains `npm run dev` and `npm run build`. Rebuild and sync after changing web assets. The iOS project is generated, but this Windows host cannot build or run its Xcode target.
 
 ## Platform adapters
 
 `src/platform/` exposes runtime detection and web-compatible seams for notifications, location and active-trip activity. The active-trip activity and native notification adapters are intentionally no-ops until native plugin requirements and permission flows are designed. Web behaviors remain available independently of Capacitor.
+
+## iOS photo uploads
+
+- The custom `PhotoUploadTransportPlugin` uses background `URLSession` and an atomic task registry in Application Support. `@capacitor/filesystem` stages source bytes in persistent app Data, not Cache. The transfer uses a persistent multipart file; signed fields and bytes are never logged.
+- IndexedDB outbox and deterministic asset identity remain the recovery source. Resume/relaunch reconciles native tasks, verifies Cloudinary assets and publishes READY metadata. Native files are acknowledged only after Firestore metadata acknowledgement, or explicit cancellation/deletion.
+- Upload concurrency is two; metadata writes for a Catch are serialized. Each completed photo triggers metadata sync without waiting for the entire photo batch. Normal Firestore changes use the owner-scoped realtime listener.
+- Delivery uses the authenticated same-origin `/api/cloudinary/export` stream with ownership, size and hash checks, avoiding Cloudinary browser CORS failures.
+- Web/PWA retains fetch and resume/reconnect recovery; background URLSession is native iOS only. Windows cannot compile Swift or verify background relaunch. Mac/Xcode and physical device tests are required before distributing the iOS binary; force-quitting can prevent background execution.

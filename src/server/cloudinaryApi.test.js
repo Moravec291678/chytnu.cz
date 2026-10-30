@@ -315,6 +315,20 @@ test("account export returns only verified binary bytes from the authenticated o
   assert.equal((await request(corrupted.api.exportPhoto)).statusCode, 502);
 });
 
+test("photo download reports only the upstream HTTP status for delivery diagnostics", async () => {
+  const unauthorized = createHarness({ fetchImpl: async () => ({ ok: false, status: 401 }) });
+  const denied = await request(unauthorized.api.exportPhoto);
+  assert.equal(denied.statusCode, 502);
+  assert.deepEqual(denied.body, { error: "provider_download_failed", providerStatus: 401,
+    message: "Cloud photo could not be downloaded." });
+
+  const missing = createHarness({ fetchImpl: async () => ({ ok: false, status: 404 }) });
+  const absent = await request(missing.api.exportPhoto);
+  assert.equal(absent.statusCode, 404);
+  assert.equal(absent.body.error, "photo_not_available");
+  assert.equal(absent.body.providerStatus, 404);
+});
+
 test("photo export denies tampered Catch/photo IDs before requesting Cloudinary", async () => {
   const harness = createHarness({ fetchImpl: async () => assert.fail("Cloudinary must not be contacted for a foreign photo") });
   const foreignCatch = await request(harness.api.exportPhoto, { body: { catchId: "foreign-catch", photoId } });

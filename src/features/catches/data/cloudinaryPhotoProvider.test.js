@@ -67,6 +67,33 @@ test("signed upload uses only the server grant, fixed image endpoint, and verifi
   assert.equal(form.has("api_secret"), false);
 });
 
+test("iOS uses the native background multipart transport, then completes the existing server verify step", async () => {
+  let nativeJob;
+  let verified = false;
+  const provider = createCloudinaryPhotoProvider({
+    getPlatform: () => "ios",
+    fetchImpl: async () => { throw new Error("iOS upload must not run through WebView fetch"); },
+    transport: { enqueueUpload: async (input) => { nativeJob = input; return { state: "completed", httpStatus: 200 }; },
+      getUploadStatus: async () => ({ state: "missing" }), listPendingUploads: async () => [], reconcileUploads: async () => [],
+      acknowledgeUpload: async () => {}, cancelUpload: async () => {}, cancelUploadsForOwner: async () => {} },
+  });
+  await provider.upload({ ownerId, catchId, photoId, objectKey, blob, size: blob.size, contentType: blob.type, sha256,
+    requestUploadGrant: async () => ({ cloudName: "test-cloud", apiKey: "1234567890", resourceType: "image", timestamp: 1_800_000_000,
+      signature: "a".repeat(64), params: { public_id: `chytnucz/${objectKey}`, type: "authenticated", overwrite: true, context: `sha256=${sha256}` } }),
+    requestUploadVerification: async (body) => {
+      verified = true;
+      assert.deepEqual(body, { catchId, photoId, bytes: blob.size, format: "jpg", sha256 });
+      return { verified: true, bytes: blob.size, format: "jpg" };
+    },
+  });
+  assert.equal(nativeJob.uploadURL, "https://api.cloudinary.com/v1_1/test-cloud/image/upload");
+  assert.equal(nativeJob.fields.public_id, `chytnucz/${objectKey}`);
+  assert.equal(nativeJob.fields.signature, "a".repeat(64));
+  assert.equal(nativeJob.fields.context, `sha256=${sha256}`);
+  assert.equal(nativeJob.bytes.byteLength, blob.size);
+  assert.equal(verified, true);
+});
+
 test("upload copies IndexedDB Blob and File bytes into typed memory Blobs for supported formats", async () => {
   const cases = [
     { type: "image/jpeg", format: "jpg", name: "legacy.jpg", source: new File(["legacy jpeg"], "legacy.jpg", { type: "image/jpeg" }) },
@@ -200,6 +227,19 @@ test("authenticated delivery grant is fetched then downloaded; delete delegates 
   assert.deepEqual(deleteRequest, { catchId, photoId });
   assert.deepEqual(deleted, { deleted: true });
   assert.equal(calls[0].options.credentials, "omit");
+});
+
+test("photo bytes use the authenticated same-origin verified download instead of a cross-origin Cloudinary fetch", async () => {
+  let downloadRequest;
+  const provider = createCloudinaryPhotoProvider({ fetchImpl: async () => { throw new Error("cross-origin request must not run"); } });
+  const result = await provider.download({ ownerId, catchId, photoId, objectKey,
+    requestPhotoDownload: async (body) => {
+      downloadRequest = body;
+      return new Blob(["verified bytes"], { type: "image/jpeg" });
+    },
+  });
+  assert.deepEqual(downloadRequest, { catchId, photoId });
+  assert.equal(await result.text(), "verified bytes");
 });
 
 test("expired delivery URL is replaced with one fresh authenticated grant", async () => {

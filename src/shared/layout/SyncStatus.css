@@ -3,14 +3,17 @@
   z-index: var(--z-floating-status);
   right: 12px;
   bottom: calc(92px + env(safe-area-inset-bottom));
-  display: grid;
-  width: 28px;
-  height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100vw - 24px);
+  padding-left: 10px;
+  min-height: 36px;
   place-items: center;
   border: 1px solid var(--border);
-  border-radius: 50%;
+  border-radius: 18px;
   background: var(--surface-1);
-  pointer-events: none;
+  font-size: 12px;
 }
 
 .sync-status-minimal-spinner {
@@ -27,3 +30,6 @@
 @media (prefers-reduced-motion: reduce) {
   .sync-status-minimal-spinner { animation: none; }
 }
+
+.sync-status-detail { color: inherit; text-decoration: none; }
+.sync-status-minimal button { min-width: 44px; min-height: 44px; border: 0; background: transparent; color: inherit; cursor: pointer; }

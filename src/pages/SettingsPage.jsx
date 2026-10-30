@@ -13,6 +13,7 @@ import { deleteLocalScopeData } from "../features/settings/data/localDataDeletio
 import { deleteCloudAccount } from "../features/settings/data/deleteCloudAccount.js";
 import { useSync } from "../features/sync/context/syncContextValue.js";
 import { readPhotoSyncDiagnostics } from "../features/catches/data/photoSyncDiagnostics.js";
+import { inspectPhotoDelivery } from "../features/catches/data/photoCloudService.js";
 import { getRuntimeLabel } from "../features/sync/data/runtimeDiagnostics.js";
 import { useModalFocusTrap } from "../shared/hooks/useModalFocusTrap.js";
 import "./SettingsPage.css";
@@ -48,19 +49,27 @@ export default function SettingsPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [photoDiagnostics, setPhotoDiagnostics] = useState({ scopeKey: null, rows: [] });
+  const [photoChecks, setPhotoChecks] = useState({});
 
   useEffect(() => {
     let active = true;
     if (!debugMode || scope.status !== "ready") return undefined;
     const diagnosticScope = { ownerId: scope.ownerId, scopeKey: scope.scopeKey };
-    readPhotoSyncDiagnostics({ scope: diagnosticScope }).then((result) => {
+    readPhotoSyncDiagnostics({ scope: diagnosticScope, includeIdentifiers: Boolean(auth.user) }).then((result) => {
       if (active) setPhotoDiagnostics({ scopeKey: scope.scopeKey, rows: result.slice(0, 100) });
     }).catch(() => {
       if (active) setPhotoDiagnostics({ scopeKey: scope.scopeKey, rows: [] });
     });
     return () => { active = false; };
-  }, [debugMode, scope.ownerId, scope.scopeKey, scope.status]);
+  }, [debugMode, auth.user, scope.ownerId, scope.scopeKey, scope.status]);
   const photoDiagnosticRows = photoDiagnostics.scopeKey === scope.scopeKey ? photoDiagnostics.rows : [];
+
+  const checkPhotoDelivery = async (photo) => {
+    const key = `${photo.catchId}/${photo.photoId}`;
+    setPhotoChecks((current) => ({ ...current, [key]: { checking: true } }));
+    const result = await inspectPhotoDelivery({ catchId: photo.catchId, photoId: photo.photoId });
+    setPhotoChecks((current) => ({ ...current, [key]: { checking: false, ...result } }));
+  };
 
   const update = (patch) => {
     if (scope.status !== "ready") return;
@@ -223,9 +232,20 @@ export default function SettingsPage() {
           <dt>Photo API endpoint</dt><dd>{sync.errorEndpoint || sync.lastErrorEndpoint || "none"}</dd>
         </dl>
         <PhotoUploadTracePanel />
-        <h3>Photo jobs (bez ID a obsahu)</h3>
-        {photoDiagnosticRows.length ? <ul>{photoDiagnosticRows.map((photo, index) => <li key={index}>
-          Blob {photo.blobPresent ? "YES" : "NO"} · {photo.size ?? "unknown"} bytes · {photo.type} · job {photo.jobState} · attempts {photo.attempts} · retry {photo.nextRetryAt ?? "none"} · error {photo.errorClass} · cloud {photo.cloudState} · remote {photo.remoteAvailability}
+        <h3>Fotografie · doručení ({auth.user ? "authenticated" : "IDs skryté bez přihlášení"})</h3>
+        <p>Diagnostika neukládá ani nezobrazuje obsah fotografie, URL, tokeny, podpisy, GPS ani credentials. Kontrola provede metadata lookup a skutečný exportní request.</p>
+        {photoDiagnosticRows.length ? <ul>{photoDiagnosticRows.map((photo, index) => <li key={photo.photoId ? `${photo.catchId}/${photo.photoId}` : index}>
+          {photo.catchId && <><strong>{photo.catchId} / {photo.photoId}</strong> · ID {photo.cloudProvider === "cloudinary" ? photo.publicId : "bez Cloudinary identity"} · </>}
+          local {photo.blobPresent ? "available" : "missing"} · job {photo.jobState} · attempts {photo.attempts} · error {photo.errorClass} · cloud {photo.cloudState} · ready {photo.ready ? "yes" : "no"}
+          {photo.catchId && <>
+            <br />Firestore photo metadata (lokální synced kopie): provider {photo.cloudProvider} · object key {photo.cloudObjectKey ?? "none"}
+            <br /><button type="button" disabled={photoChecks[`${photo.catchId}/${photo.photoId}`]?.checking} onClick={() => checkPhotoDelivery(photo)}>
+              {photoChecks[`${photo.catchId}/${photo.photoId}`]?.checking ? "Kontroluji…" : "Zkontrolovat delivery"}
+            </button>
+            {photoChecks[`${photo.catchId}/${photo.photoId}`] && !photoChecks[`${photo.catchId}/${photo.photoId}`].checking && <>
+              {" "}metadata HTTP {photoChecks[`${photo.catchId}/${photo.photoId}`].metadataStatus ?? "network/error"} · delivery HTTP {photoChecks[`${photo.catchId}/${photo.photoId}`].deliveryStatus ?? "network/error"} · provider HTTP {photoChecks[`${photo.catchId}/${photo.photoId}`].providerStatus ?? "n/a"} · error {photoChecks[`${photo.catchId}/${photo.photoId}`].errorCode ?? "none"} · {photoChecks[`${photo.catchId}/${photo.photoId}`].timestamp}
+            </>}
+          </>}
         </li>)}</ul> : <p>Žádné místní photo záznamy pro tento profil.</p>}
         {photoDiagnosticRows.length === 100 && <p>Zobrazeno maximálně 100 fotografií.</p>}
       </section>}

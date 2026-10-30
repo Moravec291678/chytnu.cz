@@ -1,6 +1,7 @@
 import { createElement, useCallback, useEffect, useRef, useState } from "react";
 import { getGalleryMissingMessage, getGalleryPhotoLoadRequest } from "../features/catches/data/catchGallery.js";
 import { getPhotoBlobForDisplay } from "../features/catches/data/photoCloudService.js";
+import { recordPhotoUploadTrace } from "../features/catches/data/photoUploadTrace.js";
 import { getPhotoAvailability, PHOTO_AVAILABILITY } from "../features/catches/data/photoAvailability.js";
 import PhotoSyncStatus from "../features/catches/components/PhotoSyncStatus.js";
 import { Link } from "react-router-dom";
@@ -71,7 +72,10 @@ export default function GalleryPhotoImage({ item, scope = null, style, alt, load
   }
   // The callback ref only creates the object URL once the DOM image is mounted.
   // eslint-disable-next-line react-hooks/refs
-  return createElement("img", { ref: setImage, style, alt, loading, onError: () => {
+  return createElement("img", { ref: setImage, style, alt, loading, onLoad: () => {
+    recordPhotoUploadTrace(item.id, "photo_image_rendered", { catchId: item.catchId });
+  }, onError: () => {
+    recordPhotoUploadTrace(item.id, "photo_image_decode_fail", { catchId: item.catchId, errorCode: "photo_decode_failed" });
     setLoaded({ item, scopeKey, blob: null, status: "decode-error", errorCode: "" });
   } });
 }

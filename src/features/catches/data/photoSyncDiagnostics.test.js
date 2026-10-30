@@ -16,7 +16,7 @@ test("photo diagnostics expose only safe per-photo state and sanitize error clas
   });
   assert.deepEqual(result, [{ blobPresent: true, size: 5, type: "image/jpeg", jobState: "failed", attempts: 2,
     localBlobReadable: true, nextRetryAt: "later", errorClass: "photo_upload_network_error", errorName: null, errorStage: null,
-    cloudState: "uploadFailed", remoteAvailability: "unknown" }]);
+    cloudState: "uploadFailed", ready: false, remoteAvailability: "unknown" }]);
   assert.doesNotMatch(JSON.stringify(result), /private-user-id|private-catch|private-photo|secret message/);
 });
 

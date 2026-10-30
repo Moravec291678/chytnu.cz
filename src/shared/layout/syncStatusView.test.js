@@ -12,14 +12,17 @@ test("short, offline, retrying and completed sync never show a global banner", (
   assert.equal(getSyncStatusView({ status: "syncing", showSyncStatus: true }, false, true).kind, "hidden");
 });
 
-test("long active sync has only a small delayed accessible indicator without technical operation count", () => {
+test("long active sync has only a small delayed accessible indicator with real logical pending count and hide action", () => {
   assert.equal(getSyncPendingCount({ pending: 1, pullPending: 0 }), 1);
   assert.deepEqual(getSyncStatusView({ status: "syncing", showSyncStatus: true, pending: 10 }, true, true), { kind: "syncing" });
-  const view = SyncStatus({ sync: { status: "syncing", showSyncStatus: true, pending: 10 }, isOnline: true, compact: true });
+  let hidden = false;
+  const view = SyncStatus({ sync: { hideStatus: () => { hidden = true; }, status: "syncing", showSyncStatus: true, pending: 10 }, isOnline: true, compact: true });
   assert.equal(view.props.role, "status");
   assert.equal(view.props["aria-label"], "Synchronizace probíhá");
   assert.match(view.props.className, /minimal/);
-  assert.equal(JSON.stringify(view).includes("10"), false);
+  assert.equal(JSON.stringify(view).includes("Zbývá 10"), true);
+  view.props.children[2].props.onClick();
+  assert.equal(hidden, true);
   assert.equal(SyncStatus({ sync: { status: "retry-wait", error: "timeout" }, isOnline: true, compact: true }), null);
 });
 

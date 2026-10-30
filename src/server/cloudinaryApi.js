@@ -360,6 +360,7 @@ export function createCloudinaryApi({
       const response = await fetchCloudinaryDownload(url, fetchImpl);
       if (!response.ok) return send(res, response.status === 404 ? 404 : 502, {
         error: response.status === 404 ? "photo_not_available" : "provider_download_failed",
+        providerStatus: response.status,
         message: "Cloud photo could not be downloaded.",
       });
       if (response.body && typeof res.write === "function") {
@@ -447,6 +448,13 @@ export function createCloudinaryApi({
         resourceType: resource.resource_type, type: resource.type,
       });
     } catch (error) {
+      const providerStatus = Number.isInteger(error?.http_code) ? error.http_code
+        : Number.isInteger(error?.error?.http_code) ? error.error.http_code : null;
+      if (providerStatus !== null) return send(res, providerStatus === 404 ? 404 : 502, {
+        error: providerStatus === 404 ? "cloudinary_asset_missing" : "cloudinary_metadata_failed",
+        providerStatus,
+        message: "Cloud photo metadata could not be loaded.",
+      });
       return safeError(res, error);
     }
   }

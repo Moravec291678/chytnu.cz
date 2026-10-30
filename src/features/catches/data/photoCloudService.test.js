@@ -6,14 +6,27 @@ import { accountScopeKey } from "../../auth/data/localDataScope.js";
 import { catchRepository, outboxRepository, photoCloudOutboxRepository } from "./catchRepository.js";
 import { getGalleryMissingMessage } from "./catchGallery.js";
 import { getPrimaryAvailablePhoto } from "./catchPhotos.js";
-import { createPhotoCloudService } from "./photoCloudService.js";
-import { createAuthenticatedPhotoEndpointCaller } from "./photoCloudService.js";
+import { createPhotoCloudService, createAuthenticatedPhotoEndpointCaller, inspectPhotoDelivery } from "./photoCloudService.js";
 import { createCloudinaryPhotoProvider } from "./cloudinaryPhotoProvider.js";
 import { createPhotoObjectKey, nonePhotoCloudProvider, PHOTO_CLOUD_STATE } from "./photoCloudProvider.js";
 import { readSyncSummary } from "../../sync/data/localSyncRepository.js";
 
 const databaseName = "chytnu-local";
 const fixedNow = Date.parse("2026-10-21T12:00:00.000Z");
+
+test("photo delivery diagnostics report metadata and provider HTTP statuses without returning photo bytes", async () => {
+  const calls = [];
+  const result = await inspectPhotoDelivery({ catchId: "catch-a", photoId: "photo-a", now: () => fixedNow,
+    authenticatedRequest: async (path, payload, options) => {
+      calls.push({ path, payload, options });
+      if (path.endsWith("/metadata")) return { bytes: 12345, format: "jpg", width: 10, height: 10 };
+      throw Object.assign(new Error("hidden"), { status: 502, providerStatus: 404, code: "cloudinary_asset_missing" });
+    } });
+  assert.deepEqual(calls.map((call) => call.path), ["/api/cloudinary/metadata", "/api/cloudinary/export"]);
+  assert.deepEqual(result, { timestamp: new Date(fixedNow).toISOString(), metadataStatus: 200, deliveryStatus: 502,
+    providerStatus: 404, errorCode: "cloudinary_asset_missing" });
+  assert.equal("bytes" in result, false);
+});
 
 async function resetDatabase() {
   await new Promise((resolve, reject) => {
@@ -29,6 +42,41 @@ function makePhoto(id, text = id) {
   return { id, name: `${id}.jpg`, type: blob.type, size: blob.size, blob, focalX: 0.5, focalY: 0.5, zoom: 1,
     cloud: { state: PHOTO_CLOUD_STATE.LOCAL_ONLY, provider: null, objectKey: null, sha256: null } };
 }
+
+test("authenticated photo download returns the same-origin verified binary body", async () => {
+  const blob = new Blob(["remote bytes"], { type: "image/jpeg" });
+  let request;
+  const call = createAuthenticatedPhotoEndpointCaller({
+    getIdToken: async () => "firebase-token",
+    fetchImpl: async (path, options) => {
+      request = { path, options };
+      return new Response(blob, { status: 200, headers: { "Content-Type": "image/jpeg" } });
+    },
+  });
+  const result = await call("/api/cloudinary/export", { catchId: "catch-a", photoId: "photo-a" }, { responseType: "blob" });
+  assert.equal(await result.text(), "remote bytes");
+  assert.equal(request.path, "/api/cloudinary/export");
+  assert.equal(request.options.headers.Authorization, "Bearer firebase-token");
+  assert.deepEqual(JSON.parse(request.options.body), { catchId: "catch-a", photoId: "photo-a" });
+});
+
+test("verified photo delivery preserves Cloudinary status and maps a real 404 to the missing-photo state", async () => {
+  const call = createAuthenticatedPhotoEndpointCaller({
+    getIdToken: async () => "firebase-token",
+    fetchImpl: async () => new Response(JSON.stringify({ error: "photo_not_available", providerStatus: 404 }), { status: 404 }),
+  });
+  await assert.rejects(call("/api/cloudinary/export", { catchId: "catch-a", photoId: "photo-a" }, { responseType: "blob" }),
+    (error) => error.code === "cloudinary_asset_missing" && error.status === 404 && error.providerStatus === 404);
+});
+
+test("photo metadata 404 is not mislabeled as a missing Cloudinary asset", async () => {
+  const call = createAuthenticatedPhotoEndpointCaller({
+    getIdToken: async () => "firebase-token",
+    fetchImpl: async () => new Response(JSON.stringify({ error: "photo_not_available" }), { status: 404 }),
+  });
+  await assert.rejects(call("/api/cloudinary/export", { catchId: "catch-a", photoId: "photo-a" }, { responseType: "blob" }),
+    (error) => error.code === "photo_metadata_not_ready" && error.status === 404 && error.providerStatus === undefined);
+});
 
 function makeCatch(ownerId, id, photos, primaryPhotoId = photos[0]?.id ?? null) {
   const now = new Date(fixedNow).toISOString();
@@ -180,11 +228,52 @@ test("one Catch with four photos ends with zero logical pending operations", asy
   const scope = { ownerId, scopeKey: accountScopeKey(ownerId) };
   await catchRepository.put(makeCatch(ownerId, "catch-four", [1, 2, 3, 4].map((number) => makePhoto(`p${number}`))), scope);
   const provider = createFakeProvider();
-  assert.equal((await makeService(ownerId, provider).run(ownerId)).uploaded, 4);
+  let activeUploads = 0;
+  let maxConcurrentUploads = 0;
+  const upload = provider.upload.bind(provider);
+  provider.upload = async (input) => {
+    activeUploads += 1;
+    maxConcurrentUploads = Math.max(maxConcurrentUploads, activeUploads);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    try { return await upload(input); } finally { activeUploads -= 1; }
+  };
+  const published = [];
+  const service = createPhotoCloudService({ provider, getCurrentOwnerId: () => ownerId,
+    isCatchMetadataSynced: async () => true, now: () => fixedNow,
+    onPhotoReady: async ({ photoId }) => {
+      const record = await catchRepository.get("catch-four", scope);
+      assert.equal(record.photos.find((photo) => photo.id === photoId).cloud.state, PHOTO_CLOUD_STATE.SYNCED);
+      published.push(photoId);
+    } });
+  assert.equal((await service.run(ownerId)).uploaded, 4);
+  assert.deepEqual(published.sort(), ["p1", "p2", "p3", "p4"], "each READY photo is published independently");
+  assert.equal(maxConcurrentUploads, 2, "the worker caps concurrent photo uploads at two");
+  assert.equal((await catchRepository.get("catch-four", scope)).photos.filter((photo) => photo.cloud.state === PHOTO_CLOUD_STATE.SYNCED).length, 4,
+    "parallel finalization preserves every photo metadata write on the same Catch");
   assert.equal((await readSyncSummary(ownerId)).pending, 1, "Catch metadata is one logical pending item");
   await acknowledgeCatchOperations(ownerId);
   assert.equal((await readSyncSummary(ownerId)).pending, 0);
   assert.equal((await readSyncSummary(ownerId)).lastError, "");
+});
+
+test("a concurrent transient failure cannot overwrite another photo's ready metadata", async () => {
+  await resetDatabase();
+  const ownerId = "parallel-failure-owner";
+  const scope = { ownerId, scopeKey: accountScopeKey(ownerId) };
+  await catchRepository.put(makeCatch(ownerId, "catch-parallel", [makePhoto("p1"), makePhoto("p2")]), scope);
+  const provider = createFakeProvider();
+  provider.failures.upload = 1;
+  const upload = provider.upload.bind(provider);
+  provider.upload = async (input) => {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    return upload(input);
+  };
+  const result = await makeService(ownerId, provider).run(ownerId);
+  assert.equal(result.status, "error");
+  const saved = await catchRepository.get("catch-parallel", scope);
+  assert.equal(saved.photos.filter((photo) => photo.cloud.state === PHOTO_CLOUD_STATE.SYNCED).length, 1);
+  assert.equal(saved.photos.filter((photo) => photo.cloud.state === PHOTO_CLOUD_STATE.UPLOAD_FAILED).length, 1);
+  assert.equal((await photoCloudOutboxRepository.list()).filter((operation) => operation.status === "failed").length, 1);
 });
 
 test("stale photo upload operation with cloud-ready metadata is removed without uploading", async () => {
@@ -773,4 +862,27 @@ test("Gallery and Share prefer local primary photos and show a truthful fallback
   assert.equal(getPrimaryAvailablePhoto(record).id, "p1");
   assert.match(getGalleryMissingMessage({ cloud: { state: PHOTO_CLOUD_STATE.SYNCED } }), /synchronizace trvat déle/);
   assert.match(getGalleryMissingMessage({ cloud: { state: PHOTO_CLOUD_STATE.LOCAL_ONLY } }), /synchronizace trvat déle/);
+});
+
+
+test("native file cleanup waits for Firestore acknowledgement of verified photo metadata", async () => {
+  await resetDatabase();
+  const ownerId = "native-finalize-owner";
+  const scope = { ownerId, scopeKey: accountScopeKey(ownerId) };
+  const catchId = "native-finalize-catch";
+  await catchRepository.put(makeCatch(ownerId, catchId, [makePhoto("p1", "native durable bytes")]), scope);
+  const provider = createFakeProvider();
+  const acknowledged = [];
+  provider.listPendingUploads = async () => {
+    const record = await catchRepository.get(catchId, scope);
+    return [{ operationId: "native-op", ownerId, catchId, photoId: "p1", sha256: record.photos[0].cloud.sha256 }];
+  };
+  provider.acknowledgeUpload = async ({ operationId }) => acknowledged.push(operationId);
+  const service = makeService(ownerId, provider);
+  await service.run(ownerId);
+  await service.finalizeNativeUploads(ownerId);
+  assert.deepEqual(acknowledged, [], "local READY alone must retain native file");
+  await acknowledgeCatchOperations(ownerId);
+  await service.finalizeNativeUploads(ownerId);
+  assert.deepEqual(acknowledged, ["native-op"]);
 });

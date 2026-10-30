@@ -8,6 +8,7 @@ function safeErrorClass(value) {
 /** Return per-photo diagnostics without identifiers, content, URLs, or credentials. */
 export async function readPhotoSyncDiagnostics({
   scope,
+  includeIdentifiers = false,
   catches = catchRepository,
   queue = photoCloudOutboxRepository,
 } = {}) {
@@ -27,7 +28,9 @@ export async function readPhotoSyncDiagnostics({
       try { await readPhotoBlob(photo.blob, "photo-diagnostics-read-local-blob"); localBlobReadable = true; }
       catch (error) { errorName = error.name; errorStage = error.photoStage; }
     }
-    return {
+    const cloudObjectKey = typeof photo.cloud?.objectKey === "string" ? photo.cloud.objectKey : null;
+    const expectedObjectKey = `users/${scope.ownerId}/catches/${record.id}/photos/${photo.id}/original`;
+    const diagnostic = {
       blobPresent: hasBlob,
       localBlobReadable,
       size: hasBlob ? photo.blob.size : Number.isFinite(photo.size) ? photo.size : null,
@@ -41,7 +44,18 @@ export async function readPhotoSyncDiagnostics({
       errorName,
       errorStage,
       cloudState: safeErrorClass(photo.cloud?.state ?? "localOnly"),
+      ready: photo.cloud?.state === "synced" && photo.cloud?.provider === "cloudinary"
+        && cloudObjectKey === expectedObjectKey && /^[a-f0-9]{64}$/.test(photo.cloud?.sha256 ?? ""),
       remoteAvailability: "unknown",
     };
+    if (includeIdentifiers) {
+      diagnostic.catchId = record.id;
+      diagnostic.photoId = photo.id;
+      diagnostic.cloudProvider = safeErrorClass(photo.cloud?.provider ?? "none");
+      diagnostic.cloudObjectKey = cloudObjectKey;
+      diagnostic.expectedObjectKey = expectedObjectKey;
+      diagnostic.publicId = `chytnucz/${expectedObjectKey}`;
+    }
+    return diagnostic;
   })))).flat();
 }
