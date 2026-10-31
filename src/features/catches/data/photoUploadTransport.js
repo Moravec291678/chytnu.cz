@@ -1,4 +1,5 @@
 import { withPhotoDeadline } from "./photoDeadline.js";
+import { uploadPhotoWithProgress } from "./photoWebUpload.js";
 import { Capacitor, registerPlugin } from "@capacitor/core";
 import { Directory, Filesystem } from "@capacitor/filesystem";
 
@@ -22,7 +23,8 @@ function nativeError(event) {
 }
 
 export function createPhotoUploadTransport({ platform = () => Capacitor.getPlatform(),
-  webFetch = globalThis.fetch, native = NativePhotoUploadTransport, filesystem = Filesystem } = {}) {
+  webFetch = globalThis.fetch, native = NativePhotoUploadTransport, filesystem = Filesystem,
+  createWebRequest = webFetch === globalThis.fetch && typeof XMLHttpRequest !== "undefined" ? () => new XMLHttpRequest() : null } = {}) {
   let nativeListener = null;
   async function ensureNativeListener() {
     if (platform() !== "ios" || nativeListener) return;
@@ -46,6 +48,7 @@ export function createPhotoUploadTransport({ platform = () => Capacitor.getPlatf
       const form = new FormData();
       form.append("file", input.blob, input.fileName);
       for (const [key, value] of Object.entries(input.fields)) form.append(key, String(value));
+      if (createWebRequest) return uploadPhotoWithProgress({ url: input.uploadURL, form, createRequest: createWebRequest });
       return withPhotoDeadline(async (signal) => {
       let response;
       try { response = await webFetch(input.uploadURL, { method: "POST", body: form, signal }); }

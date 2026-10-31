@@ -258,11 +258,11 @@ test("one Catch with four photos ends with zero logical pending operations", asy
   assert.equal((await readSyncSummary(ownerId)).lastError, "");
 });
 
-test("a concurrent transient failure cannot overwrite another photo's ready metadata", async () => {
+test("four photos with one transient failure publish the other three and retry only the failed photo", async () => {
   await resetDatabase();
   const ownerId = "parallel-failure-owner";
   const scope = { ownerId, scopeKey: accountScopeKey(ownerId) };
-  await catchRepository.put(makeCatch(ownerId, "catch-parallel", [makePhoto("p1"), makePhoto("p2")]), scope);
+  await catchRepository.put(makeCatch(ownerId, "catch-parallel", [1, 2, 3, 4].map((id) => makePhoto(`p${id}`))), scope);
   const provider = createFakeProvider();
   provider.failures.upload = 1;
   const upload = provider.upload.bind(provider);
@@ -270,12 +270,49 @@ test("a concurrent transient failure cannot overwrite another photo's ready meta
     await new Promise((resolve) => setTimeout(resolve, 10));
     return upload(input);
   };
-  const result = await makeService(ownerId, provider).run(ownerId);
+  let time = Date.now();
+  const service = createPhotoCloudService({ provider, getCurrentOwnerId: () => ownerId, isCatchMetadataSynced: async () => true, now: () => time });
+  const result = await service.run(ownerId);
   assert.equal(result.status, "error");
+  assert.equal(result.uploaded, 3);
   const saved = await catchRepository.get("catch-parallel", scope);
-  assert.equal(saved.photos.filter((photo) => photo.cloud.state === PHOTO_CLOUD_STATE.SYNCED).length, 1);
+  assert.equal(saved.photos.filter((photo) => photo.cloud.state === PHOTO_CLOUD_STATE.SYNCED).length, 3);
   assert.equal(saved.photos.filter((photo) => photo.cloud.state === PHOTO_CLOUD_STATE.UPLOAD_FAILED).length, 1);
   assert.equal((await photoCloudOutboxRepository.list()).filter((operation) => operation.status === "failed").length, 1);
+  const [failed] = await photoCloudOutboxRepository.list();
+  const retryAt = Date.parse(failed.nextAttemptAt);
+  assert.ok(retryAt > time);
+  assert.ok(retryAt - time <= 30 * 60_000, "persisted retry delay is bounded");
+  time = retryAt - 1;
+  assert.equal((await service.run(ownerId)).uploaded, 0, "ordinary work respects the deadline");
+  assert.equal(provider.calls.uploads.length, 4);
+  time = retryAt;
+  assert.equal((await service.run(ownerId)).uploaded, 1, "the due retry runs without force");
+  assert.equal(provider.calls.uploads.length, 5);
+  assert.equal(provider.calls.uploads.at(-1).photoId, failed.photoCloud.photoId);
+  assert.equal((await photoCloudOutboxRepository.list()).length, 0);
+
+});
+
+test("one READY lookup failure is isolated and does not reject the other photo workers", async () => {
+  await resetDatabase();
+  const ownerId = "lookup-failure-owner";
+  const scope = { ownerId, scopeKey: accountScopeKey(ownerId) };
+  await catchRepository.put(makeCatch(ownerId, "catch-lookup", [1, 2, 3, 4].map((id) => makePhoto(`p${id}`))), scope);
+  let failOnce = true;
+  const catches = { ...catchRepository, get: async (...args) => {
+    if (failOnce) { failOnce = false; throw new Error("temporary IndexedDB read failure"); }
+    return catchRepository.get(...args);
+  } };
+  const provider = createFakeProvider();
+  const service = createPhotoCloudService({ provider, catches, getCurrentOwnerId: () => ownerId,
+    isCatchMetadataSynced: async () => true, now: () => fixedNow });
+  const result = await service.run(ownerId);
+  assert.equal(result.status, "error");
+  assert.equal(result.uploaded, 3);
+  assert.equal(provider.calls.uploads.length, 3);
+  assert.equal((await photoCloudOutboxRepository.list()).length, 1);
+  assert.equal((await service.run(ownerId, { force: true })).uploaded, 1);
 });
 
 test("stale photo upload operation with cloud-ready metadata is removed without uploading", async () => {

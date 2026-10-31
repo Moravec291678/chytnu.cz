@@ -79,3 +79,12 @@ test("reconnect, resume and manual sync wake delivery retries immediately", asyn
     stop();
   }
 });
+
+test("exhausted metadata recovery shows a retry action instead of a permanent spinner", async () => {
+  let state;
+  const stop = startPhotoDelivery({ events: new EventTarget(), load: async () => null,
+    maxAutomaticRetries: 0, onState: (next) => { state = next; } });
+  await setImmediate();
+  assert.equal(getPhotoAvailability({}, { loadState: state.status }), "retryable-error");
+  stop();
+});

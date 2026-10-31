@@ -242,7 +242,7 @@ export function createPhotoCloudService({
     let queued = 0;
     let needsAttention = false;
     for (const record of records) {
-      if (!isActive(getCurrentOwnerId, ownerId)) return queued;
+      if (!isActive(getCurrentOwnerId, ownerId)) return { queued, needsAttention };
       for (const photo of record.photos ?? []) {
         if (!(photo.blob instanceof Blob)) continue;
         if (photo.localError?.code === PHOTO_LOCAL_BLOB_UNREADABLE && !force) continue;
@@ -473,6 +473,7 @@ export function createPhotoCloudService({
         const operation = operations[nextOperationIndex++];
         if (!operation) return;
         if (operation.ownerId !== ownerId) continue;
+      try {
         // Confirmed READY metadata supersedes even terminal or backoff-only stale jobs.
         if (operation.operation === "photo-upload") {
           const record = await catches.get(operation.photoCloud.catchId, { ownerId, scopeKey: accountScopeKey(ownerId) });
@@ -482,7 +483,6 @@ export function createPhotoCloudService({
           }
         }
         if (!due(operation, now(), force)) continue;
-      try {
         const result = operation.operation === "photo-upload"
           ? await processUpload(operation)
           : operation.operation === "photo-delete"
@@ -544,6 +544,7 @@ export function createPhotoCloudService({
       errorEndpoint: error?.endpoint ?? "" };
   }
 
+  const loadPhotoForDisplay = createPhotoDisplayLoader(loadPhotoBlob);
   return Object.freeze({
     normalizeLegacyPhotoIds: prepareLegacyPhotoIds,
     async finalizeNativeUploads(ownerId) {
@@ -592,13 +593,15 @@ export function createPhotoCloudService({
       })().finally(() => { inFlight = null; });
       return inFlight;
     },
-    async getPhotoBlob({ photo, ownerId, catchId, scopeKey }) {
+    getPhotoBlob: loadPhotoForDisplay,
+  });
+  async function loadPhotoBlob({ photo, ownerId, catchId, scopeKey }) {
       const scope = validateDataScope({ scopeKey, ownerId });
       if (!isActive(getCurrentOwnerId, ownerId)) return null;
       if (!(photo?.blob instanceof Blob)) {
         const latest = await catches.get(catchId, scope);
         const latestPhoto = latest?.photos?.find((item) => item.id === photo?.id || item.id === photo?.photoId);
-        if (isPhotoCloudReady(latestPhoto)) photo = latestPhoto;
+        if (latestPhoto) photo = latestPhoto;
       }
       let localBlobError = null;
       if (photo?.blob instanceof Blob) {
@@ -664,18 +667,40 @@ export function createPhotoCloudService({
         throw new Error("Stažená fotografie neodpovídá uloženým metadatům.");
       }
       if (!isActive(getCurrentOwnerId, ownerId)) return null;
-      const cached = await catches.cachePhotoBlob(catchId, photo.id, blob, scope);
+      const latestRecord = await catches.get(catchId, scope);
+      const latestPhoto = latestRecord?.photos?.find((item) => item.id === photo.id);
+      if (!latestPhoto || latestPhoto.cloud?.sha256 !== photo.cloud.sha256
+        || latestPhoto.cloud?.objectKey !== photo.cloud.objectKey
+        || latestPhoto.cloud?.provider !== photo.cloud.provider) return null;
+      const cached = await catches.cachePhotoBlob(catchId, photo.id, blob, {
+        ...scope, expectedPhotoCloud: { sha256: photo.cloud.sha256, objectKey: photo.cloud.objectKey, provider: photo.cloud.provider },
+      });
+      if (cached === null || !isActive(getCurrentOwnerId, ownerId)) return null;
       await catches.setPhotoLocalError?.(catchId, photo.id, null, scope);
       return cached instanceof Blob ? cached : blob;
-    },
-  });
+  }
 }
 
-export function getPhotoBlobForDisplay(options) {
-  return createPhotoCloudService({
-    provider: getPhotoCloudProvider(),
-    getCurrentOwnerId: () => {
-      try { return firebaseAuth.currentUserId(); } catch { return null; }
-    },
-  }).getPhotoBlob(options);
+// Share only in-flight work, never photo bytes or failures after settlement.
+export function createPhotoDisplayLoader(load) {
+  const pending = new Map();
+  return (options) => {
+    const photo = options.photo;
+    const key = JSON.stringify([options.ownerId, options.scopeKey, options.catchId,
+      photo?.photoId ?? photo?.id, photo?.cloud?.provider, photo?.cloud?.objectKey,
+      photo?.cloud?.sha256, photo?.cloud?.state, photo?.size, photo?.type]);
+    if (pending.has(key)) return pending.get(key);
+    const promise = Promise.resolve().then(() => load(options)).finally(() => {
+      if (pending.get(key) === promise) pending.delete(key);
+    });
+    pending.set(key, promise);
+    return promise;
+  };
 }
+
+export const getPhotoBlobForDisplay = createPhotoDisplayLoader((options) => createPhotoCloudService({
+  provider: getPhotoCloudProvider(),
+  getCurrentOwnerId: () => {
+    try { return firebaseAuth.currentUserId(); } catch { return null; }
+  },
+}).getPhotoBlob(options));

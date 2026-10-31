@@ -21,7 +21,13 @@ export default function GalleryPhotoImage({ item, scope = null, style, alt, load
   const objectUrlRef = useRef(null);
   const scopeKey = scope?.scopeKey ?? null;
   const initialRequest = getGalleryPhotoLoadRequest(item, scope);
-  const isCurrent = loaded?.item === item && loaded.scopeKey === scopeKey;
+  const deliveryKey = JSON.stringify([scopeKey, scope?.status, scope?.ownerId, item?.ownerId,
+    item?.catchId, item?.photoId ?? item?.id, item?.cloud?.state, item?.cloud?.provider,
+    item?.cloud?.objectKey, item?.cloud?.sha256, item?.size, item?.type, item?.uploadReady, item?.localError?.code]);
+  const localBlob = item?.blob;
+  const requestRef = useRef(null);
+  useEffect(() => { requestRef.current = { item, scope }; }, [item, scope]);
+  const isCurrent = loaded?.deliveryKey === deliveryKey && loaded.localBlob === localBlob;
   const state = isCurrent
     ? loaded
     : { blob: initialRequest.kind === "local" ? initialRequest.blob : null,
@@ -31,13 +37,14 @@ export default function GalleryPhotoImage({ item, scope = null, style, alt, load
     if (!enabled) return undefined;
     return startPhotoDelivery({
       load: async () => {
-        const request = getGalleryPhotoLoadRequest(item, scope);
+        const current = requestRef.current;
+        const request = getGalleryPhotoLoadRequest(current.item, current.scope);
         return request.kind === "local" ? request.blob
           : request.kind === "remote" ? loadPhoto(request.options) : null;
       },
-      onState: (next) => setLoaded({ item, scopeKey, ...next }),
+      onState: (next) => setLoaded({ deliveryKey, localBlob, ...next }),
     });
-  }, [enabled, item, scope, scopeKey, retryVersion, loadPhoto]);
+  }, [enabled, deliveryKey, localBlob, retryVersion, loadPhoto]);
   const setImage = useCallback((image) => {
     if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
     objectUrlRef.current = null;
@@ -47,7 +54,7 @@ export default function GalleryPhotoImage({ item, scope = null, style, alt, load
     }
   }, [state.blob]);
   const retry = () => {
-    setLoaded({ item, scopeKey, blob: null, status: "loading", errorCode: "" });
+    setLoaded({ deliveryKey, localBlob, blob: null, status: "loading", errorCode: "" });
     setRetryVersion((version) => version + 1);
   };
   if (state.status === "decode-error") return createElement("span", { className: "gallery-missing gallery-photo-broken", role: "status", "aria-label": "Fotografii se nepodařilo načíst" },
@@ -73,6 +80,6 @@ export default function GalleryPhotoImage({ item, scope = null, style, alt, load
     recordPhotoUploadTrace(item.id, "photo_image_rendered", { catchId: item.catchId });
   }, onError: () => {
     recordPhotoUploadTrace(item.id, "photo_image_decode_fail", { catchId: item.catchId, errorCode: "photo_decode_failed" });
-    setLoaded({ item, scopeKey, blob: null, status: "decode-error", errorCode: "" });
+    setLoaded({ deliveryKey, localBlob, blob: null, status: "decode-error", errorCode: "" });
   } });
 }

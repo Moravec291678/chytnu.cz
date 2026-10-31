@@ -442,3 +442,46 @@ test("account switch during a remote read prevents the old pull from writing loc
   assert.equal((await catchRepository.get(remoteRecord.id, accountScope("angler-b"))) ?? null, null);
   assert.equal(await readSyncCursor("angler-a"), null);
 });
+
+test("one transient metadata write does not block three other catches and later retry drains queue", async () => {
+  await resetDatabase();
+  const base = createInMemorySyncAdapter();
+  let failing = true;
+  const adapter = { ...base, async write(input) {
+    if (input.record.id === "isolate-0" && failing) throw new SyncPortError("unavailable", "temporary failure");
+    return base.write(input);
+  } };
+  for (let i = 0; i < 4; i++) await catchRepository.put(makeCatch(`isolate-${i}`, "angler-a"), accountScope());
+  const { service } = makeService(adapter);
+  await service.run("angler-a");
+  const pending = await outboxRepository.list();
+  assert.equal(pending.length, 1);
+  assert.equal(pending[0].entityId, "isolate-0");
+  assert.ok(pending[0].nextAttemptAt);
+  for (let i = 1; i < 4; i++) assert.equal((await catchRepository.get(`isolate-${i}`, accountScope())).sync.status, "metadata-synced");
+  failing = false;
+  await service.run("angler-a", { force: true });
+  assert.equal((await outboxRepository.list()).length, 0);
+});
+
+test("stalled metadata request releases service lock and later manual recovery finishes", async () => {
+  await resetDatabase();
+  const base = createInMemorySyncAdapter();
+  let stalled = true;
+  let finishOld, oldSignal;
+  const port = createSyncPort({ ...base, delta: (input) => {
+    if (!stalled) return base.delta(input);
+    oldSignal = input.signal;
+    return new Promise((resolve) => { finishOld = resolve; });
+  } });
+  const service = createSyncService({ port, getCurrentOwnerId: () => "angler-a", requestTimeoutMs: 5 });
+  const result = await service.run("angler-a");
+  assert.equal(result.status, "error");
+  assert.equal(oldSignal.aborted, true);
+  stalled = false;
+  assert.equal((await service.run("angler-a", { force: true })).status, "success");
+  const cursor = await readSyncCursor("angler-a");
+  finishOld({ items: [], cursor: "stale", hasMore: false });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(await readSyncCursor("angler-a"), cursor);
+});

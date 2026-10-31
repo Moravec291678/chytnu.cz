@@ -12,6 +12,7 @@ import { createPhotoCloudService } from "../../catches/data/photoCloudService.js
 import { getPhotoCloudProvider } from "../../catches/data/photoCloudProvider.js";
 import { getBackendConfiguration } from "../../auth/data/backendConfig.js";
 import { SyncContext } from "./syncContextValue.js";
+import { readWithDeadline, createLatestSyncSnapshot } from "./syncRunGuard.js";
 import { attachSyncLifecycle } from "./syncLifecycle.js";
 import { getPullRetryAt, mergeSyncForce, nextSyncRetryAt } from "./syncRetry.js";
 import { completedSyncState, SYNC_LIFECYCLE_STATE } from "../data/syncLifecycleState.js";
@@ -45,14 +46,21 @@ export function SyncProvider({ children }) {
   const deferredForceRef = useRef(false);
   const runSyncRef = useRef(null);
   const userId = user?.uid ?? null;
+  const activeOwnerRef = useRef(userId);
+  const snapshotsRef = useRef(createLatestSyncSnapshot());
+  if (activeOwnerRef.current !== userId) {
+    activeOwnerRef.current = userId;
+    snapshotsRef.current.invalidate();
+  }
 
   const updateSummary = useCallback(async (ownerId) => {
     if (!ownerId) return { pending: 0, conflicts: 0, lastError: "", lastErrorCode: "", lastErrorEndpoint: "", nextRetryAt: null };
-    return readSyncSummary(ownerId);
+    return readWithDeadline(() => readSyncSummary(ownerId));
   }, []);
 
   const runSync = useCallback(async (force = false, manual = false) => {
     if (authStatus !== "ready" || !userId) return;
+    const isOwnerActive = () => activeOwnerRef.current === userId;
     if (typeof document !== "undefined" && document.visibilityState === "hidden") {
       deferredForceRef.current = deferredForceRef.current || force;
       return;
@@ -84,22 +92,25 @@ export function SyncProvider({ children }) {
       } catch { /* Offline local Catch data remains durable; this pass only queues eligible photo work. */ }
       try {
         const summary = await updateSummary(userId);
-        setState((previous) => ({ ...previous, ...summary, status: SYNC_LIFECYCLE_STATE.LOCAL_PENDING, error: "", showSyncStatus: false }));
+        setState((previous) => isOwnerActive() ? { ...previous, ...summary, status: SYNC_LIFECYCLE_STATE.LOCAL_PENDING, error: "", errorCode: "", errorEndpoint: "", showSyncStatus: false } : previous);
       } catch (error) {
-        setState((previous) => ({ ...previous, status: SYNC_LIFECYCLE_STATE.RETRY_WAIT, error: userFacingErrorMessage(error, "Místní frontu se nepodařilo načíst. Zkus synchronizaci znovu."), showSyncStatus: false }));
+        setState((previous) => isOwnerActive() ? { ...previous, status: SYNC_LIFECYCLE_STATE.RETRY_WAIT, error: userFacingErrorMessage(error, "Místní frontu se nepodařilo načíst. Zkus synchronizaci znovu."), showSyncStatus: false } : previous);
       }
       return;
     }
     runningRef.current = true;
+    const ticket = snapshotsRef.current.next();
+    const publish = (update) => setState((previous) => isOwnerActive() && snapshotsRef.current.current(ticket)
+      ? (typeof update === "function" ? update(previous) : update) : previous);
     if (manual) {
-      setState((previous) => ({ ...previous, status: "syncing", error: "", errorCode: "", errorEndpoint: "",
+      publish((previous) => ({ ...previous, status: "syncing", error: "", errorCode: "", errorEndpoint: "",
         nextRetryAt: null, showSyncStatus: true, presentationId: Date.now() }));
     }
-    const startingSummary = await updateSummary(userId).catch(() => null);
-    setState((previous) => ({ ...previous, ...(startingSummary ?? {}), status: "syncing", presentationId: Date.now(),
-      error: "", errorCode: "", errorEndpoint: "",
-      showSyncStatus: true }));
     try {
+      const startingSummary = await updateSummary(userId);
+      publish((previous) => ({ ...previous, ...startingSummary, status: "syncing", presentationId: Date.now(),
+        error: "", errorCode: "", errorEndpoint: "", showSyncStatus: true }));
+      if (!isOwnerActive()) return;
       if (!serviceRef.current) {
         const { createFirestoreSyncAdapter } = await import("../data/firestoreSyncAdapter.js");
         const port = createSyncPort(createFirestoreSyncAdapter({ onDiagnostic: reportSyncDiagnostic }));
@@ -113,6 +124,7 @@ export function SyncProvider({ children }) {
         providerRef: photoCloudProviderRef,
         provider: photoCloudProvider,
         ownerId: userId,
+        force,
         createService: (provider) => createPhotoCloudService({ provider,
           onPhotoReady: async () => {
             await serviceRef.current?.run(userId);
@@ -121,20 +133,23 @@ export function SyncProvider({ children }) {
           try { return firebaseAuth.currentUserId(); } catch { return null; }
         } }),
         });
-      await photoService.normalizeLegacyPhotoIds(userId, { force });
-      const result = await serviceRef.current.run(userId, { force });
+      if (!isOwnerActive()) return;
+      const metadataService = serviceRef.current;
+      const result = await metadataService.run(userId, { force });
       if (result.status === "error" && result.errorCode) reportSyncDiagnostic({ event: "pull-failed", code: result.errorCode,
         message: result.error, retryable: result.retryable, entityType: result.entityType ?? "sync",
         operation: result.operation ?? "pull", errorName: result.errorName ?? "Error", providerCode: result.providerCode ?? null,
         syncStage: result.syncStage ?? null, firestoreStage: result.firestoreStage ?? null });
+      if (!isOwnerActive()) return;
       const hiddenBeforePhotoSync = typeof document !== "undefined" && document.visibilityState === "hidden";
       if (hiddenBeforePhotoSync) deferredForceRef.current = deferredForceRef.current || force;
       const photoResult = hiddenBeforePhotoSync
         ? { status: "deferred", uploaded: 0, deleted: 0, queued: 0 }
         : await photoService.run(userId, { force });
       if (photoResult.uploaded > 0) window.dispatchEvent(new Event("chytnu:local-data-restored"));
+      if (!isOwnerActive()) return;
       const finalResult = photoResult.uploaded > 0
-        ? await serviceRef.current.run(userId, { force })
+        ? await metadataService.run(userId, { force })
         : result;
       await photoService.finalizeNativeUploads(userId).catch(() => {});
       void serverProgressionClaimService.process(userId).catch(() => {});
@@ -155,7 +170,7 @@ export function SyncProvider({ children }) {
       const finalErrorCode = finalResult.errorCode || summary.pullErrorCode || summary.lastErrorCode || photoResult.errorCode || "";
       const finalRetryable = finalResult.status === "error" ? finalResult.retryable !== false : summary.pullPending > 0 ? summary.pullRetryable : true;
       const finalStatus = completedSyncState({ result: finalResult, photoResult, summary, retryable: finalRetryable });
-      setState({
+      publish({
         ...initialState,
         ...summary,
         status: finalStatus,
@@ -164,7 +179,7 @@ export function SyncProvider({ children }) {
         conflicts: Math.max(finalResult.conflicts ?? 0, summary.conflicts),
         error: finalStatus === SYNC_LIFECYCLE_STATE.SYNCED ? "" : finalError,
         errorCode: finalStatus === SYNC_LIFECYCLE_STATE.SYNCED ? "" : finalErrorCode,
-        errorEndpoint: finalResult.errorEndpoint ?? summary.lastErrorEndpoint ?? "",
+        errorEndpoint: finalStatus === SYNC_LIFECYCLE_STATE.SYNCED ? "" : finalResult.errorEndpoint ?? summary.lastErrorEndpoint ?? "",
         nextRetryAt: nextSyncRetryAt(finalStatus, summary),
         lastResult: finalStatus,
         showSyncStatus: false,
@@ -174,7 +189,7 @@ export function SyncProvider({ children }) {
       const summary = await updateSummary(userId).catch(() => initialState);
       const failure = describeSyncFailure(error);
       reportSyncDiagnostic({ event: "pull-failed", ...failure });
-      setState((previous) => ({ ...previous, ...summary, status: failure.retryable ? SYNC_LIFECYCLE_STATE.RETRY_WAIT : SYNC_LIFECYCLE_STATE.USER_ACTION_REQUIRED,
+      publish((previous) => ({ ...previous, ...summary, status: failure.retryable ? SYNC_LIFECYCLE_STATE.RETRY_WAIT : SYNC_LIFECYCLE_STATE.USER_ACTION_REQUIRED,
         error: failure.message, errorCode: failure.code, nextRetryAt: failure.retryable ? getPullRetryAt(true) : null, showSyncStatus: false }));
     } finally {
       runningRef.current = false;
@@ -194,7 +209,7 @@ export function SyncProvider({ children }) {
     let timer;
     const refreshProgress = async () => {
       const summary = await updateSummary(userId).catch(() => null);
-      if (!active) return;
+      if (!active || activeOwnerRef.current !== userId) return;
       if (summary) setState((previous) => previous.status === "syncing" ? { ...previous, ...summary } : previous);
       timer = window.setTimeout(refreshProgress, 10_000);
     };
@@ -219,7 +234,7 @@ export function SyncProvider({ children }) {
     let unsubscribe = null;
     let fallback = null;
     const startFallback = () => {
-      if (!disposed && !fallback) fallback = attachSyncLifecycle({ runSync: retry });
+      if (!disposed && !fallback) fallback = attachSyncLifecycle({ runSync: retry, listenEvents: false });
     };
     import("../data/firestoreSyncAdapter.js").then(({ subscribeToOwnerSyncChanges }) => {
       if (!disposed) unsubscribe = subscribeToOwnerSyncChanges(userId, retry, startFallback);

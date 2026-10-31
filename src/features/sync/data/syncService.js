@@ -5,6 +5,7 @@ import { applyRemotePage, readPendingPulls, readSyncCursor } from "./localSyncRe
 import { accountScopeKey } from "../../auth/data/localDataScope.js";
 import { describeSyncFailure } from "./syncDiagnostics.js";
 import { withSyncStage } from "./syncPort.js";
+import { withPhotoDeadline } from "../../catches/data/photoDeadline.js";
 
 const REPOSITORIES = { catch: catchRepository, trip: tripRepository, water: waterRepository };
 const PAGE_SIZE = 100;
@@ -51,7 +52,12 @@ function pendingPullDue(item, now, force) {
   return force || !item.nextAttemptAt || Date.parse(item.nextAttemptAt) <= now;
 }
 
-export function createSyncService({ port, getCurrentOwnerId, now = () => Date.now(), onDiagnostic = () => {} }) {
+export function createSyncService({ port, getCurrentOwnerId, now = () => Date.now(), onDiagnostic = () => {}, requestTimeoutMs = 45_000 }) {
+  // Bound each remote operation, not a whole batch of healthy transfers. Late
+  // responses cannot resume local mutations after the timeout wins the race.
+  // Writes retain their durable operation ID, so reconciliation is idempotent.
+  const remoteCall = (method, input) => withPhotoDeadline(
+    (signal) => port[method]({ ...input, signal }), requestTimeoutMs);
   let inFlight = null;
 
   async function pull(ownerId, { force = false } = {}) {
@@ -76,7 +82,7 @@ export function createSyncService({ port, getCurrentOwnerId, now = () => Date.no
       if (!activeOwner(getCurrentOwnerId, ownerId)) return { applied, conflicts, stopped: true };
       const change = { entityType: pending.entityType, entityId: pending.entityId, revision: null };
       try {
-        const remote = await port.read({ ownerId, entityType: change.entityType, entityId: change.entityId });
+        const remote = await remoteCall("read", { ownerId, entityType: change.entityType, entityId: change.entityId });
         if (!activeOwner(getCurrentOwnerId, ownerId)) return { applied, conflicts, stopped: true };
         if (remote?.photoMetadataError) {
           const failure = withSyncStage(remote.photoMetadataError, pullStage(change.entityType, "get-catch-photo-metadata"), "get-catch-photo-metadata");
@@ -113,7 +119,7 @@ export function createSyncService({ port, getCurrentOwnerId, now = () => Date.no
     for (let pageNumber = 0; pageNumber < MAX_PULL_PAGES; pageNumber += 1) {
       if (!activeOwner(getCurrentOwnerId, ownerId)) return { applied, conflicts, stopped: true };
       let page;
-      try { page = await port.delta({ ownerId, cursor, limit: PAGE_SIZE }); }
+      try { page = await remoteCall("delta", { ownerId, cursor, limit: PAGE_SIZE }); }
       catch (error) { throw withSyncStage(error, "pull:changes", "firestore:query-sync-changes"); }
       if (!activeOwner(getCurrentOwnerId, ownerId)) return { applied, conflicts, stopped: true };
       const latestByEntity = new Map();
@@ -125,7 +131,7 @@ export function createSyncService({ port, getCurrentOwnerId, now = () => Date.no
       for (const change of latestByEntity.values()) {
         if (!activeOwner(getCurrentOwnerId, ownerId)) return { applied, conflicts, stopped: true };
         let remote;
-        try { remote = await port.read({ ownerId, entityType: change.entityType, entityId: change.entityId }); }
+        try { remote = await remoteCall("read", { ownerId, entityType: change.entityType, entityId: change.entityId }); }
         catch (error) {
           const staged = withSyncStage(error, pullStage(change.entityType, error?.firestoreStage), error?.firestoreStage);
           staged.entityType = change.entityType;
@@ -183,7 +189,7 @@ export function createSyncService({ port, getCurrentOwnerId, now = () => Date.no
       try {
         let result;
         if (operation.operation === "delete") {
-          result = await port.delete({
+          result = await remoteCall("delete", {
             ownerId,
             entityType: operation.entityType,
             entityId: operation.entityId,
@@ -194,7 +200,7 @@ export function createSyncService({ port, getCurrentOwnerId, now = () => Date.no
         } else {
           const record = await repository.get(operation.entityId, scope);
           if (!record || record.ownerId !== ownerId || record.sync?.revision !== operation.localRevision) continue;
-          result = await port.write({
+          result = await remoteCall("write", {
             ownerId,
             entityType: operation.entityType,
             record,
@@ -207,7 +213,7 @@ export function createSyncService({ port, getCurrentOwnerId, now = () => Date.no
         if (await outboxRepository.acknowledge(operation.operationId, operation.localRevision, result.revision)) sent += 1;
       } catch (error) {
         if (error?.code === "conflict") {
-          const remote = await port.read({ ownerId, entityType: operation.entityType, entityId: operation.entityId });
+          const remote = await remoteCall("read", { ownerId, entityType: operation.entityType, entityId: operation.entityId });
           const cursor = await readSyncCursor(ownerId);
           await applyRemotePage({
             ownerId,
@@ -228,7 +234,9 @@ export function createSyncService({ port, getCurrentOwnerId, now = () => Date.no
         await outboxRepository.markFailed(operation.operationId, failure.message, failure);
         onDiagnostic({ event: "push-failed", ...failure });
         transientFailure = failure;
-        if (error?.retryable || error?.code === "permission_denied" || error?.code === "unauthenticated") break;
+        // One record's transient failure must not starve unrelated catches/photos.
+        // Authentication/ownership failures affect the whole account, so stop those.
+        if (error?.code === "permission_denied" || error?.code === "unauthenticated") break;
       }
     }
     return { sent, conflicts, stopped: false, transientFailure };

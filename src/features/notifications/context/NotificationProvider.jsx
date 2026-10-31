@@ -1,3 +1,4 @@
+import { createLatestSyncSnapshot } from "../../sync/context/syncRunGuard.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDataScope } from "../../auth/context/dataScopeContextValue.js";
 import { useProgression } from "../../progression/context/progressionContextValue.js";
@@ -24,9 +25,16 @@ export function NotificationProvider({ children }) {
   const [state, setState] = useState(emptyState);
   const seenProgressionRef = useRef({ scopeKey: null, ids: new Set() });
   const syncIncidentRef = useRef(null);
+  const refreshSnapshots = useRef(createLatestSyncSnapshot());
+  const currentScope = useRef(scope.scopeKey);
+  if (currentScope.current !== scope.scopeKey) {
+    currentScope.current = scope.scopeKey;
+    refreshSnapshots.current.invalidate();
+  }
 
   const publishNotification = useCallback(async (input) => {
     if (scope.status !== "ready") return null;
+    refreshSnapshots.current.invalidate();
     const notification = await notificationRepository.create(input, { scopeKey: scope.scopeKey, ownerId: scope.ownerId });
     setState((previous) => previous.scopeKey === scope.scopeKey
       ? { ...previous, notifications: upsertNotification(previous.notifications, notification) }
@@ -36,14 +44,15 @@ export function NotificationProvider({ children }) {
 
   const refresh = useCallback(async () => {
     if (scope.status !== "ready") return [];
+    const ticket = refreshSnapshots.current.next();
     try {
       const notifications = await notificationRepository.list({ scopeKey: scope.scopeKey, ownerId: scope.ownerId });
-      setState((previous) => previous.scopeKey === scope.scopeKey
+      setState((previous) => previous.scopeKey === scope.scopeKey && refreshSnapshots.current.current(ticket)
         ? { ...previous, notifications, loading: false, error: "" }
         : previous);
       return notifications;
     } catch (error) {
-      setState((previous) => previous.scopeKey === scope.scopeKey
+      setState((previous) => previous.scopeKey === scope.scopeKey && refreshSnapshots.current.current(ticket)
         ? { ...previous, loading: false, error: userFacingErrorMessage(error, "Oznámení se nepodařilo načíst. Zkus to znovu.") }
         : previous);
       return [];
@@ -100,6 +109,7 @@ export function NotificationProvider({ children }) {
     if (scope.status !== "ready" || sync?.status !== "synced" || state.scopeKey !== scope.scopeKey) return;
     for (const notification of state.notifications) {
       if (notification.type === "sync_problem" && !notification.readAt) {
+        refreshSnapshots.current.invalidate();
         void notificationRepository.markRead(notification.id, { scopeKey: scope.scopeKey, ownerId: scope.ownerId })
           .then((resolved) => setState((previous) => previous.scopeKey === scope.scopeKey
             ? { ...previous, notifications: previous.notifications.map((item) => item.id === resolved.id ? resolved : item) }
@@ -109,6 +119,7 @@ export function NotificationProvider({ children }) {
   }, [scope.ownerId, scope.scopeKey, scope.status, state.notifications, state.scopeKey, sync?.status]);
 
   const markAsRead = useCallback(async (id) => {
+    refreshSnapshots.current.invalidate();
     const notification = await notificationRepository.markRead(id, { scopeKey: scope.scopeKey, ownerId: scope.ownerId });
     setState((previous) => previous.scopeKey === scope.scopeKey
       ? { ...previous, notifications: sortNotificationsNewestFirst(previous.notifications.map((item) => item.id === id ? notification : item)) }
@@ -117,6 +128,7 @@ export function NotificationProvider({ children }) {
   }, [scope.ownerId, scope.scopeKey]);
 
   const markAllAsRead = useCallback(async () => {
+    refreshSnapshots.current.invalidate();
     const notifications = await notificationRepository.markAllAsRead({ scopeKey: scope.scopeKey, ownerId: scope.ownerId });
     setState((previous) => previous.scopeKey === scope.scopeKey ? { ...previous, notifications } : previous);
     return notifications;

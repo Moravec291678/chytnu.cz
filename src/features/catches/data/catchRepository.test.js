@@ -389,3 +389,25 @@ test("removing one pending photo cancels its upload while a synced photo still q
   db.close();
   assert.equal(binaryCount, 0);
 });
+
+
+test("verified delivery cache rejects stale cloud identity inside the write transaction", async () => {
+  await deleteDatabase();
+  const scope = await guestScope();
+  const original = new Blob(["original cached bytes"], { type: "image/jpeg" });
+  const cloud = { state: "synced", provider: "cloudinary", objectKey: "old-object", sha256: "a".repeat(64) };
+  await catchRepository.put(makeCatch("cache-identity", { photos: [{ id: "photo-1", blob: original, cloud }] }), scope);
+  const stale = new Blob(["stale download"], { type: "image/jpeg" });
+  for (const field of ["sha256", "objectKey", "provider"]) {
+    const changed = { ...cloud, [field]: field === "sha256" ? "b".repeat(64) : "new-value" };
+    await catchRepository.setPhotoCloudState("cache-identity", "photo-1", changed, scope);
+    assert.equal(await catchRepository.cachePhotoBlob("cache-identity", "photo-1", stale, { ...scope, expectedPhotoCloud: cloud }), null);
+    const saved = await catchRepository.get("cache-identity", scope);
+    assert.equal(await saved.photos[0].blob.text(), "original cached bytes");
+    assert.deepEqual(saved.photos[0].cloud, changed);
+  }
+  await catchRepository.setPhotoCloudState("cache-identity", "photo-1", cloud, scope);
+  const verified = new Blob(["matching verified bytes"], { type: "image/jpeg" });
+  assert.equal(await catchRepository.cachePhotoBlob("cache-identity", "photo-1", verified, { ...scope, expectedPhotoCloud: cloud }), verified);
+  assert.equal(await (await catchRepository.get("cache-identity", scope)).photos[0].blob.text(), "matching verified bytes");
+});

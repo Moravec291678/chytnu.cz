@@ -94,6 +94,7 @@ export function createSyncPort(adapter) {
 
   return Object.freeze({
     read: (args) => call("read", {
+      ...(args?.signal ? { signal: args.signal } : {}),
       ownerId: requireString(args?.ownerId, "ownerId"),
       entityType: requireEntityType(args?.entityType),
       entityId: requireString(args?.entityId, "entityId"),
@@ -112,6 +113,7 @@ export function createSyncPort(adapter) {
         throw new SyncPortError("invalid_request", "entityId musí odpovídat ID záznamu.");
       }
       return call("write", {
+        ...(args?.signal ? { signal: args.signal } : {}),
         ownerId: requireString(args.ownerId, "ownerId"),
         entityType: requireEntityType(args.entityType),
         entityId: recordId,
@@ -127,6 +129,7 @@ export function createSyncPort(adapter) {
         throw new SyncPortError("invalid_request", "localRevision musí být kladné celé číslo.");
       }
       return call("delete", {
+        ...(args?.signal ? { signal: args.signal } : {}),
         ownerId: requireString(args?.ownerId, "ownerId"),
         entityType: requireEntityType(args?.entityType),
         entityId: requireString(args?.entityId, "entityId"),
@@ -136,12 +139,14 @@ export function createSyncPort(adapter) {
       });
     },
     list: (args) => call("list", {
+      ...(args?.signal ? { signal: args.signal } : {}),
       ownerId: requireString(args?.ownerId, "ownerId"),
       entityType: requireEntityType(args?.entityType),
       cursor: args?.cursor ?? null,
       limit: args?.limit ?? 100,
     }),
     delta: (args) => call("delta", {
+      ...(args?.signal ? { signal: args.signal } : {}),
       ownerId: requireString(args?.ownerId, "ownerId"),
       cursor: args?.cursor ?? null,
       limit: args?.limit ?? 100,

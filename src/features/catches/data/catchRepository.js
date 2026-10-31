@@ -625,6 +625,10 @@ export const catchRepository = {
         }
         const photo = (record.photos ?? []).find((item) => item.id === photoId);
         if (!photo) { result = null; return; }
+        const expectedCloud = options?.expectedPhotoCloud;
+        if (expectedCloud && (photo.cloud?.state !== "synced"
+          || ["sha256", "objectKey", "provider"].some((field) => photo.cloud?.[field] !== expectedCloud[field]))) return;
+
         // This path is only used after a verified Cloudinary fetch; replacing a
         // broken local Blob is safe because the remote bytes were hash-checked.
         photoBinaryStore.put({ key: photoBinaryKey(requestedScope.scopeKey, catchId, photoId), scopeKey: requestedScope.scopeKey,

@@ -49,3 +49,24 @@ test("temporary pull failure is retried when the app returns online and to foreg
   assert.deepEqual(attempts, ["retry"]);
   detach();
 });
+
+test("fallback polling does not register duplicate reconnect/resume listeners", () => {
+  const win = eventTarget();
+  const doc = { visibilityState: "visible", addEventListener: win.addEventListener.bind(win), removeEventListener: win.removeEventListener.bind(win) };
+  let now = 0;
+  let primaryCalls = 0;
+  let pollCalls = 0;
+  const detachPrimary = attachSyncLifecycle({ windowObject: win, documentObject: doc, intervalMs: 0, now: () => now, runSync: () => { primaryCalls++; } });
+  const detachPoll = attachSyncLifecycle({ windowObject: win, documentObject: doc, listenEvents: false, now: () => now, runSync: () => { pollCalls++; } });
+  win.fire("online"); win.fire("focus"); win.fire("pageshow");
+  assert.equal(primaryCalls, 1);
+  assert.equal(pollCalls, 0);
+  now += 45_000;
+  win.interval();
+  assert.equal(pollCalls, 1);
+  detachPoll();
+  now += 1000;
+  win.fire("focus");
+  assert.equal(primaryCalls, 2, "detaching fallback must not remove primary listeners");
+  detachPrimary();
+});
