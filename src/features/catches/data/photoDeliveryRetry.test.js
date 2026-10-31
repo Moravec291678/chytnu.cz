@@ -36,7 +36,7 @@ test("stale metadata resumes immediately on realtime, without periodic polling",
   const events = new EventTarget();
   let serverReady = false;
   let state;
-  const stop = startPhotoDelivery({ events, schedule: () => assert.fail("no periodic polling"),
+  const stop = startPhotoDelivery({ events, schedule: (_fn, ms) => { assert.equal(ms, 30_000); return 1; }, cancel: () => {},
     load: async () => serverReady ? new Blob(["image"]) : null, onState: (next) => { state = next; } });
   await setImmediate();
   serverReady = true;
@@ -61,4 +61,21 @@ test("READY realtime received during a stale load is not lost", async () => {
   assert.equal(state.status, "ready");
   assert.equal(calls, 2);
   stop();
+});
+
+
+test("reconnect, resume and manual sync wake delivery retries immediately", async () => {
+  for (const event of ["online", "pageshow", "chytnu:photo-delivery-retry"]) {
+    const events = new EventTarget();
+    let attempts = 0;
+    let state;
+    const stop = startPhotoDelivery({ events, schedule: () => 1, cancel: () => {},
+      load: async () => { if (++attempts === 1) throw { code: "photo_cloud_network_error" }; return new Blob(["ready"]); },
+      onState: (next) => { state = next; } });
+    await setImmediate();
+    events.dispatchEvent(new Event(event));
+    await setImmediate();
+    assert.equal(state.status, "ready", event);
+    stop();
+  }
 });

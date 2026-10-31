@@ -1,3 +1,4 @@
+import { withPhotoDeadline } from "./photoDeadline.js";
 // Delivery retries are local to the mounted image, never a global sync error.
 export function startPhotoDelivery({ load, onState, events = globalThis.window,
   schedule = globalThis.setTimeout, cancel = globalThis.clearTimeout }) {
@@ -13,11 +14,15 @@ export function startPhotoDelivery({ load, onState, events = globalThis.window,
     cancel(timer);
     running = true;
     try {
-      const blob = await load();
+      const blob = await withPhotoDeadline(() => load());
       if (stopped) return;
       ready = blob instanceof Blob;
       onState({ blob, status: ready ? "ready" : "missing", errorCode: "" });
-      // Missing metadata waits for realtime/resume instead of polling.
+      // Realtime is primary; a pending-only watchdog repairs a lost event.
+      if (!ready) timer = schedule(() => {
+        events?.dispatchEvent(new Event("chytnu:photo-metadata-refresh"));
+        void retry();
+      }, 30_000);
     } catch (error) {
       if (stopped) return;
       onState({ blob: null, status: "error", errorCode: error?.code ?? "" });
@@ -30,7 +35,7 @@ export function startPhotoDelivery({ load, onState, events = globalThis.window,
       if (rerun) { rerun = false; queueMicrotask(retry); }
     }
   };
-  const names = ["online", "focus", "pageshow", "chytnu:local-data-restored"];
+  const names = ["online", "focus", "pageshow", "chytnu:local-data-restored", "chytnu:photo-delivery-retry"];
   for (const name of names) events?.addEventListener(name, retry);
   void retry();
   return () => {

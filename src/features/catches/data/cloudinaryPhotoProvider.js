@@ -1,3 +1,4 @@
+import { withPhotoDeadline } from "./photoDeadline.js";
 import { Capacitor } from "@capacitor/core";
 import { createPhotoObjectKey, sha256Blob } from "./photoCloudProvider.js";
 import { PRODUCT_LIMITS } from "../../../product/config/limits.js";
@@ -35,9 +36,11 @@ export function createCloudinaryPhotoProvider({ fetchImpl = globalThis.fetch, ap
   const uploadTransport = transport ?? createPhotoUploadTransport({ platform: getPlatform, webFetch: fetchImpl });
   async function available() {
     try {
-      const response = await fetchImpl(apiUrl("/api/cloudinary/capability"), { method: "GET", credentials: "same-origin" });
+      return await withPhotoDeadline(async (signal) => {
+      const response = await fetchImpl(apiUrl("/api/cloudinary/capability"), { method: "GET", credentials: "same-origin", signal });
       const body = await readJson(response);
       return response.ok && body.enabled === true;
+      });
     } catch {
       return false;
     }

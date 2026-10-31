@@ -968,6 +968,31 @@ test("second device stale pending metadata uses newly received READY and caches 
   const blob = await makeService(ownerId, provider).getPhotoBlob({ photo: { ...ready, cloud: { state: "pendingUpload" } },
     ownerId, catchId: "remote-catch", scopeKey: scope.scopeKey });
   assert.equal(await blob.text(), "remote bytes");
+  await makeService(ownerId, provider).getPhotoBlob({ photo: ready, ownerId, catchId: "remote-catch", scopeKey: scope.scopeKey });
+  assert.equal(provider.calls.downloads.length, 1, "a stale component reuses downloaded durable bytes");
   assert.equal((await readSyncSummary(ownerId)).pending, 0);
   assert.equal(provider.calls.uploads.length, 0);
+});
+
+
+test("one transient or permanent photo failure never blocks photos 1/3/4", async () => {
+  for (const code of ["cloudinary_network_error", "photo_blob_missing"]) {
+    await resetDatabase();
+    const ownerId = "isolated-owner";
+    const scope = { ownerId, scopeKey: accountScopeKey(ownerId) };
+    await catchRepository.put(makeCatch(ownerId, "isolated-catch", [1,2,3,4].map((n) => makePhoto(`p${n}`))), scope);
+    const provider = createFakeProvider();
+    const upload = provider.upload.bind(provider);
+    provider.upload = async (input) => {
+      if (input.photoId === "p2") throw Object.assign(new Error("isolated failure"), { code });
+      return upload(input);
+    };
+    await makeService(ownerId, provider).run(ownerId);
+    const saved = await catchRepository.get("isolated-catch", scope);
+    assert.deepEqual(saved.photos.filter((photo) => photo.cloud.state === "synced").map((photo) => photo.id), ["p1","p3","p4"]);
+    const jobs = await photoCloudOutboxRepository.list();
+    assert.equal(jobs.length, 1);
+    assert.equal(jobs[0].photoCloud.photoId, "p2");
+    if (code === "cloudinary_network_error") assert.ok(jobs[0].nextAttemptAt);
+  }
 });

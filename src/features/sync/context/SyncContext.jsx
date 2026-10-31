@@ -13,7 +13,7 @@ import { getPhotoCloudProvider } from "../../catches/data/photoCloudProvider.js"
 import { getBackendConfiguration } from "../../auth/data/backendConfig.js";
 import { SyncContext } from "./syncContextValue.js";
 import { attachSyncLifecycle } from "./syncLifecycle.js";
-import { getPullRetryAt, mergeSyncForce } from "./syncRetry.js";
+import { getPullRetryAt, mergeSyncForce, nextSyncRetryAt } from "./syncRetry.js";
 import { completedSyncState, SYNC_LIFECYCLE_STATE } from "../data/syncLifecycleState.js";
 import { preparePhotoSyncService } from "./photoSyncPreparation.js";
 import { serverProgressionClaimService } from "../../progression/data/serverProgressionClaimService.js";
@@ -165,7 +165,7 @@ export function SyncProvider({ children }) {
         error: finalStatus === SYNC_LIFECYCLE_STATE.SYNCED ? "" : finalError,
         errorCode: finalStatus === SYNC_LIFECYCLE_STATE.SYNCED ? "" : finalErrorCode,
         errorEndpoint: finalResult.errorEndpoint ?? summary.lastErrorEndpoint ?? "",
-        nextRetryAt: finalStatus === SYNC_LIFECYCLE_STATE.RETRY_WAIT ? summary.nextRetryAt ?? getPullRetryAt(true) : summary.nextRetryAt,
+        nextRetryAt: nextSyncRetryAt(finalStatus, summary),
         lastResult: finalStatus,
         showSyncStatus: false,
       });
@@ -214,7 +214,7 @@ export function SyncProvider({ children }) {
     }
     void runSync();
     const retry = () => void runSync();
-    const detachLifecycle = attachSyncLifecycle({ runSync: retry, intervalMs: 0 });
+    const detachLifecycle = attachSyncLifecycle({ runSync: () => { window.dispatchEvent(new Event("chytnu:photo-delivery-retry")); void runSync(true); }, intervalMs: 0 });
     let disposed = false;
     let unsubscribe = null;
     let fallback = null;
@@ -224,6 +224,7 @@ export function SyncProvider({ children }) {
     import("../data/firestoreSyncAdapter.js").then(({ subscribeToOwnerSyncChanges }) => {
       if (!disposed) unsubscribe = subscribeToOwnerSyncChanges(userId, retry, startFallback);
     }).catch(startFallback);
+    window.addEventListener("chytnu:photo-metadata-refresh", retry);
     window.addEventListener("chytnu:outbox-changed", retry);
     window.addEventListener("chytnu:native-photo-upload-changed", retry);
     return () => {
@@ -231,6 +232,7 @@ export function SyncProvider({ children }) {
       unsubscribe?.();
       fallback?.();
       detachLifecycle();
+      window.removeEventListener("chytnu:photo-metadata-refresh", retry);
       window.removeEventListener("chytnu:outbox-changed", retry);
       window.removeEventListener("chytnu:native-photo-upload-changed", retry);
     };
@@ -243,8 +245,8 @@ export function SyncProvider({ children }) {
     return () => window.clearTimeout(timer);
   }, [runSync, state.nextRetryAt, state.status, userId]);
 
-  const retry = useCallback(() => runSync(true, true), [runSync]);
-  const syncNow = useCallback(() => runSync(true, true), [runSync]);
+  const retry = useCallback(() => { window.dispatchEvent(new Event("chytnu:photo-delivery-retry")); return runSync(true, true); }, [runSync]);
+  const syncNow = useCallback(() => { window.dispatchEvent(new Event("chytnu:photo-delivery-retry")); return runSync(true, true); }, [runSync]);
   const hideStatus = useCallback(() => setState((previous) => ({ ...previous, showSyncStatus: false })), []);
   const backendMode = (() => { try { return getBackendConfiguration().mode; } catch { return "unavailable"; } })();
   const providerId = getPhotoCloudProvider()?.id ?? "none";

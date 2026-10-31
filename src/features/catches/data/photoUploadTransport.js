@@ -1,3 +1,4 @@
+import { withPhotoDeadline } from "./photoDeadline.js";
 import { Capacitor, registerPlugin } from "@capacitor/core";
 import { Directory, Filesystem } from "@capacitor/filesystem";
 
@@ -45,12 +46,14 @@ export function createPhotoUploadTransport({ platform = () => Capacitor.getPlatf
       const form = new FormData();
       form.append("file", input.blob, input.fileName);
       for (const [key, value] of Object.entries(input.fields)) form.append(key, String(value));
+      return withPhotoDeadline(async (signal) => {
       let response;
-      try { response = await webFetch(input.uploadURL, { method: "POST", body: form }); }
+      try { response = await webFetch(input.uploadURL, { method: "POST", body: form, signal }); }
       catch { throw Object.assign(new Error("Cloudinary image upload failed because of a network error."), { code: "cloudinary_network_error" }); }
       let body;
       try { body = await response.json(); } catch { body = {}; }
       return { state: response.ok ? "completed" : "failed_retryable", httpStatus: response.status, body };
+      }, 120_000);
     }
 
     const filePath = await stageNativeFile(input);
@@ -88,7 +91,7 @@ export function createPhotoUploadTransport({ platform = () => Capacitor.getPlatf
       const status = await native.getUploadStatus({ operationId: input.operationId });
       if (status.state === "completed") return { state: status.state, httpStatus: status.httpStatus, body: {} };
       if (["failed_retryable", "interrupted", "cancelled", "missing"].includes(status.state)) throw nativeError(status);
-      const event = await completed;
+      const event = await withPhotoDeadline(() => completed, 120_000);
       return { state: event.state, httpStatus: event.httpStatus, body: {} };
     } finally {
       await removeListener?.();

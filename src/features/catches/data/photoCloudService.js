@@ -1,3 +1,4 @@
+import { withPhotoDeadline } from "./photoDeadline.js";
 import { accountScopeKey, validateDataScope } from "../../auth/data/localDataScope.js";
 import { firebaseAuth } from "../../auth/data/firebaseAuth.js";
 import { catchRepository, outboxRepository, photoCloudOutboxRepository } from "./catchRepository.js";
@@ -119,16 +120,16 @@ export function createAuthenticatedPhotoEndpointCaller({
 } = {}) {
   return async function callAuthenticatedPhotoEndpoint(path, payload, { responseType = "json" } = {}) {
     let idToken;
-    try { idToken = await getIdToken(false); }
+    try { idToken = await withPhotoDeadline(() => getIdToken(false)); }
     catch (error) { throw tokenReadError(error, path); }
     if (!idToken) throw Object.assign(new Error("Pro synchronizaci fotografií je potřeba přihlášení."), { code: "missing_firebase_user", endpoint: path });
 
-    const send = async (token) => {
+    const send = (token) => withPhotoDeadline(async (signal) => {
       let response;
       const requestUrl = apiUrl(path);
       try {
         response = await fetchImpl(requestUrl, {
-          method: "POST",
+          method: "POST", signal,
           credentials: "same-origin",
           headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
           body: JSON.stringify(payload),
@@ -140,11 +141,11 @@ export function createAuthenticatedPhotoEndpointCaller({
       if (response.ok && responseType === "blob") return { response, result: await response.blob() };
       try { result = await response.json(); } catch { result = {}; }
       return { response, result };
-    };
+    });
 
     let attempt = await send(idToken);
     if (attempt.response.status === 401 && ["invalid_auth", "firebase_token_expired"].includes(attempt.result.error)) {
-      try { idToken = await getIdToken(true); }
+      try { idToken = await withPhotoDeadline(() => getIdToken(true)); }
       catch (error) { throw tokenReadError(error, path); }
       if (!idToken) throw Object.assign(new Error("Firebase přihlášení po obnovení není dostupné."), { code: "token_refresh_failed", status: 401, endpoint: path });
       attempt = await send(idToken);
@@ -525,7 +526,7 @@ export function createPhotoCloudService({
               stage: failure.photoStage || "photo-hash-local-blob" }, scope).catch(() => {});
           });
         }
-        if (failure?.code !== "photo_prepare_failed" && !localBlobUnreadable) { stopScheduling = true; return; }
+        // Failure belongs to this photo; the other worker and remaining jobs continue.
       }
       }
     };
@@ -594,7 +595,7 @@ export function createPhotoCloudService({
     async getPhotoBlob({ photo, ownerId, catchId, scopeKey }) {
       const scope = validateDataScope({ scopeKey, ownerId });
       if (!isActive(getCurrentOwnerId, ownerId)) return null;
-      if (!isPhotoCloudReady(photo) && !(photo?.blob instanceof Blob)) {
+      if (!(photo?.blob instanceof Blob)) {
         const latest = await catches.get(catchId, scope);
         const latestPhoto = latest?.photos?.find((item) => item.id === photo?.id || item.id === photo?.photoId);
         if (isPhotoCloudReady(latestPhoto)) photo = latestPhoto;
