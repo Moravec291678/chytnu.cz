@@ -594,6 +594,11 @@ export function createPhotoCloudService({
     async getPhotoBlob({ photo, ownerId, catchId, scopeKey }) {
       const scope = validateDataScope({ scopeKey, ownerId });
       if (!isActive(getCurrentOwnerId, ownerId)) return null;
+      if (!isPhotoCloudReady(photo) && !(photo?.blob instanceof Blob)) {
+        const latest = await catches.get(catchId, scope);
+        const latestPhoto = latest?.photos?.find((item) => item.id === photo?.id || item.id === photo?.photoId);
+        if (isPhotoCloudReady(latestPhoto)) photo = latestPhoto;
+      }
       let localBlobError = null;
       if (photo?.blob instanceof Blob) {
         try {

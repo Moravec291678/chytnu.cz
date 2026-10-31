@@ -4,6 +4,7 @@ import { getPhotoBlobForDisplay } from "../features/catches/data/photoCloudServi
 import { recordPhotoUploadTrace } from "../features/catches/data/photoUploadTrace.js";
 import { getPhotoAvailability, PHOTO_AVAILABILITY } from "../features/catches/data/photoAvailability.js";
 import PhotoSyncStatus from "../features/catches/components/PhotoSyncStatus.js";
+import { startPhotoDelivery } from "../features/catches/data/photoDeliveryRetry.js";
 import { Link } from "react-router-dom";
 
 export function GalleryPhotoFailure({ item, tile = false, permanent = false, message = "", onRetry }) {
@@ -14,7 +15,7 @@ export function GalleryPhotoFailure({ item, tile = false, permanent = false, mes
       : createElement("button", { type: "button", onClick: onRetry, "aria-label": "Zkusit znovu načíst fotografii" }, "Zkusit znovu"));
 }
 
-export default function GalleryPhotoImage({ item, scope = null, style, alt, loading, enabled = true, tile = false }) {
+export default function GalleryPhotoImage({ item, scope = null, style, alt, loading, enabled = true, tile = false, loadPhoto = getPhotoBlobForDisplay }) {
   const [loaded, setLoaded] = useState(null);
   const [retryVersion, setRetryVersion] = useState(0);
   const objectUrlRef = useRef(null);
@@ -25,22 +26,18 @@ export default function GalleryPhotoImage({ item, scope = null, style, alt, load
     ? loaded
     : { blob: initialRequest.kind === "local" ? initialRequest.blob : null,
       status: !enabled ? "idle" : initialRequest.kind === "remote" ? "loading" : "missing" };
-  const availability = getPhotoAvailability(item, { loadState: state.status === "decode-error" ? "error" : state.status, errorCode: state.errorCode });
+  const availability = getPhotoAvailability(item, { loadState: state.status === "decode-error" ? "error" : state.status, errorCode: state.errorCode, resolvedBlob: state.blob });
   useEffect(() => {
-    let active = true;
     if (!enabled) return undefined;
-    Promise.resolve().then(async () => {
-      try {
+    return startPhotoDelivery({
+      load: async () => {
         const request = getGalleryPhotoLoadRequest(item, scope);
-        const blob = request.kind === "local" ? request.blob
-          : request.kind === "remote" ? await getPhotoBlobForDisplay(request.options) : null;
-        if (active) setLoaded({ item, scopeKey, blob, status: blob ? "ready" : request.kind === "remote" ? "error" : "missing", errorCode: "" });
-      } catch (error) {
-        if (active) setLoaded({ item, scopeKey, blob: null, status: "error", errorCode: error?.code ?? "" });
-      }
+        return request.kind === "local" ? request.blob
+          : request.kind === "remote" ? loadPhoto(request.options) : null;
+      },
+      onState: (next) => setLoaded({ item, scopeKey, ...next }),
     });
-    return () => { active = false; };
-  }, [enabled, item, scope, scopeKey, retryVersion]);
+  }, [enabled, item, scope, scopeKey, retryVersion, loadPhoto]);
   const setImage = useCallback((image) => {
     if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
     objectUrlRef.current = null;

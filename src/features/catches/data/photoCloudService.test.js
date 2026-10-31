@@ -951,3 +951,23 @@ test("token acquisition network failure retries; revoked session still requires 
     });
   }
 });
+
+
+test("second device stale pending metadata uses newly received READY and caches delivery without upload work", async () => {
+  await resetDatabase();
+  const ownerId = "download-reconcile";
+  const scope = { ownerId, scopeKey: accountScopeKey(ownerId) };
+  const original = makePhoto("p1", "remote bytes");
+  const hash = await (await import("./photoCloudProvider.js")).sha256Blob(original.blob);
+  const key = createPhotoObjectKey(ownerId, "remote-catch", "p1");
+  const ready = { ...original, blob: undefined, cloud: { state: "synced", provider: "fake", objectKey: key, sha256: hash } };
+  await catchRepository.put(makeCatch(ownerId, "remote-catch", [ready]), scope);
+  await acknowledgeCatchOperations(ownerId);
+  const provider = createFakeProvider();
+  provider.objects.set(key, { blob: original.blob, sha256: hash, contentType: original.type });
+  const blob = await makeService(ownerId, provider).getPhotoBlob({ photo: { ...ready, cloud: { state: "pendingUpload" } },
+    ownerId, catchId: "remote-catch", scopeKey: scope.scopeKey });
+  assert.equal(await blob.text(), "remote bytes");
+  assert.equal((await readSyncSummary(ownerId)).pending, 0);
+  assert.equal(provider.calls.uploads.length, 0);
+});

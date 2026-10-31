@@ -12,7 +12,8 @@ export const PHOTO_AVAILABILITY = Object.freeze({
 
 export const PHOTO_SYNC_HELP = "U většího počtu fotografií může synchronizace trvat déle. Aplikaci můžeš dál používat.";
 
-export function getPhotoAvailability(photo, { loadState = "idle", errorCode = "" } = {}) {
+export function getPhotoAvailability(photo, { loadState = "idle", errorCode = "", resolvedBlob = null } = {}) {
+  if (resolvedBlob instanceof Blob && loadState === "ready") return PHOTO_AVAILABILITY.AVAILABLE;
   const cloudState = photo?.cloud?.state ?? "localOnly";
   const hasSyncedCloudCopy = isPhotoCloudReady(photo);
   const unreadableWithoutCloud = photo?.localError?.code === "photo_local_blob_unreadable" && !hasSyncedCloudCopy;

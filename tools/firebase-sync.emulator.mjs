@@ -10,6 +10,12 @@ import {
 } from "firebase/auth";
 import { collection, connectFirestoreEmulator, doc, getDoc, getDocs, getFirestore } from "firebase/firestore";
 import "fake-indexeddb/auto";
+import { IDBFactory } from "fake-indexeddb";
+import { createPhotoCloudService } from "../src/features/catches/data/photoCloudService.js";
+import { createCloudinaryPhotoProvider } from "../src/features/catches/data/cloudinaryPhotoProvider.js";
+import { getPhotoAvailability } from "../src/features/catches/data/photoAvailability.js";
+import { sha256Blob } from "../src/features/catches/data/photoCloudProvider.js";
+import { readSyncSummary } from "../src/features/sync/data/localSyncRepository.js";
 import { catchRepository, outboxRepository } from "../src/features/catches/data/catchRepository.js";
 import { createCloudinaryPhotoDeletionService } from "../src/server/cloudinaryPhotoDeletion.js";
 import { createFirestoreSyncAdapter, toRemoteRecord, subscribeToOwnerSyncChanges } from "../src/features/sync/data/firestoreSyncAdapter.js";
@@ -217,6 +223,53 @@ try {
   const repeated = await firestoreService.run(ownerId);
   assert.equal(repeated.status, "success", repeated.error);
 
+  const source = await catchRepository.get(catchId, accountScope);
+  const beforeReady = await getDoc(doc(db, "users", ownerId, "catches", catchId));
+  let baseline;
+  let stopReady;
+  let readyTimeout;
+  let initial;
+  const initialSnapshot = new Promise((resolve) => { initial = resolve; });
+  const readyEvent = new Promise((resolve, reject) => {
+    readyTimeout = setTimeout(() => reject(new Error("Photo READY realtime timed out")), 10_000);
+    stopReady = subscribeToOwnerSyncChanges(ownerId, (sequence) => {
+      if (baseline === undefined) { baseline = sequence; initial(); }
+      else if (sequence > baseline) resolve(performance.now());
+    }, reject, { db, getCurrentUserId: () => ownerId });
+  });
+  await initialSnapshot;
+  const hash = await sha256Blob(source.photos[0].blob);
+  const verifiedAt = performance.now();
+  await firestoreAdapter.write({ ownerId, entityType: "catch", entityId: catchId,
+    record: { ...source, photos: source.photos.map((photo, index) => index ? photo : { ...photo, cloud: {
+      state: "synced", provider: "cloudinary", objectKey: `users/${ownerId}/catches/${catchId}/photos/${photo.id}/original`, sha256: hash,
+    } }) }, expectedRevision: beforeReady.data().serverRevision,
+    operationId: `ready-${crypto.randomUUID()}`, localRevision: 1 });
+  const readyAt = performance.now();
+  const realtimeAt = await readyEvent;
+  clearTimeout(readyTimeout); stopReady();
+  const firstDevice = globalThis.indexedDB;
+  globalThis.indexedDB = new IDBFactory();
+  try {
+    assert.equal((await serviceFor(firestoreAdapter).run(ownerId)).status, "success");
+    const received = await catchRepository.get(catchId, accountScope);
+    assert.equal(received.photos[0].cloud.state, "synced");
+    assert.equal(received.photos[0].cloud.sha256, hash);
+    let deliveryRequestedAt;
+    const delivery = createPhotoCloudService({ provider: createCloudinaryPhotoProvider(), getCurrentOwnerId: () => ownerId,
+      authenticatedRequest: async (path) => {
+        assert.equal(path, "/api/cloudinary/export");
+        deliveryRequestedAt = performance.now();
+        return new Response(source.photos[0].blob, { status: 200, headers: { "Content-Type": source.photos[0].type } }).blob();
+      } });
+    const delivered = await delivery.getPhotoBlob({ photo: received.photos[0], ownerId, catchId, scopeKey: accountScope.scopeKey });
+    assert.equal(getPhotoAvailability(received.photos[0], { loadState: "ready", resolvedBlob: delivered }), "available");
+    assert.equal((await readSyncSummary(ownerId)).pending, 0);
+    console.log(JSON.stringify({ syntheticPhotoTimingMs: { verifiedMetadataToFirestoreAck: Math.round(readyAt - verifiedAt),
+      firestoreAckToRealtime: Math.round(realtimeAt - readyAt), realtimeToDeliveryRequest: Math.round(deliveryRequestedAt - realtimeAt) } }));
+  } finally { globalThis.indexedDB = firstDevice; }
+  await firestoreService.run(ownerId);
+
   // Exercise deletion as a durable tombstone, not a Firestore document delete.
   await catchRepository.delete(catchId, accountScope);
   const deleted = await firestoreService.run(ownerId);
@@ -225,7 +278,9 @@ try {
   assert.equal(tombstone.data().deleted, true);
   const deletedPhotoDocs = await getDocs(collection(db, "users", ownerId, "catches", catchId, "photos"));
   assert.ok(deletedPhotoDocs.docs.every((photo) => photo.data().deleted), "deleting Catch tombstones all of its photo documents");
-  assert.equal((await outboxRepository.list()).length, 0);
+  const remainingAfterDelete = await outboxRepository.list();
+  assert.equal(remainingAfterDelete.length, 1, "the newly cloud-ready photo requires its normal deletion job");
+  assert.equal(remainingAfterDelete[0].operation, "photo-delete");
 
   await waterRepository.delete(waterId, accountScope);
   await firestoreService.run(ownerId);
