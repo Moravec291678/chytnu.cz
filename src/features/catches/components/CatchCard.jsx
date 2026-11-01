@@ -8,6 +8,7 @@ import {
 import { formatCatchWeight } from "../data/catchWeight.js";
 import { photoFrameStyle } from "../data/photoFraming.js";
 import { getPrimaryAvailablePhoto } from "../data/catchPhotos.js";
+import { withPhotoDeadline } from "../data/photoDeadline.js";
 import { startPhotoDelivery } from "../data/photoDeliveryRetry.js";
 import { accountScopeKey } from "../../auth/data/localDataScope.js";
 import { getPhotoBlobForDisplay } from "../data/photoCloudService.js";
@@ -69,7 +70,7 @@ function CatchPhoto({ blob, species, photo, ownerId, catchId }) {
     attemptedFallback.current = true;
     setLoadState("loading");
     try {
-      const recovered = await getPhotoBlobForDisplay({ photo, ownerId, catchId, scopeKey: accountScopeKey(ownerId) });
+      const recovered = await withPhotoDeadline(() => getPhotoBlobForDisplay({ photo, ownerId, catchId, scopeKey: accountScopeKey(ownerId) }));
       if (recovered && recovered !== displayBlob) { setDisplayBlob(recovered); setLoadState("ready"); setLoadErrorCode(""); }
       else setLoadState("error");
     } catch (error) { setLoadErrorCode(error?.code ?? ""); setLoadState("error"); }

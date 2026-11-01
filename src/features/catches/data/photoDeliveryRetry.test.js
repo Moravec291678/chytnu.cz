@@ -108,3 +108,20 @@ test("lost READY event recovers on first watchdog and many tiles request only on
     assert.deepEqual(results, Array(6).fill("ready"));
   } finally { stops.forEach((stop) => stop()); }
 });
+
+test("an unrelated refresh during a slow successful thumbnail does not discard it or restart delivery", async () => {
+  const events = new EventTarget();
+  const request = Promise.withResolvers();
+  let calls = 0;
+  let state;
+  const stop = startPhotoDelivery({ events, load: () => { calls++; return request.promise; },
+    onState: next => { state = next; } });
+  try {
+    events.dispatchEvent(new Event("chytnu:local-data-restored"));
+    const blob = new Blob(["verified"]);
+    request.resolve(blob);
+    await setImmediate();
+    assert.equal(calls, 1);
+    assert.equal(getPhotoAvailability({}, { loadState: state.status, resolvedBlob: state.blob }), "available");
+  } finally { stop(); }
+});

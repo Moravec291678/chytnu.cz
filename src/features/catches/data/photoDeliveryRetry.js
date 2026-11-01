@@ -35,6 +35,9 @@ export function startPhotoDelivery({ load, onState, events = globalThis.window,
     try {
       const blob = await withPhotoDeadline(() => load());
       if (stopped) return;
+      // Account-wide refreshes also arrive for unrelated catches. A verified
+      // result for this still-mounted photo identity is already usable.
+      if (blob instanceof Blob) rerun = false;
       if (rerun) {
         if (attempts++ < maxAutomaticRetries) return;
         rerun = false;
