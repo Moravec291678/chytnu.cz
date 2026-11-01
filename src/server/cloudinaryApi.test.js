@@ -71,13 +71,22 @@ test("sign endpoint accepts only authenticated owner metadata and returns a cons
   const response = await request(harness.api.signUpload, { body: { catchId, photoId, size: 1024, contentType: "image/jpeg", sha256 } });
   const publicId = cloudinaryPublicId(ownerId, catchId, photoId);
   assert.equal(response.statusCode, 200, JSON.stringify(response.body));
-  assert.deepEqual(response.body.params, { public_id: publicId, type: "authenticated", overwrite: true, context: `sha256=${sha256}` });
+  assert.deepEqual(response.body.params, { public_id: publicId, type: "authenticated", overwrite: false, context: `sha256=${sha256}` });
   assert.equal(response.body.resourceType, "image");
   assert.equal(response.body.signature, "b".repeat(64));
   assert.equal(harness.signed[0].secret, "test-only-secret");
   assert.equal(harness.signed[0].params.public_id, publicId);
   assert.equal(Object.hasOwn(response.body, "apiSecret"), false);
   assert.equal(Object.hasOwn(response.body, "secret"), false);
+});
+
+test("a late upload cannot sign an overwrite of a newer READY revision", async () => {
+  const harness = createHarness();
+  const stale = await request(harness.api.signUpload, { body: { catchId, photoId, size: 1024,
+    contentType: "image/jpeg", sha256: "f".repeat(64) } });
+  assert.equal(stale.statusCode, 409);
+  assert.equal(stale.body.error, "photo_already_ready");
+  assert.equal(harness.signed.length, 0);
 });
 
 test("sign endpoint denies absent/invalid tokens, foreign owner, extra uid/public ID, and invalid metadata", async () => {

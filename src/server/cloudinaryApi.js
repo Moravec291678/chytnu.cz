@@ -254,12 +254,15 @@ export function createCloudinaryApi({
       if (access.photoRecord.size !== body.size || access.photoRecord.type !== body.contentType) {
         return send(res, 409, { error: "photo_metadata_mismatch", message: "Photo metadata has changed." });
       }
+      if (access.photoRecord.cloud?.state === "synced" && access.photoRecord.cloud.sha256 !== body.sha256) {
+        return send(res, 409, { error: "photo_already_ready", message: "Photo was already finalized." });
+      }
       const cloudinary = await getCloudinary(env);
       const timestamp = Math.floor(now() / 1000);
       const params = {
         public_id: cloudinaryPublicId(uid, body.catchId, body.photoId),
         type: "authenticated",
-        overwrite: true,
+        overwrite: false,
         context: `sha256=${body.sha256}`,
         timestamp,
       };
