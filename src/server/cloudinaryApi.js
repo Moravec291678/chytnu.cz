@@ -1,12 +1,12 @@
 import { createHash, createPrivateKey, generateKeyPairSync } from "node:crypto";
 import { Buffer } from "node:buffer";
-import { Readable, Transform } from "node:stream";
+import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { PRODUCT_LIMITS } from "../product/config/limits.js";
-import { createCloudinaryPhotoDeletionService, PHOTO_DELETE_RECEIPT_PRUNE_MS } from "./cloudinaryPhotoDeletion.js";
+import { createCloudinaryPhotoDeletionService, identityFromPhotoPath, pruneScannedReceipt, PHOTO_DELETE_RECEIPT_PRUNE_MS } from "./cloudinaryPhotoDeletion.js";
 import { createAccountDeletionService } from "./accountDeletion.js";
 
 export const FIREBASE_PROJECT_ID = "chutnucz";
@@ -363,44 +363,28 @@ export function createCloudinaryApi({
         providerStatus: response.status,
         message: "Cloud photo could not be downloaded.",
       });
-      if (response.body && typeof res.write === "function") {
-        let byteCount = 0;
-        const digest = createHash("sha256");
-        const validateStream = new Transform({
-          transform(chunk, _encoding, callback) {
-            byteCount += chunk.byteLength;
-            if (byteCount > photo.size || byteCount > MAX_PHOTO_BYTES) {
-              callback(Object.assign(new Error("Cloud photo size mismatch."), { code: "photo_content_mismatch" }));
-              return;
-            }
-            digest.update(chunk);
-            callback(null, chunk);
-          },
-          flush(callback) {
-            if (byteCount !== photo.size || digest.digest("hex") !== photo.cloud.sha256) {
-              callback(Object.assign(new Error("Cloud photo content mismatch."), { code: "photo_content_mismatch" }));
-              return;
-            }
-            callback();
-          },
-        });
-        res.setHeader?.("Cache-Control", "no-store");
-        res.setHeader?.("Content-Type", photo.type);
-        res.setHeader?.("Content-Disposition", "attachment; filename=photo");
-        res.status(200);
-        await pipeline(Readable.fromWeb(response.body), validateStream, res);
-        return;
+      // The public status must reflect verification. Hold at most one allowed
+      // photo, rejecting oversize bodies before accepting additional chunks.
+      const digest = createHash("sha256");
+      const chunks = [];
+      let byteCount = 0;
+      const upstream = response.body ?? [new Uint8Array(await response.arrayBuffer())];
+      for await (const chunk of upstream) {
+        byteCount += chunk.byteLength;
+        if (byteCount > photo.size) break;
+        digest.update(chunk);
+        chunks.push(chunk);
       }
-      const bytes = new Uint8Array(await response.arrayBuffer());
-      const hash = createHash("sha256").update(bytes).digest("hex");
-      if (bytes.byteLength !== photo.size || hash !== photo.cloud.sha256) {
+      if (byteCount !== photo.size || digest.digest("hex") !== photo.cloud.sha256) {
         return send(res, 502, { error: "photo_content_mismatch", message: "Cloud photo could not be verified." });
       }
       res.setHeader?.("Cache-Control", "no-store");
       res.setHeader?.("Content-Type", photo.type);
-      res.setHeader?.("Content-Length", String(bytes.byteLength));
+      res.setHeader?.("Content-Length", String(byteCount));
       res.setHeader?.("Content-Disposition", "attachment; filename=photo");
-      return res.status(200).send(Buffer.from(bytes));
+      res.status(200);
+      if (typeof res.write === "function") return await pipeline(Readable.from(chunks), res);
+      return res.send(Buffer.concat(chunks, byteCount));
     } catch (error) {
       if (res.headersSent || res.destroyed) {
         res.destroy?.(error);
@@ -582,7 +566,6 @@ export function createCloudinaryPhotoCleanup({ db, getCloudinary, now = () => Da
   });
   return async function cleanupDeletedPhotos() {
     const cutoff = now() - PHOTO_DELETE_RECEIPT_PRUNE_MS;
-    const tombstones = [];
     let pruned = 0;
     let cursor = null;
     while (true) {
@@ -591,18 +574,14 @@ export function createCloudinaryPhotoCleanup({ db, getCloudinary, now = () => Da
       const page = await query.get();
       if (page.empty) break;
       for (const snapshot of page.docs) {
-        tombstones.push(snapshot);
+        const identity = identityFromPhotoPath(snapshot.ref.path);
+        const data = snapshot.data();
+        const confirmedAt = Date.parse(data.cloudinaryDeletedAt);
+        if (identity && identity.photoId === data.id && data.deleted === true && Number.isFinite(confirmedAt)
+          && confirmedAt <= cutoff && await pruneScannedReceipt(snapshot)) pruned += 1;
       }
       cursor = page.docs.at(-1);
       if (page.docs.length < pageSize) break;
-    }
-    for (const snapshot of tombstones) {
-      const data = snapshot.data();
-      const confirmedAt = Date.parse(data.cloudinaryDeletedAt);
-      if (Number.isFinite(confirmedAt) && confirmedAt <= cutoff) {
-        await snapshot.ref.delete();
-        pruned += 1;
-      }
     }
     const discovered = await deletionService.enqueueFromTombstones();
     const processed = await deletionService.processDueJobs();

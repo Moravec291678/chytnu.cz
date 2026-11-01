@@ -83,3 +83,10 @@ export function progressionNotificationInput(event, scopeKey) {
   }
   return null;
 }
+
+// New entries and acknowledged read timestamps survive an older list request finishing last.
+export function mergeNotificationList(current, fetched) {
+  const byId = new Map(current.map((item) => [item.id, item]));
+  for (const item of fetched) byId.set(item.id, mergeNotificationReadState(byId.get(item.id), item));
+  return sortNotificationsNewestFirst([...byId.values()]);
+}

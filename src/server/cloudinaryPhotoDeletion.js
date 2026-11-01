@@ -24,7 +24,7 @@ function cloudinaryAssetMissing(error) {
   return error?.http_code === 404 || error?.error?.http_code === 404;
 }
 
-function identityFromPhotoPath(path) {
+export function identityFromPhotoPath(path) {
   const parts = String(path || "").split("/");
   if (parts.length !== 6 || parts[0] !== "users" || parts[2] !== "catches" || parts[4] !== "photos"
     || !validIdentity(parts[1], parts[3], parts[5])) return null;
@@ -54,6 +54,17 @@ function validPhotoCloudLink(photo, ownerId, catchId, photoId) {
   return !cloud || (cloud.provider == null && cloud.objectKey == null)
     || (cloud.provider === "cloudinary"
       && cloud.objectKey === `users/${ownerId}/catches/${catchId}/photos/${photoId}/original`);
+}
+
+// The receipt may have been restored or replaced since the collection-group scan.
+export async function pruneScannedReceipt(snapshot) {
+  try {
+    await snapshot.ref.delete({ lastUpdateTime: snapshot.updateTime });
+    return true;
+  } catch (error) {
+    if ([5, 9, "not-found", "failed-precondition"].includes(error?.code)) return false;
+    throw error;
+  }
 }
 
 export function createCloudinaryPhotoDeletionService({
@@ -227,8 +238,14 @@ export function createCloudinaryPhotoDeletionService({
         else deferred += 1;
       } catch {
         const retryMs = Math.min(RETRY_MAX_MS, RETRY_BASE_MS * (2 ** Math.min(claimed.attempts - 1, 10)));
-        await snapshot.ref.update({ status: "retry", leaseUntil: null, nextAttemptAt: timestamp(now() + retryMs), lastErrorCode: "cloudinary_delete_failed" });
-        failed += 1;
+        const stillOwned = await db.runTransaction(async (transaction) => {
+          const latest = await transaction.get(snapshot.ref);
+          if (!latest.exists || latest.data().status !== "deleting" || latest.data().attempts !== claimed.attempts) return false;
+          transaction.update(snapshot.ref, { status: "retry", leaseUntil: null, nextAttemptAt: timestamp(now() + retryMs), lastErrorCode: "cloudinary_delete_failed" });
+          return true;
+        });
+        if (stillOwned) failed += 1;
+        else deferred += 1;
       }
       }
       cursor = page.docs.at(-1);
@@ -239,7 +256,6 @@ export function createCloudinaryPhotoDeletionService({
 
   async function pruneCompletedJobs() {
     const cutoff = now() - PHOTO_DELETE_RECEIPT_PRUNE_MS;
-    const snapshots = [];
     let pruned = 0;
     let cursor = null;
     while (true) {
@@ -247,15 +263,14 @@ export function createCloudinaryPhotoDeletionService({
       if (cursor) query = query.startAfter(cursor);
       const page = await query.get();
       if (page.empty) break;
-      snapshots.push(...page.docs);
+      for (const snapshot of page.docs) {
+        const identity = identityFromJobPath(snapshot.ref.path);
+        const job = snapshot.data();
+        if (identity && identity.ownerId === job.ownerId && identity.jobId === jobIdFor(job.ownerId, job.catchId, job.photoId)
+          && readMillis(job.completedAt) <= cutoff && await pruneScannedReceipt(snapshot)) pruned += 1;
+      }
       cursor = page.docs.at(-1);
       if (page.docs.length < pageSize) break;
-    }
-    for (const snapshot of snapshots) {
-      if (readMillis(snapshot.data().completedAt) <= cutoff) {
-        await snapshot.ref.delete();
-        pruned += 1;
-      }
     }
     return pruned;
   }

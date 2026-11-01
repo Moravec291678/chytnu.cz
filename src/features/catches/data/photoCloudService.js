@@ -95,6 +95,8 @@ async function normalizeLegacyPhotoIds(catches, ownerId, now, normalizeLegacyPho
 function photoEndpointError(path, response, result) {
   const code = result.error === "photo_not_available" && result.providerStatus === 404 ? "cloudinary_asset_missing"
     : result.error === "photo_not_available" ? "photo_metadata_not_ready"
+    : result.error === "provider_download_failed" && result.providerStatus === 429 ? "cloudinary_rate_limited"
+    : result.error === "provider_download_failed" && [401, 403].includes(result.providerStatus) ? "cloudinary_download_expired"
     : result.error ?? (response.status === 429 ? "rate_limited" : "photo_cloud_failed");
   const error = Object.assign(new Error(response.status === 401 ? "Přihlášení k fotografiím se nezdařilo."
     : response.status === 403 ? "K této fotografii nemáš přístup."
@@ -138,7 +140,10 @@ export function createAuthenticatedPhotoEndpointCaller({
         throw Object.assign(new Error("Server pro cloudové fotografie není dostupný."), { code: "photo_cloud_network_error", endpoint: path });
       }
       let result;
-      if (response.ok && responseType === "blob") return { response, result: await response.blob() };
+      if (response.ok && responseType === "blob") {
+        try { return { response, result: await response.blob() }; }
+        catch { throw Object.assign(new Error("Stahování fotografie bylo přerušeno."), { code: "photo_cloud_network_error", status: response.status, endpoint: path }); }
+      }
       try { result = await response.json(); } catch { result = {}; }
       return { response, result };
     });
@@ -493,39 +498,20 @@ export function createPhotoCloudService({
         if (result?.stopped) { stopScheduling = true; return; }
       } catch (failure) {
         if (failure?.code === "photo_job_superseded") continue;
-        error ??= failure;
-        const job = operation.photoCloud;
         const localBlobUnreadable = photoBlobErrorCode(failure) === PHOTO_LOCAL_BLOB_UNREADABLE;
         const failureCode = localBlobUnreadable ? PHOTO_LOCAL_BLOB_UNREADABLE : failure?.code;
         recordPhotoUploadTrace(operation.photoCloud.photoId, "upload_fail", { errorCode: failureCode, httpStatus: failure?.status,
           retryable: failureCode !== "photo_prepare_failed" && !TERMINAL_UPLOAD_ERRORS.has(failureCode),
           errorName: failure?.name, operationStage: failure?.photoStage || "photo-upload" });
         const terminal = operation.operation === "photo-upload" && (TERMINAL_UPLOAD_ERRORS.has(failure?.code) || localBlobUnreadable);
-        if (terminal) await operationOutbox.markConflict(operation.operationId, failure?.message, failureCode);
-        else await operationOutbox.markFailed(operation.operationId, failure?.message, {
-          code: failureCode,
-          providerCode: failure?.providerCode,
-          endpoint: failure?.endpoint,
-        });
         if (operation.operation === "photo-upload") {
-          const scope = { ownerId, scopeKey: accountScopeKey(ownerId) };
-          await withPhotoMetadataWriteLock(ownerId, job.catchId, async () => {
-            const latest = terminal ? await catches.get(job.catchId, scope).catch(() => null) : null;
-            const latestPhoto = latest?.photos?.find((photo) => photo.id === job.photoId);
-            if (!terminal || latestPhoto?.cloud?.state !== PHOTO_CLOUD_STATE.SYNCED) {
-              await catches.setPhotoCloudState(job.catchId, job.photoId, {
-                state: terminal ? PHOTO_CLOUD_STATE.UNAVAILABLE : PHOTO_CLOUD_STATE.UPLOAD_FAILED,
-                provider: job.provider,
-                objectKey: job.objectKey,
-                sha256: job.sha256,
-                ...(terminal ? { errorCode: failureCode } : {}),
-              }, scope).catch(() => {});
-            }
-            if (localBlobUnreadable) await catches.setPhotoLocalError?.(job.catchId, job.photoId, {
-              code: PHOTO_LOCAL_BLOB_UNREADABLE, errorName: failure.name,
-              stage: failure.photoStage || "photo-hash-local-blob" }, scope).catch(() => {});
-          });
+          if (!await queue.failUpload(operation, { terminal, code: failureCode, message: failure?.message,
+            providerCode: failure?.providerCode, endpoint: failure?.endpoint, unreadable: localBlobUnreadable })) continue;
+        } else {
+          await operationOutbox.markFailed(operation.operationId, failure?.message, {
+            code: failureCode, providerCode: failure?.providerCode, endpoint: failure?.endpoint });
         }
+        error ??= failure;
         // Failure belongs to this photo; the other worker and remaining jobs continue.
       }
       }
@@ -612,7 +598,7 @@ export function createPhotoCloudService({
             localBlobError = Object.assign(new Error("Místní fotografie neodpovídá ověřené cloudové kopii."), {
               code: "photo_local_blob_hash_mismatch", photoStage: "photo-verify-local-blob",
             });
-          } else return photo.blob;
+          } else return isActive(getCurrentOwnerId, ownerId) ? photo.blob : null;
         }
         catch (failure) {
           localBlobError = failure;
@@ -650,22 +636,21 @@ export function createPhotoCloudService({
           requestPhotoDownload: (photo) => authenticatedRequest("/api/cloudinary/export", photo, { responseType: "blob" }),
           requestDownloadGrant: (photo) => authenticatedRequest("/api/cloudinary/delivery", photo),
         });
+        if (!(blob instanceof Blob)) throw Object.assign(new Error("Cloudová fotografie není dostupná."), {
+          code: blob === null ? "cloudinary_asset_missing" : "cloudinary_download_failed",
+        });
+        if (blob.size !== photo.size || (photo.type && blob.type !== photo.type)
+          || await sha256Blob(blob) !== photo.cloud.sha256) {
+          throw Object.assign(new Error("Stažená fotografie neodpovídá uloženým metadatům."), { code: "photo_content_mismatch" });
+        }
       } catch (error) {
         recordPhotoUploadTrace(photo.id, "photo_delivery_fail", { catchId, bytes: photo.size, mimeType: photo.type,
           durationMs: (globalThis.performance?.now?.() ?? Date.now()) - deliveryStart,
           httpStatus: error?.status, providerStatus: error?.providerStatus, errorCode: error?.code });
         throw error;
       }
-      recordPhotoUploadTrace(photo.id, "photo_delivery_pass", { catchId, bytes: blob?.size ?? 0, mimeType: photo.type,
+      recordPhotoUploadTrace(photo.id, "photo_delivery_pass", { catchId, bytes: blob.size, mimeType: photo.type,
         durationMs: (globalThis.performance?.now?.() ?? Date.now()) - deliveryStart, httpStatus: 200 });
-      if (!(blob instanceof Blob)) {
-        if (blob === null) throw Object.assign(new Error("Cloudinary asset is missing."), { code: "cloudinary_asset_missing" });
-        return null;
-      }
-      if (blob.size !== photo.size || (photo.type && blob.type !== photo.type)
-        || await sha256Blob(blob) !== photo.cloud.sha256) {
-        throw new Error("Stažená fotografie neodpovídá uloženým metadatům.");
-      }
       if (!isActive(getCurrentOwnerId, ownerId)) return null;
       const latestRecord = await catches.get(catchId, scope);
       const latestPhoto = latestRecord?.photos?.find((item) => item.id === photo.id);

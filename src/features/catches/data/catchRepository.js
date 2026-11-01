@@ -721,6 +721,46 @@ export const photoCloudOutboxRepository = {
     });
   },
   list: async () => (await outboxRepository.list()).filter((operation) => operation.entityType === "photoCloud"),
+  // A late network response and a new READY snapshot can arrive in either order.
+  // Compare and update the queue and the photo in the SAME IndexedDB transaction.
+  failUpload: async (attempt, { terminal, code = "unknown", message, endpoint, providerCode, unreadable }) => {
+    const db = await openLocalDatabase();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction([OUTBOX_STORE_NAME, CATCH_STORE_NAME], "readwrite");
+      const jobs = tx.objectStore(OUTBOX_STORE_NAME);
+      const catches = tx.objectStore(CATCH_STORE_NAME);
+      const lookup = jobs.index("operationId").get(attempt.operationId);
+      let applied = false;
+      lookup.onsuccess = () => {
+        const op = lookup.result;
+        const job = op?.photoCloud;
+        if (op?.operation !== "photo-upload" || op.localRevision !== attempt.localRevision
+          || job.sha256 !== attempt.photoCloud.sha256 || op.ownerId !== attempt.ownerId) return;
+        const read = catches.get(job.catchId);
+        read.onsuccess = () => {
+          const record = read.result;
+          const photo = recordScopeKey(record ?? {}) === op.scopeKey && record?.photos?.find(p => p.id === job.photoId);
+          if (!photo || photo.cloud?.state === "synced" || (photo.cloud?.sha256 && photo.cloud.sha256 !== job.sha256)
+            || (photo.contentSha256 && photo.contentSha256 !== job.sha256)) {
+            jobs.delete(op.sequence); // Retire only this obsolete attempt, never its replacement.
+            return;
+          }
+          const count = op.attemptCount + 1;
+          const now = Date.now();
+          jobs.put({ ...op, status: terminal ? "conflict" : "failed", attemptCount: count, lastError: String(message || code),
+            lastErrorCode: code, lastProviderCode: providerCode ?? null, lastEndpoint: ["/api/cloudinary/sign", "/api/cloudinary/verify-upload"].includes(endpoint) ? endpoint : null,
+            nextAttemptAt: terminal ? null : new Date(now + 1000 * 2 ** Math.min(count, 10)).toISOString(),
+            updatedAt: new Date(now).toISOString(), photoCloud: { ...job, state: terminal ? "failed_terminal" : "failed_retryable" } });
+          const cloud = { state: terminal ? "unavailable" : "uploadFailed", provider: job.provider,
+            objectKey: job.objectKey, sha256: job.sha256, ...(terminal ? { errorCode: code } : {}) };
+          catches.put({ ...record, photos: record.photos.map(p => p.id !== job.photoId ? p : { ...p, cloud,
+            ...(unreadable ? { localError: { code: "photo_local_blob_unreadable", errorName: "NotFoundError", stage: "photo-hash-local-blob" } } : {}) }) });
+          applied = true;
+        };
+      };
+      transactionResult(tx, db, resolve, reject, () => applied);
+    });
+  },
   setStage: async (operationId, expectedLocalRevision, stage) => {
     if (!["preparing", "signing", "uploading", "verifying", "persisting"].includes(stage)) {
       throw new TypeError("Photo upload stage is not supported.");

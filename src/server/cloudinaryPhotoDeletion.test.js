@@ -442,3 +442,28 @@ test("confirmed photo tombstone does not recreate an expired job", async () => {
   assert.deepEqual(await service.enqueueFromTombstones(), { scanned: 1, enqueued: 0, invalid: 0 });
   assert.equal([...db.docs.keys()].some((path) => path.includes("/photoDeletionJobs/")), false);
 });
+
+test("an expired worker cannot replace a newer confirmed deletion with a retry", async () => {
+  const db = createFakeDb();
+  let clock = Date.parse("2026-10-28T12:00:00Z");
+  let signalStart, release;
+  const started = new Promise((resolve) => { signalStart = resolve; });
+  const suspended = new Promise((resolve) => { release = resolve; });
+  let calls = 0;
+  const service = createCloudinaryPhotoDeletionService({ db, Timestamp: FakeTimestamp, now: () => clock,
+    derivePublicId, getCloudinary: async () => ({ uploader: { async destroy() {
+      if (++calls === 1) { signalStart(); await suspended; throw new Error("stale provider response"); }
+      return { result: "ok" };
+    } } }) });
+  const { jobId } = await service.enqueue({ ownerId, catchId, photoId });
+  clock += PHOTO_DELETE_DELAY_MS;
+  const staleWorker = service.processDueJobs();
+  await started;
+  clock += 16 * 60 * 1000;
+  assert.equal((await service.processDueJobs()).deleted, 1);
+  release();
+  assert.equal((await staleWorker).deferred, 1);
+  const receipt = db.docs.get(`users/${ownerId}/photoDeletionJobs/${jobId}`);
+  assert.equal(receipt.status, "deleted");
+  assert.equal(receipt.nextAttemptAt, null);
+});

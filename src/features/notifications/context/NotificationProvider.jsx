@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDataScope } from "../../auth/context/dataScopeContextValue.js";
 import { useProgression } from "../../progression/context/progressionContextValue.js";
 import { useOptionalSync } from "../../sync/context/syncContextValue.js";
-import { progressionNotificationInput, sortNotificationsNewestFirst, stableNotificationId } from "../data/notificationModel.js";
+import { mergeNotificationList, progressionNotificationInput, sortNotificationsNewestFirst, stableNotificationId } from "../data/notificationModel.js";
 import { notificationRepository } from "../data/notificationRepository.js";
 import { NotificationContext } from "./notificationContextValue.js";
 import { userFacingErrorMessage } from "../../../shared/errors/userFacingError.js";
@@ -34,7 +34,6 @@ export function NotificationProvider({ children }) {
 
   const publishNotification = useCallback(async (input) => {
     if (scope.status !== "ready") return null;
-    refreshSnapshots.current.invalidate();
     const notification = await notificationRepository.create(input, { scopeKey: scope.scopeKey, ownerId: scope.ownerId });
     setState((previous) => previous.scopeKey === scope.scopeKey
       ? { ...previous, notifications: upsertNotification(previous.notifications, notification) }
@@ -48,7 +47,7 @@ export function NotificationProvider({ children }) {
     try {
       const notifications = await notificationRepository.list({ scopeKey: scope.scopeKey, ownerId: scope.ownerId });
       setState((previous) => previous.scopeKey === scope.scopeKey && refreshSnapshots.current.current(ticket)
-        ? { ...previous, notifications, loading: false, error: "" }
+        ? { ...previous, notifications: mergeNotificationList(previous.notifications, notifications), loading: false, error: "" }
         : previous);
       return notifications;
     } catch (error) {
@@ -109,7 +108,6 @@ export function NotificationProvider({ children }) {
     if (scope.status !== "ready" || sync?.status !== "synced" || state.scopeKey !== scope.scopeKey) return;
     for (const notification of state.notifications) {
       if (notification.type === "sync_problem" && !notification.readAt) {
-        refreshSnapshots.current.invalidate();
         void notificationRepository.markRead(notification.id, { scopeKey: scope.scopeKey, ownerId: scope.ownerId })
           .then((resolved) => setState((previous) => previous.scopeKey === scope.scopeKey
             ? { ...previous, notifications: previous.notifications.map((item) => item.id === resolved.id ? resolved : item) }
@@ -119,7 +117,6 @@ export function NotificationProvider({ children }) {
   }, [scope.ownerId, scope.scopeKey, scope.status, state.notifications, state.scopeKey, sync?.status]);
 
   const markAsRead = useCallback(async (id) => {
-    refreshSnapshots.current.invalidate();
     const notification = await notificationRepository.markRead(id, { scopeKey: scope.scopeKey, ownerId: scope.ownerId });
     setState((previous) => previous.scopeKey === scope.scopeKey
       ? { ...previous, notifications: sortNotificationsNewestFirst(previous.notifications.map((item) => item.id === id ? notification : item)) }
@@ -128,9 +125,8 @@ export function NotificationProvider({ children }) {
   }, [scope.ownerId, scope.scopeKey]);
 
   const markAllAsRead = useCallback(async () => {
-    refreshSnapshots.current.invalidate();
     const notifications = await notificationRepository.markAllAsRead({ scopeKey: scope.scopeKey, ownerId: scope.ownerId });
-    setState((previous) => previous.scopeKey === scope.scopeKey ? { ...previous, notifications } : previous);
+    setState((previous) => previous.scopeKey === scope.scopeKey ? { ...previous, notifications: mergeNotificationList(previous.notifications, notifications) } : previous);
     return notifications;
   }, [scope.ownerId, scope.scopeKey]);
 

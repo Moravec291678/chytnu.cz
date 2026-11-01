@@ -7,7 +7,7 @@ import { readSyncSummary } from "../data/localSyncRepository.js";
 import { describeSyncFailure } from "../data/syncDiagnostics.js";
 import { catchRepository } from "../../catches/data/catchRepository.js";
 import { accountScopeKey } from "../../auth/data/localDataScope.js";
-import { recordSyncedPhotoTraces } from "../../catches/data/photoUploadTrace.js";
+import { pendingPhotoAcknowledgments, recordSyncedPhotoTraces } from "../../catches/data/photoUploadTrace.js";
 import { createPhotoCloudService } from "../../catches/data/photoCloudService.js";
 import { getPhotoCloudProvider } from "../../catches/data/photoCloudProvider.js";
 import { getBackendConfiguration } from "../../auth/data/backendConfig.js";
@@ -154,9 +154,12 @@ export function SyncProvider({ children }) {
       await photoService.finalizeNativeUploads(userId).catch(() => {});
       void serverProgressionClaimService.process(userId).catch(() => {});
       // A successful aggregate run alone cannot prove a particular photo was acknowledged.
-      await catchRepository.list({ ownerId: userId, scopeKey: accountScopeKey(userId) }).then((records) => {
-        if (firebaseAuth.currentUserId() === userId) recordSyncedPhotoTraces(records);
-      }).catch(() => {});
+      const pendingAcks = pendingPhotoAcknowledgments();
+      if (pendingAcks.size) {
+        await catchRepository.list({ ownerId: userId, scopeKey: accountScopeKey(userId) }).then((records) => {
+          if (firebaseAuth.currentUserId() === userId) recordSyncedPhotoTraces(records, pendingAcks);
+        }).catch(() => {});
+      }
       if (photoResult.status === "error" && finalResult.status === "success") {
         finalResult.status = "error";
         finalResult.error = photoResult.error;

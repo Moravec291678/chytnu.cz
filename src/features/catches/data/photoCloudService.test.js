@@ -1033,3 +1033,64 @@ test("one transient or permanent photo failure never blocks photos 1/3/4", async
     if (code === "cloudinary_network_error") assert.ok(jobs[0].nextAttemptAt);
   }
 });
+
+for (const race of ["ready", "revision", "hash"]) test("atomic upload failure guard: " + race, async () => {
+  await resetDatabase();
+  const ownerId = "race-owner", catchId = "race-catch", photoId = "race-photo";
+  const scope = { ownerId, scopeKey: accountScopeKey(ownerId) };
+  const photo = makePhoto(photoId);
+  const objectKey = createPhotoObjectKey(ownerId, catchId, photoId);
+  const sha256 = "a".repeat(64);
+  const cloud = { provider: "cloudinary", objectKey, sha256, state: "pendingUpload" };
+  await catchRepository.put(makeCatch(ownerId, catchId, [{ ...photo, cloud }]), scope);
+  await acknowledgeCatchOperations(ownerId);
+  await photoCloudOutboxRepository.enqueue({ ownerId, catchId, photoId, operation: "upload",
+    provider: cloud.provider, objectKey, sha256, size: photo.size, contentType: photo.type });
+  const [op] = await photoCloudOutboxRepository.list();
+  const newer = race === "ready" ? { ...cloud, state: "synced" }
+    : race === "hash" ? { ...cloud, sha256: "b".repeat(64) } : cloud;
+  await catchRepository.setPhotoCloudState(catchId, photoId, newer, scope);
+  assert.equal(await photoCloudOutboxRepository.failUpload(race === "revision" ? { ...op, localRevision: op.localRevision - 1 } : op,
+    { terminal: false, code: "cloudinary_network_error", message: "late" }), false);
+  assert.deepEqual((await catchRepository.get(catchId, scope)).photos[0].cloud, newer);
+  const remaining = await photoCloudOutboxRepository.list();
+  if (race === "revision") assert.deepEqual(remaining, [op]);
+  else assert.equal(remaining.length, 0);
+});
+
+test("expired signature leaves a retry job, verifies before retry and signs anew for the same asset", async () => {
+  await resetDatabase();
+  const ownerId = "sign-owner", catchId = "sign-catch", photoId = "sign-photo";
+  const scope = { ownerId, scopeKey: accountScopeKey(ownerId) };
+  const photo = makePhoto(photoId);
+  await catchRepository.put(makeCatch(ownerId, catchId, [photo]), scope);
+  await acknowledgeCatchOperations(ownerId);
+  const publicId = "chytnucz/" + createPhotoObjectKey(ownerId, catchId, photoId);
+  const grants = [], steps = [];
+  const provider = createCloudinaryPhotoProvider({ fetchImpl: async (url, options) => {
+    if (url.endsWith("/capability")) return Response.json({ enabled: true });
+    steps.push("upload");
+    grants.push(options.body.get("signature"));
+    return grants.length === 1 ? Response.json({ error: { message: "Stale request - reported timestamp" } }, { status: 401 })
+      : Response.json({ public_id: publicId, resource_type: "image", type: "authenticated", bytes: photo.size, format: "jpg" });
+  } });
+  const service = createPhotoCloudService({ provider, getCurrentOwnerId: () => ownerId, authenticatedRequest: async (path) => {
+    if (path.endsWith("/sign")) {
+      steps.push("sign");
+      return { cloudName: "test-cloud", apiKey: "1234567890", resourceType: "image", timestamp: 1800000000 + grants.length,
+        signature: (grants.length ? "b" : "a").repeat(64), params: { public_id: publicId, type: "authenticated", overwrite: true } };
+    }
+    steps.push("verify");
+    if (grants.length === 1) throw Object.assign(new Error("missing"), { status: 404, code: "asset_not_found" });
+    return { verified: true, bytes: photo.size, format: "jpg" };
+  } });
+  await service.run(ownerId);
+  const [job] = await photoCloudOutboxRepository.list();
+  assert.equal(job.lastErrorCode, "cloudinary_signature_expired");
+  assert.ok(job.nextAttemptAt);
+  assert.equal((await service.run(ownerId, { force: true })).uploaded, 1);
+  assert.deepEqual(steps, ["sign", "upload", "verify", "sign", "upload", "verify"]);
+  assert.notEqual(grants[0], grants[1]);
+  assert.equal((await photoCloudOutboxRepository.list()).length, 0);
+  assert.equal((await catchRepository.get(catchId, scope)).photos[0].cloud.state, "synced");
+});

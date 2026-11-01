@@ -91,7 +91,12 @@ export function createCloudinaryPhotoProvider({ fetchImpl = globalThis.fetch, ap
           uploadURL: `${CLOUDINARY_API_ORIGIN}/v1_1/${encodeURIComponent(grant.cloudName)}/image/upload`, fields });
         uploadResponse = { status: transported.httpStatus, ok: transported.state === "completed" };
         result = transported.body ?? { bytes: input.size, format: expectedFormat };
-        if (!uploadResponse.ok) throw Object.assign(providerError("Cloudinary did not accept the image upload.", "cloudinary_upload_failed"), { status: transported.httpStatus });
+        if (!uploadResponse.ok) {
+          const expired = [400, 401, 403].includes(transported.httpStatus)
+            && /stale request|expired (?:signature|timestamp)|signature (?:has )?expired/i.test(result?.error?.message ?? "");
+          throw Object.assign(providerError("Cloudinary did not accept the image upload.",
+            expired ? "cloudinary_signature_expired" : "cloudinary_upload_failed"), { status: transported.httpStatus });
+        }
       } catch (error) {
         const status = error?.status;
         const code = (status === 420 || status === 429) || error?.code === "cloudinary_rate_limited" ? "cloudinary_rate_limited" : error?.code || "cloudinary_upload_failed";

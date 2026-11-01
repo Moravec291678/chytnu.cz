@@ -97,3 +97,25 @@ test("guest inbox never loads the account-only Firestore transport", async () =>
   await repository.list(scope);
   assert.equal(transportLoads, 0);
 });
+
+test("a stale remote response cannot reopen a locally resolved sync warning", async () => {
+  const remote = makeRemote();
+  const repo = createNotificationRepository({ remote });
+  const scope = { ownerId: "notice-race", scopeKey: "account:notice-race" };
+  await repo.create(input("warning-race", "2026-10-27T10:00:00.000Z", { type: "sync_problem" }), scope);
+  let release;
+  let started;
+  const readStarted = new Promise((resolve) => { started = resolve; });
+  const list = remote.list.bind(remote);
+  remote.list = async (ownerId) => {
+    const old = await list(ownerId); started();
+    await new Promise((resolve) => { release = resolve; });
+    return old;
+  };
+  const refreshing = repo.list(scope);
+  await readStarted;
+  const resolved = await repo.markRead("warning-race", scope);
+  release();
+  assert.equal((await refreshing)[0].readAt, resolved.readAt);
+  assert.equal((await createNotificationRepository({ remote: null }).list(scope))[0].readAt, resolved.readAt);
+});

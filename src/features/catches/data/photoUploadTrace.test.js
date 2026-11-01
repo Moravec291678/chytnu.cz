@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createPhotoUploadTrace } from "./photoUploadTrace.js";
+import { createPhotoUploadTrace, pendingPhotoAcknowledgments } from "./photoUploadTrace.js";
 
 test("trace survives reload with a bounded ring and cannot retain secrets", () => {
   let saved;
@@ -43,4 +43,21 @@ test("storage and listener failures never interrupt upload", () => {
   const trace = createPhotoUploadTrace({ storage: { getItem() { throw Error(); }, setItem() { throw Error(); } }, onChange() { throw Error(); } });
   assert.doesNotThrow(() => trace.record("photo", "blob_created", { sourceBytes: 20, preparedBytes: 10, conversion: "jpeg", originalExtension: "heic" }));
   assert.equal(trace.read()[0].preparedBytes, 10);
+});
+
+test("stage durations use only the current attempt and allowlisted operation names", () => {
+  let time = 0;
+  const trace = createPhotoUploadTrace({ now: () => time });
+  const record = (stage, at) => { time = at; trace.record("p", stage, { operationStage: "secret-token" }); };
+  record("sign_started", 10); record("sign_fail", 25); record("sign_started", 40); record("sign_pass", 42); record("sign_pass", 100);
+  assert.deepEqual(trace.read().map((event) => event.durationMs), [undefined, 15, undefined, 2, undefined]);
+  assert.equal(JSON.stringify(trace.read()).includes("secret-token"), false);
+});
+
+
+test("delivery and rendering do not invent new Firestore acknowledgments", () => {
+  const events = (stages) => stages.map((stage) => ({ photoId: "p", stage }));
+  assert.equal(pendingPhotoAcknowledgments(events(["photo_delivery_pass", "photo_image_rendered"])).size, 0);
+  assert.deepEqual([...pendingPhotoAcknowledgments(events(["local_metadata_persisted", "photo_synced"]))], ["p"]);
+  assert.equal(pendingPhotoAcknowledgments(events(["photo_synced", "firestore_synced", "photo_image_rendered"])).size, 0);
 });

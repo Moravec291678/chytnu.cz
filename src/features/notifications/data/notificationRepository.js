@@ -52,8 +52,12 @@ export function createNotificationRepository({ openDatabase = openLocalDatabase,
   ));
 
   const localPut = (record) => withNotificationStore(openDatabase, "readwrite", async (store) => {
-    await requestResult(store.put(record));
-    return record;
+    const existing = await requestResult(store.get(record.id));
+    if (existing) requireOwnedRecord(existing, record.id, record);
+    const next = mergeNotificationReadState(existing, record);
+    if (existing?.readAt && !record.readAt) next.remoteSyncStatus = existing.remoteSyncStatus;
+    await requestResult(store.put(next));
+    return next;
   });
 
   const localGet = (id) => withNotificationStore(openDatabase, "readonly", async (store) => requestResult(store.get(id)));
@@ -96,8 +100,7 @@ export function createNotificationRepository({ openDatabase = openLocalDatabase,
       if (merged.readAt && !remoteRecord.readAt) {
         merged.remoteSyncStatus = await syncReadState(scope.ownerId, remoteStore, remoteRecord, localById.get(merged.id), merged);
       }
-      localById.set(merged.id, merged);
-      await localPut(merged);
+      localById.set(merged.id, await localPut(merged));
     }
 
     for (const localRecord of localById.values()) {
