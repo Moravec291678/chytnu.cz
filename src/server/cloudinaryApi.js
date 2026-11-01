@@ -336,7 +336,8 @@ export function createCloudinaryApi({
   }
 
   async function exportPhoto(req, res) {
-    const request = await prepare(req, res, ["catchId", "photoId"], "export");
+    const started = performance.now();
+    const request = await prepare(req, res, ["catchId", "photoId", "expectedSha256"], "export");
     if (!request) return;
     const { uid, body } = request;
     try {
@@ -352,11 +353,17 @@ export function createCloudinaryApi({
         || photo.size < 0 || photo.size > MAX_PHOTO_BYTES) {
         return send(res, 404, { error: "photo_not_available", message: "Photo is not available." });
       }
+      // private_download_url serves the current original; the digest is the
+      // content revision for both legacy and versioned assets.
+      if (body.expectedSha256 !== undefined && body.expectedSha256 !== photo.cloud.sha256) {
+        return send(res, 409, { error: "photo_metadata_not_ready", message: "Photo revision has changed." });
+      }
       const cloudinary = await getCloudinary(env);
       const expiresAt = Math.floor(now() / 1000) + 300;
       const url = cloudinary.utils.private_download_url(cloudinaryPublicId(uid, body.catchId, body.photoId), expectedFormat(photo.type), {
         resource_type: "image", type: "authenticated", expires_at: expiresAt,
       });
+      const upstreamStart = performance.now();
       const response = await fetchCloudinaryDownload(url, fetchImpl);
       if (!response.ok) return send(res, response.status === 404 ? 404 : 502, {
         error: response.status === 404 ? "photo_not_available" : "provider_download_failed",
@@ -375,6 +382,8 @@ export function createCloudinaryApi({
         digest.update(chunk);
         chunks.push(chunk);
       }
+      const received = performance.now();
+      res.setHeader?.("Server-Timing", `endpoint;dur=${(received - started).toFixed(1)}, cloudinary;dur=${(received - upstreamStart).toFixed(1)}`);
       if (byteCount !== photo.size || digest.digest("hex") !== photo.cloud.sha256) {
         return send(res, 502, { error: "photo_content_mismatch", message: "Cloud photo could not be verified." });
       }

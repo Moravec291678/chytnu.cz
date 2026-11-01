@@ -416,3 +416,24 @@ test("API routes enforce POST and per-user rate limits", async () => {
   assert.equal((await request(limited.api.delivery)).statusCode, 429);
   assert.equal((await request(limited.api.exportPhoto)).statusCode, 429);
 });
+
+test("versioned and legacy originals use the authorized current hash, with no transformation or stale proxy response", async () => {
+  const bytes = new Uint8Array([1, 2, 3, 4]);
+  const hash = createHash("sha256").update(bytes).digest("hex");
+  for (const version of [undefined, 1850000000]) {
+    const access = makePhotoAccess();
+    Object.assign(access.photoRecord, { size: bytes.length });
+    Object.assign(access.photoRecord.cloud, { sha256: hash, version });
+    let calls = 0;
+    const harness = createHarness({ access, fetchImpl: async () => { calls++; return new Response(bytes); } });
+    const stale = await request(harness.api.exportPhoto, { body: { catchId, photoId, expectedSha256: "b".repeat(64) } });
+    assert.equal(stale.statusCode, 409);
+    assert.equal(calls, 0);
+    const current = await request(harness.api.exportPhoto, { body: { catchId, photoId, expectedSha256: hash } });
+    assert.equal(current.statusCode, 200);
+    assert.equal(calls, 1);
+    assert.deepEqual([...current.body], [...bytes]);
+    assert.match(current.headers["Server-Timing"], /^endpoint;dur=[0-9.]+, cloudinary;dur=[0-9.]+$/);
+    assert.equal(harness.deliveries[0].options.transformation, undefined);
+  }
+});

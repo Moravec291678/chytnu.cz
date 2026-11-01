@@ -36,7 +36,7 @@ test("stale metadata resumes immediately on realtime, without periodic polling",
   const events = new EventTarget();
   let serverReady = false;
   let state;
-  const stop = startPhotoDelivery({ events, schedule: (_fn, ms) => { assert.equal(ms, 30_000); return 1; }, cancel: () => {},
+  const stop = startPhotoDelivery({ events, schedule: (_fn, ms) => { assert.equal(ms, 1000); return 1; }, cancel: () => {},
     load: async () => serverReady ? new Blob(["image"]) : null, onState: (next) => { state = next; } });
   await setImmediate();
   serverReady = true;
@@ -87,4 +87,24 @@ test("exhausted metadata recovery shows a retry action instead of a permanent sp
   await setImmediate();
   assert.equal(getPhotoAvailability({}, { loadState: state.status }), "retryable-error");
   stop();
+});
+
+test("lost READY event recovers on first watchdog and many tiles request only one metadata refresh", async () => {
+  const events = new EventTarget();
+  let ready = false, refreshes = 0;
+  const timers = [], results = [];
+  events.addEventListener("chytnu:photo-metadata-refresh", () => { refreshes++; ready = true; });
+  const stops = Array.from({ length: 6 }, (_, i) => startPhotoDelivery({
+    events, schedule: (fn, delay) => { timers.push({ fn, delay }); return timers.length; }, cancel() {},
+    load: async () => ready ? new Blob(["ready"]) : null, onState: (state) => { results[i] = state.status; },
+  }));
+  try {
+    await setImmediate();
+    assert.equal(timers.length, 6);
+    assert.deepEqual(timers.map((timer) => timer.delay), Array(6).fill(1000));
+    timers.forEach((timer) => timer.fn());
+    await setImmediate();
+    assert.equal(refreshes, 1);
+    assert.deepEqual(results, Array(6).fill("ready"));
+  } finally { stops.forEach((stop) => stop()); }
 });

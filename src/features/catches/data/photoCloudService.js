@@ -141,7 +141,15 @@ export function createAuthenticatedPhotoEndpointCaller({
       }
       let result;
       if (response.ok && responseType === "blob") {
-        try { return { response, result: await response.blob() }; }
+        try {
+          const result = await response.blob();
+          const timing = response.headers?.get?.("Server-Timing") ?? "";
+          for (const match of timing.matchAll(/(?:^|, )(?<name>endpoint|cloudinary);dur=(?<ms>\d+(?:\.\d+)?)(?=,|$)/g)) {
+            recordPhotoUploadTrace(payload.photoId, match.groups.name === "endpoint" ? "photo_endpoint_pass" : "photo_upstream_pass",
+              { catchId: payload.catchId, bytes: result.size, durationMs: Number(match.groups.ms), httpStatus: response.status });
+          }
+          return { response, result };
+        }
         catch { throw Object.assign(new Error("Stahování fotografie bylo přerušeno."), { code: "photo_cloud_network_error", status: response.status, endpoint: path }); }
       }
       try { result = await response.json(); } catch { result = {}; }
@@ -585,16 +593,19 @@ export function createPhotoCloudService({
       const scope = validateDataScope({ scopeKey, ownerId });
       if (!isActive(getCurrentOwnerId, ownerId)) return null;
       if (!(photo?.blob instanceof Blob)) {
-        const latest = await catches.get(catchId, scope);
-        const latestPhoto = latest?.photos?.find((item) => item.id === photo?.id || item.id === photo?.photoId);
+        const requestedPhotoId = photo?.photoId ?? photo?.id;
+        const latestPhoto = catches.getPhotoForDisplay
+          ? await catches.getPhotoForDisplay(catchId, requestedPhotoId, scope)
+          : (await catches.get(catchId, scope))?.photos?.find((item) => item.id === requestedPhotoId);
         if (latestPhoto) photo = latestPhoto;
       }
       let localBlobError = null;
       if (photo?.blob instanceof Blob) {
         try {
-          await photo.blob.arrayBuffer();
-          if (photo.cloud?.state === PHOTO_CLOUD_STATE.SYNCED && photo.cloud.sha256
-            && await sha256Blob(photo.blob) !== photo.cloud.sha256) {
+          const expectedHash = photo.cloud?.state === PHOTO_CLOUD_STATE.SYNCED && photo.cloud.sha256;
+          // Hash already reads the complete Blob. Do not read each full-size photo twice.
+          const actualHash = expectedHash ? await sha256Blob(photo.blob) : (await photo.blob.arrayBuffer(), null);
+          if (expectedHash && actualHash !== expectedHash) {
             localBlobError = Object.assign(new Error("Místní fotografie neodpovídá ověřené cloudové kopii."), {
               code: "photo_local_blob_hash_mismatch", photoStage: "photo-verify-local-blob",
             });
@@ -633,7 +644,7 @@ export function createPhotoCloudService({
           photoId: photo.id,
           objectKey: photo.cloud.objectKey,
           sha256: photo.cloud.sha256,
-          requestPhotoDownload: (photo) => authenticatedRequest("/api/cloudinary/export", photo, { responseType: "blob" }),
+          requestPhotoDownload: (identity) => authenticatedRequest("/api/cloudinary/export", { ...identity, expectedSha256: photo.cloud.sha256 }, { responseType: "blob" }),
           requestDownloadGrant: (photo) => authenticatedRequest("/api/cloudinary/delivery", photo),
         });
         if (!(blob instanceof Blob)) throw Object.assign(new Error("Cloudová fotografie není dostupná."), {
@@ -652,7 +663,7 @@ export function createPhotoCloudService({
       recordPhotoUploadTrace(photo.id, "photo_delivery_pass", { catchId, bytes: blob.size, mimeType: photo.type,
         durationMs: (globalThis.performance?.now?.() ?? Date.now()) - deliveryStart, httpStatus: 200 });
       if (!isActive(getCurrentOwnerId, ownerId)) return null;
-      const latestRecord = await catches.get(catchId, scope);
+      const latestRecord = await (catches.getMetadata ?? catches.get)(catchId, scope);
       const latestPhoto = latestRecord?.photos?.find((item) => item.id === photo.id);
       if (!latestPhoto || latestPhoto.cloud?.sha256 !== photo.cloud.sha256
         || latestPhoto.cloud?.objectKey !== photo.cloud.objectKey
@@ -661,7 +672,7 @@ export function createPhotoCloudService({
         ...scope, expectedPhotoCloud: { sha256: photo.cloud.sha256, objectKey: photo.cloud.objectKey, provider: photo.cloud.provider },
       });
       if (cached === null || !isActive(getCurrentOwnerId, ownerId)) return null;
-      await catches.setPhotoLocalError?.(catchId, photo.id, null, scope);
+
       return cached instanceof Blob ? cached : blob;
   }
 }

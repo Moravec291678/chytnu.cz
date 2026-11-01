@@ -8,6 +8,7 @@ import {
 import { formatCatchWeight } from "../data/catchWeight.js";
 import { photoFrameStyle } from "../data/photoFraming.js";
 import { getPrimaryAvailablePhoto } from "../data/catchPhotos.js";
+import { startPhotoDelivery } from "../data/photoDeliveryRetry.js";
 import { accountScopeKey } from "../../auth/data/localDataScope.js";
 import { getPhotoBlobForDisplay } from "../data/photoCloudService.js";
 import { getPhotoAvailability, PHOTO_AVAILABILITY } from "../data/photoAvailability.js";
@@ -23,31 +24,25 @@ function CatchPhoto({ blob, species, photo, ownerId, catchId }) {
   const [loadState, setLoadState] = useState(blob ? "ready" : "idle");
   const [loadErrorCode, setLoadErrorCode] = useState("");
   const attemptedFallback = useRef(false);
+  const currentPhoto = useRef(photo);
+  const identity = JSON.stringify([photo.id, photo.cloud?.provider, photo.cloud?.objectKey, photo.cloud?.sha256,
+    photo.cloud?.state, photo.size, photo.type, photo.localError?.code]);
+  useEffect(() => { currentPhoto.current = photo; }, [photo]);
   useEffect(() => {
-    let active = true;
-    Promise.resolve().then(async () => {
-      if (blob instanceof Blob) return blob;
-      if (photo?.cloud?.state !== "synced" || !ownerId) return null;
-      return getPhotoBlobForDisplay({ photo, ownerId, catchId, scopeKey: accountScopeKey(ownerId) });
-    }).then((recovered) => {
-      if (!active) return;
-      setPhotoUrl("");
-      setLoadErrorCode("");
-      if (recovered) {
-        attemptedFallback.current = false;
+    return startPhotoDelivery({
+      load: () => {
+        if (blob instanceof Blob) return blob;
+        if (!ownerId) return null;
+        return getPhotoBlobForDisplay({ photo: currentPhoto.current, ownerId, catchId, scopeKey: accountScopeKey(ownerId) });
+      },
+      onState: ({ blob: recovered, status, errorCode }) => {
         setDisplayBlob(recovered);
-        setLoadState("ready");
-      } else {
-        setDisplayBlob(null);
-        setLoadState("missing");
-      }
-    }).catch((error) => {
-      if (!active) return;
-      setLoadErrorCode(error?.code ?? "");
-      setLoadState("error");
+        setLoadState(status);
+        setLoadErrorCode(errorCode);
+        attemptedFallback.current = false;
+      },
     });
-    return () => { active = false; };
-  }, [blob, photo, ownerId, catchId]);
+  }, [blob, identity, ownerId, catchId]);
   useEffect(() => {
     if (!(displayBlob instanceof Blob)) return undefined;
     let active = true;
@@ -59,7 +54,7 @@ function CatchPhoto({ blob, species, photo, ownerId, catchId }) {
     });
     return () => { active = false; if (url) URL.revokeObjectURL(url); };
   }, [displayBlob]);
-  const availability = getPhotoAvailability(photo, { loadState, errorCode: loadErrorCode });
+  const availability = getPhotoAvailability(photo, { loadState, errorCode: loadErrorCode, resolvedBlob: displayBlob });
   if (availability === PHOTO_AVAILABILITY.PENDING || availability === PHOTO_AVAILABILITY.SYNCING) {
     return <PhotoSyncStatus className="photo-sync-status catch-card-photo-sync" compact />;
   }
@@ -75,7 +70,7 @@ function CatchPhoto({ blob, species, photo, ownerId, catchId }) {
     setLoadState("loading");
     try {
       const recovered = await getPhotoBlobForDisplay({ photo, ownerId, catchId, scopeKey: accountScopeKey(ownerId) });
-      if (recovered && recovered !== displayBlob) setDisplayBlob(recovered);
+      if (recovered && recovered !== displayBlob) { setDisplayBlob(recovered); setLoadState("ready"); setLoadErrorCode(""); }
       else setLoadState("error");
     } catch (error) { setLoadErrorCode(error?.code ?? ""); setLoadState("error"); }
   }} /> : <div className="catch-card-icon" aria-hidden="true">🐟</div>;
@@ -104,7 +99,7 @@ function CatchCard({ catchedFish, isPersonalRecord = false }) {
     <Link to={`/catch/${catchedFish.id}`} className={`catch-card-link${isPersonalRecord ? " catch-card-link-record" : ""}`}>
       <Card as="article" density="compact" interactive className={`catch-card${isPersonalRecord ? " catch-card-record" : ""}`}>
         <div className="catch-card-main">
-          {primaryPhoto ? <CatchPhoto key={primaryPhoto.id} blob={primaryPhoto.blob} species={catchedFish.species} photo={primaryPhoto} ownerId={catchedFish.ownerId} catchId={catchedFish.id} /> : <FishMark speciesKey={catchedFish.speciesKey} />}
+          {primaryPhoto ? <CatchPhoto key={JSON.stringify([catchedFish.ownerId, catchedFish.id, primaryPhoto.id, primaryPhoto.cloud?.sha256])} blob={primaryPhoto.blob} species={catchedFish.species} photo={primaryPhoto} ownerId={catchedFish.ownerId} catchId={catchedFish.id} /> : <FishMark speciesKey={catchedFish.speciesKey} />}
 
           <div className="catch-card-info">
             <h2>{catchedFish.species}</h2>

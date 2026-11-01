@@ -116,7 +116,8 @@ export function SyncProvider({ children }) {
         const port = createSyncPort(createFirestoreSyncAdapter({ onDiagnostic: reportSyncDiagnostic }));
         serviceRef.current = createSyncService({ port, getCurrentOwnerId: () => {
           try { return firebaseAuth.currentUserId(); } catch { return null; }
-        }, onDiagnostic: reportSyncDiagnostic });
+        }, onDiagnostic: reportSyncDiagnostic,
+        onRemoteApplied: () => window.dispatchEvent(new Event("chytnu:local-data-restored")) });
       }
       const photoCloudProvider = getPhotoCloudProvider();
       const photoService = await preparePhotoSyncService({
@@ -187,7 +188,6 @@ export function SyncProvider({ children }) {
         lastResult: finalStatus,
         showSyncStatus: false,
       });
-      if ((result.applied ?? 0) > 0) window.dispatchEvent(new Event("chytnu:local-data-restored"));
     } catch (error) {
       const summary = await updateSummary(userId).catch(() => initialState);
       const failure = describeSyncFailure(error);

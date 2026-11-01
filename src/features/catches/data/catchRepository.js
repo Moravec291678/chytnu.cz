@@ -439,6 +439,26 @@ export const catchRepository = {
     const { scopeKey } = requireRepositoryScope(options);
     return getScopedRecord(CATCH_STORE_NAME, id, scopeKey);
   },
+  async getPhotoForDisplay(catchId, photoId, options) {
+    const { scopeKey } = requireRepositoryScope(options);
+    const db = await openLocalDatabase();
+    try {
+      const tx = db.transaction([CATCH_STORE_NAME, PHOTO_BINARY_STORE_NAME], "readonly");
+      const key = photoBinaryKey(scopeKey, catchId, photoId);
+      const [record, binary] = await Promise.all([
+        requestValue(tx.objectStore(CATCH_STORE_NAME).get(catchId)),
+        requestValue(tx.objectStore(PHOTO_BINARY_STORE_NAME).get(key)),
+      ]);
+      if (!record) return undefined;
+      if (recordScopeKey(record) !== scopeKey) throw new Error("Záznam nepatří do aktivního profilu.");
+      const photo = record.photos?.find((item) => item.id === photoId);
+      if (!photo) return undefined;
+      const local = sessionPhotoBlobs.get(key) ?? photo.blob;
+      if (local instanceof Blob) return { ...photo, blob: local };
+      if (!binary || !(binary.bytes instanceof ArrayBuffer || ArrayBuffer.isView(binary.bytes))) return photo;
+      return { ...photo, blob: new Blob([binary.bytes], { type: binary.type || photo.type }) };
+    } finally { db.close(); }
+  },
   getMetadata: (id, options) => {
     const { scopeKey } = requireRepositoryScope(options);
     return getScopedMetadataRecord(CATCH_STORE_NAME, id, scopeKey);
@@ -637,12 +657,17 @@ export const catchRepository = {
           if (item.id !== photoId) return item;
           const metadata = { ...item };
           delete metadata.blob;
+          delete metadata.localError;
           return metadata;
         }) });
         result = blob;
       };
       request.onerror = () => transaction.abort();
-      transaction.oncomplete = () => { db.close(); resolve(result); };
+      transaction.oncomplete = () => {
+        db.close();
+        if (result) sessionPhotoBlobs.delete(sessionPhotoBlobKey(requestedScope.scopeKey, catchId, photoId));
+        resolve(result);
+      };
       transaction.onerror = () => { db.close(); reject(transaction.error ?? new Error("Fotografii se nepodařilo uložit do místní cache.")); };
       transaction.onabort = () => { db.close(); reject(transaction.error ?? new Error("Cache fotografie byla přerušena.")); };
     });

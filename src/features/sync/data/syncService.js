@@ -9,6 +9,7 @@ import { withPhotoDeadline } from "../../catches/data/photoDeadline.js";
 
 const REPOSITORIES = { catch: catchRepository, trip: tripRepository, water: waterRepository };
 const PAGE_SIZE = 100;
+const MAX_PARALLEL_READS = 4;
 const MAX_PULL_PAGES = 100;
 const MAX_PUSH_PASSES = 3;
 function activeOwner(getCurrentOwnerId, ownerId) {
@@ -52,7 +53,7 @@ function pendingPullDue(item, now, force) {
   return force || !item.nextAttemptAt || Date.parse(item.nextAttemptAt) <= now;
 }
 
-export function createSyncService({ port, getCurrentOwnerId, now = () => Date.now(), onDiagnostic = () => {}, requestTimeoutMs = 45_000 }) {
+export function createSyncService({ port, getCurrentOwnerId, now = () => Date.now(), onDiagnostic = () => {}, onRemoteApplied = () => {}, requestTimeoutMs = 45_000 }) {
   // Bound each remote operation, not a whole batch of healthy transfers. Late
   // responses cannot resume local mutations after the timeout wins the race.
   // Writes retain their durable operation ID, so reconciliation is idempotent.
@@ -95,6 +96,7 @@ export function createSyncService({ port, getCurrentOwnerId, now = () => Date.no
             const result = await applyRemotePage({ ownerId,
               snapshots: [makeChangeSnapshot({ ...change, revision: remote.revision }, remote)],
               cursor, pendingPullUpdates: [pendingByKey.get(pullKey(change))] });
+            if (result.applied && activeOwner(getCurrentOwnerId, ownerId)) onRemoteApplied(ownerId);
             applied += result.applied;
             conflicts += result.conflicts;
             pendingByKey.delete(pullKey(change));
@@ -128,30 +130,38 @@ export function createSyncService({ port, getCurrentOwnerId, now = () => Date.no
       }
       const snapshots = [];
       const pendingPullUpdates = [];
-      for (const change of latestByEntity.values()) {
+      const changes = [...latestByEntity.values()];
+      for (let index = 0; index < changes.length; index += MAX_PARALLEL_READS) {
         if (!activeOwner(getCurrentOwnerId, ownerId)) return { applied, conflicts, stopped: true };
-        let remote;
-        try { remote = await remoteCall("read", { ownerId, entityType: change.entityType, entityId: change.entityId }); }
-        catch (error) {
-          const staged = withSyncStage(error, pullStage(change.entityType, error?.firestoreStage), error?.firestoreStage);
-          staged.entityType = change.entityType;
-          staged.operation = "pull";
-          pendingPullUpdates.push(retryPullRecord(change, staged, previousPull(change), now()));
-          pullFailures.set(pullKey(change), staged);
-          continue;
-        }
+        const batch = changes.slice(index, index + MAX_PARALLEL_READS);
+        const reads = await Promise.allSettled(batch.map((change) =>
+          remoteCall("read", { ownerId, entityType: change.entityType, entityId: change.entityId })));
         if (!activeOwner(getCurrentOwnerId, ownerId)) return { applied, conflicts, stopped: true };
-        if (remote?.photoMetadataError) {
-          const staged = withSyncStage(remote.photoMetadataError, "pull:photos", "get-catch-photo-metadata");
-          staged.entityType = "catch";
-          staged.operation = "pull";
-          pendingPullUpdates.push(retryPullRecord(change, staged, previousPull(change), now()));
-          pullFailures.set(pullKey(change), staged);
-        } else {
-          pendingPullUpdates.push({ ...change, remove: true });
-          pullFailures.delete(pullKey(change));
+        // Keep the original change order and advance the cursor only after the entire page is durable.
+        for (const [offset, read] of reads.entries()) {
+          const change = batch[offset];
+          if (read.status === "rejected") {
+            const error = read.reason;
+            const staged = withSyncStage(error, pullStage(change.entityType, error?.firestoreStage), error?.firestoreStage);
+            staged.entityType = change.entityType;
+            staged.operation = "pull";
+            pendingPullUpdates.push(retryPullRecord(change, staged, previousPull(change), now()));
+            pullFailures.set(pullKey(change), staged);
+            continue;
+          }
+          const remote = read.value;
+          if (remote?.photoMetadataError) {
+            const staged = withSyncStage(remote.photoMetadataError, "pull:photos", "get-catch-photo-metadata");
+            staged.entityType = "catch";
+            staged.operation = "pull";
+            pendingPullUpdates.push(retryPullRecord(change, staged, previousPull(change), now()));
+            pullFailures.set(pullKey(change), staged);
+          } else {
+            pendingPullUpdates.push({ ...change, remove: true });
+            pullFailures.delete(pullKey(change));
+          }
+          snapshots.push(makeChangeSnapshot(change, remote));
         }
-        snapshots.push(makeChangeSnapshot(change, remote));
       }
       if (!activeOwner(getCurrentOwnerId, ownerId)) return { applied, conflicts, stopped: true };
       let result;
@@ -159,6 +169,7 @@ export function createSyncService({ port, getCurrentOwnerId, now = () => Date.no
       catch (error) { throw withSyncStage(error, "pull:merge", "local:apply-remote-page"); }
       applied += result.applied;
       conflicts += result.conflicts;
+      if (result.applied && activeOwner(getCurrentOwnerId, ownerId)) onRemoteApplied(ownerId);
       if (!page.hasMore) break;
       if (page.cursor === cursor) throw new Error("Synchronizační kurzor se nepohnul; změny zůstaly lokálně zachované.");
       cursor = page.cursor;

@@ -1,7 +1,16 @@
 import { withPhotoDeadline } from "./photoDeadline.js";
+const pendingDelays = [1000, 3000, 8000, 30_000];
+const metadataRefreshTimes = new WeakMap();
+function refreshMetadata(events) {
+  if (!events) return;
+  const now = Date.now();
+  if (now - (metadataRefreshTimes.get(events) ?? -Infinity) < 750) return;
+  metadataRefreshTimes.set(events, now);
+  events.dispatchEvent(new Event("chytnu:photo-metadata-refresh"));
+}
 // Delivery retries are local to the mounted image, never a global sync error.
 export function startPhotoDelivery({ load, onState, events = globalThis.window,
-  schedule = globalThis.setTimeout, cancel = globalThis.clearTimeout, maxAutomaticRetries = 4 }) {
+  schedule = globalThis.setTimeout, cancel = globalThis.clearTimeout, maxAutomaticRetries = 4, listenForRestore = true }) {
   let stopped = false;
   let running = false;
   let ready = false;
@@ -37,10 +46,10 @@ export function startPhotoDelivery({ load, onState, events = globalThis.window,
       exhausted = !ready && attempts >= maxAutomaticRetries;
       onState({ blob, status: ready ? "ready" : exhausted ? "error" : "missing", errorCode: exhausted ? "photo_delivery_pending" : "" });
       // Realtime is primary; a pending-only watchdog repairs a lost event.
-      if (!ready && attempts++ < maxAutomaticRetries) timer = schedule(() => {
-        events?.dispatchEvent(new Event("chytnu:photo-metadata-refresh"));
-        void retry();
-      }, 30_000);
+      if (!ready && attempts < maxAutomaticRetries) {
+        const delay = pendingDelays[Math.min(attempts++, pendingDelays.length - 1)];
+        timer = schedule(() => { if (!stopped) { refreshMetadata(events); void retry(); } }, delay);
+      }
     } catch (error) {
       if (stopped) return;
       const errorCode = error?.photoErrorCode || error?.code || "";
@@ -56,7 +65,7 @@ export function startPhotoDelivery({ load, onState, events = globalThis.window,
       if (rerun) { rerun = false; queueMicrotask(() => retry({ type: "chytnu:local-data-restored" })); }
     }
   };
-  const names = ["online", "focus", "pageshow", "chytnu:local-data-restored", "chytnu:photo-delivery-retry"];
+  const names = ["online", "focus", "pageshow", ...(listenForRestore ? ["chytnu:local-data-restored"] : []), "chytnu:photo-delivery-retry"];
   for (const name of names) events?.addEventListener(name, retry);
   void retry();
   return () => {

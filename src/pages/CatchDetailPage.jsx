@@ -4,6 +4,7 @@ import Layout from "../shared/layout/Layout";
 import { useCatches } from "../features/catches/context/useCatches";
 import { photoFrameStyle } from "../features/catches/data/photoFraming.js";
 import { getPrimaryAvailablePhoto } from "../features/catches/data/catchPhotos.js";
+import { createDetailPhotoDelivery } from "../features/catches/data/detailPhotoDelivery.js";
 import { getPhotoBlobForDisplay } from "../features/catches/data/photoCloudService.js";
 import { getPhotoAvailability, PHOTO_AVAILABILITY } from "../features/catches/data/photoAvailability.js";
 import PhotoSyncStatus from "../features/catches/components/PhotoSyncStatus.js";
@@ -62,7 +63,7 @@ function CatchDetailPage() {
   const catchDateLabel = item ? formatDate(item.caughtAt) : null;
   const [photos, setPhotos] = useState([]);
   const [photoLoadFailed, setPhotoLoadFailed] = useState(false);
-  const [photoRetryVersion, setPhotoRetryVersion] = useState(0);
+  const delivery = useRef(null);
   const [missingCloudPhotoId, setMissingCloudPhotoId] = useState(null);
   const missingCloudPhoto = missingCloudPhotoId === item?.id;
   const [previewPhoto, setPreviewPhoto] = useState(null);
@@ -79,37 +80,20 @@ function CatchDetailPage() {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   useEffect(() => {
-    if (!item) return undefined;
-    let active = true;
-    const entries = [];
-    let loadFailed = false;
-    Promise.all((item.photos ?? []).map(async (photo) => {
-      if (photo.cloud?.state === "unavailable") { if (photo.localError?.code === "photo_local_blob_unreadable") loadFailed = true; return null; }
-      try {
-        const blob = await getPhotoBlobForDisplay({ photo, ownerId: scope.ownerId, catchId: item.id, scopeKey: scope.scopeKey });
-        return blob ? { ...photo, blob, url: URL.createObjectURL(blob) } : null;
-      } catch (photoError) {
-        if (active && photoError?.code === "cloudinary_asset_missing") setMissingCloudPhotoId(item.id);
-        else if (active) loadFailed = true;
-        return null;
-      }
-    })).then((loaded) => {
-      if (!active) { loaded.filter(Boolean).forEach((photo) => URL.revokeObjectURL(photo.url)); return; }
-      entries.push(...loaded.filter(Boolean));
-      setPhotos(entries);
-      setPhotoLoadFailed(loadFailed);
+    const controller = createDetailPhotoDelivery(getPhotoBlobForDisplay, (ready, errors) => {
+      setPhotos(ready);
+      setPhotoLoadFailed(errors.some(code => code !== "cloudinary_asset_missing"));
+      setMissingCloudPhotoId(errors.includes("cloudinary_asset_missing") ? id : null);
     });
-    return () => {
-      active = false;
-      entries.forEach((photo) => URL.revokeObjectURL(photo.url));
-    };
-  }, [item, scope.ownerId, scope.scopeKey, photoRetryVersion]);
+    delivery.current = controller;
+    return () => { controller.close(); delivery.current = null; };
+  }, [id, scope.ownerId, scope.scopeKey]);
 
-  const retryPhotoLoads = () => {
-    setPhotoLoadFailed(false);
-    setMissingCloudPhotoId(null);
-    setPhotoRetryVersion((version) => version + 1);
-  };
+  const updatePhotos = useCallback((retryFailed = false) => {
+    delivery.current?.update(item?.photos ?? [], { ownerId: scope.ownerId, scopeKey: scope.scopeKey, catchId: id }, retryFailed);
+  }, [item?.photos, scope.ownerId, scope.scopeKey, id]);
+  useEffect(() => { updatePhotos(); }, [updatePhotos]);
+  const retryPhotoLoads = () => updatePhotos(true);
 
   const handleDelete = async () => {
     if (deletingRef.current) return;

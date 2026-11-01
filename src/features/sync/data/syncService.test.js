@@ -485,3 +485,48 @@ test("stalled metadata request releases service lock and later manual recovery f
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(await readSyncCursor("angler-a"), cursor);
 });
+
+test("a committed READY page notifies the receiver before later pages finish; reads stay bounded", async () => {
+  await resetDatabase();
+  const ownerId = "angler-a";
+  const base = createInMemorySyncAdapter();
+  const writer = createSyncPort(base);
+  for (let index = 0; index < 6; index += 1) {
+    const id = `ready-${index}`;
+    await writer.write({ ownerId, entityType: "catch", record: makeCatch(id, ownerId, { photos: [{
+      id: "p", type: "image/jpeg", size: 10, cloud: { state: "synced", provider: "cloudinary",
+        objectKey: `users/${ownerId}/catches/${id}/photos/p/original`, sha256: "a".repeat(64) },
+    }] }), expectedRevision: null, operationId: `write-${index}`, localRevision: 1 });
+  }
+  let active = 0;
+  let peak = 0;
+  let releaseLast;
+  const lastGate = new Promise((resolve) => { releaseLast = resolve; });
+  let notifyFirst;
+  const committed = new Promise((resolve) => { notifyFirst = resolve; });
+  const events = [];
+  const port = createSyncPort({ ...base,
+    delta: (args) => base.delta({ ...args, limit: 5 }),
+    async read(args) {
+      active += 1;
+      peak = Math.max(peak, active);
+      try {
+        if (args.entityId === "ready-5") await lastGate;
+        await new Promise((resolve) => setTimeout(resolve, 1));
+        return await base.read(args);
+      } finally { active -= 1; }
+    },
+  });
+  const service = createSyncService({ port, getCurrentOwnerId: () => ownerId,
+    onRemoteApplied: (owner) => { events.push(owner); notifyFirst(); } });
+  const run = service.run(ownerId);
+  try {
+    await committed;
+    const first = await catchRepository.get("ready-0", accountScope(ownerId));
+    assert.equal(first.photos[0].cloud.state, "synced");
+    assert.equal(await readSyncCursor(ownerId), "5");
+    assert.equal(peak, 4);
+  } finally { releaseLast(); }
+  assert.equal((await run).applied, 6);
+  assert.deepEqual(events, [ownerId, ownerId]);
+});
