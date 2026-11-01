@@ -1,6 +1,6 @@
 export const PRIVACY_POLICY = Object.freeze({
   title: "Zásady ochrany osobních údajů",
-  lastUpdated: "28. října 2026",
+  lastUpdated: "2. listopadu 2026",
   sections: [
     {
       heading: "1. Správce osobních údajů",
@@ -67,11 +67,11 @@ export const PRIVACY_POLICY = Object.freeze({
     },
     {
       heading: "9. Export údajů",
-      paragraphs: ["V aplikaci můžeš stáhnout místní JSON zálohu údajů, které jsou dostupné na právě používaném zařízení. Tato záloha nemusí obsahovat všechna data synchronizovaná do cloudu a není úplným cloudovým exportem. O přístup k dalším údajům můžeš požádat správce e-mailem."],
+      paragraphs: ["V Nastavení můžeš stáhnout export cloudových údajů svého přihlášeného účtu včetně dostupných cloudových fotografií. U fotografií bez cloudové kopie export uvede, co chybí. Můžeš také stáhnout místní JSON zálohu údajů dostupných na právě používaném zařízení. Místní rozepsané úlovky, starší záznamy bez přiřazeného účtu a jiné údaje uložené pouze na jiném zařízení nemusí být v cloudovém exportu. Exportovaný soubor není šifrovaný; uchovávej ho bezpečně. O přístup k dalším údajům můžeš požádat správce e-mailem."],
     },
     {
       heading: "10. Smazání účtu",
-      paragraphs: ["V aplikaci nyní není automatizované úplné smazání cloudového účtu. Žádost o smazání účtu a souvisejících online údajů pošli na kontaktní e-mail; správce s tebou ověří žádost a sdělí další postup. Aplikace neslibuje konkrétní lhůtu dokončení ani automatické odstranění všech systémů poskytovatelů."],
+      paragraphs: ["V Nastavení můžeš po opětovném ověření přihlášení zahájit smazání cloudového účtu. Po zahájení se smažou místní data aktivního profilu na tomto zařízení a odhlásíš se. Odstranění cloudových záznamů a fotografií probíhá postupně ve frontě a může pokračovat i po odhlášení; závisí na dostupnosti poskytovatelů. Pevnou lhůtu dokončení, například 24 hodin, aplikace negarantuje. Údaje uložené jen na jiném zařízení nebo starší místní záznamy bez přiřazeného vlastníka se tím nemusí odstranit. Pokud dokončení selže nebo potřebuješ pomoc, kontaktuj správce e-mailem."],
     },
     {
       heading: "11. Smazání místních dat",
@@ -102,7 +102,7 @@ export const PRIVACY_POLICY = Object.freeze({
 
 export const TERMS_OF_USE = Object.freeze({
   title: "Podmínky používání",
-  lastUpdated: "28. října 2026",
+  lastUpdated: "2. listopadu 2026",
   sections: [
     { heading: "1. Provozovatel", paragraphs: ["ChytnuCz provozuje David Moravec, fyzická osoba – nepodnikatel. Kontakt: David.Moravec2@seznam.cz."] },
     { heading: "2. Charakter služby", paragraphs: ["ChytnuCz je bezplatná aplikace určená především pro osobní rybářský deník. Může obsahovat evidenci úlovků, fotografie, mapy a GPS, vycházky, statistiky, výzvy, achievementy, XP, počasí, revíry, zálohu a synchronizaci mezi zařízeními. V současné verzi nejsou aktivní placené funkce ani reklamy."] },
@@ -114,9 +114,9 @@ export const TERMS_OF_USE = Object.freeze({
     { heading: "8. Fotografie a obsah uživatele", paragraphs: ["Práva k fotografiím, poznámkám a dalšímu obsahu zůstávají tobě. Provozovateli poskytuješ oprávnění nezbytné k technickému uložení, synchronizaci, zpracování, zobrazení a doručení obsahu zpět tobě. Obsah nesmí být používán k prodeji fotografií ani reklamě. Odpovídáš za to, že máš právo vložený obsah použít."] },
     { heading: "9. Zakázané použití", items: ["neoprávněný přístup k cizím účtům;", "obcházení bezpečnostních mechanismů nebo úmyslné zahlcování serverů;", "automatizované zneužívání API;", "nahrávání nezákonného obsahu nebo porušování práv třetích osob;", "pokusy získat neveřejné údaje jiných uživatelů."] },
     { heading: "10. Synchronizace a offline režim", paragraphs: ["Aplikace může částečně fungovat offline. Změny se nemusí odeslat okamžitě a synchronizace může pokračovat později. Dočasný výpadek může vyžadovat opakování synchronizace; Catch uložený místně nezmizí pouze kvůli čekajícímu odeslání."] },
-    { heading: "11. Zálohování", paragraphs: ["Aplikace nabízí místní JSON zálohu dostupných dat na používaném zařízení. Nejde o úplný cloudový export. Záloha není šifrovaná; uchovávej ji bezpečně. Důležité údaje doporučujeme pravidelně exportovat. Nelze zaručit, že online služba nikdy neztratí data."] },
+    { heading: "11. Zálohování", paragraphs: ["Nastavení nabízí export údajů přihlášeného cloudového účtu a samostatnou místní JSON zálohu dat dostupných na používaném zařízení. Export upozorní na fotografie bez dostupné cloudové kopie. Údaje uložené pouze na jiném zařízení, včetně místních rozepsaných úlovků, nemusí být v cloudovém exportu. Exportované soubory nejsou šifrované; uchovávej je bezpečně. Nelze zaručit, že online služba nikdy neztratí data."] },
     { heading: "12. Smazání úlovku a fotografie", paragraphs: ["Smazaný obsah přestane být v aplikaci aktivně zobrazován. U synchronizované fotografie může aplikace zařadit odstranění vzdáleného objektu do fronty; dokončení závisí na synchronizaci a dostupnosti poskytovatele a nemá garantovanou lhůtu 24 hodin. Minimální technické synchronizační záznamy mohou zůstat po dobu nutnou k dokončení synchronizace."] },
-    { heading: "13. Smazání účtu", paragraphs: ["Úplné smazání účtu není v aplikaci automatizované. Žádost můžeš poslat provozovateli na kontaktní e-mail; další postup a ověření budou řešeny individuálně. Konkrétní lhůta ani automatické dokončení u všech poskytovatelů nejsou garantovány."] },
+    { heading: "13. Smazání účtu", paragraphs: ["Smazání účtu můžeš zahájit v Nastavení po opětovném ověření přihlášení. Související cloudové záznamy a fotografie se odstraňují postupně; dokončení závisí na dostupnosti poskytovatelů a nemá garantovanou lhůtu 24 hodin. Místní údaje na jiných zařízeních a starší nepřiřazené místní záznamy mohou vyžadovat samostatné odstranění. Při potížích kontaktuj provozovatele e-mailem."] },
     { heading: "14. Dostupnost služby", paragraphs: ["ChytnuCz je poskytováno bezplatně a bez záruky nepřetržité dostupnosti. Může dojít k údržbě, výpadku serveru nebo služby třetí strany, změně API, technické chybě či dočasnému omezení funkce."] },
     { heading: "15. Služby třetích stran", paragraphs: ["Aplikace může využívat Google Firebase, Cloudinary, Vercel, Open-Meteo a OpenStreetMap nebo jiné poskytovatele mapových dlaždic. Tyto služby mají vlastní podmínky, pravidla dostupnosti a zásady ochrany osobních údajů."] },
     { heading: "16. Změny a ukončení funkcí", paragraphs: ["Funkce aplikace mohou být upraveny, přidány, dočasně vypnuty nebo odstraněny. Pokud změna ovlivní nakládání s osobními údaji, aktualizujeme také zásady ochrany osobních údajů."] },

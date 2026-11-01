@@ -16,8 +16,8 @@ const flatten = (document) => document.sections.flatMap((section) => [
 test("privacy policy is ready for the public app and describes local-only backup limits", () => {
   const text = flatten(PRIVACY_POLICY);
   assert.match(text, /místní JSON záloh/i);
-  assert.match(text, /není úplným cloudovým exportem/i);
-  assert.match(text, /automatizované úplné smazání cloudového účtu/i);
+  assert.match(text, /údajů svého přihlášeného účtu/i);
+  assert.match(text, /po opětovném ověření přihlášení/i);
   assert.match(text, /přibližně po 7 dnech/i);
   assert.match(text, /pevnou lhůtu 24 hodin aplikace negarantuje/i);
   assert.match(text, /David Moravec/);
@@ -28,6 +28,6 @@ test("terms explain offline use, user content, fishing rules and account deletio
   assert.match(text, /částečně fungovat offline/i);
   assert.match(text, /Práva k fotografiím/i);
   assert.match(text, /rybářský řád/i);
-  assert.match(text, /Úplné smazání účtu není v aplikaci automatizované/i);
+  assert.match(text, /Smazání účtu můžeš zahájit v Nastavení/i);
   assert.match(text, /místní JSON zálohu/i);
 });
