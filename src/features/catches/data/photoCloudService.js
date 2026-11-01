@@ -631,6 +631,28 @@ export function createPhotoCloudService({
         await catches.setPhotoLocalError?.(catchId, photo.id, { code: localErrorCode,
           errorName: localBlobError.name, stage: operationStage }, scope).catch(() => {});
       }
+      // A receiving device has no upload job. If the sender stopped between uploading
+      // the original and publishing READY, verify the original directly for this revision.
+      if (provider.id === "cloudinary" && photo?.cloud?.state === "localOnly" && !photo.cloud.provider
+        && !photo.cloud.objectKey && !(photo.blob instanceof Blob) && isActive(getCurrentOwnerId, ownerId)) {
+        const record = await catches.getMetadata(catchId, scope);
+        const revision = record?.sync?.serverRevision;
+        if (record?.sync?.status !== "metadata-synced" || !Number.isSafeInteger(revision) || revision < 1) return null;
+        let blob;
+        try {
+          blob = await authenticatedRequest("/api/cloudinary/export", { catchId, photoId: photo.id, recoverAtRevision: revision }, { responseType: "blob" });
+        } catch (error) {
+          if (error.code === "photo_metadata_not_ready") return null;
+          throw error;
+        }
+        if (!(blob instanceof Blob) || blob.size !== photo.size || blob.type !== photo.type) {
+          throw Object.assign(new Error("Cloudová kopie fotografie neodpovídá záznamu."), { code: "photo_content_mismatch" });
+        }
+        const cloud = { state: "synced", provider: "cloudinary", objectKey: createPhotoObjectKey(ownerId, catchId, photo.id), sha256: await sha256Blob(blob) };
+        if (!isActive(getCurrentOwnerId, ownerId)) return null;
+        const cached = await catches.cachePhotoBlob(catchId, photo.id, blob, { ...scope, recoveredCloud: cloud, expectedServerRevision: revision });
+        return isActive(getCurrentOwnerId, ownerId) ? cached : null;
+      }
       const downloadProvider = resolveProvider(photo?.cloud?.provider);
       if (!photo?.cloud || photo.cloud.state !== PHOTO_CLOUD_STATE.SYNCED
         || !downloadProvider || !photo.cloud.objectKey || !photo.cloud.sha256

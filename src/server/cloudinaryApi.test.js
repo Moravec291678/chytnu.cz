@@ -437,3 +437,22 @@ test("versioned and legacy originals use the authorized current hash, with no tr
     assert.equal(harness.deliveries[0].options.transformation, undefined);
   }
 });
+
+test("receiving PC recovers the authenticated original before READY only for the current owned revision", async () => {
+  const bytes = new Uint8Array([1, 2, 3, 4]);
+  const hash = createHash("sha256").update(bytes).digest("hex");
+  const access = makePhotoAccess();
+  access.catchRecord.serverRevision = 4;
+  Object.assign(access.photoRecord, { size: bytes.length, cloud: { state: "localOnly", provider: null, objectKey: null } });
+  const resource = { public_id: cloudinaryPublicId(ownerId, catchId, photoId), type: "authenticated", resource_type: "image",
+    bytes: 4, format: "jpg", context: { custom: { sha256: hash } } };
+  const h = createHarness({ access, resource, fetchImpl: async () => new Response(bytes) });
+  const body = { catchId, photoId, recoverAtRevision: 4 };
+  assert.equal((await request(h.api.exportPhoto, { body: { ...body, recoverAtRevision: 3 } })).statusCode, 409);
+  assert.equal((await request(h.api.exportPhoto, { body, authorization: "Bearer owner-b-token" })).statusCode, 403);
+  const ok = await request(h.api.exportPhoto, { body });
+  assert.equal(ok.statusCode, 200);
+  assert.deepEqual([...ok.body], [...bytes]);
+  resource.context.custom.sha256 = "a".repeat(64);
+  assert.equal((await request(h.api.exportPhoto, { body })).statusCode, 502);
+});

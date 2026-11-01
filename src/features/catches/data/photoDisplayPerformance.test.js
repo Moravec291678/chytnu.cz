@@ -53,3 +53,26 @@ test("verified warm Blob needs only one byte read and no database or network req
   assert.equal(result, blob);
   assert.equal(reads, 1);
 });
+
+test("a PC with metadata only and no upload job displays and caches the recovered Cloudinary original", async () => {
+  const ownerId = "pc-owner", catchId = "catch";
+  const photo = { id: "photo", cloud: { state: "localOnly" }, size: 4, type: "image/png" };
+  const blob = new Blob(["test"], { type: photo.type });
+  let cached;
+  const service = createPhotoCloudService({ provider: { id: "cloudinary" }, getCurrentOwnerId: () => ownerId,
+    authenticatedRequest: async (path, body) => {
+      assert.equal(path, "/api/cloudinary/export");
+      assert.deepEqual(body, { catchId, photoId: photo.id, recoverAtRevision: 7 }); return blob;
+    },
+    catches: { getPhotoForDisplay: async () => ({ ...photo, blob: cached }),
+      getMetadata: async () => ({ sync: { status: "metadata-synced", serverRevision: 7 } }),
+      cachePhotoBlob: async (_c, _p, bytes, options) => {
+        assert.equal(options.expectedServerRevision, 7);
+        assert.equal(options.recoveredCloud.sha256, await sha256Blob(blob));
+        cached = bytes; return bytes;
+      } },
+  });
+  const args = { ownerId, scopeKey: accountScopeKey(ownerId), catchId, photo };
+  assert.equal(await service.getPhotoBlob(args), blob);
+  assert.equal(await service.getPhotoBlob(args), blob);
+});

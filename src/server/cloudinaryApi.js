@@ -337,7 +337,7 @@ export function createCloudinaryApi({
 
   async function exportPhoto(req, res) {
     const started = performance.now();
-    const request = await prepare(req, res, ["catchId", "photoId", "expectedSha256"], "export");
+    const request = await prepare(req, res, ["catchId", "photoId", "expectedSha256", "recoverAtRevision"], "export");
     if (!request) return;
     const { uid, body } = request;
     try {
@@ -347,18 +347,39 @@ export function createCloudinaryApi({
       }
       const expectedKey = `users/${uid}/catches/${body.catchId}/photos/${body.photoId}/original`;
       const photo = access.photoRecord;
-      if (photo.cloud?.provider !== "cloudinary" || photo.cloud?.state !== "synced"
-        || photo.cloud.objectKey !== expectedKey || !SHA_PATTERN.test(photo.cloud.sha256 ?? "")
-        || !ALLOWED_PHOTO_TYPES.includes(photo.type) || !Number.isSafeInteger(photo.size)
+      const recovery = body.recoverAtRevision !== undefined;
+      if (recovery && (!Number.isSafeInteger(body.recoverAtRevision) || body.recoverAtRevision < 1
+        || access.catchRecord.serverRevision !== body.recoverAtRevision)) {
+        return send(res, 409, { error: "photo_metadata_not_ready", message: "Catch revision has changed." });
+      }
+      const ready = photo.cloud?.provider === "cloudinary" && photo.cloud.state === "synced"
+        && photo.cloud.objectKey === expectedKey && SHA_PATTERN.test(photo.cloud.sha256 ?? "");
+      const pending = recovery && photo.cloud?.state === "localOnly" && !photo.cloud.provider && !photo.cloud.objectKey;
+      if ((!ready && !pending) || !ALLOWED_PHOTO_TYPES.includes(photo.type) || !Number.isSafeInteger(photo.size)
         || photo.size < 0 || photo.size > MAX_PHOTO_BYTES) {
         return send(res, 404, { error: "photo_not_available", message: "Photo is not available." });
       }
-      // private_download_url serves the current original; the digest is the
-      // content revision for both legacy and versioned assets.
-      if (body.expectedSha256 !== undefined && body.expectedSha256 !== photo.cloud.sha256) {
+      const cloudinary = await getCloudinary(env);
+      let expectedHash = photo.cloud.sha256;
+      if (pending) {
+        const publicId = cloudinaryPublicId(uid, body.catchId, body.photoId);
+        let resource;
+        try { resource = await cloudinary.api.resource(publicId, { resource_type: "image", type: "authenticated", context: true }); }
+        catch (error) {
+          if (error?.http_code === 404 || error?.error?.http_code === 404) {
+            return send(res, 409, { error: "photo_metadata_not_ready", message: "Photo upload is pending." });
+          }
+          throw error;
+        }
+        expectedHash = resource.context?.custom?.sha256;
+        if (resource.public_id !== publicId || resource.type !== "authenticated" || resource.resource_type !== "image"
+          || resource.bytes !== photo.size || resource.format !== expectedFormat(photo.type) || !SHA_PATTERN.test(expectedHash ?? "")) {
+          return send(res, 409, { error: "photo_metadata_not_ready", message: "Original cannot be verified." });
+        }
+      }
+      if (body.expectedSha256 !== undefined && body.expectedSha256 !== expectedHash) {
         return send(res, 409, { error: "photo_metadata_not_ready", message: "Photo revision has changed." });
       }
-      const cloudinary = await getCloudinary(env);
       const expiresAt = Math.floor(now() / 1000) + 300;
       const url = cloudinary.utils.private_download_url(cloudinaryPublicId(uid, body.catchId, body.photoId), expectedFormat(photo.type), {
         resource_type: "image", type: "authenticated", expires_at: expiresAt,
@@ -384,7 +405,7 @@ export function createCloudinaryApi({
       }
       const received = performance.now();
       res.setHeader?.("Server-Timing", `endpoint;dur=${(received - started).toFixed(1)}, cloudinary;dur=${(received - upstreamStart).toFixed(1)}`);
-      if (byteCount !== photo.size || digest.digest("hex") !== photo.cloud.sha256) {
+      if (byteCount !== photo.size || digest.digest("hex") !== expectedHash) {
         return send(res, 502, { error: "photo_content_mismatch", message: "Cloud photo could not be verified." });
       }
       res.setHeader?.("Cache-Control", "no-store");

@@ -645,6 +645,10 @@ export const catchRepository = {
         }
         const photo = (record.photos ?? []).find((item) => item.id === photoId);
         if (!photo) { result = null; return; }
+        const recovered = options?.recoveredCloud;
+        if (recovered && (record.sync?.status !== "metadata-synced" || record.sync.serverRevision !== options.expectedServerRevision
+          || photo.cloud?.state !== "localOnly" || photo.cloud.provider || photo.cloud.objectKey
+          || photo.size !== blob.size || photo.type !== blob.type)) return;
         const expectedCloud = options?.expectedPhotoCloud;
         if (expectedCloud && (photo.cloud?.state !== "synced"
           || ["sha256", "objectKey", "provider"].some((field) => photo.cloud?.[field] !== expectedCloud[field]))) return;
@@ -656,6 +660,7 @@ export const catchRepository = {
         store.put({ ...record, photos: record.photos.map((item) => {
           if (item.id !== photoId) return item;
           const metadata = { ...item };
+          if (recovered) metadata.cloud = recovered;
           delete metadata.blob;
           delete metadata.localError;
           return metadata;
