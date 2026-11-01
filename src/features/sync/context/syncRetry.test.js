@@ -14,3 +14,12 @@ test("retryable pull failures schedule a bounded next attempt", () => {
   assert.equal(getPullRetryAt(false, now), null);
   assert.ok(SYNC_PULL_RETRY_DELAY_MS <= 60_000);
 });
+
+test("a blocked photo schedules its own background check without delaying earlier queue work", async () => {
+  const { nextSyncRetryAt } = await import("./syncRetry.js");
+  const nextPhotoProbeAt = "2026-11-01T10:05:00.000Z";
+  const nextRetryAt = "2026-11-01T10:01:00.000Z";
+  assert.equal(nextSyncRetryAt("user-action-required", { nextPhotoProbeAt }), nextPhotoProbeAt);
+  assert.equal(nextSyncRetryAt("user-action-required", { nextPhotoProbeAt, nextRetryAt }), nextRetryAt);
+  assert.equal(nextSyncRetryAt("synced", { nextPhotoProbeAt }), null);
+});

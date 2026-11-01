@@ -184,7 +184,7 @@ export function SyncProvider({ children }) {
         error: finalStatus === SYNC_LIFECYCLE_STATE.SYNCED ? "" : finalError,
         errorCode: finalStatus === SYNC_LIFECYCLE_STATE.SYNCED ? "" : finalErrorCode,
         errorEndpoint: finalStatus === SYNC_LIFECYCLE_STATE.SYNCED ? "" : finalResult.errorEndpoint ?? summary.lastErrorEndpoint ?? "",
-        nextRetryAt: nextSyncRetryAt(finalStatus, summary),
+        nextRetryAt: nextSyncRetryAt(finalStatus, { ...summary, nextPhotoProbeAt: photoResult.nextPhotoProbeAt }),
         lastResult: finalStatus,
         showSyncStatus: false,
       });

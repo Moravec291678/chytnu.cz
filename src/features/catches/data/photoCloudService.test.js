@@ -933,7 +933,7 @@ test("native file cleanup waits for Firestore acknowledgement of verified photo 
 });
 
 
-test("manual sync recovers terminal unreadable photo from cloud, clears attention, errors and pending", async () => {
+test("automatic sync recovers terminal unreadable photo from cloud, clears attention, errors and pending", async () => {
   await resetDatabase();
   const ownerId = "manual-recovery";
   const scope = { ownerId, scopeKey: accountScopeKey(ownerId) };
@@ -957,16 +957,19 @@ test("manual sync recovers terminal unreadable photo from cloud, clears attentio
   };
   const provider = createFakeProvider();
   provider.objects.set(objectKey, { blob: original.blob, sha256, contentType: original.type });
+  let clock = fixedNow;
   const service = createPhotoCloudService({ provider, catches, getCurrentOwnerId: () => ownerId,
-    isCatchMetadataSynced: async () => true, now: () => fixedNow });
+    isCatchMetadataSynced: async () => true, now: () => clock });
   const recover = provider.recoverUpload.bind(provider);
   provider.recoverUpload = async () => { throw Object.assign(new Error("temporary network"), { code: "photo_cloud_network_error" }); };
-  const temporary = await service.run(ownerId, { force: true });
+  const temporary = await service.run(ownerId);
   assert.equal(temporary.needsAttention, false);
   assert.equal(completedSyncState({ result: { status: "success" }, photoResult: temporary,
     summary: await readSyncSummary(ownerId) }), "retry-wait");
   provider.recoverUpload = recover;
-  const photoResult = await service.run(ownerId, { force: true });
+  clock = Date.parse((await readSyncSummary(ownerId)).nextRetryAt) + 1;
+  assert.ok(Number.isFinite(clock));
+  const photoResult = await service.run(ownerId);
   assert.equal(photoResult.needsAttention, false);
   assert.equal(provider.calls.uploads.length, 0);
   assert.equal(provider.calls.recoveries.length, 1);

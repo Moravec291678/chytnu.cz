@@ -12,6 +12,7 @@ export function getPullRetryAt(retryable, now = Date.now()) {
 export function nextSyncRetryAt(status, summary, now = Date.now()) {
   if (status === "synced") return null;
   // A permanent problem in one photo must not suppress retries for other photos.
-  if (summary.nextRetryAt) return summary.nextRetryAt;
+  const scheduled = [summary.nextRetryAt, summary.nextPhotoProbeAt].filter(Boolean).sort()[0];
+  if (scheduled) return scheduled;
   return ["retry-wait", "local-pending"].includes(status) ? getPullRetryAt(true, now) : null;
 }

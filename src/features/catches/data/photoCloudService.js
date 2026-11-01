@@ -16,8 +16,11 @@ import {
   sha256Blob,
 } from "./photoCloudProvider.js";
 
-function due(operation, now, force) {
-  if (operation.status === "conflict") return force && [PHOTO_LOCAL_BLOB_UNREADABLE, "photo_blob_missing"].includes(operation.lastErrorCode);
+const repairablePhotoConflict = operation => operation.status === "conflict"
+  && [PHOTO_LOCAL_BLOB_UNREADABLE, "photo_blob_missing"].includes(operation.lastErrorCode);
+
+function due(operation, now, force, probeLocalPhoto) {
+  if (operation.status === "conflict") return (force || probeLocalPhoto) && repairablePhotoConflict(operation);
   if (operation.status !== "failed") return true;
   return force || !operation.nextAttemptAt || Date.parse(operation.nextAttemptAt) <= now;
 }
@@ -466,12 +469,14 @@ export function createPhotoCloudService({
     return { uploaded: 0, deleted: 1 };
   }
 
+  const localPhotoProbeAt = new Map();
   async function runOnce(ownerId, { force = false } = {}) {
     if (!ownerId || !isActive(getCurrentOwnerId, ownerId)) return { status: "signed-out", uploaded: 0, deleted: 0, queued: 0 };
     if (!isVisible()) return { status: "deferred", uploaded: 0, deleted: 0, queued: 0 };
     if (preflightOwnerId !== ownerId) await prepareLegacyPhotoIds(ownerId, { force });
     preflightOwnerId = null;
-    const reconciliation = await reconcileUploads(ownerId, { force });
+    const probeLocalPhoto = now() >= (localPhotoProbeAt.get(ownerId) ?? 0);
+    const reconciliation = await reconcileUploads(ownerId, { force: force || probeLocalPhoto });
     const queued = reconciliation.queued;
     if (!await provider.isAvailable({ ownerId })) return { status: "local-only", uploaded: 0, deleted: 0, queued };
     try { await provider.reconcileUploads?.(); } catch { /* Firestore outbox reconciliation can still recover interrupted native uploads. */ }
@@ -495,7 +500,7 @@ export function createPhotoCloudService({
             continue;
           }
         }
-        if (!due(operation, now(), force)) continue;
+        if (!due(operation, now(), force, probeLocalPhoto)) continue;
         const result = operation.operation === "photo-upload"
           ? await processUpload(operation)
           : operation.operation === "photo-delete"
@@ -531,7 +536,11 @@ export function createPhotoCloudService({
       photo.localError?.code === PHOTO_LOCAL_BLOB_UNREADABLE && !isPhotoCloudReady(photo)
       && !remainingJobs.some((job) => job.ownerId === ownerId && job.photoCloud?.catchId === record.id
         && job.photoCloud?.photoId === photo.id && job.status !== "conflict")));
-    return { status: error && !needsAttention ? "error" : needsAttention ? "partial" : isVisible() ? "success" : "deferred", uploaded, deleted, queued,
+    const needsProbe = needsAttention || remainingJobs.some(job => job.ownerId === ownerId && repairablePhotoConflict(job));
+    if (!needsProbe) localPhotoProbeAt.delete(ownerId);
+    else if (probeLocalPhoto || force) localPhotoProbeAt.set(ownerId, now() + 5 * 60_000);
+    return { nextPhotoProbeAt: needsProbe ? new Date(localPhotoProbeAt.get(ownerId)).toISOString() : null,
+      status: error && !needsAttention ? "error" : needsAttention ? "partial" : isVisible() ? "success" : "deferred", uploaded, deleted, queued,
       needsAttention: Boolean(needsAttention), error: error?.message ?? "",
       errorCode: needsAttention && photoBlobErrorCode(error) !== PHOTO_LOCAL_BLOB_UNREADABLE ? PHOTO_LOCAL_BLOB_UNREADABLE
         : photoBlobErrorCode(error) === PHOTO_LOCAL_BLOB_UNREADABLE ? PHOTO_LOCAL_BLOB_UNREADABLE : error?.code ?? "photo_cloud_failed",

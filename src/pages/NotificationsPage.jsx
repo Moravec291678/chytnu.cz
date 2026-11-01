@@ -106,7 +106,9 @@ export default function NotificationsPage() {
         {sync?.syncEnabled && <details className="notifications-preferences">
           <summary>Synchronizace</summary>
           <p className="notifications-preferences-intro">
-            {sync.status === "user-action-required"
+            {sync.status === "user-action-required" && sync.nextRetryAt
+              ? "Další pokus o synchronizaci proběhne automaticky."
+              : sync.status === "user-action-required"
               ? "Synchronizace potřebuje tvou pomoc. Zkontroluj přihlášení nebo místní fotografii."
               : sync.status === "retry-wait" || sync.status === "local-pending"
                 ? "Změny jsou uložené v zařízení. Odeslání dokončíme automaticky, až to bude možné."
