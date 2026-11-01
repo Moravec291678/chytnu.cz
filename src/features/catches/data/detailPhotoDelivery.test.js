@@ -53,3 +53,21 @@ test("realtime replaces only the changed request and transient retry leaves succ
   assert.equal(visible.length, 3);
   assert.deepEqual(errors, []);
 });
+
+test("four gallery photos at 0/200/2000/5000 ms render as each delivery completes", async t => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const items = ["a", "b", "c", "d"].map(id => ({ id, cloud: { state: "synced", sha256: id } }));
+  const delays = { a: 0, b: 200, c: 2000, d: 5000 };
+  let visible = [];
+  const detail = createDetailPhotoDelivery(({ photo }) => new Promise(resolve =>
+    setTimeout(() => resolve(new Blob([photo.id])), delays[photo.id])), rows => { visible = rows.map(row => row.id); });
+  t.after(() => detail.close());
+  detail.update(items, scope);
+  await flush();
+  for (const [delta, expected] of [[0, ["a"]], [200, ["a", "b"]], [1800, ["a", "b", "c"]],
+    [3000, ["a", "b", "c", "d"]]]) {
+    t.mock.timers.tick(delta);
+    await flush();
+    assert.deepEqual(visible, expected);
+  }
+});

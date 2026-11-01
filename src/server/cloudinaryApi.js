@@ -394,6 +394,32 @@ export function createCloudinaryApi({
         providerStatus: response.status,
         message: "Cloud photo could not be downloaded.",
       });
+      // Stream large originals so the first bytes can leave Vercel before the
+      // whole Cloudinary body arrives. The client verifies SHA-256 before display.
+      // A failed digest destroys the response instead of completing the stream.
+      if (photo.size > 4 * 1024 * 1024 && typeof res.write === "function") {
+        res.setHeader?.("Server-Timing", `cloudinary-headers;dur=${(performance.now() - upstreamStart).toFixed(1)}`);
+        res.setHeader?.("Cache-Control", "no-store");
+        res.setHeader?.("Content-Type", photo.type);
+        res.setHeader?.("Content-Length", String(photo.size));
+        res.setHeader?.("Content-Disposition", "attachment; filename=photo");
+        res.status(200);
+        const upstream = response.body ?? [new Uint8Array(await response.arrayBuffer())];
+        async function* verifiedStream() {
+          const digest = createHash("sha256");
+          let received = 0;
+          for await (const chunk of upstream) {
+            received += chunk.byteLength;
+            if (received > photo.size) throw new Error("Cloud photo exceeds the authorized size.");
+            digest.update(chunk);
+            yield chunk;
+          }
+          if (received !== photo.size || digest.digest("hex") !== expectedHash) {
+            throw new Error("Cloud photo failed integrity verification.");
+          }
+        }
+        return await pipeline(Readable.from(verifiedStream()), res);
+      }
       // The public status must reflect verification. Hold at most one allowed
       // photo, rejecting oversize bodies before accepting additional chunks.
       const digest = createHash("sha256");

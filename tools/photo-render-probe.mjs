@@ -25,15 +25,15 @@ export async function openPhotoRenderProbe(executable) {
     if (request.url !== "/") { response.writeHead(404).end(); return; }
     response.writeHead(200, { "Content-Type": "text/html" }).end(`<!doctype html><body><script>
       new EventSource('/events').onmessage = async ({ data }) => {
-        const { id, encoded } = JSON.parse(data); const start = performance.now();
-        const blob = new Blob([Uint8Array.from(atob(encoded), c => c.charCodeAt(0))], { type: 'image/png' });
-        const image = new Image(); image.src = URL.createObjectURL(blob); document.body.append(image);
+        const { id, encoded, mimeType } = JSON.parse(data); const start = performance.now();
+        const blob = new Blob([Uint8Array.from(atob(encoded), c => c.charCodeAt(0))], { type: mimeType || 'image/png' });
+        const image = new Image(); image.style.maxWidth = '90vw'; image.style.maxHeight = '90vh'; image.src = URL.createObjectURL(blob); document.body.append(image);
         try { await image.decode(); const decoded = performance.now();
           await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
           const rect = image.getBoundingClientRect();
           await fetch('/result', {method:'POST',body:JSON.stringify({ id, decodeMs:decoded-start, frameMs:performance.now()-decoded,
             inViewport:rect.width>0 && rect.height>0 && rect.top>=0 && rect.bottom<=innerHeight, width:image.naturalWidth, height:image.naturalHeight })});
-        } finally { URL.revokeObjectURL(image.src); }
+        } finally { URL.revokeObjectURL(image.src); image.remove(); }
       }; </script>`);
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -53,7 +53,7 @@ export async function openPhotoRenderProbe(executable) {
   try { await bounded(ready.promise); } catch (error) { await close(); throw error; }
   return { close, async render(id, blob) {
     const result = Promise.withResolvers(); pending.set(id, result);
-    try { stream.write(`data: ${JSON.stringify({ id, encoded: Buffer.from(await blob.arrayBuffer()).toString("base64") })}\n\n`); return await bounded(result.promise); }
+    try { stream.write(`data: ${JSON.stringify({ id, encoded: Buffer.from(await blob.arrayBuffer()).toString("base64"), mimeType: blob.type })}\n\n`); return await bounded(result.promise); }
     finally { pending.delete(id); }
   } };
 }

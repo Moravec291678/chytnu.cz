@@ -465,3 +465,72 @@ test("receiving PC recovers the authenticated original before READY only for the
   resource.context.custom.sha256 = "a".repeat(64);
   assert.equal((await request(h.api.exportPhoto, { body })).statusCode, 502);
 });
+
+test("large authenticated originals stream before Cloudinary completes and retain content integrity", async () => {
+  for (const megabytes of [1, 4, 8]) {
+    const size = megabytes * 1024 * 1024;
+    const chunk = Buffer.alloc(64 * 1024, 37);
+    const bytes = Buffer.alloc(size, 37);
+    const access = makePhotoAccess();
+    access.photoRecord.size = size;
+    access.photoRecord.cloud.sha256 = createHash("sha256").update(bytes).digest("hex");
+    let release;
+    const gate = new Promise(resolve => { release = resolve; });
+    let firstWrite;
+    const written = new Promise(resolve => { firstWrite = resolve; });
+    const harness = createHarness({ access, fetchImpl: async () => ({ ok: true, status: 200,
+      body: megabytes > 4 ? (async function* () {
+        yield chunk;
+        await gate;
+        for (let offset = chunk.length; offset < size; offset += chunk.length) yield chunk;
+      })() : (async function* () {
+        for (let offset = 0; offset < size; offset += chunk.length) yield chunk;
+      })(),
+    }) });
+    const chunks = [];
+    const res = new Writable({ write(value, _encoding, done) { chunks.push(value); firstWrite(); done(); } });
+    res.headers = {};
+    res.setHeader = (key, value) => { res.headers[key] = value; };
+    res.status = code => { res.statusCode = code; return res; };
+    res.send = value => { chunks.push(value); return res; };
+    res.json = value => { res.body = value; return res; };
+    const running = harness.api.exportPhoto({ method: "POST", headers: { authorization: "Bearer owner-a-token" },
+      body: { catchId, photoId } }, res);
+    if (megabytes > 4) {
+      await written;
+      assert.equal(chunks.length, 1, "first byte must not wait for upstream completion");
+      release();
+    }
+    await running;
+    assert.equal(res.statusCode, 200);
+    assert.equal(Buffer.concat(chunks).length, size);
+  }
+});
+
+test("a corrupt 8 MB stream terminates before successful completion", async () => {
+  const size = 8 * 1024 * 1024;
+  const access = makePhotoAccess();
+  access.photoRecord.size = size;
+  access.photoRecord.cloud.sha256 = createHash("sha256").update(Buffer.alloc(size, 1)).digest("hex");
+  const harness = createHarness({ access, fetchImpl: async () => ({ ok: true, status: 200,
+    body: (async function* () { for (let n = 0; n < size; n += 64 * 1024) yield Buffer.alloc(64 * 1024, 2); })(),
+  }) });
+  const res = new Writable({ write(_bytes, _encoding, done) { done(); } });
+  res.setHeader = () => {};
+  res.status = () => res;
+  res.destroyedByIntegrity = false;
+  const destroy = res.destroy.bind(res);
+  res.destroy = error => { if (error) res.destroyedByIntegrity = true; return destroy(); };
+  await harness.api.exportPhoto({ method: "POST", headers: { authorization: "Bearer owner-a-token" },
+    body: { catchId, photoId } }, res);
+  assert.equal(res.destroyedByIntegrity, true);
+});
+
+test("15 and 25 MB originals are rejected by the current product limit before Cloudinary", async () => {
+  for (const megabytes of [15, 25]) {
+    const access = makePhotoAccess();
+    access.photoRecord.size = megabytes * 1024 * 1024;
+    const harness = createHarness({ access, fetchImpl: () => assert.fail("Oversize photo reached Cloudinary") });
+    assert.equal((await request(harness.api.exportPhoto)).statusCode, 404);
+  }
+});
