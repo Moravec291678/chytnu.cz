@@ -106,3 +106,18 @@ export async function preparePhotoForStorageAndUpload(file, options = {}) {
   }
   return { blob, type: blob.type, size: blob.size, sha256: await sha256Blob(blob), uploadReady: true };
 }
+
+
+// Decode one image at a time to limit peak memory on phones. A rejected file
+// leaves the slot available for the next file in the same picker selection.
+export async function preparePhotoSelection(files, room, prepare) {
+  const additions = [];
+  const failures = [];
+  let overflow = 0;
+  for (const file of files) {
+    if (additions.length >= room) { overflow++; continue; }
+    try { additions.push(await prepare(file)); }
+    catch (error) { failures.push({ name: file.name, reason: error?.message || "Soubor se nepodařilo přečíst." }); }
+  }
+  return { additions, failures, overflow };
+}

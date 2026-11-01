@@ -38,7 +38,7 @@ import {
 import PhotoFrameEditor from "../features/catches/components/PhotoFrameEditor.jsx";
 import { photoFrameStyle } from "../features/catches/data/photoFraming.js";
 import { MAX_PHOTOS_PER_CATCH, normalizePrimaryPhotoId } from "../features/catches/data/catchPhotos.js";
-import { preparePhotoForStorageAndUpload } from "../features/catches/data/photoInput.js";
+import { preparePhotoSelection, preparePhotoForStorageAndUpload } from "../features/catches/data/photoInput.js";
 import { recordPhotoUploadTrace } from "../features/catches/data/photoUploadTrace.js";
 import { catchDraftRepository } from "../features/catches/data/catchDraftRepository.js";
 import { applySelectedWaterToCatchDraft } from "../features/catches/data/catchDraftModel.js";
@@ -144,11 +144,10 @@ function AddCatchPage() {
     const selectedPhotos = [...(event.target.files ?? [])];
     if (!selectedPhotos.length) return;
     setPhotoProcessing(true);
-    const additions = [];
     try {
       const room = MAX_PHOTOS_PER_CATCH - catchData.photos.length;
       if (room <= 0) throw new Error(`Můžeš přidat nejvýše ${MAX_PHOTOS_PER_CATCH} fotografií.`);
-      for (const selectedPhoto of selectedPhotos.slice(0, room)) {
+      const { additions, failures, overflow } = await preparePhotoSelection(selectedPhotos, room, async (selectedPhoto) => {
         const photoId = crypto.randomUUID();
         recordPhotoUploadTrace(photoId, "photo_selected", {
           sourceMimeType: selectedPhoto.type, sourceBytes: selectedPhoto.size,
@@ -165,13 +164,13 @@ function AddCatchPage() {
         const optimizedPhoto = preparedPhoto.blob;
         const previewUrl = URL.createObjectURL(optimizedPhoto);
         photoUrlsRef.current.add(previewUrl);
-        additions.push({ id: photoId, blob: optimizedPhoto,
+        return { id: photoId, blob: optimizedPhoto,
           name: selectedPhoto.name.replace(/\.[^.]+$/, ".jpg"),
           type: preparedPhoto.type, size: preparedPhoto.size, contentSha256: preparedPhoto.sha256,
           ...(captureMetadata ? { captureMetadata } : {}),
           uploadReady: true,
-          previewUrl });
-      }
+          previewUrl };
+      });
       const nextPhotos = [...catchData.photos, ...additions];
       setPhotos(nextPhotos);
       const photoMetadata = additions.find((photo) => photo.captureMetadata)?.captureMetadata;
@@ -185,13 +184,10 @@ function AddCatchPage() {
           : { ...previous, coordinates: photoMetadata.coordinates, gpsLocation: formatCoordinates(photoMetadata.coordinates), gpsSource: "photo-exif" });
       }
       if (!catchData.primaryPhotoId && nextPhotos[0]) updateCatchData("primaryPhotoId", nextPhotos[0].id);
-      if (selectedPhotos.length > room) setFormError(`Přidáno ${room} fotografií. Limit je ${MAX_PHOTOS_PER_CATCH}.`);
-      else setFormError("");
+      const messages = failures.map(({ name, reason }) => `${name}: ${reason}`);
+      if (overflow) messages.push(`Kvůli limitu ${MAX_PHOTOS_PER_CATCH} fotek na úlovek se další soubory nepřidaly (${overflow}).`);
+      setFormError(messages.join(" "));
     } catch (error) {
-      additions.forEach((item) => {
-        URL.revokeObjectURL(item.previewUrl);
-        photoUrlsRef.current.delete(item.previewUrl);
-      });
       setFormError(error.message || "Fotografii se nepodařilo připravit.");
     } finally {
       setPhotoProcessing(false);
@@ -805,12 +801,12 @@ function AddCatchPage() {
                 <div className="photo-actions">
                   {!isPrimary && <button type="button" className="photo-action-button" aria-pressed={false} onClick={() => updateCatchData("primaryPhotoId", item.id)}>Nastavit hlavní</button>}
                   {item.previewUrl && <button type="button" className="photo-action-button" onClick={() => { setEditingPhotoId(item.id); setPhotoEditorOpen(true); }}>Upravit výřez</button>}
-                  <button type="button" className="photo-action-button" onClick={() => removePhoto(item.id)}>Odebrat</button>
+                  <button type="button" className="photo-action-button" disabled={photoProcessing} onClick={() => removePhoto(item.id)}>Odebrat</button>
                 </div>
               </article>;
             })}
           </div>}
-          {catchData.photos.length < MAX_PHOTOS_PER_CATCH && <button type="button" onClick={handleAddPhoto} className="photo-upload-button">
+          {catchData.photos.length < MAX_PHOTOS_PER_CATCH && <button type="button" disabled={photoProcessing} onClick={handleAddPhoto} className="photo-upload-button">
               <span className="photo-upload-icon" aria-hidden="true">⌑</span>
               <span>{catchData.photos.length ? "Přidat fotografie" : "Přidat fotografie · ověření úlovku"}</span>
             </button>}

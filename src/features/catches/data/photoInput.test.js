@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isHeicPhoto, normalizePhotoForUpload, preparePhotoForStorageAndUpload } from "./photoInput.js";
+import { preparePhotoSelection, isHeicPhoto, normalizePhotoForUpload, preparePhotoForStorageAndUpload } from "./photoInput.js";
 import { sha256Blob } from "./photoCloudProvider.js";
 
 function canvasFactory() {
@@ -170,3 +170,18 @@ for (const bitmapAvailable of [true, false]) {
     assert.equal(revoked, 1);
   });
 }
+
+test("phone library batch keeps earlier and later photos with different dates when one file fails", async () => {
+  const files = ["first.jpg", "broken.heic", "older.jpg", "newer.jpg", "extra.jpg"].map((name, i) =>
+    new File([name], name, { type: "image/jpeg", lastModified: Date.UTC(2024 + i, 0, 1) }));
+  const attempted = [];
+  const result = await preparePhotoSelection(files, 3, async file => {
+    attempted.push(file.name);
+    if (file.name === "broken.heic") throw new Error("unreadable");
+    return { name: file.name, date: file.lastModified };
+  });
+  assert.deepEqual(attempted, ["first.jpg", "broken.heic", "older.jpg", "newer.jpg"]);
+  assert.deepEqual(result.additions.map(photo => photo.date), [files[0], files[2], files[3]].map(file => file.lastModified));
+  assert.deepEqual(result.failures, [{ name: "broken.heic", reason: "unreadable" }]);
+  assert.equal(result.overflow, 1);
+});
