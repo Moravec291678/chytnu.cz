@@ -688,7 +688,7 @@ test("photo upload refreshes an invalid Firebase token once and completes with t
         const body = JSON.parse(options.body);
         const objectKey = createPhotoObjectKey(ownerId, body.catchId, body.photoId);
         return new Response(JSON.stringify({ cloudName: "test-cloud", apiKey: "1234567890", resourceType: "image",
-          timestamp: 1_800_000_000, signature: "a".repeat(64), params: { public_id: `chytnucz/${objectKey}`, type: "authenticated", overwrite: true } }),
+          timestamp: 1_800_000_000, signature: "a".repeat(64), params: { public_id: `chytnucz/${objectKey}`, type: "authenticated", overwrite: false } }),
         { status: 200, headers: { "Content-Type": "application/json" } });
       }
       if (path === "/api/cloudinary/verify-upload") {
@@ -1081,7 +1081,7 @@ test("expired signature leaves a retry job, verifies before retry and signs anew
     if (path.endsWith("/sign")) {
       steps.push("sign");
       return { cloudName: "test-cloud", apiKey: "1234567890", resourceType: "image", timestamp: 1800000000 + grants.length,
-        signature: (grants.length ? "b" : "a").repeat(64), params: { public_id: publicId, type: "authenticated", overwrite: true } };
+        signature: (grants.length ? "b" : "a").repeat(64), params: { public_id: publicId, type: "authenticated", overwrite: false } };
     }
     steps.push("verify");
     if (grants.length === 1) throw Object.assign(new Error("missing"), { status: 404, code: "asset_not_found" });

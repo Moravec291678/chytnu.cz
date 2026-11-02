@@ -1,8 +1,9 @@
 import { sha256Blob } from "./photoCloudProvider.js";
 import { photoBlobErrorCode, readPhotoBlob } from "./photoLocalBlob.js";
+import { PRODUCT_LIMITS } from "../../../product/config/limits.js";
 
 export const MAX_SOURCE_PHOTO_BYTES = 50 * 1024 * 1024;
-export const MAX_NORMALIZED_PHOTO_BYTES = 10 * 1024 * 1024;
+export const MAX_NORMALIZED_PHOTO_BYTES = PRODUCT_LIMITS.photoBytes;
 
 const HEIC_TYPES = new Set(["image/heic", "image/heif", "image/heic-sequence", "image/heif-sequence"]);
 const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/avif", ...HEIC_TYPES]);

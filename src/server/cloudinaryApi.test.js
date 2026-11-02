@@ -467,7 +467,7 @@ test("receiving PC recovers the authenticated original before READY only for the
 });
 
 test("large authenticated originals stream before Cloudinary completes and retain content integrity", async () => {
-  for (const megabytes of [1, 4, 8]) {
+  for (const megabytes of [1, 4, 8, 10]) {
     const size = megabytes * 1024 * 1024;
     const chunk = Buffer.alloc(64 * 1024, 37);
     const bytes = Buffer.alloc(size, 37);

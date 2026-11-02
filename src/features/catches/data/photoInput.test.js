@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { preparePhotoSelection, isHeicPhoto, normalizePhotoForUpload, preparePhotoForStorageAndUpload } from "./photoInput.js";
+import { MAX_NORMALIZED_PHOTO_BYTES, preparePhotoSelection, isHeicPhoto, normalizePhotoForUpload, preparePhotoForStorageAndUpload } from "./photoInput.js";
 import { sha256Blob } from "./photoCloudProvider.js";
+import { PRODUCT_LIMITS } from "../../../product/config/limits.js";
 
 function canvasFactory() {
   return { width: 0, height: 0, getContext: () => ({ drawImage() {} }),
@@ -144,6 +145,16 @@ test("final output over 10 MB is rejected and decoder released", async () => {
       toBlob(callback, type) { callback(new Blob([new Uint8Array(11 * 1024 * 1024)], { type })); } }),
   }), { code: "photo_too_large" });
   assert.equal(closed, true);
+});
+
+test("10 MB canonical output is accepted at the shared product limit", async () => {
+  assert.equal(MAX_NORMALIZED_PHOTO_BYTES, PRODUCT_LIMITS.photoBytes);
+  const prepared = await preparePhotoForStorageAndUpload(new File(["jpg"], "photo.jpg", { type: "image/jpeg" }), {
+    decode: async () => ({ width: 4000, height: 3000 }),
+    canvasFactory: () => ({ getContext: () => ({ drawImage() {} }),
+      toBlob(callback, type) { callback(new Blob([new Uint8Array(PRODUCT_LIMITS.photoBytes)], { type })); } }),
+  });
+  assert.equal(prepared.size, PRODUCT_LIMITS.photoBytes);
 });
 
 for (const bitmapAvailable of [true, false]) {

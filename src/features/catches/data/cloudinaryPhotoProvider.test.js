@@ -38,7 +38,7 @@ test("signed upload uses only the server grant, fixed image endpoint, and verifi
     async requestUploadGrant(body) {
       assert.deepEqual(body, { catchId, photoId, size: blob.size, contentType: blob.type, sha256 });
       return { cloudName: "test-cloud", apiKey: "1234567890", resourceType: "image", timestamp: 1_800_000_000,
-        signature: "b".repeat(64), params: { public_id: `chytnucz/${objectKey}`, type: "authenticated", overwrite: true } };
+        signature: "b".repeat(64), params: { public_id: `chytnucz/${objectKey}`, type: "authenticated", overwrite: false } };
     },
     async requestUploadVerification(body) {
       verified = true;
@@ -58,6 +58,7 @@ test("signed upload uses only the server grant, fixed image endpoint, and verifi
   const form = seen[0].options.body;
   assert.equal(form.get("type"), "authenticated");
   assert.equal(form.get("public_id"), `chytnucz/${objectKey}`);
+  assert.equal(form.get("overwrite"), "false");
   assert.equal(form.get("file").size, blob.size);
   assert.ok(form.get("file") instanceof Blob);
   assert.notEqual(form.get("file"), blob);
@@ -65,6 +66,26 @@ test("signed upload uses only the server grant, fixed image endpoint, and verifi
   assert.equal(await sha256Blob(form.get("file")), sha256);
   assert.deepEqual(new Uint8Array(await form.get("file").arrayBuffer()), new Uint8Array(await blob.arrayBuffer()));
   assert.equal(form.has("api_secret"), false);
+});
+
+test("1, 4, 8 and 10 MB uploads accept the supported range", async () => {
+  for (const megabytes of [1, 4, 8, 10]) {
+    const sizedBlob = new Blob([new Uint8Array(megabytes * 1024 * 1024)], { type: "image/jpeg" });
+    const sizedHash = await sha256Blob(sizedBlob);
+    const provider = createCloudinaryPhotoProvider({ fetchImpl: async (_url, { body }) => {
+      assert.equal(body.get("file").size, sizedBlob.size);
+      assert.equal(body.get("overwrite"), "false");
+      return jsonResponse({ public_id: `chytnucz/${objectKey}`, resource_type: "image", type: "authenticated",
+        bytes: sizedBlob.size, format: "jpg" });
+    } });
+    const result = await provider.upload({ ownerId, catchId, photoId, objectKey, blob: sizedBlob,
+      size: sizedBlob.size, contentType: sizedBlob.type, sha256: sizedHash,
+      requestUploadGrant: async () => ({ cloudName: "test-cloud", apiKey: "1234567890", resourceType: "image", timestamp: 1_800_000_000,
+        signature: "b".repeat(64), params: { public_id: `chytnucz/${objectKey}`, type: "authenticated", overwrite: false } }),
+      requestUploadVerification: async () => ({ verified: true, bytes: sizedBlob.size, format: "jpg" }),
+    });
+    assert.equal(result.objectKey, objectKey);
+  }
 });
 
 test("iOS uses the native background multipart transport, then completes the existing server verify step", async () => {
@@ -79,7 +100,7 @@ test("iOS uses the native background multipart transport, then completes the exi
   });
   await provider.upload({ ownerId, catchId, photoId, objectKey, blob, size: blob.size, contentType: blob.type, sha256,
     requestUploadGrant: async () => ({ cloudName: "test-cloud", apiKey: "1234567890", resourceType: "image", timestamp: 1_800_000_000,
-      signature: "a".repeat(64), params: { public_id: `chytnucz/${objectKey}`, type: "authenticated", overwrite: true, context: `sha256=${sha256}` } }),
+      signature: "a".repeat(64), params: { public_id: `chytnucz/${objectKey}`, type: "authenticated", overwrite: false, context: `sha256=${sha256}` } }),
     requestUploadVerification: async (body) => {
       verified = true;
       assert.deepEqual(body, { catchId, photoId, bytes: blob.size, format: "jpg", sha256 });
@@ -114,7 +135,7 @@ test("upload copies IndexedDB Blob and File bytes into typed memory Blobs for su
       ownerId, catchId, photoId: id, objectKey: key, blob: item.source,
       size: item.source.size, contentType: item.type, sha256: digest,
       requestUploadGrant: async () => ({ cloudName: "test-cloud", apiKey: "1234567890", resourceType: "image", timestamp: 1_800_000_000,
-        signature: "b".repeat(64), params: { public_id: `chytnucz/${key}`, type: "authenticated", overwrite: true } }),
+        signature: "b".repeat(64), params: { public_id: `chytnucz/${key}`, type: "authenticated", overwrite: false } }),
       requestUploadVerification: async ({ bytes, format }) => ({ verified: true, bytes, format }),
     });
     assert.notEqual(appended, item.source);
@@ -159,7 +180,7 @@ test("File restored from IndexedDB is copied before it enters Cloudinary FormDat
   await provider.upload({ ownerId, catchId, photoId: "indexeddb-file", objectKey: key, blob: restored,
     size: restored.size, contentType: "image/jpeg", sha256: digest,
     requestUploadGrant: async () => ({ cloudName: "test-cloud", apiKey: "1234567890", resourceType: "image", timestamp: 1_800_000_000,
-      signature: "b".repeat(64), params: { public_id: `chytnucz/${key}`, type: "authenticated", overwrite: true } }),
+      signature: "b".repeat(64), params: { public_id: `chytnucz/${key}`, type: "authenticated", overwrite: false } }),
     requestUploadVerification: async ({ bytes, format }) => ({ verified: true, bytes, format }),
   });
   assert.notEqual(uploaded, restored);
@@ -183,7 +204,7 @@ test("ten photos in one Catch receive independent deterministic signed uploads",
     await provider.upload({
       ownerId, catchId, photoId: id, objectKey: key, blob, size: blob.size, contentType: blob.type, sha256,
       requestUploadGrant: async () => ({ cloudName: "test-cloud", apiKey: "1234567890", resourceType: "image", timestamp: 1_800_000_000,
-        signature: "b".repeat(64), params: { public_id: `chytnucz/${key}`, type: "authenticated", overwrite: true } }),
+        signature: "b".repeat(64), params: { public_id: `chytnucz/${key}`, type: "authenticated", overwrite: false } }),
       requestUploadVerification: async () => ({ verified: true, bytes: blob.size, format: "jpg" }),
     });
   }
@@ -196,7 +217,7 @@ test("provider rejects a mismatched signed path and classifies Cloudinary upload
   await assert.rejects(provider.upload({
     ownerId, catchId, photoId, objectKey, blob, size: blob.size, contentType: blob.type, sha256,
     requestUploadGrant: async () => ({ cloudName: "test-cloud", apiKey: "1234567890", resourceType: "image", timestamp: 1_800_000_000,
-      signature: "b".repeat(64), params: { public_id: "foreign/path", type: "authenticated", overwrite: true } }),
+      signature: "b".repeat(64), params: { public_id: "foreign/path", type: "authenticated", overwrite: false } }),
     requestUploadVerification: async () => ({ verified: true }),
   }), { code: "invalid_photo_identity" });
 
@@ -204,9 +225,32 @@ test("provider rejects a mismatched signed path and classifies Cloudinary upload
   await assert.rejects(failing.upload({
     ownerId, catchId, photoId, objectKey, blob, size: blob.size, contentType: blob.type, sha256,
     requestUploadGrant: async () => ({ cloudName: "test-cloud", apiKey: "1234567890", resourceType: "image", timestamp: 1_800_000_000,
-      signature: "b".repeat(64), params: { public_id: `chytnucz/${objectKey}`, type: "authenticated", overwrite: true } }),
+      signature: "b".repeat(64), params: { public_id: `chytnucz/${objectKey}`, type: "authenticated", overwrite: false } }),
     requestUploadVerification: async () => ({ verified: true }),
   }), (error) => error.code === "cloudinary_rate_limited" && !error.message.includes("must not escape"));
+});
+
+test("provider refuses a grant that could overwrite a newer asset", async () => {
+  const provider = createCloudinaryPhotoProvider({ fetchImpl: async () => assert.fail("unsafe grant reached Cloudinary") });
+  await assert.rejects(provider.upload({ ownerId, catchId, photoId, objectKey, blob,
+    size: blob.size, contentType: blob.type, sha256,
+    requestUploadGrant: async () => ({ cloudName: "test-cloud", apiKey: "1234567890", resourceType: "image", timestamp: 1_800_000_000,
+      signature: "b".repeat(64), params: { public_id: `chytnucz/${objectKey}`, type: "authenticated", overwrite: true } }),
+  }), { code: "cloudinary_invalid_grant" });
+});
+
+for (const [status, message, code] of [
+  [429, "rate limited", "cloudinary_rate_limited"],
+  [503, "temporarily unavailable", "cloudinary_upload_failed"],
+  [401, "Expired signature", "cloudinary_signature_expired"],
+]) test(`signed upload classifies HTTP ${status} for retry`, async () => {
+  const provider = createCloudinaryPhotoProvider({ fetchImpl: async () => jsonResponse({ error: { message } }, status) });
+  await assert.rejects(provider.upload({ ownerId, catchId, photoId, objectKey, blob,
+    size: blob.size, contentType: blob.type, sha256,
+    requestUploadGrant: async () => ({ cloudName: "test-cloud", apiKey: "1234567890", resourceType: "image", timestamp: 1_800_000_000,
+      signature: "b".repeat(64), params: { public_id: `chytnucz/${objectKey}`, type: "authenticated", overwrite: false } }),
+    requestUploadVerification: async () => assert.fail("failed upload cannot finalize"),
+  }), { code, status });
 });
 
 test("authenticated delivery grant is fetched then downloaded; delete delegates IDs only to server", async () => {
@@ -269,7 +313,7 @@ test("empty or mismatched Cloudinary response cannot reach verification", async 
     await assert.rejects(provider.upload({ ownerId, catchId, photoId, objectKey, blob,
       size: blob.size, contentType: blob.type, sha256,
       requestUploadGrant: async () => ({ cloudName: "test-cloud", apiKey: "1234567890", resourceType: "image", timestamp: 1_800_000_000,
-        signature: "b".repeat(64), params: { public_id: `chytnucz/${objectKey}`, type: "authenticated", overwrite: true } }),
+        signature: "b".repeat(64), params: { public_id: `chytnucz/${objectKey}`, type: "authenticated", overwrite: false } }),
       requestUploadVerification: async () => { verified = true; },
     }), { code: "cloudinary_response_mismatch" });
     assert.equal(verified, false);

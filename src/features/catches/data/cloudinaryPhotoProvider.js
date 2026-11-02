@@ -25,7 +25,7 @@ function grantParams(grant) {
     || grant.resourceType !== "image" || !Number.isInteger(grant.timestamp)
     || typeof grant.signature !== "string" || !/^[a-f0-9]{40,64}$/i.test(grant.signature)
     || !grant.params || typeof grant.params.public_id !== "string"
-    || grant.params.type !== "authenticated" || grant.params.overwrite !== true) {
+    || grant.params.type !== "authenticated" || grant.params.overwrite !== false) {
     throw providerError("Cloudinary authorization response is invalid.", "cloudinary_invalid_grant");
   }
   return grant;
