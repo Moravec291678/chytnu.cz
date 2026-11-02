@@ -148,8 +148,9 @@ export default function SettingsPage() {
       setMessage(missingPhotos
         ? `Cloudový export je stažený. ${missingPhotos} fotografií nemá dostupnou cloudovou kopii; důvod je uveden v exportu.`
         : "Cloudový export účtu je předán prohlížeči ke stažení.");
-    } catch {
-      setError("Cloudový export se nepodařilo vytvořit. Zkontroluj připojení a přihlášení a zkus to znovu.");
+    } catch (exportError) {
+      setError(exportError?.code === "export_too_large" ? exportError.message
+        : "Cloudový export se nepodařilo vytvořit. Zkontroluj připojení a přihlášení a zkus to znovu.");
     } finally {
       setExportingCloud(false);
       setCloudExportProgress("");

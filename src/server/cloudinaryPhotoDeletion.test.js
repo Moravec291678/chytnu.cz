@@ -87,23 +87,23 @@ test("one-hour eligibility reaches the first daily sweep within about 25 hours",
   }
 });
 
-test("one cleanup run continues past the first page of due photos", async () => {
+test("one cleanup run continues past 100 due photos", async () => {
   let now = Date.parse("2026-10-28T12:00:00.000Z");
   const db = createFakeDb();
   const destroyed = [];
   const service = createCloudinaryPhotoDeletionService({ db, Timestamp: FakeTimestamp, now: () => now,
-    pageSize: 2, getCloudinary: async () => ({ uploader: { async destroy(id) {
+    pageSize: 20, getCloudinary: async () => ({ uploader: { async destroy(id) {
       destroyed.push(id);
       return { result: "ok" };
     } } }), derivePublicId });
-  for (let index = 0; index < 5; index += 1) {
+  for (let index = 0; index < 105; index += 1) {
     await service.enqueue({ ownerId, catchId, photoId: `photo-${index}` });
   }
   now += PHOTO_DELETE_DELAY_MS;
   const result = await service.processDueJobs();
-  assert.equal(result.scanned, 5);
-  assert.equal(result.deleted, 5);
-  assert.equal(destroyed.length, 5);
+  assert.equal(result.scanned, 105);
+  assert.equal(result.deleted, 105);
+  assert.equal(destroyed.length, 105);
 });
 
 test("server deletion job is owner-scoped, deterministic, and eligible for the first safe sweep", async () => {

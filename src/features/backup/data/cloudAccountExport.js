@@ -8,11 +8,13 @@ import { calculateProgression } from "../../progression/data/progression.js";
 import { buildChallengeOverview } from "../../progression/data/challenges.js";
 import { buildSeasonalChallenge } from "../../progression/data/seasonalChallenge.js";
 import { summaryForXp } from "../../progression/data/progressionLedger.js";
+import { PRODUCT_LIMITS } from "../../../product/config/limits.js";
 
 export const CLOUD_ACCOUNT_EXPORT_FORMAT = "chytnucz-account-export";
 export const CLOUD_ACCOUNT_EXPORT_VERSION = 1;
 const PAGE_SIZE = 200;
-const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
+const MAX_PHOTO_BYTES = PRODUCT_LIMITS.photoBytes;
+const MAX_EXPORT_CHARS = 64 * 1024 * 1024;
 const EMULATOR_CONNECTIONS = Symbol.for("chytnucz.firebaseEmulatorConnections");
 const SYNC_INTERNAL_FIELDS = ["ownerId", "serverRevision", "syncSequence", "lastOperationId", "clientLocalRevision",
   "operationDigest", "lastReceiptId", "photoState", "sync"];
@@ -101,12 +103,13 @@ export function createCloudAccountExportService({
   currentOwnerId = () => firebaseAuth.currentUserId(),
   now = () => new Date(),
   pageSize = PAGE_SIZE,
+  maxExportChars = MAX_EXPORT_CHARS,
 } = {}) {
   if (typeof getCollectionPage !== "function" || typeof downloadPhoto !== "function") {
     throw new TypeError("Cloud export vyžaduje čtení Firestore a stažení fotografií.");
   }
 
-  async function listCollection(ownerId, collectionName, onPage, { ownerFieldRequired = true } = {}) {
+  async function listCollection(ownerId, collectionName, onPage, { ownerFieldRequired = true, reserve = () => {} } = {}) {
     const items = [];
     let cursor = null;
     while (true) {
@@ -115,9 +118,11 @@ export function createCloudAccountExportService({
       assertOwner(ownerId, currentOwnerId);
       for (const item of page.items) {
         if ((ownerFieldRequired && item.data?.ownerId !== ownerId)
+          || (!ownerFieldRequired && item.data?.ownerId != null && item.data.ownerId !== ownerId)
           || (item.data?.id != null && item.data.id !== item.id)) {
           throw new Error(`Cloudový záznam ${collectionName}/${item.id} nemá platného vlastníka.`);
         }
+        reserve(JSON.stringify(jsonSafe(item.data)).length + item.id.length + 128);
         items.push({ id: item.id, data: { ...jsonSafe(item.data), id: item.id } });
       }
       onPage?.(items.length);
@@ -130,11 +135,19 @@ export function createCloudAccountExportService({
   async function exportAccount({ ownerId, user = null, email = user?.email ?? null, deviceSupplement = null, onProgress = () => {} }) {
     assertOwner(ownerId, currentOwnerId);
     if (user?.uid && user.uid !== ownerId) throw new Error("Přihlášený účet neodpovídá vlastníkovi exportu.");
+    let estimatedChars = 0;
+    const reserve = (chars) => {
+      estimatedChars += chars;
+      if (estimatedChars > maxExportChars) throw Object.assign(
+        new Error("Cloudový export přesáhl bezpečný limit 64 MB. Data zůstala zachována; kontaktuj podporu."),
+        { code: "export_too_large" });
+    };
+    reserve(JSON.stringify(jsonSafe(portableDeviceSupplement(deviceSupplement))).length + 1024);
     onProgress({ phase: "records" });
     const names = ["catches", "trips", "waters", "notifications", "serverProgressionEvents", "serverProgressionState"];
     const collections = {};
     for (const name of names) {
-      collections[name] = await listCollection(ownerId, name, (count) => onProgress({ phase: "records", collection: name, count }));
+      collections[name] = await listCollection(ownerId, name, (count) => onProgress({ phase: "records", collection: name, count }), { reserve });
     }
 
     const activeCatches = [];
@@ -159,7 +172,7 @@ export function createCloudAccountExportService({
     const photoCollections = [];
     for (const catchRecord of activeCatches) {
       const photoItems = await listCollection(ownerId, `catches/${catchRecord.id}/photos`,
-        (count) => onProgress({ phase: "photos", catchId: catchRecord.id, count }), { ownerFieldRequired: false });
+        (count) => onProgress({ phase: "photos", catchId: catchRecord.id, count }), { ownerFieldRequired: false, reserve });
       const legacyPhotoMap = new Map((Array.isArray(catchRecord.photos) ? catchRecord.photos : [])
         .filter((photo) => typeof photo?.id === "string").map((photo) => [photo.id, photo]));
       const referencedIds = catchRecord.photoRefs
@@ -185,9 +198,11 @@ export function createCloudAccountExportService({
             }
             const hash = await fingerprint(bytes);
             if (hash !== cloudMetadata.sha256) throw Object.assign(new Error("Photo hash mismatch."), { code: "photo_hash_mismatch" });
+            reserve(4 * Math.ceil(bytes.byteLength / 3) + 128);
             photo.dataBase64 = encodeBytes(bytes);
             photo.availability = "included";
           } catch (error) {
+            if (error?.code === "export_too_large") throw error;
             if (currentOwnerId() !== ownerId) throw new Error("Přihlášený účet se změnil. Export byl zastaven.", { cause: error });
             const reason = typeof error?.code === "string" && /^[a-z0-9_-]{1,64}$/.test(error.code)
               ? error.code : "photo_download_failed";

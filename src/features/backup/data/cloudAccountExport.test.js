@@ -276,6 +276,19 @@ test("cloud export rejects records whose owner or document identity does not mat
   await assert.rejects(service.exportAccount({ ownerId: OWNER }), /nemá platného vlastníka/);
 });
 
+test("cloud export rejects a photo document claiming another owner", async () => {
+  const service = createCloudAccountExportService({
+    getCollectionPage: async ({ collectionName }) => ({ items: collectionName === "catches"
+      ? [makeItem("catch-owner", { photoRefs: { photo: true } })]
+      : collectionName === "catches/catch-owner/photos"
+        ? [{ id: "photo", data: { id: "photo", ownerId: "account-b", name: "foreign.jpg" } }] : [],
+    cursor: null, done: true }),
+    currentOwnerId: () => OWNER,
+    downloadPhoto: async () => assert.fail("foreign photo cannot be downloaded"),
+  });
+  await assert.rejects(service.exportAccount({ ownerId: OWNER }), /nemá platného vlastníka/);
+});
+
 test("cloud export aborts if the authenticated account changes during pagination", async () => {
   let activeOwner = OWNER;
   const service = createCloudAccountExportService({
@@ -370,4 +383,32 @@ test("size audit: many photos and a legacy Catch with more than four photos expo
   assert.equal(result.coverage.photos, 120);
   assert.equal(result.records.catches[0].photos.length, 10, "legacy >4-photo Catch remain complete");
   assert.ok(result.records.catches.every((record) => record.photos.length === 10));
+});
+
+test("large metadata export stops with a safe error before creating a partial file", async () => {
+  const service = createCloudAccountExportService({
+    getCollectionPage: async ({ collectionName }) => ({ items: collectionName === "catches"
+      ? [makeItem("large-catch", { notes: "x".repeat(500) })] : [], cursor: null, done: true }),
+    currentOwnerId: () => OWNER,
+    downloadPhoto: async () => assert.fail("metadata limit reached before photo download"),
+    maxExportChars: 1200,
+  });
+  await assert.rejects(service.exportAccount({ ownerId: OWNER }),
+    (error) => error.code === "export_too_large" && /Data zůstala zachována/.test(error.message));
+});
+
+test("large photo export stops before base64 accumulation exceeds the safe limit", async () => {
+  const bytes = new Uint8Array(600);
+  const hash = await photoHash(bytes);
+  const service = createCloudAccountExportService({
+    getCollectionPage: async ({ collectionName }) => ({ items: collectionName === "catches"
+      ? [makeItem("catch-large-photo", { photoRefs: { photo: true } })]
+      : collectionName === "catches/catch-large-photo/photos"
+        ? [{ id: "photo", data: { id: "photo", name: "photo.jpg", type: "image/jpeg", size: bytes.length,
+          cloud: { state: "synced", provider: "cloudinary", sha256: hash } } }] : [], cursor: null, done: true }),
+    currentOwnerId: () => OWNER,
+    downloadPhoto: async () => bytes,
+    maxExportChars: 1700,
+  });
+  await assert.rejects(service.exportAccount({ ownerId: OWNER }), { code: "export_too_large" });
 });
