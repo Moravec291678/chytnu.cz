@@ -7,6 +7,7 @@ import {
   getUserLocation,
 } from "./fishActivity.js";
 import { clearWeatherCache, fetchWeatherData, getWeatherConditions } from "./weatherApi.js";
+import { getLocationAdapter } from "../../../platform/location/index.js";
 
 test("weather snapshot combines the current hour with complete provider data", () => {
   const conditions = getWeatherConditions({
@@ -74,6 +75,26 @@ test("geolocation denial is preserved as a permission error", async () => {
   }
 });
 
+test("optional location accepts a fix and handles unavailable or timed-out devices", async () => {
+  const originalNavigator = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  try {
+    Object.defineProperty(globalThis, "navigator", { configurable: true, value: {} });
+    assert.equal(getLocationAdapter().supported, false);
+    await assert.rejects(getLocationAdapter().getCurrentPosition(), /není.*dostupná/);
+    Object.defineProperty(globalThis, "navigator", { configurable: true, value: { geolocation: {
+      getCurrentPosition(success) { success({ coords: { latitude: 50, longitude: 14, accuracy: 20 } }); },
+    } } });
+    assert.deepEqual(await getUserLocation(), { lat: 50, lng: 14, accuracy: 20 });
+    Object.defineProperty(globalThis, "navigator", { configurable: true, value: { geolocation: {
+      getCurrentPosition(_success, failure) { failure({ code: 3 }); },
+    } } });
+    await assert.rejects(getLocationAdapter().getCurrentPosition({ timeout: 10 }), { code: 3 });
+  } finally {
+    if (originalNavigator) Object.defineProperty(globalThis, "navigator", originalNavigator);
+    else delete globalThis.navigator;
+  }
+});
+
 test("activity heuristic is deterministic for the same weather and timestamp", () => {
   const conditions = { temperature: -5, windSpeed: 40, pressure: 1000, cloudiness: 0, rainChance: 0 };
   const date = new Date(2026, 0, 16, 2);
@@ -112,6 +133,22 @@ test("weather request reports HTTP failures as unavailable data", async () => {
 
   try {
     await assert.rejects(fetchWeatherData(50, 14), { kind: "weather-unavailable" });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("offline weather failure and a stalled request return a usable unavailable state", async () => {
+  clearWeatherCache();
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => { throw new TypeError("offline"); };
+    await assert.rejects(fetchWeatherData(50, 14), { kind: "weather-unavailable" });
+    globalThis.fetch = (_url, { signal }) => new Promise((_resolve, reject) => {
+      signal.addEventListener("abort", () => reject(Object.assign(new Error("aborted"), { name: "AbortError" })), { once: true });
+    });
+    await assert.rejects(fetchWeatherData(50, 14, { timeoutMs: 5 }),
+      (error) => error.kind === "weather-unavailable" && /příliš dlouho/.test(error.message));
   } finally {
     globalThis.fetch = originalFetch;
   }

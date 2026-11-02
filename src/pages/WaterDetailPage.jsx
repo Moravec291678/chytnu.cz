@@ -8,6 +8,7 @@ import { createTripRecord } from "../features/trips/data/tripModel.js";
 import { getWaterCatchSeasonCounts, getWaterHourlyCatchRate, getWaterRelatedCatches, getWaterRelatedTrips, getWaterTodayTripCount } from "../features/waters/data/waterDetailStats.js";
 import { waterRepository } from "../features/waters/data/waterRepository.js";
 import CatchCard from "../features/catches/components/CatchCard.jsx";
+import ConfirmDialog from "../shared/components/ConfirmDialog.jsx";
 import "./WaterDetailPage.css";
 
 function WaterDetailPage() {
@@ -23,6 +24,8 @@ function WaterDetailPage() {
   const [actionError, setActionError] = useState("");
   const [favoriteSaving, setFavoriteSaving] = useState(false);
   const [startingTrip, setStartingTrip] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const startingTripRef = useRef(false);
 
   const loadWater = useCallback(async () => {
@@ -103,6 +106,21 @@ function WaterDetailPage() {
     }
   };
 
+  const deleteWater = async () => {
+    if (!water || deleting) return;
+    setDeleting(true);
+    setActionError("");
+    try {
+      await waterRepository.delete(water.id, scope);
+      navigate("/waters", { replace: true });
+    } catch {
+      setConfirmingDelete(false);
+      setActionError("Revír se nepodařilo smazat. Zkus to znovu.");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   if (dataLoading) {
     return <Layout><div className="water-detail-page"><p className="loading-state" role="status">Načítám detail revíru…</p></div></Layout>;
   }
@@ -147,7 +165,15 @@ function WaterDetailPage() {
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 16.5-.8 4.3 4.3-.8L20 7.5 16.5 4 4 16.5Z" /><path d="m14.8 5.7 3.5 3.5" /></svg>
         </Link>
         <Link to={`/waters/${water.id}/chat`} aria-label="Chat revíru" className="water-detail-icon-button">💬</Link>
+        <button type="button" className="water-detail-icon-button" aria-label="Smazat revír" onClick={() => setConfirmingDelete(true)} disabled={deleting}>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m-9 0 1 13h10l1-13M10 11v6m4-6v6" /></svg>
+        </button>
       </header>
+
+      {confirmingDelete && <ConfirmDialog titleId="delete-water-title" descriptionId="delete-water-description"
+        title="Smazat revír?" description="Revír se odstraní z tohoto profilu. Úlovky a vycházky zůstanou zachované, ale jejich vazba na revír už nebude dostupná."
+        busy={deleting} confirmLabel="Smazat revír" busyLabel="Mažu…" confirmClassName="catch-delete-confirm"
+        onCancel={() => setConfirmingDelete(false)} onConfirm={deleteWater} />}
 
       {actionError && <p role="alert" className="water-action-error">{actionError}{activeTrip && !activeTripForWater && <> <Link to={`/trips/${activeTrip.id}`}>Otevřít aktivní vycházku</Link></>}</p>}
 

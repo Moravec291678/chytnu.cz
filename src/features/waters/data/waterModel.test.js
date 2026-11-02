@@ -131,3 +131,17 @@ test("water repository stores, reloads, lists and opens a local pending Water wi
   assert.equal(messages[0].text, "Dnes berou kapři na feeder");
   assert.equal((await waterRepository.listMessages(water.id, { scopeKey: "different-scope" })).length, 0);
 });
+
+test("deleting a Water removes only the active account's record", async () => {
+  const accountA = { scopeKey: "account:water-delete-a", ownerId: "water-delete-a" };
+  const accountB = { scopeKey: "account:water-delete-b", ownerId: "water-delete-b" };
+  const waterA = createWaterRecord({ name: "A water" }, accountA);
+  const waterB = createWaterRecord({ name: "B water" }, accountB);
+  await waterRepository.put(waterA, accountA);
+  await waterRepository.put(waterB, accountB);
+  assert.equal(await waterRepository.delete(waterB.id, accountA), null);
+  assert.equal(await waterRepository.delete(waterA.id, accountA), waterA.id);
+  assert.equal(await waterRepository.get(waterA.id, accountA), null);
+  assert.equal((await waterRepository.list(accountA)).length, 0);
+  assert.equal((await waterRepository.get(waterB.id, accountB)).name, "B water");
+});

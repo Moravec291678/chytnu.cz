@@ -5,7 +5,7 @@ export function clearWeatherCache() {
   weatherCache = null;
 }
 
-export async function fetchWeatherData(lat, lng, { signal, now } = {}) {
+export async function fetchWeatherData(lat, lng, { signal, now, timeoutMs = 12000 } = {}) {
   if (!Number.isFinite(lat) || lat < -90 || lat > 90 || !Number.isFinite(lng) || lng < -180 || lng > 180) {
     throw Object.assign(new Error("Zjištěná poloha není platná."), { kind: "location-unavailable" });
   }
@@ -17,7 +17,7 @@ export async function fetchWeatherData(lat, lng, { signal, now } = {}) {
   }
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 12000);
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   const abortRequest = () => controller.abort();
   if (signal?.aborted) controller.abort();
   else signal?.addEventListener("abort", abortRequest, { once: true });

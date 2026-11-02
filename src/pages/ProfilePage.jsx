@@ -37,6 +37,7 @@ import { DEFAULT_PRIVACY_SETTINGS } from "../features/privacy/data/privacyModel.
 import { privacyRepository } from "../features/privacy/data/privacyRepository.js";
 import { waterRepository } from "../features/waters/data/waterRepository.js";
 import { runManualSync } from "../shared/layout/syncStatusView.js";
+import { isFeatureEnabled } from "../shared/config/featureFlags.js";
 import "./ProfilePage.css";
 
 function formatCount(count, one, few, many) {
@@ -434,7 +435,7 @@ function ProfilePage() {
         <Link className="profile-secondary-link" to="/achievements">Achievementy <span aria-hidden="true">→</span></Link>
         <Link className="profile-secondary-link" to="/challenges">Osobní výzvy <span aria-hidden="true">→</span></Link>
         <Link className="profile-secondary-link" to="/streak">Týdenní série <span aria-hidden="true">→</span></Link>
-        <Link className="profile-secondary-link" to="/supporter">Supporter <span aria-hidden="true">→</span></Link>
+        {isFeatureEnabled("supporter") && <Link className="profile-secondary-link" to="/supporter">Supporter <span aria-hidden="true">→</span></Link>}
       </nav>
 
       <section className="profile-panel profile-preferences" aria-labelledby="profile-preferences-title">

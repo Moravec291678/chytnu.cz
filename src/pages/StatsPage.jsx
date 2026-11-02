@@ -194,7 +194,7 @@ function StatsPage() {
             : "Tato funkce zatím není dostupná. Zobrazené statistiky vycházejí pouze z tvých uložených záznamů."}</p>
         </section>
 
-        {getEntitlementState(null, "supporter") !== "active" && <section className="stats-supporter" aria-label="Rybářský příběh sezóny">
+        {isFeatureEnabled("supporter") && getEntitlementState(null, "supporter") !== "active" && <section className="stats-supporter" aria-label="Rybářský příběh sezóny">
           <span>SUPPORTER</span>
           <h2>Rybářský příběh sezóny</h2>
           <p>Tato funkce zatím není dostupná.</p>

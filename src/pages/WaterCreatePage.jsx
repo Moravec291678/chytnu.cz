@@ -192,14 +192,6 @@ function WaterCreatePage() {
             {errors.area && <span className="water-create-error">{errors.area}</span>}
           </label>
 
-          <section className="water-create-location" aria-labelledby="water-location-title">
-            <div>
-              <strong id="water-location-title">Označit na mapě</strong>
-              <p>Výběr bodu na mapě zatím není připojený. Uloží se pouze textová poloha výše.</p>
-            </div>
-            <button type="button" disabled>Mapa není dostupná</button>
-          </section>
-
           <div className="water-create-group">
             <span>Druhy ryb</span>
             <div className="water-create-chips" role="group" aria-label="Druhy ryb">

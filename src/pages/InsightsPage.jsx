@@ -17,6 +17,7 @@ import {
 } from "../features/retrospectives/data/insightsPageData.js";
 import { waterRepository } from "../features/waters/data/waterRepository.js";
 import { getEntitlementState } from "../features/entitlements/data/entitlementAccess.js";
+import { isFeatureEnabled } from "../shared/config/featureFlags.js";
 import "./InsightsPage.css";
 
 function InsightSection({ title, children, className = "" }) {
@@ -147,11 +148,11 @@ function InsightsPage() {
             </>}
         </InsightSection>
 
-        <InsightSection title="Supporter" className="insights-supporter">
+        {isFeatureEnabled("supporter") && <InsightSection title="Supporter" className="insights-supporter">
           {getEntitlementState(null, "supporter") === "active"
             ? <p>Rozšířená analytika je dostupná s ověřeným Supporter oprávněním.</p>
             : <p>Pokročilé grafy a hlubší analýza jsou zamčené. Ověření členství ani nákup zatím nejsou dostupné.</p>}
-        </InsightSection>
+        </InsightSection>}
 
         <nav className="insights-links" aria-label="Další přehledy">
           <Link to="/stats">Podrobné statistiky →</Link>

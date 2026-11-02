@@ -196,15 +196,11 @@ export default function CatchSharePage() {
         <strong>{busy ? "Připravuji obrázek…" : "Uložit obrázek"}</strong>
         <span>Stáhne celou kartu jako PNG</span>
       </button>
-      <button type="button" disabled aria-disabled="true" aria-describedby="catch-share-pdf-unavailable">
-        <strong>Export deníku do PDF</strong>
-        <span id="catch-share-pdf-unavailable">Export do PDF zatím není dostupný.</span>
-      </button>
     </section>
     {message && <p className="catch-share-message" role="status">{message}</p>}
     {error && <p className="catch-share-error-text" role="alert">{error}</p>}
     <div className="catch-share-actions">
-      <button type="button" disabled={busy || photoLoading || waterLoading} onClick={shareImage}>{busy ? "Připravuji…" : "Sdílet jako příběh · +10 XP"}</button>
+      <button type="button" disabled={busy || photoLoading || waterLoading} onClick={shareImage}>{busy ? "Připravuji…" : "Sdílet jako příběh"}</button>
     </div>
   </main>;
 }

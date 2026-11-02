@@ -13,6 +13,7 @@ import SplashScreen from "./SplashScreen.jsx";
 import { isGuestAccessConfirmed } from "../features/auth/data/guestAccess.js";
 import { useAuth } from "../features/auth/context/authContextValue.js";
 import { canAccessProtectedRoute, isPublicRoute } from "./routeAccess.js";
+import { isFeatureEnabled } from "../shared/config/featureFlags.js";
 
 function RouteAccessGuard() {
   const auth = useAuth();
@@ -162,7 +163,8 @@ function App() {
         <Route path="/insights" element={<PageSuspense><InsightsPage /></PageSuspense>} />
         <Route path="/season-story" element={<PageSuspense><SeasonStoryPage /></PageSuspense>} />
         <Route path="/year-summary" element={<PageSuspense><YearSummaryPage /></PageSuspense>} />
-        <Route path="/supporter" element={<PageSuspense><SupporterPage /></PageSuspense>} />
+        <Route path="/supporter" element={isFeatureEnabled("supporter")
+          ? <PageSuspense><SupporterPage /></PageSuspense> : <Navigate to="/profile" replace />} />
         <Route path="/trips" element={<PageSuspense><TripsPage /></PageSuspense>} />
         <Route path="/trips/new" element={<PageSuspense><TripCreatePage /></PageSuspense>} />
         <Route path="/trips/:id" element={<PageSuspense><TripDetailPage /></PageSuspense>} />

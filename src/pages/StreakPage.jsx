@@ -105,7 +105,7 @@ export default function StreakPage() {
 
             {freezeError && <p className="streak-action-error" role="alert">{freezeError}</p>}
             {freezeMessage && <p className="streak-action-message" role="status">{freezeMessage}</p>}
-            <p className="progression-muted">Aktivní Supporter nárok zde není ověřen; dostupný je proto pouze 1 freeze měsíčně.</p>
+            <p className="progression-muted">Dostupné je 1 zmrazení série měsíčně.</p>
 
             <section className="streak-milestones" aria-label="Milníky série">
               {milestones.map((weeks) => (
