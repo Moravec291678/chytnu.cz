@@ -1,8 +1,10 @@
 import { timingSafeEqual } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { Buffer } from "node:buffer";
 import { createCloudflareSpeciesProvider, createCloudflareTextProvider, CLOUDFLARE_ZERO_COST_MODEL } from "./cloudflareProvider.js";
 import { createZeroCostQuota, blockZeroCostQuota } from "./zeroCostQuota.js";
 import { getAccountDeletionAdminContext } from "../../../server/cloudinaryApi.js";
+import { stripJpegMetadata } from "./productionSpeciesApi.js";
 
 // Temporary operator capability; fixed nonpersonal fixtures only. No caller prompt,
 // image URL or user records are accepted. Remove its deployment secret after checks.
@@ -34,6 +36,14 @@ export function createOperatorAiCheck({ env = globalThis.process?.env ?? {}, adm
           }
           return response;
         } };
+      if (req.body?.action === "operator_fish_check") {
+        if (!await quota("operator-fish-check")) return send(429, { error: "quota_exhausted" });
+        const bytes = stripJpegMetadata(new Uint8Array(await readFile(new URL("../../../../public/ai-fixtures/fish.jpg", import.meta.url))));
+        const result = await (speciesProvider ?? createCloudflareSpeciesProvider(configuration))({ bytes, mimeType: "image/jpeg" });
+        return send(result.status === "suggestion" && result.speciesKey === "commonCarp" ? 200 : 422,
+          { status: result.status === "suggestion" && result.speciesKey === "commonCarp" ? "PASS" : "FAIL",
+            fixture: "USFWS public-domain common carp", result });
+      }
       if (!await quota("operator-text-check")) return send(429, { error: "quota_exhausted" });
       const story = await (textProvider ?? createCloudflareTextProvider(configuration))({
         notes: "Ráno jsem byl u vody. Žádnou rybu jsem nechytil. Potom jsem se vrátil domů.", action: "title" });
