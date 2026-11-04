@@ -14,6 +14,16 @@ import { waterRepository } from "../../waters/data/waterRepository.js";
 
 function memoryStorage() { const values = new Map(); return { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) }; }
 
+test("local diary analysis preferences persist per profile without granting external AI consent", () => {
+  const storage = memoryStorage();
+  savePreferences({ localDiaryAnalysis: false, localFishingRecommendations: false }, storage, "guest-a");
+  assert.equal(readPreferences(storage, "guest-a").localDiaryAnalysis, false);
+  assert.equal(readPreferences(storage, "guest-a").localFishingRecommendations, false);
+  assert.equal(readPreferences(storage, "guest-b").localDiaryAnalysis, true);
+  assert.equal(readPreferences(storage, "guest-b").localFishingRecommendations, true);
+  assert.equal(readPreferences(storage, "guest-a").aiConsent, undefined);
+});
+
 test("all notification preferences persist across reload and stay isolated by profile", () => {
   const storage = memoryStorage();
   const selected = {

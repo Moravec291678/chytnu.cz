@@ -163,3 +163,8 @@
   font-weight: 800;
   text-decoration: none;
 }
+
+.insights-analysis-button { min-height: 44px; padding: 10px 16px; border: 1px solid var(--border-strong); border-radius: 12px; background: var(--surface-2); color: var(--accent-green); font: inherit; cursor: pointer; }
+.insights-analysis-button:focus-visible { outline: 2px solid var(--accent-green); outline-offset: 3px; }
+.insights-evidence { max-height: 200px; overflow-y: auto; }
+.insights-evidence a { display: inline-block; min-height: 32px; color: var(--accent-green); }

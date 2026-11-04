@@ -276,6 +276,15 @@ export default function SettingsPage() {
         </label>
       </section>
 
+      <section className="settings-card" aria-labelledby="settings-ai-title">
+        <h2 id="settings-ai-title">Umělá inteligence a místní postřehy</h2>
+        <p>Externí AI je vypnutá. Fotografie ani obsah deníku se neposílají AI poskytovateli. Rozpoznávání ryb a pomoc s historkami čekají na ověřenou bezplatnou službu a výslovný souhlas.</p>
+        <label className="settings-toggle"><input type="checkbox" checked={preferences.localDiaryAnalysis !== false} onChange={event => update({ localDiaryAnalysis: event.target.checked })} /> Místní analýza deníku</label>
+        <label className="settings-toggle"><input type="checkbox" checked={preferences.localFishingRecommendations !== false} onChange={event => update({ localFishingRecommendations: event.target.checked })} /> Místní doporučení pro další výpravu</label>
+        <p>Tyto výpočty fungují zdarma v zařízení i bez AI. Nejde o souhlas s externím zpracováním.</p>
+        <Link className="settings-link" to="/insights">Otevřít rozbor deníku <span aria-hidden="true">→</span></Link>
+      </section>
+
       <section className="settings-card" aria-labelledby="settings-export-title">
         <h2 id="settings-export-title">Export dat</h2>
         {scope.ownerId ? <>

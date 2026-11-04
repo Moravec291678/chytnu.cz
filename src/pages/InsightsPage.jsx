@@ -19,6 +19,8 @@ import { waterRepository } from "../features/waters/data/waterRepository.js";
 import { getEntitlementState } from "../features/entitlements/data/entitlementAccess.js";
 import { isFeatureEnabled } from "../shared/config/featureFlags.js";
 import "./InsightsPage.css";
+import DiaryIntelligence from "../features/ai/DiaryIntelligence.jsx";
+import { readPreferences } from "../features/preferences/data/preferences.js";
 
 function InsightSection({ title, children, className = "" }) {
   return <section className={`insights-section ${className}`.trim()}>
@@ -74,6 +76,7 @@ function InsightsPage() {
   const lastYear = buildLastYearSummary(catches, ranges);
   const topWaters = buildTopWaterInsights(catches, trips, waters, ranges.current);
   const topSpecies = buildStableSpeciesInsights(catches, ranges.current);
+  const preferences = readPreferences(globalThis.localStorage, scope.scopeKey);
 
   const retry = () => { void Promise.all([refreshCatches(), refreshTrips(), loadWaters()]); };
 
@@ -94,7 +97,9 @@ function InsightsPage() {
       {loading ? <p className="insights-status" role="status">Načítám tvoje přehledy…</p> : catchState.error ? <section className="insights-status">
         Úlovky se nepodařilo načíst, osobní přehledy proto nelze vypočítat.
       </section> : <>
-        <InsightSection title="Pattern">
+        <DiaryIntelligence key={scope.scopeKey} catches={catches} trips={trips} waters={waters}
+          analysisEnabled={preferences.localDiaryAnalysis !== false} recommendationsEnabled={preferences.localFishingRecommendations !== false} />
+        <details className="insights-section"><summary>Další četnosti z deníku</summary>
           <p>Nejčastější opakované údaje z úlovků (nejméně 3 záznamy pro každou položku):</p>
           <ul className="insights-list">
             {patterns.map((item) => <li key={item.key}>
@@ -102,7 +107,7 @@ function InsightsPage() {
             </li>)}
           </ul>
           <p className="insights-muted">Jde o četnost v deníku, ne o jistotu ani předpověď úspěchu.</p>
-        </InsightSection>
+        </details>
 
         <InsightSection title="Předpověď" className="insights-weather">
           <p>Orientační Fish Activity používá aktuální počasí a dostupné místní předpovědi. Výsledek je vysvětlený odhad, ne předpověď úlovků.</p>

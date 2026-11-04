@@ -9,6 +9,8 @@ export const DEFAULT_PREFERENCES = Object.freeze({
   detailMode: "simple",
   notifications: DEFAULT_NOTIFICATION_PREFERENCES,
   onboardingComplete: false,
+  localDiaryAnalysis: true,
+  localFishingRecommendations: true,
 });
 
 function preferenceKey(scopeKey) {

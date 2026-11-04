@@ -1,6 +1,6 @@
 export const PRIVACY_POLICY = Object.freeze({
   title: "Zásady ochrany osobních údajů",
-  lastUpdated: "2. listopadu 2026",
+  lastUpdated: "4. listopadu 2026",
   sections: [
     {
       heading: "1. Správce osobních údajů",
@@ -23,7 +23,7 @@ export const PRIVACY_POLICY = Object.freeze({
     },
     {
       heading: "3. Proč údaje používáme",
-      paragraphs: ["Údaje používáme k provozu účtu a rybářského deníku, synchronizaci mezi zařízeními, ukládání a zobrazování fotografií, místní záloze a obnově, mapovým a meteorologickým funkcím, statistikám a herním funkcím, zabezpečení a řešení technických chyb a vyřízení žádostí uživatelů. Údaje neprodáváme a aplikace v současnosti neobsahuje reklamní systém."],
+      paragraphs: ["Údaje používáme k provozu účtu a rybářského deníku, synchronizaci mezi zařízeními, ukládání a zobrazování fotografií, místní záloze a obnově, mapovým a meteorologickým funkcím, statistikám a herním funkcím, zabezpečení a řešení technických chyb a vyřízení žádostí uživatelů. Údaje neprodáváme a aplikace v současnosti neobsahuje reklamní systém.", "Volitelný místní rozbor deníku a doporučení počítá aplikace v zařízení ze záznamů. Nejde o výstup AI modelu a tyto funkce neposílají fotografie, poznámky ani polohu externí AI službě. Externí rozpoznávání ryb a generování příběhů nejsou aktivované; případné zapnutí bude vyžadovat samostatné informace o poskytovateli a výslovný souhlas."],
     },
     {
       heading: "4. Právní základ",
