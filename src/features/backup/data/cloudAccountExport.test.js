@@ -7,6 +7,42 @@ const OWNER = "account-a";
 const makeItem = (id, data) => ({ id, data: { id, ownerId: OWNER, ...data } });
 const emptyNames = ["trips", "waters", "notifications", "serverProgressionEvents", "serverProgressionState"];
 
+test("cloud export decodes normalized Quick Catch wire metadata while preserving unknown species and null measurements", async () => {
+  const metadata = { capturedAt: "2026-11-04T12:00:00.000Z", inputSource: "camera", timeZone: "Europe/Prague",
+    timezoneOffsetMinutes: -60, provenance: { caughtAt: "device", unsafeField: "unsafe" },
+    enrichment: { weather: { status: "pending", attempts: 1, nextAttemptAt: null } }, arbitrary: "omit" };
+  const service = createCloudAccountExportService({
+    getCollectionPage: async ({ collectionName }) => ({ items: collectionName === "catches"
+      ? [makeItem("quick", { captureMode: "quick", quickCatch: JSON.stringify(metadata), speciesKey: "", species: "Druh zatím neurčen",
+        lengthCm: null, weightKg: null, photoRefs: {} })] : [], cursor: null, done: true }),
+    currentOwnerId: () => OWNER, downloadPhoto: async () => assert.fail("fixture has no cloud photos"),
+  });
+  const result = await service.exportAccount({ ownerId: OWNER });
+  const record = result.records.catches[0];
+  assert.equal(typeof record.quickCatch, "object");
+  assert.equal(record.quickCatch.capturedAt, metadata.capturedAt);
+  assert.equal(record.quickCatch.enrichment.weather.attempts, 1);
+  assert.equal(record.quickCatch.enrichment.metadata.status, "unavailable");
+  assert.deepEqual(record.quickCatch.provenance, { caughtAt: "device" });
+  assert.equal(record.quickCatch.arbitrary, undefined);
+  assert.equal(record.speciesKey, "");
+  assert.equal(record.lengthCm, null);
+  assert.equal(record.weightKg, null);
+});
+
+test("invalid optional Quick Catch wire metadata never prevents exporting the catch", async () => {
+  const invalidValues = ["{broken", "null", JSON.stringify({ inputSource: "camera" }), " ".repeat(8193)];
+  const service = createCloudAccountExportService({
+    getCollectionPage: async ({ collectionName }) => ({ items: collectionName === "catches"
+      ? invalidValues.map((quickCatch, index) => makeItem(`quick-${index}`, { captureMode: "quick", quickCatch, speciesKey: "", lengthCm: null, photoRefs: {} }))
+      : [], cursor: null, done: true }),
+    currentOwnerId: () => OWNER, downloadPhoto: async () => assert.fail("fixture has no cloud photos"),
+  });
+  const result = await service.exportAccount({ ownerId: OWNER });
+  assert.equal(result.records.catches.length, invalidValues.length);
+  assert.ok(result.records.catches.every(record => record.captureMode === "quick" && record.quickCatch === undefined && record.lengthCm === null));
+});
+
 test("account cloud export remains a distinct format from the existing local backup", () => {
   assert.equal(CLOUD_ACCOUNT_EXPORT_FORMAT, "chytnucz-account-export");
   assert.notEqual(CLOUD_ACCOUNT_EXPORT_FORMAT, LOCAL_BACKUP_FORMAT);

@@ -85,6 +85,7 @@ export function hasWeatherConditions(conditions) {
 export function calculateSpeciesMastery(catches) {
   const recordsBySpecies = new Map();
   for (const record of catches) {
+    if (record.captureMode === "quick" && !record.speciesKey) continue;
     const key = record.speciesKey || normalizeText(record.species ?? "") || null;
     if (!key) continue;
     recordsBySpecies.set(key, (recordsBySpecies.get(key) ?? 0) + 1);
@@ -114,7 +115,7 @@ export function getRankForLevel(level) {
 
 export function calculateProgression(catches, trips = [], { now = new Date(), streakFreezes = [] } = {}) {
   catches = filterEligibleCatchRecords(catches, { now });
-  const speciesCount = uniqueKnown(catches, (item) => item.speciesKey || normalizeText(item.species ?? "") || null);
+  const speciesCount = uniqueKnown(catches.filter((item) => item.captureMode !== "quick" || item.speciesKey), (item) => item.speciesKey || normalizeText(item.species ?? "") || null);
   const locationCount = uniqueKnown(catches, (item) => item.waterId || null);
   const completedTrips = trips.filter((trip) => trip.endedAt).length;
   const questXp = calculateQuestXp(catches, trips, now);

@@ -6,31 +6,39 @@ function validCoordinates(latitude, longitude) {
     && Number.isFinite(longitude) && longitude >= -180 && longitude <= 180;
 }
 
-function targetHour(date, time) {
+function targetHour(date, time, timezone) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date ?? "") || !/^\d{2}:\d{2}$/.test(time ?? "")) return null;
   const [year, month, day] = date.split("-").map(Number);
   const [hour, minute] = time.split(":").map(Number);
-  const target = new Date(year, month - 1, day, hour, minute);
-  if (target.getFullYear() !== year || target.getMonth() !== month - 1 || target.getDate() !== day || hour > 23 || minute > 59) return null;
-  if (minute >= 30) target.setHours(target.getHours() + 1);
-  target.setMinutes(0, 0, 0);
+  const utc = timezone === "UTC";
+  const target = utc ? new Date(Date.UTC(year, month - 1, day, hour, minute)) : new Date(year, month - 1, day, hour, minute);
+  const get = (part) => target[`get${utc ? "UTC" : ""}${part}`]();
+  if (get("FullYear") !== year || get("Month") !== month - 1 || get("Date") !== day || hour > 23 || minute > 59) return null;
+  if (utc) {
+    if (minute >= 30) target.setUTCHours(target.getUTCHours() + 1);
+    target.setUTCMinutes(0, 0, 0);
+  } else {
+    if (minute >= 30) target.setHours(target.getHours() + 1);
+    target.setMinutes(0, 0, 0);
+  }
   const pad = (value) => String(value).padStart(2, "0");
-  return `${target.getFullYear()}-${pad(target.getMonth() + 1)}-${pad(target.getDate())}T${pad(target.getHours())}:00`;
+  return `${get("FullYear")}-${pad(get("Month") + 1)}-${pad(get("Date"))}T${pad(get("Hours"))}:00`;
 }
 
-function dayDifferenceFromToday(targetDate, now) {
+function dayDifferenceFromToday(targetDate, now, timezone) {
   const [year, month, day] = targetDate.split("-").map(Number);
   const target = Date.UTC(year, month - 1, day);
-  const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  const today = timezone === "UTC" ? Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
+    : Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
   return Math.round((today - target) / 86400000);
 }
 
-function createUrl(base, latitude, longitude, date, pastDays) {
+function createUrl(base, latitude, longitude, date, pastDays, timezone) {
   const url = new URL(base);
   url.searchParams.set("latitude", String(latitude));
   url.searchParams.set("longitude", String(longitude));
   url.searchParams.set("hourly", "temperature_2m,surface_pressure,wind_speed_10m");
-  url.searchParams.set("timezone", "auto");
+  url.searchParams.set("timezone", timezone);
   if (pastDays === null) {
     url.searchParams.set("start_date", date);
     url.searchParams.set("end_date", date);
@@ -41,21 +49,22 @@ function createUrl(base, latitude, longitude, date, pastDays) {
   return url;
 }
 
-export async function fetchCatchWeather(latitude, longitude, date, time, { signal, now = new Date() } = {}) {
+export async function fetchCatchWeather(latitude, longitude, date, time, { signal, now = new Date(), timezone = "auto" } = {}) {
   if (!validCoordinates(latitude, longitude)) throw new Error("Neplatné souřadnice.");
-  const requestedHour = targetHour(date, time);
+  if (!["auto", "UTC"].includes(timezone)) throw new Error("Neplatné časové pásmo počasí.");
+  const requestedHour = targetHour(date, time, timezone);
   if (!requestedHour) throw new Error("Neplatné datum nebo čas úlovku.");
-  const cacheKey = `${latitude.toFixed(4)},${longitude.toFixed(4)},${requestedHour}`;
+  const cacheKey = `${latitude.toFixed(4)},${longitude.toFixed(4)},${requestedHour},${timezone}`;
   const cached = weatherCache.get(cacheKey);
   if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) return cached.values;
 
-  const daysAgo = dayDifferenceFromToday(requestedHour.slice(0, 10), now);
+  const daysAgo = dayDifferenceFromToday(requestedHour.slice(0, 10), now, timezone);
   const isWithinForecastHistory = daysAgo >= 0 && daysAgo <= 92;
   const isInForecastRange = daysAgo < 0 && daysAgo >= -15;
   const url = isWithinForecastHistory || isInForecastRange
-    ? createUrl("https://api.open-meteo.com/v1/forecast", latitude, longitude, requestedHour.slice(0, 10), Math.max(0, daysAgo))
+    ? createUrl("https://api.open-meteo.com/v1/forecast", latitude, longitude, requestedHour.slice(0, 10), Math.max(0, daysAgo), timezone)
     : daysAgo > 92
-      ? createUrl("https://archive-api.open-meteo.com/v1/archive", latitude, longitude, requestedHour.slice(0, 10), null)
+      ? createUrl("https://archive-api.open-meteo.com/v1/archive", latitude, longitude, requestedHour.slice(0, 10), null, timezone)
       : null;
   if (!url) throw new Error("Počasí pro tento budoucí termín zatím není dostupné.");
 

@@ -10,7 +10,7 @@ import { filterAndSortCatches, hasActiveJournalFilters } from "../features/catch
 import { normalizeText } from "../shared/utils/helpers";
 import "./JournalPage.css";
 
-const EMPTY_FILTERS = { search: "", speciesKey: "", dateFrom: "", dateTo: "", favoriteOnly: false, result: "", methodKey: "", tripId: "", sort: "newest" };
+const EMPTY_FILTERS = { search: "", speciesKey: "", dateFrom: "", dateTo: "", favoriteOnly: false, incompleteOnly: false, result: "", methodKey: "", tripId: "", sort: "newest" };
 const SORTS = [
   ["newest", "Nejnovější"], ["oldest", "Nejstarší"], ["longest", "Nejdelší"], ["heaviest", "Nejtěžší"],
   ["lightest", "Nejlehčí"], ["longest", "Nejdelší"], ["shortest", "Nejkratší"],
@@ -30,7 +30,7 @@ function JournalPage() {
   const { state: tripState } = useTrips();
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [filtersExpanded, setFiltersExpanded] = useState(false);
-  const species = useMemo(() => [...new Map(state.catches.map((item) => [item.speciesKey, { key: item.speciesKey, label: item.species }])).values()]
+  const species = useMemo(() => [...new Map(state.catches.filter(item => item.speciesKey || item.captureMode !== "quick").map((item) => [item.speciesKey, { key: item.speciesKey, label: item.species }])).values()]
     .sort((a, b) => normalizeText(a.label).localeCompare(normalizeText(b.label), "cs")), [state.catches]);
   const results = useMemo(() => filterAndSortCatches(state.catches, filters, tripState.trips), [state.catches, filters, tripState.trips]);
   const activeFilters = hasActiveJournalFilters(filters);
@@ -55,6 +55,7 @@ function JournalPage() {
         <Link className="journal-tab" to="/journal/calendar">Kalendář</Link>
       </nav>
       <div className="journal-controls">
+        <label className="journal-favorite-filter"><input type="checkbox" checked={filters.incompleteOnly} onChange={event => setFilter("incompleteOnly", event.target.checked)} /> Doplnit později</label>
         <label className="journal-search">
           <span aria-hidden="true" className="journal-search-icon">⌕</span>
           <span className="visually-hidden">Hledat v deníku</span>

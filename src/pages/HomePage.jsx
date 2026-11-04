@@ -15,6 +15,8 @@ import { buildHomeInsight } from "../features/home/utils/homeInsights";
 import { useProgression } from "../features/progression/context/progressionContextValue.js";
 import { useNotifications } from "../features/notifications/context/notificationContextValue.js";
 import "./HomePage.css";
+import QuickCatchButton from "../features/catches/components/QuickCatchButton.jsx";
+import { QUICK_CATCH_FEATURES } from "../product/config/quickCatchFlags.js";
 
 const SEASONS = [
   { key: "winter", label: "Zima", months: [11, 0, 1] },
@@ -165,7 +167,7 @@ function HomePage() {
     return Number.isFinite(caughtAt) && getSeasonKey(new Date(caughtAt)) === season.key;
   }), [catches, season.key]);
   const seasonSpeciesCount = useMemo(
-    () => new Set(seasonCatches.map((item) => item.speciesKey || item.species).filter(Boolean)).size,
+    () => new Set(seasonCatches.filter(item => item.speciesKey || item.captureMode !== "quick").map((item) => item.speciesKey || item.species).filter(Boolean)).size,
     [seasonCatches],
   );
   const recordCatch = useMemo(() => getBiggestCatch(catches), [catches]);
@@ -213,6 +215,7 @@ function HomePage() {
           </div>
         </header>
 
+        {QUICK_CATCH_FEATURES.capture && <QuickCatchButton />}
         <FishActivity />
 
         {!ledger.loading && !ledger.error && <Link className="home-progress-card home-xp-card" to="/levels" aria-label={`Úroveň ${ledger.summary.level}, ${ledger.summary.xp} XP, hodnost ${ledger.summary.rank.name}. Otevřít postup`}>

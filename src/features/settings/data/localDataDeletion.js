@@ -13,6 +13,7 @@ import {
   WATER_STORE_NAME,
   WATER_CHAT_STORE_NAME,
   clearSessionPhotoBlobsForScope,
+  APP_META_STORE_NAME,
   openLocalDatabase,
 } from "../../catches/data/catchRepository.js";
 import { catchDraftRepository } from "../../catches/data/catchDraftRepository.js";
@@ -20,6 +21,7 @@ import { validateDataScope } from "../../auth/data/localDataScope.js";
 import { crewRepository } from "../../crew/data/crewRepository.js";
 import { communityInteractionRepository } from "../../community/data/communityInteractionRepository.js";
 import { clearLegacyLocalScope } from "../../waters/data/waterRepository.js";
+import { invalidateQuickCapture, quickCaptureGenerationKey } from "../../catches/data/quickCaptureLifecycle.js";
 
 function deleteIndexMatches(store, indexName, value) {
   const request = store.index(indexName).openCursor(IDBKeyRange.only(value));
@@ -57,9 +59,11 @@ async function deleteJournalScope(scope) {
     WATER_STORE_NAME,
     WATER_CHAT_STORE_NAME,
     PHOTO_BINARY_STORE_NAME,
+    APP_META_STORE_NAME,
   ];
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(stores, "readwrite");
+    transaction.objectStore(APP_META_STORE_NAME).put({ key: quickCaptureGenerationKey(scope.scopeKey), generation: crypto.randomUUID() });
     deleteIndexMatches(transaction.objectStore(CATCH_STORE_NAME), "scopeKey", scope.scopeKey);
     deleteIndexMatches(transaction.objectStore(TRIP_STORE_NAME), "scopeKey", scope.scopeKey);
     deleteIndexMatches(transaction.objectStore(WATER_STORE_NAME), "scopeKey", scope.scopeKey);
@@ -93,6 +97,7 @@ function deleteScopedPreferences(scopeKey, storage) {
 
 export async function deleteLocalScopeData(options, storage = globalThis.localStorage) {
   const scope = validateDataScope(options ?? {});
+  invalidateQuickCapture(scope.scopeKey);
   // Drafts live in their own IndexedDB database and may contain photo Blobs.
   await catchDraftRepository.remove(scope);
   await deleteJournalScope(scope);

@@ -1,4 +1,8 @@
-import { useCallback, useEffect, useReducer, useRef } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { createQuickCapture, prepareQuickCatch, persistQuickCatch, quickCaptureError, wasQuickCatchPersisted } from "../data/quickCatch.js";
+import { subscribeQuickCaptureInvalidation } from "../data/quickCaptureLifecycle.js";
+import { createQuickCatchEnrichmentCoordinator } from "../data/quickCatchEnrichment.js";
+import { QUICK_CATCH_FEATURES } from "../../../product/config/quickCatchFlags.js";
 import { CatchContext } from "./catchContextValue";
 import { catchRepository, retainSessionPhotoBlob } from "../data/catchRepository";
 import { useDataScope } from "../../auth/context/dataScopeContextValue.js";
@@ -29,7 +33,7 @@ function catchReducer(state, action) {
       return {
         ...state,
         error: "",
-        catches: [...state.catches, action.payload],
+        catches: [...state.catches.filter(item => item.id !== action.payload.id), action.payload],
       };
     case "DELETE_CATCH":
       return {
@@ -65,6 +69,10 @@ export function CatchProvider({ children }) {
   const [state, dispatch] = useReducer(catchReducer, initialState);
   const scope = useDataScope();
   const activeScopeKey = useRef(null);
+  const pendingQuickCapture = useRef(null);
+  const quickSaving = useRef(false);
+  const completedQuickFiles = useRef(new WeakSet());
+  const [quickCaptureState, setQuickCaptureState] = useState({ status: "idle" });
   const persistAndVerifyPhotos = useCallback(async (record, storedRecord) => {
     for (const photo of record.photos ?? []) {
       if (!(photo.blob instanceof Blob)) continue;
@@ -106,6 +114,67 @@ export function CatchProvider({ children }) {
     }
   }, [scope]);
 
+  const saveQuickCapture = useCallback(async (file, inputSource, context = {}) => {
+    if (!QUICK_CATCH_FEATURES.capture) return;
+    if (quickSaving.current) return;
+    if (scope.status !== "ready") return;
+    if (file && completedQuickFiles.current.has(file)) return;
+    let pending = pendingQuickCapture.current;
+    if (pending && pending.scope.scopeKey !== scope.scopeKey) {
+      setQuickCaptureState({ status: "error", error: "Fotografie patří k předchozímu profilu. Vrať se do něj a zopakuj uložení." });
+      return;
+    }
+    if (file && pending && file !== pending.file) {
+      // Explicitly selecting a replacement keeps the old photo until a new one is returned.
+      pending = null;
+    }
+    if (!pending) {
+      if (!file) return;
+      pending = { file, capture: createQuickCapture(inputSource), scope, context };
+      pendingQuickCapture.current = pending;
+    }
+    quickSaving.current = true;
+    setQuickCaptureState({ status: "saving" });
+    try {
+      if (!Object.hasOwn(pending.scope, "quickCaptureGeneration")) {
+        pending.scope = { ...pending.scope, quickCaptureGeneration: await catchRepository.getQuickCaptureGeneration(pending.scope) };
+      }
+      pending.record ??= await prepareQuickCatch(pending.file, pending.capture, pending.context);
+      if (pendingQuickCapture.current !== pending) return;
+      await persistQuickCatch(pending.record, pending.scope, catchRepository);
+      if (pendingQuickCapture.current !== pending) return;
+      completedQuickFiles.current.add(pending.file);
+      pendingQuickCapture.current = null;
+      // Local durability is the entire success gate. Network and rewards are independent.
+      if (activeScopeKey.current === pending.scope.scopeKey) {
+        setQuickCaptureState({ status: "saved", id: pending.record.id });
+        await refresh();
+      }
+      window.dispatchEvent(new Event("chytnu:outbox-changed"));
+      void requestPhotoStorageDurability();
+      void progressionLedger.reconcile(pending.scope).then(() => {
+        window.dispatchEvent(new Event("chytnu:progression-changed"));
+      }).catch(() => {});
+    } catch (error) {
+      if (pendingQuickCapture.current === pending) setQuickCaptureState({ status: "error", error: quickCaptureError(error),
+        canReplace: !pending.record || !wasQuickCatchPersisted(pending.record) });
+    } finally {
+      quickSaving.current = false;
+      if (pending.cancelled && activeScopeKey.current === pending.scope.scopeKey) setQuickCaptureState({ status: "idle" });
+    }
+  }, [scope, refresh]);
+
+  useEffect(() => {
+    const invalidate = scopeKey => {
+      if (pendingQuickCapture.current?.scope.scopeKey === scopeKey) {
+        pendingQuickCapture.current.cancelled = true;
+        pendingQuickCapture.current = null;
+      }
+      if (scope.scopeKey === scopeKey) setQuickCaptureState({ status: quickSaving.current ? "canceling" : "idle" });
+    };
+    return subscribeQuickCaptureInvalidation(invalidate);
+  }, [scope.scopeKey]);
+
   useEffect(() => {
     activeScopeKey.current = scope.status === "ready" ? scope.scopeKey : null;
     dispatch({ type: "RESET_SCOPE" });
@@ -117,6 +186,29 @@ export function CatchProvider({ children }) {
       if (activeScopeKey.current === scope.scopeKey) activeScopeKey.current = null;
     };
   }, [refresh, scope.status, scope.scopeKey]);
+
+  useEffect(() => {
+    if (scope.status !== "ready" || !QUICK_CATCH_FEATURES.metadata) return undefined;
+    const coordinator = createQuickCatchEnrichmentCoordinator({ repository: catchRepository, scope,
+      applyPatch: catchRepository.patchQuickCatchEnrichment,
+      onChange: () => {
+        void refresh();
+        window.dispatchEvent(new Event("chytnu:outbox-changed"));
+      } });
+    const run = async () => {
+      try { await coordinator.run(await catchRepository.listMetadata(scope)); } catch { /* Retry on next app wake. */ }
+    };
+    void run();
+    const timer = window.setInterval(run, 30_000);
+    window.addEventListener("online", run);
+    window.addEventListener("chytnu:outbox-changed", run);
+    return () => {
+      coordinator.dispose();
+      window.clearInterval(timer);
+      window.removeEventListener("online", run);
+      window.removeEventListener("chytnu:outbox-changed", run);
+    };
+  }, [scope, refresh]);
 
   const createCatch = useCallback(async (record) => {
     if (scope.status !== "ready") throw new Error("Místní profil se ještě načítá.");
@@ -181,7 +273,7 @@ export function CatchProvider({ children }) {
   }, [scope]);
 
   return (
-    <CatchContext.Provider value={{ state, dispatch, refresh, createCatch, updateCatch, toggleFavorite, deleteCatch }}>
+    <CatchContext.Provider value={{ state, dispatch, refresh, createCatch, updateCatch, toggleFavorite, deleteCatch, quickCaptureState, saveQuickCapture }}>
       {children}
     </CatchContext.Provider>
   );

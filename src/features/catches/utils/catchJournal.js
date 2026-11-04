@@ -1,4 +1,5 @@
 import { normalizeText } from "../../../shared/utils/helpers.js";
+import { isIncompleteQuickCatch } from "../data/quickCatch.js";
 
 function localDate(value) {
   const date = new Date(value);
@@ -16,6 +17,7 @@ export function filterAndSortCatches(catches, filters, trips = []) {
       .filter(Boolean).map(normalizeText).join(" ");
     const date = localDate(item.caughtAt);
     return (!query || searchable.includes(query))
+      && (!filters.incompleteOnly || isIncompleteQuickCatch(item))
       && (!filters.speciesKey || item.speciesKey === filters.speciesKey)
       && (!filters.dateFrom || date >= filters.dateFrom)
       && (!filters.dateTo || date <= filters.dateTo)
@@ -42,5 +44,5 @@ export function filterAndSortCatches(catches, filters, trips = []) {
 
 export function hasActiveJournalFilters(filters) {
   return Boolean(filters.search || filters.speciesKey || filters.dateFrom || filters.dateTo
-    || filters.favoriteOnly || filters.result || filters.methodKey || filters.tripId);
+    || filters.favoriteOnly || filters.result || filters.methodKey || filters.tripId || filters.incompleteOnly);
 }

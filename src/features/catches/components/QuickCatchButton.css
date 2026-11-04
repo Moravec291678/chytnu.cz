@@ -1,0 +1,10 @@
+.quick-catch { margin: 0 0 16px; }
+.quick-catch-actions { display: flex; gap: 10px; }
+.quick-catch button { min-height: 48px; border-radius: 14px; padding: 12px 16px; font: inherit; font-weight: 600; cursor: pointer; }
+.quick-catch-primary { flex: 1; background: var(--gr, #2ecc71); color: #071c10; border: 1px solid transparent; }
+.quick-catch-gallery { background: var(--s1, #1c2635); color: var(--t1, #f0f6ff); border: 1px solid var(--bd, #2c3e52); }
+.quick-catch button:disabled { opacity: .6; cursor: wait; }
+.quick-catch p { font-size: 14px; margin: 10px 0 0; }
+.quick-catch a { color: var(--gr, #2ecc71); }
+.quick-catch [role="alert"] { color: var(--re, #e85555); }
+.quick-catch button:focus-visible { outline: 3px solid var(--bl, #3bade8); outline-offset: 3px; }

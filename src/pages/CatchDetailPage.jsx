@@ -22,6 +22,7 @@ import { formatCatchWeight } from "../features/catches/data/catchWeight.js";
 import ConfirmDialog from "../shared/components/ConfirmDialog";
 import "../features/catches/components/PhotoSyncStatus.css";
 import "./AddCatchPage.css";
+import { isIncompleteQuickCatch } from "../features/catches/data/quickCatch.js";
 
 function formatDate(value) {
   if (!value || !Number.isFinite(Date.parse(value))) return null;
@@ -153,7 +154,7 @@ function CatchDetailPage() {
   const isSpeciesRecord = recognition.speciesRecord;
   const isLengthRecord = isNewLengthRecord(item, state.catches);
   const hasMapLocation = buildPrivateCatchMarkers([item]).length > 0;
-  const rarity = getCatchRarity(item, DEFAULT_SPECIES);
+  const rarity = item.captureMode === "quick" && !item.speciesKey ? null : getCatchRarity(item, DEFAULT_SPECIES);
   const verificationCopy = getVerificationPresentation(item.verification);
   const displayedPhotoIds = new Set(photos.map((photo) => photo.id));
   const unresolvedPhotos = (item.photos ?? []).filter((photo) => !displayedPhotoIds.has(photo.id));
@@ -193,6 +194,21 @@ function CatchDetailPage() {
           <h1>{item.species}</h1>
         )}
         {catchDateLabel && <p className="catch-detail-date">{catchDateLabel}</p>}
+        {item.quickCatch && <details className="catch-detail-date">
+          <summary>Původ doplněných údajů</summary>
+          <dl>{Object.entries(item.quickCatch.provenance ?? {}).map(([field, source]) => {
+            const labels = { caughtAt: "Datum a čas", coordinates: "Poloha", tripId: "Vycházka", locationName: "Místo",
+              waterId: "Revír", method: "Metoda", baits: "Nástrahy", moonPhase: "Fáze měsíce", airTempC: "Teplota vzduchu",
+              pressureHpa: "Tlak", windKmh: "Vítr", speciesKey: "Druh ryby", lengthCm: "Délka", weightKg: "Hmotnost" };
+            const sources = { manual: "Potvrzeno při úpravě", device: "Čas uložení v zařízení", exif: "Údaje fotografie",
+              active_trip: "Aktivní vycházka", gps: "Poloha zařízení", weather_api: "Zdroj počasí", derived: "Výpočet podle data",
+              ai_suggestion: "Návrh AI", saved_water: "Uložený revír" };
+            const value = ["moonPhase", "airTempC", "pressureHpa", "windKmh"].includes(field) ? item.conditions?.[field] : item[field];
+            const present = value !== null && value !== undefined && value !== "" && (!Array.isArray(value) || value.length > 0);
+            return labels[field] && sources[source] ? <div key={field}><dt>{labels[field]}</dt><dd>{present ? sources[source] : "Nezadáno"}</dd></div> : null;
+          })}</dl>
+        </details>}
+        {isIncompleteQuickCatch(item) && <p className="catch-detail-date"><Link to={`/catch/${item.id}/edit`}>Doplnit později</Link> · {!item.speciesKey ? "Druh zatím neurčen. " : ""}{!Number.isFinite(item.lengthCm) ? "Délka nezadána." : ""}</p>}
         <div className="catch-detail-badges">
           {rarity && <span className={`catch-detail-badge catch-detail-badge-rarity catch-detail-badge-rarity--${rarity.key}`}>{rarity.label}</span>}
           {isPersonalBest && <span className="catch-detail-badge catch-detail-badge-record">Osobní rekord</span>}

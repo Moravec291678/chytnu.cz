@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { quickCatchMetadataToRemote } from "../src/features/catches/data/quickCatchMetadata.js";
 import { readFile } from "node:fs/promises";
 import { after, before, beforeEach, test } from "node:test";
 import {
@@ -191,6 +192,58 @@ test("vlastník čte své záznamy; zápis vyžaduje synchronizační protokol a
   }));
   await assertFails(deleteDoc(catchRef));
   await assertFails(deleteDoc(tripRef));
+});
+
+test("rychlý úlovek přijímá neznámý druh a míry a pouze omezená metadata", async () => {
+  const db = alice.firestore();
+  const catchRef = doc(db, catchPath("angler-a", "catch-a"));
+  const current = (await getDoc(catchRef)).data();
+  const quickCatch = quickCatchMetadataToRemote({
+    capturedAt: "2026-11-04T10:12:00.000Z", inputSource: "gallery", timeZone: "Europe/Prague", timezoneOffsetMinutes: -60,
+    provenance: { caughtAt: "exif", speciesKey: "manual", coordinates: "gps", tripId: "active_trip", locationName: "active_trip",
+      waterId: "active_trip", waterNumber: "active_trip", method: "active_trip", baits: "active_trip", moonPhase: "derived",
+      airTempC: "weather_api", pressureHpa: "weather_api", windKmh: "weather_api", lengthCm: "manual", weightKg: "manual",
+      gpsLocation: "manual", notes: "manual", result: "manual" },
+    enrichment: { metadata: { status: "complete", attempts: 1, nextAttemptAt: null },
+      weather: { status: "pending", attempts: 0, nextAttemptAt: null } },
+  });
+  const updated = nextSyncedCatch(current, { captureMode: "quick", quickCatch, species: "", speciesKey: "", lengthCm: null, weightKg: null,
+    conditions: { airTempC: 12, waterTempC: 10, pressureHpa: 1000, windKmh: 12, moonPhase: "fullMoon",
+      weather: "polojasno", windDirection: "J", pressureTrend: "stable", airTemperatureC: 12, waterTemperatureC: 10 },
+    conditionSources: { airTempC: "auto", waterTempC: "manual", pressureHpa: "auto", windKmh: "auto", moonPhase: "auto" } });
+  await assertSucceeds(setDoc(catchRef, updated));
+  const create = writeBatch(db);
+  create.set(doc(db, catchPath("angler-a", "quick-new")), {
+    ...makeSyncedCatch("quick-new", "angler-a", "trip-a"), captureMode: "quick", quickCatch,
+    species: "", speciesKey: "", lengthCm: null, weightKg: null,
+    conditions: updated.conditions, conditionSources: updated.conditionSources,
+    photoRefs: { "quick-photo": true }, primaryPhotoId: "quick-photo", photoState: "metadata-only",
+  });
+  create.set(doc(db, photoPath("angler-a", "quick-new", "quick-photo")), makePhoto("quick-photo", "angler-a", "quick-new"));
+  await assertSucceeds(create.commit());
+  const quickRef = doc(db, catchPath("angler-a", "quick-new"));
+  const quickCreated = (await getDoc(quickRef)).data();
+  await assertSucceeds(setDoc(quickRef, nextSyncedCatch(quickCreated, {
+    conditions: { airTempC: 12, waterTempC: 10, pressureHpa: 1000, windKmh: 12, moonPhase: "fullMoon" },
+  })));
+  const oldRef = doc(bob.firestore(), catchPath("angler-b", "catch-b"));
+  const oldRecord = (await getDoc(oldRef)).data();
+  await assertSucceeds(setDoc(oldRef, nextSyncedCatch(oldRecord, {
+    conditions: updated.conditions, conditionSources: updated.conditionSources,
+  })));
+  await assertFails(getDoc(doc(bob.firestore(), catchPath("angler-a", "catch-a"))));
+  for (const invalid of [
+    {}, 42, null, "x".repeat(4097),
+  ]) {
+    await assertFails(setDoc(catchRef, nextSyncedCatch(updated, { quickCatch: invalid })));
+  }
+  for (const invalid of ["12", true, [], {}, null, -61, 61]) {
+    await assertFails(setDoc(catchRef, nextSyncedCatch(updated, { conditions: { airTempC: invalid } })));
+  }
+  for (const invalid of ["1000", true, [], {}, null, 299, 1201]) {
+    await assertFails(setDoc(catchRef, nextSyncedCatch(updated, { conditions: { pressureHpa: invalid } })));
+  }
+  await assertFails(setDoc(catchRef, nextSyncedCatch(updated, { conditionSources: { airTempC: "guessed" } })));
 });
 
 test("uživatel A nemůže číst, měnit ani mazat záznamy uživatele B", async () => {

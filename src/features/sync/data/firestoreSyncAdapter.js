@@ -19,6 +19,7 @@ import { getBackendConfiguration } from "../../auth/data/backendConfig.js";
 import { SyncPortError } from "./syncPort.js";
 import { normalizeCatchPrivacy } from "../../privacy/data/privacyModel.js";
 import { normalizeCatchVerification, normalizeLocationEvidence } from "../../catches/data/catchVerification.js";
+import { quickCatchMetadataFromRemote, quickCatchMetadataToRemote } from "../../catches/data/quickCatchMetadata.js";
 
 const EMULATOR_HOST = "127.0.0.1";
 const EMULATOR_PORT = 8080;
@@ -176,6 +177,8 @@ export function toRemoteRecord(entityType, record, ownerId) {
   return {
     ...common,
     caughtAt: requireValue(record.caughtAt, record.createdAt),
+    ...(record.captureMode === "quick" ? { captureMode: "quick" } : {}),
+    ...(record.quickCatch ? { quickCatch: quickCatchMetadataToRemote(record.quickCatch) } : {}),
     catchDateTimeSource: ["manual", "photo-exif"].includes(record.catchDateTimeSource) ? record.catchDateTimeSource : "default",
     gpsSource: ["manual", "manual-map", "photo-exif", "live-gps"].includes(record.gpsSource) ? record.gpsSource : "default",
     species: requireValue(record.species, ""),
@@ -213,6 +216,11 @@ export function toRemoteRecord(entityType, record, ownerId) {
 function fromRemoteDocument(entityType, data, photos = undefined, photoMetadataError = null) {
   const record = { ...data };
   if (entityType === "catch") {
+    if (record.quickCatch) {
+      const metadata = quickCatchMetadataFromRemote(record.quickCatch);
+      if (metadata) record.quickCatch = metadata;
+      else delete record.quickCatch;
+    }
     const legacyPhotos = Array.isArray(record.photos) ? record.photos : [];
     record.photos = photos ?? legacyPhotos;
     record.primaryPhotoId = record.primaryPhotoId ?? legacyPhotos[0]?.id ?? record.photos[0]?.id ?? null;

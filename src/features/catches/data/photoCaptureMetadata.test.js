@@ -1,9 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readPhotoCaptureMetadata } from "./photoCaptureMetadata.js";
+import { normalizeCaptureDate, readPhotoCaptureMetadata } from "./photoCaptureMetadata.js";
 
-function makeExifJpeg() {
-  const tiff = new Uint8Array(190);
+function makeExifJpeg({ offset } = {}) {
+  const tiff = new Uint8Array(offset ? 228 : 190);
   const view = new DataView(tiff.buffer);
   tiff.set([0x49, 0x49]);
   view.setUint16(2, 42, true);
@@ -28,6 +28,19 @@ function makeExifJpeg() {
   view.setUint32(48, 170, true);
   view.setUint32(52, 0, true);
   tiff.set(new TextEncoder().encode("2026:10:28 13:35:42\0"), 170);
+  if (offset) {
+    view.setUint32(18, 190, true);
+    view.setUint16(190, 2, true);
+    view.setUint16(192, 0x9003, true);
+    view.setUint16(194, 2, true);
+    view.setUint32(196, 20, true);
+    view.setUint32(200, 170, true);
+    view.setUint16(204, 0x9011, true);
+    view.setUint16(206, 2, true);
+    view.setUint32(208, 7, true);
+    view.setUint32(212, 220, true);
+    tiff.set(new TextEncoder().encode(`${offset}\0`), 220);
+  }
 
   view.setUint16(62, 4, true);
   const gpsTags = [
@@ -77,4 +90,38 @@ test("unsupported or metadata-free image formats safely return no capture metada
   assert.equal(await readPhotoCaptureMetadata({ type: "image/heic", arrayBuffer: async () => new ArrayBuffer(0) }), null);
   assert.equal(await readPhotoCaptureMetadata({ type: "image/jpeg", arrayBuffer: async () => new ArrayBuffer(0) }), null);
   assert.equal(await readPhotoCaptureMetadata(null), null);
+});
+
+test("EXIF date validation rejects impossible calendar dates rather than rolling forward", () => {
+  for (const invalid of ["2026:02:31 10:00:00", "2026:13:01 10:00:00", "2026:11:04 24:01:00", "2026:11:04 10:60:00", "not-a-date"]) {
+    assert.equal(normalizeCaptureDate(invalid), null);
+  }
+  assert.equal(normalizeCaptureDate("2024:02:29 10:00:00"), new Date(2024, 1, 29, 10).toISOString());
+  assert.equal(normalizeCaptureDate("2026:02:29 10:00:00+02:00"), null);
+});
+
+test("EXIF explicit UTC and separate original timezone offset preserve the actual instant", () => {
+  assert.equal(normalizeCaptureDate("2026-11-04T12:00:00Z"), "2026-11-04T12:00:00.000Z");
+  assert.equal(normalizeCaptureDate("2026-11-04 12:00:00 UTC"), "2026-11-04T12:00:00.000Z");
+  assert.equal(normalizeCaptureDate("2026:11:04 12:00:00", "+02:00"), "2026-11-04T10:00:00.000Z");
+  assert.equal(normalizeCaptureDate("2026:11:04 12:00:00.123", "-0530"), "2026-11-04T17:30:00.123Z");
+  assert.equal(normalizeCaptureDate("2026:11:04 12:00:00+02:00", "+03:00"), "2026-11-04T10:00:00.000Z");
+  for (const invalid of ["+25:00", "+14:01", "+02:90", "unknown"]) {
+    assert.equal(normalizeCaptureDate("2026:11:04 12:00:00", invalid), null);
+  }
+});
+
+test("invalid calendar date remains rejected through the real EXIF parser", async () => {
+  const bytes = makeExifJpeg();
+  bytes.set(new TextEncoder().encode("2026:02:31 13:35:42\0"), 182);
+  const result = await readPhotoCaptureMetadata(new Blob([bytes], { type: "image/jpeg" }));
+  assert.equal(result.capturedAt, null);
+  assert.deepEqual(result.coordinates, { latitude: 50, longitude: 14 });
+});
+
+test("real EXIF OffsetTimeOriginal is applied without the Date reviver discarding it", async () => {
+  const bytes = makeExifJpeg({ offset: "+02:00" });
+  const result = await readPhotoCaptureMetadata(new Blob([bytes], { type: "image/jpeg" }));
+  assert.equal(result.capturedAt, "2026-10-28T11:35:42.000Z");
+  assert.deepEqual(result.coordinates, { latitude: 50, longitude: 14 });
 });

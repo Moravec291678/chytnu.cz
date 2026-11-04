@@ -226,7 +226,7 @@ export function createSyncService({ port, getCurrentOwnerId, now = () => Date.no
         if (error?.code === "conflict") {
           const remote = await remoteCall("read", { ownerId, entityType: operation.entityType, entityId: operation.entityId });
           const cursor = await readSyncCursor(ownerId);
-          await applyRemotePage({
+          const appliedRemote = await applyRemotePage({
             ownerId,
             snapshots: [makeChangeSnapshot({ entityType: operation.entityType, entityId: operation.entityId, revision: remote?.revision ?? 0 }, remote ?? {
               entityType: operation.entityType,
@@ -237,7 +237,7 @@ export function createSyncService({ port, getCurrentOwnerId, now = () => Date.no
             })],
             cursor,
           });
-          conflicts += 1;
+          conflicts += appliedRemote.conflicts;
           continue;
         }
         const stagedError = withSyncStage(error, `push:${operation.operation}`, error?.firestoreStage);

@@ -66,7 +66,7 @@ export function getAvailableSummaryYears(catches = [], trips = [], currentYear =
 
 export function buildInsights(catches) {
   const dated = catches.map((record) => ({ record, date: validDate(record) })).filter((item) => item.date);
-  const species = topOrNull(catches, (r) => r.speciesKey || r.speciesId, (r) => r.species);
+  const species = topOrNull(catches.filter((r) => r.captureMode !== "quick" || r.speciesKey), (r) => r.speciesKey || r.speciesId, (r) => r.species);
   const method = topOrNull(catches, (r) => r.method?.key, (r) => r.method?.label);
   const bait = getBestCatchBait(catches);
   const hours = ranking(dated, ({ date }) => String(getPragueDateParts(date).hour), ({ date }) => `${String(getPragueDateParts(date).hour).padStart(2, "0")}:00`);
@@ -93,7 +93,7 @@ export function buildYearSummary(catches, trips, year) {
   });
   const measuredWeight = records.filter(isMeasuredCatchWeight).sort((a, b) => b.weightKg - a.weightKg);
   const measuredLength = records.filter((record) => Number.isFinite(record.lengthCm) && record.lengthCm > 0).sort((a, b) => b.lengthCm - a.lengthCm);
-  const uniqueSpecies = new Set(records.map((r) => r.speciesKey || r.species).filter(Boolean));
+  const uniqueSpecies = new Set(records.filter((r) => r.captureMode !== "quick" || r.speciesKey).map((r) => r.speciesKey || r.species).filter(Boolean));
   return { year, catches: records.length, trips: datedTrips.length, species: uniqueSpecies.size,
     biggest: selectBestCatch(records), largestRecordedCatch: selectBestCatch(records), heaviestMeasuredCatch: measuredWeight[0] || null, longest: measuredLength[0] || null,
     bestMonth: getBestCatchMonth(records), bestMethod: topOrNull(records, (r) => r.method?.key, (r) => r.method?.label),
@@ -160,7 +160,7 @@ function catchNoun(count) {
 export function buildSeasonStoryWithWaters(catches = [], trips = [], waters = [], seasonYear = new Date().getFullYear()) {
   const records = catches.filter((record) => validDate(record)?.getFullYear() === seasonYear);
   const seasonTrips = trips.filter((trip) => tripDate(trip)?.getFullYear() === seasonYear);
-  const speciesCount = new Set(records.map((record) => record.speciesKey || record.species).filter(Boolean)).size;
+  const speciesCount = new Set(records.filter((record) => record.captureMode !== "quick" || record.speciesKey).map((record) => record.speciesKey || record.species).filter(Boolean)).size;
   const bestMonth = getBestCatchMonth(records);
   const recordedDistances = seasonTrips.map(tripDistanceKm).filter((value) => value !== null);
   const distanceKm = recordedDistances.length

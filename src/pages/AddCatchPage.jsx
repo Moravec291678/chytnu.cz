@@ -554,12 +554,13 @@ function AddCatchPage() {
 
   const handleSave = async () => {
     if (savingRef.current) return;
-    const errors = validateCatchForm(catchData);
+    const errors = validateCatchForm(catchData, { allowUnknownSpecies: existingCatch?.captureMode === "quick" });
     if (Object.keys(errors).length) {
       setFormError(Object.values(errors)[0]);
       return;
     }
-    const selected = DEFAULT_SPECIES.find((item) => item.key === catchData.speciesKey);
+    const selected = DEFAULT_SPECIES.find((item) => item.key === catchData.speciesKey)
+      ?? (existingCatch?.captureMode === "quick" && !catchData.speciesKey ? { key: "", label: "Druh zatím neurčen" } : null);
     if (!selected) {
       setFormError("Vybraný druh ryby už není v katalogu. Vyber jej znovu.");
       return;
@@ -590,6 +591,11 @@ function AddCatchPage() {
         });
       }
       const record = createCatchRecord({ ...catchData, verification }, selected, DEFAULT_METHODS, existingCatch, DEFAULT_BAITS);
+      if (record.quickCatch) {
+        record.quickCatch = { ...record.quickCatch, provenance: { ...record.quickCatch.provenance,
+          ...Object.fromEntries(["caughtAt", "coordinates", "tripId", "locationName", "waterId", "method", "baits",
+            "speciesKey", "lengthCm", "weightKg", "moonPhase", "airTempC", "pressureHpa", "windKmh"].map(field => [field, "manual"])) } };
+      }
       let progressionEventIds = [];
       if (existingCatch) await updateCatch(record);
       else {
@@ -813,7 +819,7 @@ function AddCatchPage() {
         </section>
         {photoEditorOpen && editingPhoto?.previewUrl && <PhotoFrameEditor photo={editingPhoto} onSave={savePhotoFrame} onCancel={() => { setPhotoEditorOpen(false); setEditingPhotoId(null); }} />}
         <section className="add-catch-section">
-          <h2>Druh ryby *</h2>
+          <h2>{existingCatch?.captureMode === "quick" ? "Druh ryby" : "Druh ryby *"}</h2>
 
           {selectedSpecies ? (
             <div className="selected-species">

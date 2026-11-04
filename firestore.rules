@@ -34,35 +34,37 @@ service cloud.firestore {
     }
 
     function validConditions(value) {
-      return value == null || (
-        value is map
+      return value == null || validRecordedConditions(value);
+    }
+
+    function validRecordedConditions(value) {
+      let air = value.get('airTempC', 0);
+      let water = value.get('waterTempC', 0);
+      let pressure = value.get('pressureHpa', 1000);
+      let wind = value.get('windKmh', 0);
+      let oldAir = value.get('airTemperatureC', 0);
+      let oldWater = value.get('waterTemperatureC', 0);
+      return value is map
         && value.keys().hasOnly([
           'airTempC', 'waterTempC', 'pressureHpa', 'windKmh', 'moonPhase',
           'airTemperatureC', 'waterTemperatureC', 'weather', 'windDirection', 'pressureTrend'
         ])
-        && (!value.keys().hasAny(['airTempC']) || (value.airTempC is number && value.airTempC >= -60 && value.airTempC <= 60))
-        && (!value.keys().hasAny(['waterTempC']) || (value.waterTempC is number && value.waterTempC >= -10 && value.waterTempC <= 60))
-        && (!value.keys().hasAny(['pressureHpa']) || (value.pressureHpa is number && value.pressureHpa >= 300 && value.pressureHpa <= 1200))
-        && (!value.keys().hasAny(['windKmh']) || (value.windKmh is number && value.windKmh >= 0 && value.windKmh <= 300))
-        && (!value.keys().hasAny(['moonPhase']) || value.moonPhase is string)
-        && (!value.keys().hasAny(['airTemperatureC']) || (value.airTemperatureC is number && value.airTemperatureC >= -60 && value.airTemperatureC <= 60))
-        && (!value.keys().hasAny(['waterTemperatureC']) || (value.waterTemperatureC is number && value.waterTemperatureC >= -10 && value.waterTemperatureC <= 60))
-        && (!value.keys().hasAny(['weather']) || value.weather is string)
-        && (!value.keys().hasAny(['windDirection']) || value.windDirection is string)
-        && (!value.keys().hasAny(['pressureTrend']) || value.pressureTrend is string)
-      );
+        && air is number && air >= -60 && air <= 60
+        && water is number && water >= -10 && water <= 60
+        && pressure is number && pressure >= 300 && pressure <= 1200
+        && wind is number && wind >= 0 && wind <= 300
+        && oldAir is number && oldAir >= -60 && oldAir <= 60
+        && oldWater is number && oldWater >= -10 && oldWater <= 60
+        && value.get('moonPhase', '') is string
+        && value.get('weather', '') is string
+        && value.get('windDirection', '') is string
+        && value.get('pressureTrend', '') is string;
     }
 
     function validConditionSources(value) {
-      return value == null || (
-        value is map
+      return value == null || (value is map
         && value.keys().hasOnly(['airTempC', 'waterTempC', 'pressureHpa', 'windKmh', 'moonPhase'])
-        && (!value.keys().hasAny(['airTempC']) || value.airTempC in ['auto', 'manual'])
-        && (!value.keys().hasAny(['waterTempC']) || value.waterTempC in ['auto', 'manual'])
-        && (!value.keys().hasAny(['pressureHpa']) || value.pressureHpa in ['auto', 'manual'])
-        && (!value.keys().hasAny(['windKmh']) || value.windKmh in ['auto', 'manual'])
-        && (!value.keys().hasAny(['moonPhase']) || value.moonPhase in ['auto', 'manual'])
-      );
+        && value.values().hasOnly(['auto', 'manual']));
     }
 
     function validMethod(value) {
@@ -184,23 +186,25 @@ service cloud.firestore {
     function validCatchContent(data, userId, catchId) {
       return data.schemaVersion == 1
         && data.caughtAt is string
+        && data.get('captureMode', 'quick') == 'quick'
+        && (!('quickCatch' in data) || (data.quickCatch is string && data.quickCatch.size() <= 4096))
         && data.species is string
         && data.speciesKey is string
         && optionalString(data.speciesLatin)
         && optionalNumber(data.weightKg, 1000)
-        && (!data.keys().hasAny(['weightSource']) || data.weightSource in ['manual', 'estimated'])
+        && data.get('weightSource', 'manual') in ['manual', 'estimated']
         && optionalNumber(data.lengthCm, 2000)
         && optionalNumber(data.girthCm, 2000)
         && optionalNumber(data.fightMinutes, 10000)
         && data.locationName is string
         && optionalNumber(data.waterNumber, 99999999)
-        && (!data.keys().hasAny(['waterId']) || optionalString(data.waterId))
+        && optionalString(data.get('waterId', null))
         && data.gpsLocation is string
-        && (!data.keys().hasAny(['coordinates']) || validCoordinates(data.coordinates))
+        && validCoordinates(data.get('coordinates', null))
         && optionalNumber(data.waterDepthM, 2000)
         && optionalString(data.bottomType)
-        && (!data.keys().hasAny(['conditions']) || validConditions(data.conditions))
-        && (!data.keys().hasAny(['conditionSources']) || validConditionSources(data.conditionSources))
+        && validConditions(data.get('conditions', null))
+        && validConditionSources(data.get('conditionSources', null))
         && (data.tripId == null || (
           data.tripId is string
           && exists(/databases/$(database)/documents/users/$(userId)/trips/$(data.tripId))
@@ -224,7 +228,7 @@ service cloud.firestore {
         && data.createdAt is string
         && data.updatedAt is string
         && data.keys().hasOnly([
-          'schemaVersion', 'id', 'ownerId', 'entityType', 'createdAt', 'updatedAt', 'caughtAt', 'catchDateTimeSource', 'gpsSource', 'locationEvidence', 'verification',
+          'schemaVersion', 'id', 'ownerId', 'entityType', 'createdAt', 'updatedAt', 'caughtAt', 'catchDateTimeSource', 'gpsSource', 'locationEvidence', 'verification', 'captureMode', 'quickCatch',
           'species', 'speciesKey', 'speciesLatin', 'weightKg', 'weightSource', 'lengthCm', 'girthCm', 'fightMinutes',
           'locationName', 'waterNumber', 'waterId', 'gpsLocation', 'coordinates', 'waterDepthM', 'bottomType', 'conditions', 'conditionSources', 'tripId', 'method',
           'baits', 'result', 'photoRefs', 'primaryPhotoId', 'notes', 'isFavorite', 'privacy', 'deleted', 'deletedAt', 'serverRevision',
@@ -261,7 +265,7 @@ service cloud.firestore {
         && optionalString(data.waterNumber)
         && data.type in ['Rybník', 'Řeka', 'Přehrada', 'Lom']
         && optionalString(data.area)
-        && (!data.keys().hasAny(['coordinates']) || validCoordinates(data.coordinates))
+        && validCoordinates(data.get('coordinates', null))
         && optionalString(data.notes)
         && data.targetFish is list
         && data.targetFish.size() <= 50
@@ -353,14 +357,11 @@ service cloud.firestore {
     match /users/{userId}/catches/{catchId} {
       allow get, list: if signedInAs(userId);
       allow create: if validSyncWrite(userId, 'catch', catchId, request.resource.data)
-        && request.resource.data.deleted == false
-        && validCatchContent(request.resource.data, userId, catchId)
-        && request.resource.data.photoRefs.size() <= 4
-        && request.resource.data.serverRevision == 1;
-      allow create: if validSyncWrite(userId, 'catch', catchId, request.resource.data)
-        && request.resource.data.deleted == true
-        && validTombstone(request.resource.data, userId, 'catch', catchId)
-        && request.resource.data.serverRevision == 1;
+        && request.resource.data.serverRevision == 1
+        && (request.resource.data.deleted
+          ? validTombstone(request.resource.data, userId, 'catch', catchId)
+          : (validCatchContent(request.resource.data, userId, catchId)
+            && request.resource.data.photoRefs.size() <= 4));
       allow update: if resource.data.deleted == false
         && validSyncWrite(userId, 'catch', catchId, request.resource.data)
         && request.resource.data.serverRevision == resource.data.serverRevision + 1

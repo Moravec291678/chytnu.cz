@@ -7,6 +7,9 @@ import {
   validateDataScope,
 } from "../../auth/data/localDataScope.js";
 import { readPhotoBlob } from "./photoLocalBlob.js";
+import { sha256Blob } from "./photoCloudProvider.js";
+import { mergeQuickCatchEnrichment } from "./quickCatchEnrichment.js";
+import { quickCaptureGenerationKey } from "./quickCaptureLifecycle.js";
 
 const DATABASE_NAME = "chytnu-local";
 export const DATABASE_VERSION = 9;
@@ -75,6 +78,7 @@ export function queueOutboxOperation(transaction, {
   scopeKey = ownerId ? accountScopeKey(ownerId) : null,
   baseServerRevision = null,
   now = new Date().toISOString(),
+  automaticEnrichment = false,
 }, onQueued = () => {}) {
   const store = transaction.objectStore(OUTBOX_STORE_NAME);
   if (!scopeKey) throw new Error("Synchronizační operace nemá datový scope.");
@@ -93,6 +97,8 @@ export function queueOutboxOperation(transaction, {
       const revision = Math.max(localRevision, revisionFloor);
       const entry = {
         ...(existing ?? {}),
+        ...((automaticEnrichment || existing?.automaticEnrichment !== undefined)
+          ? { automaticEnrichment: automaticEnrichment && (!existing || existing.automaticEnrichment === true) } : {}),
         operationId: existing?.operationId ?? createOperationId(),
         ownerId,
         scopeKey,
@@ -427,6 +433,75 @@ export async function runStoreOperation(storeName, operation, mode, record) {
 }
 
 export const catchRepository = {
+  async getQuickCaptureGeneration(options) {
+    const { scopeKey } = requireRepositoryScope(options);
+    return (await runStoreOperation(APP_META_STORE_NAME, "get", "readonly", quickCaptureGenerationKey(scopeKey)))?.generation ?? null;
+  },
+  async repairDurablePhoto(catchId, photo, options) {
+    const { scopeKey } = requireRepositoryScope(options);
+    const bytes = await readPhotoBlob(photo.blob, "quick-photo-repair");
+    if (!bytes.byteLength || await sha256Blob(new Blob([bytes])) !== photo.contentSha256) throw new Error("Fotografii nelze bezpečně obnovit.");
+    const db = await openLocalDatabase();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction([CATCH_STORE_NAME, PHOTO_BINARY_STORE_NAME], "readwrite");
+      const request = tx.objectStore(CATCH_STORE_NAME).get(catchId);
+      request.onsuccess = () => {
+        const record = request.result;
+        const storedPhoto = record?.photos?.find(item => item.id === photo.id);
+        if (!record || recordScopeKey(record) !== scopeKey || storedPhoto?.contentSha256 !== photo.contentSha256) { tx.abort(); return; }
+        tx.objectStore(PHOTO_BINARY_STORE_NAME).put({ key: photoBinaryKey(scopeKey, catchId, photo.id),
+          scopeKey, catchId, photoId: photo.id, type: photo.type, size: bytes.byteLength, bytes });
+      };
+      request.onerror = () => tx.abort();
+      tx.oncomplete = () => { db.close(); resolve(true); };
+      tx.onerror = tx.onabort = () => { db.close(); reject(tx.error ?? new Error("Fotografii se nepodařilo obnovit.")); };
+    });
+  },
+  async patchQuickCatchEnrichment(id, expectedRevision, patch, options) {
+    const { scopeKey, ownerId } = requireRepositoryScope(options);
+    const db = await openLocalDatabase();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction([CATCH_STORE_NAME, OUTBOX_STORE_NAME], "readwrite");
+      const store = tx.objectStore(CATCH_STORE_NAME);
+      const request = store.get(id);
+      let result = null;
+      request.onsuccess = () => {
+        const record = request.result;
+        if (!record || recordScopeKey(record) !== scopeKey || record.captureMode !== "quick"
+          || record.sync?.revision !== expectedRevision) return;
+        const merged = mergeQuickCatchEnrichment(record, patch);
+        queueOutboxOperation(tx, { entityType: "catch", entityId: id, operation: "upsert",
+          localRevision: expectedRevision + 1, ownerId, scopeKey,
+          automaticEnrichment: true,
+          baseServerRevision: record.sync?.serverRevision ?? null }, revision => {
+          result = { ...merged, updatedAt: new Date().toISOString(),
+            sync: { ...record.sync, status: "local", revision } };
+          store.put(result);
+        });
+      };
+      request.onerror = () => tx.abort();
+      tx.oncomplete = () => { db.close(); resolve(result); };
+      tx.onerror = tx.onabort = () => { db.close(); reject(tx.error ?? new Error("Údaje se nepodařilo doplnit.")); };
+    });
+  },
+  async verifyDurablePhoto(catchId, photoId, expectedHash, options) {
+    const { scopeKey } = requireRepositoryScope(options);
+    const db = await openLocalDatabase();
+    let record, binary;
+    try {
+      const tx = db.transaction([CATCH_STORE_NAME, PHOTO_BINARY_STORE_NAME], "readonly");
+      [record, binary] = await Promise.all([
+        requestValue(tx.objectStore(CATCH_STORE_NAME).get(catchId)),
+        requestValue(tx.objectStore(PHOTO_BINARY_STORE_NAME).get(photoBinaryKey(scopeKey, catchId, photoId))),
+      ]);
+    } finally { db.close(); }
+    if (!record || recordScopeKey(record) !== scopeKey || !record.photos?.some(photo => photo.id === photoId)
+      || !binary?.bytes || !binary.size || typeof expectedHash !== "string"
+      || await sha256Blob(new Blob([binary.bytes], { type: binary.type })) !== expectedHash) {
+      throw new Error("Fotografii se nepodařilo bezpečně uložit. Nezavírej aplikaci a zkus uložení znovu.");
+    }
+    return true;
+  },
   list: (options) => {
     const { scopeKey } = requireRepositoryScope(options);
     return listScopedRecords(CATCH_STORE_NAME, scopeKey);
@@ -479,11 +554,21 @@ export const catchRepository = {
     }
     const existingPhotoBinaryByKey = new Map(existingPhotoBinaries.map((item) => [item.key, item]));
     return new Promise((resolve, reject) => {
-      const transaction = db.transaction([CATCH_STORE_NAME, TRIP_STORE_NAME, WATER_STORE_NAME, OUTBOX_STORE_NAME, PHOTO_BINARY_STORE_NAME], "readwrite");
+      const transaction = db.transaction([CATCH_STORE_NAME, TRIP_STORE_NAME, WATER_STORE_NAME, OUTBOX_STORE_NAME, PHOTO_BINARY_STORE_NAME, APP_META_STORE_NAME], "readwrite");
       const catchStore = transaction.objectStore(CATCH_STORE_NAME);
       const photoBinaryStore = transaction.objectStore(PHOTO_BINARY_STORE_NAME);
       let failure;
       let storedRecord = record;
+      if (Object.hasOwn(options ?? {}, "quickCaptureGeneration")) {
+        const generationRequest = transaction.objectStore(APP_META_STORE_NAME).get(quickCaptureGenerationKey(requestedScope.scopeKey));
+        generationRequest.onsuccess = () => {
+          if ((generationRequest.result?.generation ?? null) !== options.quickCaptureGeneration) {
+            failure = new Error("Ukládání bylo zrušeno po smazání místních dat.");
+            transaction.abort();
+          }
+        };
+        generationRequest.onerror = () => transaction.abort();
+      }
       const existingRequest = catchStore.get(record.id);
       existingRequest.onsuccess = () => {
         const existing = existingRequest.result;
@@ -574,7 +659,7 @@ export const catchRepository = {
         };
         tripRequest.onerror = () => { failure = tripRequest.error; transaction.abort(); };
       };
-      existingRequest.onerror = () => { failure = existingRequest.error; transaction.abort(); };
+      existingRequest.onerror = () => { failure ??= existingRequest.error; transaction.abort(); };
       transaction.oncomplete = () => { db.close(); resolve(storedRecord); };
       transaction.onerror = () => { db.close(); reject(failure ?? transaction.error ?? new Error("Změnu se nepodařilo uložit.")); };
       transaction.onabort = () => { db.close(); reject(failure ?? transaction.error ?? new Error("Změna byla přerušena.")); };

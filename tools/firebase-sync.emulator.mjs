@@ -24,6 +24,7 @@ import { createSyncPort } from "../src/features/sync/data/syncPort.js";
 import { createSyncService } from "../src/features/sync/data/syncService.js";
 import { tripRepository } from "../src/features/trips/data/tripRepository.js";
 import { waterRepository } from "../src/features/waters/data/waterRepository.js";
+import { createQuickCapture, prepareQuickCatch, persistQuickCatch } from "../src/features/catches/data/quickCatch.js";
 
 const projectId = "demo-chytnucz-local";
 const app = initializeApp({ apiKey: "demo-api-key", authDomain: "localhost", projectId }, `sync-test-${crypto.randomUUID()}`);
@@ -297,6 +298,39 @@ try {
   await waterRepository.delete(waterId, accountScope);
   await firestoreService.run(ownerId);
   assert.equal((await getDoc(doc(db, "users", ownerId, "waters", waterId))).data().deleted, true);
+
+  // Use the actual one-photo creation contract, then exercise its wire metadata
+  // and a second isolated IndexedDB device. READY/delivery here are synthetic.
+  const quickHash = await sha256Blob(photoBlob);
+  const quick = await prepareQuickCatch(photoBlob, createQuickCapture("gallery"), {
+    prepare: async () => ({ blob: photoBlob, type: photoBlob.type, size: photoBlob.size, sha256: quickHash }),
+    readMetadata: async () => null,
+  });
+  await persistQuickCatch(quick, accountScope, catchRepository);
+  await persistQuickCatch(quick, accountScope, catchRepository);
+  assert.equal((await firestoreService.run(ownerId)).status, "success");
+  const quickRemote = (await getDoc(doc(db, "users", ownerId, "catches", quick.id))).data();
+  assert.equal(quickRemote.speciesKey, ""); assert.equal(quickRemote.lengthCm, null); assert.equal(quickRemote.weightKg, null);
+  assert.equal(JSON.parse(quickRemote.quickCatch).capturedAt, quick.quickCatch.capturedAt);
+  const quickLocal = await catchRepository.get(quick.id, accountScope);
+  await firestoreAdapter.write({ ownerId, entityType: "catch", entityId: quick.id,
+    record: { ...quickLocal, photos: quickLocal.photos.map(photo => ({ ...photo, cloud: {
+      state: "synced", provider: "cloudinary", objectKey: `users/${ownerId}/catches/${quick.id}/photos/${photo.id}/original`, sha256: quickHash,
+    } })) }, expectedRevision: quickRemote.serverRevision, operationId: `quick-ready-${crypto.randomUUID()}`, localRevision: 1 });
+  const quickOriginDevice = globalThis.indexedDB;
+  globalThis.indexedDB = new IDBFactory();
+  try {
+    assert.equal((await serviceFor(firestoreAdapter).run(ownerId)).status, "success");
+    const received = await catchRepository.get(quick.id, accountScope);
+    assert.equal(received.captureMode, "quick");
+    assert.equal(received.quickCatch.provenance.caughtAt, "device");
+    assert.equal(received.photos.length, 1); assert.equal(received.photos[0].cloud.state, "synced");
+    const delivery = createPhotoCloudService({ provider: createCloudinaryPhotoProvider(), getCurrentOwnerId: () => ownerId,
+      authenticatedRequest: async () => photoBlob });
+    const delivered = await delivery.getPhotoBlob({ photo: received.photos[0], ownerId, catchId: quick.id, scopeKey: accountScope.scopeKey });
+    assert.equal(await sha256Blob(delivered), quickHash);
+  } finally { globalThis.indexedDB = quickOriginDevice; }
+  console.log("Quick Catch emulator passed: actual local one-photo creation, retry identity, unknown fields, bounded metadata, synthetic READY and second-device photo delivery.");
 
   console.log("Firestore sync emulator passed: authenticated Trip/Catch/Water writes, four-photo new Catch limit, separately validated ordered photo documents, crop/primary/photo-delete synchronization, retained local Blob, exact operation replay, remote delta pull, idempotent resync, Catch/photo tombstones, and clean outbox.");
 } finally {

@@ -58,7 +58,7 @@ function WaterDetailPage() {
     : [], [water, tripState.trips, relatedCatches]);
   const activeTrip = tripState.trips.find((trip) => !trip.endedAt) ?? null;
   const activeTripForWater = activeTrip && relatedTrips.some((trip) => trip.id === activeTrip.id) ? activeTrip : null;
-  const speciesObserved = useMemo(() => [...new Set(relatedCatches.map((record) => record.species).filter(Boolean))], [relatedCatches]);
+  const speciesObserved = useMemo(() => [...new Set(relatedCatches.filter((record) => record.captureMode !== "quick" || record.speciesKey).map((record) => record.species).filter(Boolean))], [relatedCatches]);
   const seasonCounts = useMemo(() => getWaterCatchSeasonCounts(relatedCatches), [relatedCatches]);
   const hourlyStats = useMemo(() => getWaterHourlyCatchRate(relatedTrips, relatedCatches), [relatedTrips, relatedCatches]);
   const todayTrips = useMemo(() => getWaterTodayTripCount(relatedTrips), [relatedTrips]);

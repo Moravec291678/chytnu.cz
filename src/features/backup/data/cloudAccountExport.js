@@ -9,6 +9,7 @@ import { buildChallengeOverview } from "../../progression/data/challenges.js";
 import { buildSeasonalChallenge } from "../../progression/data/seasonalChallenge.js";
 import { summaryForXp } from "../../progression/data/progressionLedger.js";
 import { PRODUCT_LIMITS } from "../../../product/config/limits.js";
+import { normalizeQuickCatchMetadata, quickCatchMetadataFromRemote } from "../../catches/data/quickCatchMetadata.js";
 
 export const CLOUD_ACCOUNT_EXPORT_FORMAT = "chytnucz-account-export";
 export const CLOUD_ACCOUNT_EXPORT_VERSION = 1;
@@ -22,6 +23,16 @@ const SYNC_INTERNAL_FIELDS = ["ownerId", "serverRevision", "syncSequence", "last
 function portableRecord(record) {
   const value = { ...record };
   for (const key of SYNC_INTERNAL_FIELDS) delete value[key];
+  if (value.quickCatch !== undefined) {
+    try {
+      if (value.captureMode !== "quick") throw new Error("Invalid quick capture metadata.");
+      value.quickCatch = typeof value.quickCatch === "string" ? quickCatchMetadataFromRemote(value.quickCatch) : normalizeQuickCatchMetadata(value.quickCatch);
+      if (!value.quickCatch) delete value.quickCatch;
+    } catch {
+      // Preserve the catch and photos even if optional enrichment bookkeeping is corrupt.
+      delete value.quickCatch;
+    }
+  }
   if (value.verification && typeof value.verification === "object") {
     value.verification = { ...value.verification };
     delete value.verification.photoHash;

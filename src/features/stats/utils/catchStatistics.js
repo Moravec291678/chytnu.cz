@@ -82,7 +82,7 @@ export function getCatchPatterns(catches) {
 }
 
 export function getCatchStatistics(catches, trips = [], now = new Date()) {
-  const species = groupBy(catches, (item) => normalizeText(item.speciesKey || item.species || ""), (item) => item.species || item.speciesKey || "");
+  const species = groupBy(catches.filter((item) => item.captureMode !== "quick" || item.speciesKey), (item) => normalizeText(item.speciesKey || item.species || ""), (item) => item.species || item.speciesKey || "");
   const methods = groupBy(catches, (item) => item.method?.key || "", (item) => item.method?.label || "");
   const measuredWeight = catches.filter(isMeasuredCatchWeight);
   const measuredLength = catches.filter((item) => validMeasurement(item.lengthCm));

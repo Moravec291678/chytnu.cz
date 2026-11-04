@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { LOCAL_BACKUP_FORMAT, LOCAL_BACKUP_VERSION } from "./backupFormat.js";
 import { createLocalBackupDocument } from "./backupFormat.js";
+import { createQuickCapture, prepareQuickCatch } from "../../catches/data/quickCatch.js";
+import { sha256Blob } from "../../catches/data/photoCloudProvider.js";
 import {
   parseLocalBackupJson,
   parseLocalBackupDocument,
@@ -411,6 +413,60 @@ test("a freshly exported local catch with a photo can be merged back idempotentl
   assert.equal(result.skipped, 2);
   assert.equal(result.catches, 0);
   assert.equal(result.trips, 0);
+});
+
+test("unknown Quick Catch survives export/restore with null measurements, capture provenance and durable photo bytes; replacement removes its local data", async () => {
+  const bytes = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jCioAAAAASUVORK5CYII="), character => character.charCodeAt(0));
+  const blob = new Blob([bytes], { type: "image/png" });
+  const capture = createQuickCapture("camera", new Date(time));
+  const source = await prepareQuickCatch(blob, capture, {
+    prepare: async () => ({ blob, type: blob.type, size: blob.size, sha256: await sha256Blob(blob) }),
+    readMetadata: async () => null,
+  });
+  const document = await createLocalBackupDocument({ catches: [source], trips: [], createdAt: new Date(time) });
+  const parsed = parseLocalBackupJson(JSON.stringify(document));
+  const restored = parsed.catches[0];
+  assert.equal(restored.speciesKey, "");
+  assert.equal(restored.species, "Druh zatím neurčen");
+  assert.equal(restored.lengthCm, null);
+  assert.equal(restored.weightKg, null);
+  assert.equal(restored.caughtAt, time);
+  assert.deepEqual(restored.quickCatch, source.quickCatch);
+  assert.deepEqual(new Uint8Array(await restored.photos[0].blob.arrayBuffer()), bytes);
+  assert.equal(restored.photos[0].id, capture.photoId);
+  assert.equal(restored.ownerId, null);
+  const db = makeDatabase();
+  const imported = await restoreLocalBackup(parsed, "merge", guestOptions, async () => db);
+  assert.equal(imported.catches, 1);
+  const snapshot = db.snapshot();
+  assert.equal(snapshot.catches[0].speciesKey, "");
+  assert.equal(snapshot.catches[0].lengthCm, null);
+  assert.equal(snapshot.photoBinaries.length, 1);
+  const binary = snapshot.photoBinaries[0];
+  assert.equal(binary.photoId, capture.photoId);
+  assert.ok(binary.bytes instanceof ArrayBuffer);
+  assert.deepEqual(new Uint8Array(binary.bytes), bytes);
+  await restoreLocalBackup(makeBackup(makeDocument({ catches: [], trips: [] })), "replace", guestOptions, async () => db);
+  assert.equal(db.snapshot().catches.length, 0);
+  assert.equal(db.snapshot().photoBinaries.length, 0);
+  assert.equal(db.snapshot().outbox.length, 0);
+});
+
+test("backup accepts unknown species only with validated Quick Catch metadata and normalizes its optional envelope", () => {
+  const record = { ...makeCatch("unknown", null), speciesKey: "", lengthCm: null };
+  assert.throws(() => makeBackup(makeDocument({ catches: [record], trips: [] })), /druh úlovku/);
+  for (const quickCatch of [undefined, null, {}, { capturedAt: time, inputSource: "invalid" },
+    { capturedAt: time, inputSource: "camera", timezoneOffsetMinutes: 2000 },
+    { capturedAt: time, inputSource: "camera", enrichment: { weather: { status: "pending", attempts: 99 } } }]) {
+    assert.throws(() => makeBackup(makeDocument({ catches: [{ ...record, captureMode: "quick", quickCatch }], trips: [] })), /neplatné údaje/);
+  }
+  const quickCatch = { capturedAt: time, inputSource: "gallery", provenance: { caughtAt: "exif", arbitrary: "unsafe" }, notes: "must not enter metadata" };
+  const restored = makeBackup(makeDocument({ catches: [{ ...record, captureMode: "quick", quickCatch }], trips: [] })).catches[0];
+  assert.equal(restored.quickCatch.timeZone, "UTC");
+  assert.deepEqual(restored.quickCatch.provenance, { caughtAt: "exif" });
+  assert.equal(restored.quickCatch.notes, undefined);
+  assert.equal(restored.quickCatch.enrichment.weather.status, "unavailable");
+  assert.throws(() => makeBackup(makeDocument({ catches: [{ ...record, quickCatch }], trips: [] })), /bez způsobu pořízení/);
 });
 
 test("merge is idempotent and a different same-ID record aborts before writing", async () => {

@@ -11,6 +11,7 @@ import {
 } from "../../catches/data/catchRepository.js";
 import { accountScopeKey, isGuestScope, recordScopeKey } from "../../auth/data/localDataScope.js";
 import { logicalSyncKey } from "./syncLifecycleState.js";
+import { rebaseQuickCatchEnrichment, quickCatchAutomaticState, prepareQuickCatchRebasePhotos } from "./quickCatchEnrichmentRebase.js";
 
 const STORES = { catch: "catches", trip: "trips", water: "waters" };
 
@@ -511,6 +512,86 @@ export async function applyRemotePage({ ownerId, snapshots, cursor, pendingPullU
           });
           processSnapshot(index + 1);
           return;
+        }
+
+        // Automatic enrichment never owns a user's Catch. Rebase only a queue
+        // entry explicitly known to contain no capture/manual/photo changes.
+        const automaticCandidate = snapshot.entityType === "catch" && pendingOperation?.operation === "upsert"
+          && pendingOperation.automaticEnrichment === true && localRecord?.captureMode === "quick"
+          && localRecord.ownerId === ownerId && recordScopeKey(localRecord) === accountScopeKey(ownerId);
+        if (automaticCandidate && remote.photoMetadataError) {
+          // The existing pending-pull mechanism retries photo metadata. A
+          // partial snapshot cannot authorize replacing photos or a conflict.
+          processSnapshot(index + 1);
+          return;
+        }
+        if (automaticCandidate && !remote.deleted && remote.record?.ownerId === ownerId
+          && remote.record?.id === snapshot.entityId && remote.revision <= (localRecord.sync?.serverRevision ?? 0)
+          && remote.revision <= (pendingOperation.baseServerRevision ?? 0)) {
+          // A rebase during push does not advance the delta cursor. Replaying
+          // its already accepted base page must keep that pending rebase intact.
+          processSnapshot(index + 1);
+          return;
+        }
+        const autoOnly = automaticCandidate && remote.revision > (localRecord.sync?.serverRevision ?? 0);
+        if (autoOnly && remote.deleted) {
+          entityStore.delete(snapshot.entityId);
+          outbox.delete(pendingOperation.sequence);
+          const binaries = transaction.objectStore(PHOTO_BINARY_STORE_NAME).index("catchPhoto").getAll([accountScopeKey(ownerId), snapshot.entityId]);
+          binaries.onsuccess = () => { for (const binary of binaries.result) transaction.objectStore(PHOTO_BINARY_STORE_NAME).delete(binary.key); };
+          binaries.onerror = () => { failure = binaries.error; transaction.abort(); };
+          const photoJobs = outbox.index("scopeKey").getAll(accountScopeKey(ownerId));
+          photoJobs.onsuccess = () => {
+            for (const job of photoJobs.result) {
+              if (job.ownerId === ownerId && job.entityType === "photoCloud" && job.operation === "photo-upload"
+                && job.photoCloud?.catchId === snapshot.entityId) outbox.delete(job.sequence);
+            }
+          };
+          photoJobs.onerror = () => { failure = photoJobs.error; transaction.abort(); };
+          applied += 1;
+          processSnapshot(index + 1);
+          return;
+        }
+        if (autoOnly && remote.record?.ownerId === ownerId && remote.record?.id === snapshot.entityId) {
+          const photoSources = prepareQuickCatchRebasePhotos(remote, localRecord);
+          const accepted = metadataOnlyRecord(photoSources.remote, photoSources.local);
+          const merged = rebaseQuickCatchEnrichment(accepted, localRecord);
+          if (merged) {
+            const changed = quickCatchAutomaticState(merged) !== quickCatchAutomaticState(accepted);
+            const revision = localRecord.sync.revision + 1;
+            if (changed) {
+              outbox.put({ ...pendingOperation, operationId: crypto.randomUUID(), localRevision: revision,
+                baseServerRevision: remote.revision, status: "pending", attemptCount: 0, lastError: null,
+                lastErrorCode: null, nextAttemptAt: null, updatedAt: new Date().toISOString() });
+            } else outbox.delete(pendingOperation.sequence);
+            const save = (hasLocalPhotos) => entityStore.put({ ...merged,
+              ...(changed ? { updatedAt: new Date().toISOString() } : {}),
+              sync: { ...accepted.sync, revision, status: changed ? "local" : "metadata-synced",
+                photoStatus: (merged.photos ?? []).length ? hasLocalPhotos ? "local-only" : "metadata-only" : "none" } });
+            const binaryRequest = transaction.objectStore(PHOTO_BINARY_STORE_NAME).index("catchPhoto").getAll([accountScopeKey(ownerId), snapshot.entityId]);
+            binaryRequest.onsuccess = () => {
+              const retainedIds = new Set((merged.photos ?? []).map((photo) => photo.id));
+              for (const binary of binaryRequest.result) {
+                if (!retainedIds.has(binary.photoId) || photoSources.invalidatedPhotoIds.has(binary.photoId)) transaction.objectStore(PHOTO_BINARY_STORE_NAME).delete(binary.key);
+              }
+              const localIds = new Set(binaryRequest.result.filter((photo) => !photoSources.invalidatedPhotoIds.has(photo.photoId)).map((photo) => photo.photoId));
+              save((merged.photos ?? []).some((photo) => photo.blob || localIds.has(photo.id)));
+            };
+            binaryRequest.onerror = () => { failure = binaryRequest.error; transaction.abort(); };
+            if (photoSources.invalidatedPhotoIds.size) {
+              const photoJobs = outbox.index("scopeKey").getAll(accountScopeKey(ownerId));
+              photoJobs.onsuccess = () => {
+                for (const job of photoJobs.result) {
+                  if (job.ownerId === ownerId && job.entityType === "photoCloud" && job.operation === "photo-upload"
+                    && job.photoCloud?.catchId === snapshot.entityId && photoSources.invalidatedPhotoIds.has(job.photoCloud.photoId)) outbox.delete(job.sequence);
+                }
+              };
+              photoJobs.onerror = () => { failure = photoJobs.error; transaction.abort(); };
+            }
+            applied += 1;
+            processSnapshot(index + 1);
+            return;
+          }
         }
 
         if (pendingOperation) {

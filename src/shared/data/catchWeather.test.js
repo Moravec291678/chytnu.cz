@@ -49,3 +49,42 @@ test("weather failures reject without producing placeholder values", async () =>
     clearCatchWeatherCache();
   }
 });
+
+test("UTC enrichment uses a stable absolute hour and a separate cache from local auto timezone", async () => {
+  clearCatchWeatherCache();
+  const originalFetch = globalThis.fetch;
+  const requested = [];
+  globalThis.fetch = async (url) => {
+    requested.push(new URL(url));
+    const utc = new URL(url).searchParams.get("timezone") === "UTC";
+    return { ok: true, json: async () => ({ hourly: {
+      time: ["2020-02-03T10:00"], temperature_2m: [utc ? 4 : 8], surface_pressure: [1001], wind_speed_10m: [7],
+    } }) };
+  };
+  try {
+    const args = [50, 14, "2020-02-03", "10:20"];
+    const utc = await fetchCatchWeather(...args, { timezone: "UTC" });
+    const auto = await fetchCatchWeather(...args);
+    assert.equal(utc.airTempC, 4);
+    assert.equal(auto.airTempC, 8);
+    assert.deepEqual(requested.map((url) => url.searchParams.get("timezone")), ["UTC", "auto"]);
+    await fetchCatchWeather(...args, { timezone: "UTC" });
+    assert.equal(requested.length, 2);
+  } finally { globalThis.fetch = originalFetch; clearCatchWeatherCache(); }
+});
+
+test("UTC hour rounding rolls the requested archive day forward correctly", async () => {
+  const originalFetch = globalThis.fetch;
+  let requested;
+  globalThis.fetch = async (url) => {
+    requested = new URL(url);
+    return { ok: true, json: async () => ({ hourly: {
+      time: ["2020-02-04T00:00"], temperature_2m: [4], surface_pressure: [1001], wind_speed_10m: [7],
+    } }) };
+  };
+  try {
+    await fetchCatchWeather(50, 14, "2020-02-03", "23:50", { timezone: "UTC" });
+    assert.equal(requested.searchParams.get("start_date"), "2020-02-04");
+    await assert.rejects(fetchCatchWeather(50, 14, "2020-02-03", "23:50", { timezone: "Other" }), /časové pásmo/);
+  } finally { globalThis.fetch = originalFetch; clearCatchWeatherCache(); }
+});

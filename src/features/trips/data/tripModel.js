@@ -98,6 +98,7 @@ export function formatTripCatchCount(count) {
 export function getDistinctTripSpecies(catches) {
   const speciesByKey = new Map();
   for (const record of catches) {
+    if (record.captureMode === "quick" && !record.speciesKey) continue;
     if (typeof record.species !== "string" || !record.species.trim()) continue;
     const speciesKey = typeof record.speciesKey === "string" && record.speciesKey.trim()
       ? record.speciesKey.trim()

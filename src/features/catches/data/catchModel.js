@@ -42,9 +42,9 @@ export function parseOptionalNumber(value, label, errors, { min = 0, max = Numbe
   }
   return number;
 }
-export function validateCatchForm(data) {
+export function validateCatchForm(data, { allowUnknownSpecies = false } = {}) {
   const errors = {};
-  if (!data.speciesKey) errors.species = "Vyber druh ryby.";
+  if (!data.speciesKey && !allowUnknownSpecies) errors.species = "Vyber druh ryby.";
   if (!data.catchDate || Number.isNaN(Date.parse(`${data.catchDate}T${data.catchTime || "12:00"}`))) {
     errors.catchDate = "Zadej platné datum úlovku.";
   }

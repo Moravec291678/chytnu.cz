@@ -8,6 +8,7 @@ import { MAX_LEGACY_PHOTOS_PER_CATCH, normalizePrimaryPhotoId } from "../../catc
 import { normalizeCatchVerification, normalizeLocationEvidence } from "../../catches/data/catchVerification.js";
 import { createNotificationRecord } from "../../notifications/data/notificationModel.js";
 import { PRODUCT_LIMITS } from "../../../product/config/limits.js";
+import { normalizeQuickCatchMetadata } from "../../catches/data/quickCatchMetadata.js";
 
 export const MAX_BACKUP_FILE_BYTES = PRODUCT_LIMITS.backupFileBytes;
 const MAX_PHOTO_BYTES = PRODUCT_LIMITS.photoBytes;
@@ -96,7 +97,14 @@ function decodeCatch(record, tripIds) {
   requireTimestamp(record.createdAt, `createdAt úlovku ${record.id}`);
   requireTimestamp(record.updatedAt, `updatedAt úlovku ${record.id}`);
   requireTimestamp(record.caughtAt, `caughtAt úlovku ${record.id}`);
-  requireString(record.speciesKey, `druh úlovku ${record.id}`);
+  let quickCatch;
+  if (record.captureMode !== undefined && record.captureMode !== "quick") fail(`Úlovek ${record.id} obsahuje neplatný způsob pořízení.`);
+  if (record.captureMode === "quick") {
+    try { quickCatch = normalizeQuickCatchMetadata(record.quickCatch); }
+    catch { fail(`Rychlý úlovek ${record.id} obsahuje neplatné údaje o pořízení fotografie.`); }
+  } else if (record.quickCatch !== undefined) fail(`Úlovek ${record.id} obsahuje údaje rychlého úlovku bez způsobu pořízení.`);
+  // Unknown species is valid only for a genuine, validated Quick Catch.
+  if (!(record.captureMode === "quick" && record.speciesKey === "")) requireString(record.speciesKey, `druh úlovku ${record.id}`);
   requireString(record.species, `název druhu úlovku ${record.id}`);
   if (record.speciesLatin !== null && typeof record.speciesLatin !== "string") fail(`Úlovek ${record.id} obsahuje neplatný latinský název.`);
   for (const key of ["weightKg", "lengthCm", "girthCm", "fightMinutes", "waterNumber", "waterDepthM"]) {
@@ -135,6 +143,7 @@ function decodeCatch(record, tripIds) {
   requireUniqueIds(photos, `fotografií u úlovku ${record.id}`);
   return {
     ...record,
+    ...(quickCatch ? { quickCatch } : {}),
     ownerId: null,
     photos: photos.map((photo) => ({ ...photo, photoStatus: "local-only" })),
     primaryPhotoId: normalizePrimaryPhotoId(photos, record.primaryPhotoId),
