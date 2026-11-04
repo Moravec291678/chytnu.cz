@@ -2,6 +2,8 @@
 
 Status: **disabled in production**, reviewed 2026-11-04. No external AI request was made, no key was installed, no billing was activated. Quick Catch never depends on AI.
 
+Current zero-cost work: see [FREE_AI_PROVIDER_REVIEW.md](FREE_AI_PROVIDER_REVIEW.md) and [FREE_AI_RELEASE.md](FREE_AI_RELEASE.md). The production factory now only accepts the pinned Cloudflare candidate after source review; Gemini is retained as an inactive research adapter, with no paid fallback. Local diary analysis and recommendations are usable deterministic calculations, not active model inference.
+
 ## Implementation
 
 - `src/features/ai/aiPolicy.js`: independent `species`, `diary`, `recommendations`, `stories` flags, all false; versioned, provider-specific, capability-specific consent and revocation checks. Payload access happens only after both gates pass. These functions do not persist consent. No consent UI is displayed while capabilities are disabled.
@@ -25,7 +27,7 @@ Decision: keep all external AI capabilities disabled. No production provider has
 
 ## Setup and release blockers
 
-No AI environment variables are required for this release. The factory's exact future server-only names are `AI_PROVIDER` (`gemini`), `AI_GEMINI_API_KEY`, `AI_GEMINI_MODEL`, `AI_SPECIES_ENABLED` (`true`). The source `AI_FEATURES.species` must also be explicitly enabled in a reviewed release. Setting variables alone cannot activate it. Never use a `VITE_` prefix for a key. Existing Firebase server authentication must continue to target `chutnucz`; existing server Firebase/Cloudinary credentials are reused only after activation.
+No AI environment variables are required for local insights. Future server-only names are `AI_PROVIDER=cloudflare`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `AI_CLOUDFLARE_MODEL=@cf/google/gemma-4-26b-a4b-it`, `AI_SPECIES_ENABLED=true` and `AI_ZERO_COST_CONFIRMED=true`. Source flags remain false; environment variables cannot activate inference alone. A real test and consent/privacy release review remain mandatory. Do not add billing or configure Gemini for the zero-cost path. Existing Firebase project remains `chutnucz`.
 
 Before enabling a capability:
 

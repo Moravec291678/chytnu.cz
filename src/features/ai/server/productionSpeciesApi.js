@@ -2,7 +2,8 @@ import { createHash } from "node:crypto";
 import { Buffer } from "node:buffer";
 import { AI_FEATURES } from "../aiPolicy.js";
 import { createSpeciesApi } from "./speciesApi.js";
-import { createGeminiSpeciesProvider } from "./geminiProvider.js";
+import { createCloudflareSpeciesProvider } from "./cloudflareProvider.js";
+import { createZeroCostQuota, blockZeroCostQuota } from "./zeroCostQuota.js";
 import { getAccountDeletionAdminContext, verifyFirebaseIdToken, cloudinaryPublicId } from "../../../server/cloudinaryApi.js";
 
 const MAX_ORIGINAL = 10 * 1024 * 1024;
@@ -139,10 +140,19 @@ export function createFirebaseSpeciesDependencies({ env, admin = () => getAccoun
 
 export function createProductionSpeciesApi({ env = globalThis.process?.env ?? {} } = {}) {
   // Both a reviewed source release and server configuration are required.
-  const enabled = AI_FEATURES.species === true && env.AI_SPECIES_ENABLED === "true" && env.AI_PROVIDER === "gemini";
+  const enabled = AI_FEATURES.species === true && env.AI_SPECIES_ENABLED === "true"
+    && env.AI_PROVIDER === "cloudflare" && env.AI_ZERO_COST_CONFIRMED === "true";
   if (!enabled) return createSpeciesApi();
   try {
-    return createSpeciesApi({ enabled, providerName: "gemini", ...createFirebaseSpeciesDependencies({ env }),
-      provider: createGeminiSpeciesProvider({ apiKey: env.AI_GEMINI_API_KEY, model: env.AI_GEMINI_MODEL }) });
+    return createSpeciesApi({ enabled, providerName: "cloudflare", ...createFirebaseSpeciesDependencies({ env }),
+      consumeRateLimit: async uid => {
+        const { db, Timestamp } = await getAccountDeletionAdminContext(env);
+        return createZeroCostQuota({ db, Timestamp })(uid);
+      },
+      provider: createCloudflareSpeciesProvider({ accountId: env.CLOUDFLARE_ACCOUNT_ID, apiToken: env.CLOUDFLARE_API_TOKEN,
+        model: env.AI_CLOUDFLARE_MODEL, onQuotaExhausted: async () => {
+          const { db, Timestamp } = await getAccountDeletionAdminContext(env);
+          await blockZeroCostQuota({ db, Timestamp });
+        } }) });
   } catch { return createSpeciesApi(); }
 }
