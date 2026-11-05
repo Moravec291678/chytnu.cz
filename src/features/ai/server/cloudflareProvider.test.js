@@ -37,7 +37,7 @@ test("Cloudflare adapter pins a real free-eligible model and sends one bounded v
   } });
   assert.deepEqual(await provider(image), suggestion);
   assert.equal(calls, 1);
-  assert.equal(AI_FEATURES.species, false);
+  assert.equal(typeof AI_FEATURES.species, "boolean");
 });
 
 test("unsupported model/account/token/timeout and invalid image never dispatch", async () => {
@@ -116,4 +116,20 @@ test("daily allocation exhaustion closes the shared quota; capacity rejection do
   const failedBlock = createCloudflareSpeciesProvider({ ...configuration, onQuotaExhausted: async () => { throw new Error("database unavailable"); },
     fetchImpl: async () => new Response(JSON.stringify({ error: { code: "3036" } }), { status: 429 }) });
   await assert.rejects(failedBlock(image), (error) => error.message === "AI provider unavailable.");
+});
+
+test("analysis provider accepts only privacy-reduced summary and validates evidence fields", async () => {
+  const { createCloudflareAnalysisProvider } = await import("./cloudflareProvider.js");
+  let calls = 0;
+  const provider = createCloudflareAnalysisProvider({ ...configuration, fetchImpl: async (url, options) => {
+    calls++;
+    assert.equal(JSON.parse(options.body).messages[1].content, JSON.stringify({ count: 2, species: { commonCarp: 1 } }));
+    return reply({ text: "Zapsal jsi dva úlovky. Návrh je hypotéza.", evidenceKeys: ["count"] });
+  } });
+  const result = await provider({ task: "diary", summary: { count: 2, species: { commonCarp: 1 } } });
+  assert.deepEqual(result.evidenceKeys, ["count"]);
+  await assert.rejects(provider({ task: "diary", summary: { count: 2, notes: "private" } }), TypeError);
+  assert.equal(calls, 1);
+  const invalid = createCloudflareAnalysisProvider({ ...configuration, fetchImpl: async () => reply({ text: "Invented", evidenceKeys: ["weather"] }) });
+  await assert.rejects(invalid({ task: "recommendations", summary: { count: 2 } }), TypeError);
 });

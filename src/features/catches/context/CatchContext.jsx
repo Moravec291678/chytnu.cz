@@ -225,11 +225,12 @@ export function CatchProvider({ children }) {
     window.dispatchEvent(new Event("chytnu:progression-changed"));
     return { record: storedRecord, progressionEventIds: getCatchRewardEventIds(progression.events, storedRecord.id) };
   }, [persistAndVerifyPhotos, scope]);
-  const updateCatch = useCallback(async (record) => {
+  const updateCatch = useCallback(async (record, { expectedRevision, expectedServerRevision } = {}) => {
     if (scope.status !== "ready") throw new Error("Místní profil se ještě načítá.");
     const latestRecord = await catchRepository.get(record.id, scope);
     const safeRecord = latestRecord ? await preserveSyncedPhotoMetadata(record, latestRecord) : record;
-    const storedRecord = await catchRepository.put(safeRecord, scope);
+    const storedRecord = await catchRepository.put(safeRecord, expectedRevision === undefined ? scope
+      : { ...scope, expectedRevision, expectedServerRevision });
     if (storedRecord.ownerId) await serverProgressionClaimRepository.enqueue(storedRecord.id, {
       ownerId: storedRecord.ownerId, scopeKey: scope.scopeKey,
     }).catch(() => {});
@@ -242,6 +243,14 @@ export function CatchProvider({ children }) {
     window.dispatchEvent(new Event("chytnu:progression-changed"));
     return storedRecord;
   }, [persistAndVerifyPhotos, scope]);
+  const approveAiStoryDraft = useCallback(async (id, draft) => {
+    if (scope.status !== "ready") throw new Error("Místní profil se ještě načítá.");
+    const storedRecord = await catchRepository.approveAiStoryDraft(id, draft, scope);
+    if (activeScopeKey.current !== scope.scopeKey) return;
+    dispatch({ type: "UPDATE_CATCH", payload: storedRecord });
+    window.dispatchEvent(new Event("chytnu:outbox-changed"));
+    return storedRecord;
+  }, [scope]);
   const toggleFavorite = useCallback(async (id) => {
     const record = state.catches.find((item) => item.id === id);
     if (!record) throw new Error("Úlovek už není dostupný. Obnov deník a zkus to znovu.");
@@ -273,7 +282,7 @@ export function CatchProvider({ children }) {
   }, [scope]);
 
   return (
-    <CatchContext.Provider value={{ state, dispatch, refresh, createCatch, updateCatch, toggleFavorite, deleteCatch, quickCaptureState, saveQuickCapture }}>
+    <CatchContext.Provider value={{ state, dispatch, refresh, createCatch, updateCatch, approveAiStoryDraft, toggleFavorite, deleteCatch, quickCaptureState, saveQuickCapture }}>
       {children}
     </CatchContext.Provider>
   );

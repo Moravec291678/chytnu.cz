@@ -1,8 +1,8 @@
 # Public test fixture for live AI acceptance
 
-`public/ai-fixtures/fish.jpg` is a public-domain photograph of **common carp, Cyprinus carpio**, by **Sam Stukel / USFWS**, photographed at Gavins Point National Fish Hatchery. It is a real photograph, not an illustration or generated image. It contains no application user's personal photograph.
+`tools/fixtures/ai/common-carp.jpg` is a public-domain photograph of **common carp, Cyprinus carpio**, by **Sam Stukel / USFWS**, photographed at Gavins Point National Fish Hatchery. It is a real photograph, not an illustration or generated image. It contains no application user's personal photograph.
 
-Source and licence verified 2026-11-04:
+Source and licence verified 2026-11-05:
 
 - [US Fish and Wildlife Service original media page](https://www.fws.gov/media/common-carp-10) identifies Cyprinus carpio, credits Sam Stukel / USFWS and explicitly states **Public Domain**.
 - [Wikimedia Commons file description and licence](https://commons.wikimedia.org/wiki/File:Common_Carp_(Cyprinus_carpio)_(3)_(51222524726).jpg) identifies the USFWS employee's official photograph and public-domain status; the source Flickr photo was licence-reviewed by Commons.

@@ -433,6 +433,37 @@ export async function runStoreOperation(storeName, operation, mode, record) {
 }
 
 export const catchRepository = {
+  async approveAiStoryDraft(id, draft, options) {
+    const { scopeKey, ownerId } = requireRepositoryScope(options);
+    if (!draft || !["improve", "summarize"].includes(draft.action)
+      || typeof draft.originalNotes !== "string" || typeof draft.text !== "string"
+      || !draft.text.trim() || draft.text.length > 8000 || !Number.isSafeInteger(draft.expectedRevision)) {
+      throw new Error("Návrh nelze bezpečně schválit.");
+    }
+    const db = await openLocalDatabase();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction([CATCH_STORE_NAME, OUTBOX_STORE_NAME], "readwrite");
+      const store = tx.objectStore(CATCH_STORE_NAME);
+      const request = store.get(id);
+      let result = null;
+      request.onsuccess = () => {
+        const record = request.result;
+        if (!record || record.deleted || recordScopeKey(record) !== scopeKey
+          || (record.ownerId ?? null) !== ownerId || record.sync?.revision !== draft.expectedRevision
+          || (record.notes ?? "") !== draft.originalNotes) return;
+        queueOutboxOperation(tx, { entityType: "catch", entityId: id, operation: "upsert",
+          localRevision: draft.expectedRevision + 1, ownerId, scopeKey,
+          baseServerRevision: record.sync?.serverRevision ?? null }, revision => {
+          result = { ...record, notes: draft.text.trim(), updatedAt: new Date().toISOString(),
+            sync: { ...record.sync, status: "local", revision } };
+          store.put(result);
+        });
+      };
+      request.onerror = () => tx.abort();
+      tx.oncomplete = () => { db.close(); result ? resolve(result) : reject(new Error("Úlovek se změnil nebo byl smazán. Obnov návrh.")); };
+      tx.onerror = tx.onabort = () => { db.close(); reject(tx.error ?? new Error("Návrh se nepodařilo uložit.")); };
+    });
+  },
   async getQuickCaptureGeneration(options) {
     const { scopeKey } = requireRepositoryScope(options);
     return (await runStoreOperation(APP_META_STORE_NAME, "get", "readonly", quickCaptureGenerationKey(scopeKey)))?.generation ?? null;
@@ -572,6 +603,15 @@ export const catchRepository = {
       const existingRequest = catchStore.get(record.id);
       existingRequest.onsuccess = () => {
         const existing = existingRequest.result;
+        if (Object.hasOwn(options ?? {}, "expectedRevision")
+          && (!Number.isSafeInteger(options.expectedRevision) || !existing || existing.deleted
+            || existing.sync?.revision !== options.expectedRevision
+            || (Object.hasOwn(options, "expectedServerRevision")
+              && (existing.sync?.serverRevision ?? null) !== options.expectedServerRevision))) {
+          failure = new Error("Úlovek se od návrhu AI změnil nebo byl smazán. Otevři jej znovu.");
+          transaction.abort();
+          return;
+        }
         if (existing && recordScopeKey(existing) !== requestedScope.scopeKey) {
           failure = new Error("Úlovek nepatří do aktivního profilu.");
           transaction.abort();

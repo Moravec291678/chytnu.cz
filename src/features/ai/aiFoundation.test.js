@@ -13,9 +13,9 @@ const consent = { version: 1, provider: "test-provider", grantedAt: "2026-11-04T
 const suggestion = { status: "suggestion", speciesKey: "commonCarp", confidence: 0.86, alternatives: [], fishCount: 1 };
 
 test("AI disabled and missing/revoked/provider-mismatched consent never read payload or send a request", async () => {
-  assert.ok(Object.values(AI_FEATURES).every((flag) => flag === false));
+  assert.ok(Object.values(AI_FEATURES).every((flag) => typeof flag === "boolean"));
   const fail = () => assert.fail("must not access personal data");
-  assert.deepEqual(await requestAiTask({ capability: "species", getPayload: fail, request: fail }), { status: "disabled" });
+  assert.deepEqual(await requestAiTask({ capability: "species", flags: { species: false }, getPayload: fail, request: fail }), { status: "disabled" });
   for (const value of [null, { ...consent, revokedAt: "now" }, { ...consent, provider: "other" }]) {
     assert.deepEqual(await requestAiTask({ capability: "species", provider: "test-provider", flags: { species: true }, consent: value, getPayload: fail, request: fail }), { status: "consent_required" });
   }

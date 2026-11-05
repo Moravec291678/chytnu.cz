@@ -1,6 +1,6 @@
 export const PRIVACY_POLICY = Object.freeze({
   title: "Zásady ochrany osobních údajů",
-  lastUpdated: "4. listopadu 2026",
+  lastUpdated: "5. listopadu 2026",
   sections: [
     {
       heading: "1. Správce osobních údajů",
@@ -18,18 +18,20 @@ export const PRIVACY_POLICY = Object.freeze({
         { heading: "Rybářský deník", items: ["druh, délku a hmotnost ryby, datum a čas úlovku;", "metodu, nástrahu, poznámky, revír nebo vlastní vodu;", "údaje o vycházce, fotografie a další údaje, které do záznamu vložíš."] },
         { heading: "Poloha", items: ["GPS souřadnice úlovku nebo vycházky;", "polohu ručně zvolenou na mapě;", "souřadnice použité pro nalezení vody nebo načtení počasí."] , note: "Poloha není nutná pro každý záznam a některé údaje lze zadat ručně." },
         { heading: "Fotografie", items: ["obraz fotografie a její technická metadata;", "datum pořízení a GPS údaje, pokud je soubor obsahuje."] , note: "Metadata může aplikace použít k usnadnění zápisu nebo vyhodnocení kontextu úlovku." },
+        { heading: "Volitelné funkce AI", items: ["nastavení souhlasu s externím zpracováním, jeho verzi, změny a odvolání;", "návrhy druhů ryb, vysvětlení souhrnů a vyžádané návrhy vyprávění, pokud tuto funkci použiješ."] , note: "Externí zpracování je ve výchozím nastavení vypnuté. Návrh AI není potvrzený údaj deníku." },
         { heading: "Herní postup a technické údaje", items: ["XP, úrovně, achievementy, výzvy, série a mastery;", "stav synchronizace, identifikátory operací, konflikty mezi zařízeními a záznamy potřebné k zabránění duplicitním odměnám;", "technické údaje o chybách a neúspěšných synchronizacích."] , note: "Technické údaje nepoužíváme k vytváření reklamních profilů." },
       ],
     },
     {
       heading: "3. Proč údaje používáme",
-      paragraphs: ["Údaje používáme k provozu účtu a rybářského deníku, synchronizaci mezi zařízeními, ukládání a zobrazování fotografií, místní záloze a obnově, mapovým a meteorologickým funkcím, statistikám a herním funkcím, zabezpečení a řešení technických chyb a vyřízení žádostí uživatelů. Údaje neprodáváme a aplikace v současnosti neobsahuje reklamní systém.", "Volitelný místní rozbor deníku a doporučení počítá aplikace v zařízení ze záznamů. Nejde o výstup AI modelu a tyto funkce neposílají fotografie, poznámky ani polohu externí AI službě. Externí rozpoznávání ryb a generování příběhů nejsou aktivované; případné zapnutí bude vyžadovat samostatné informace o poskytovateli a výslovný souhlas."],
+      paragraphs: ["Údaje používáme k provozu účtu a rybářského deníku, synchronizaci mezi zařízeními, ukládání a zobrazování fotografií, místní záloze a obnově, mapovým a meteorologickým funkcím, statistikám a herním funkcím, zabezpečení a řešení technických chyb a vyřízení žádostí uživatelů. Údaje neprodáváme a aplikace v současnosti neobsahuje reklamní systém.", "Místní rozbor deníku a doporučení počítá aplikace v zařízení ze záznamů. Nejde o výstup AI modelu a tento místní režim neposílá fotografie, poznámky ani polohu externí AI službě. Pokud jsou v nasazení dostupné externí funkce AI, použijí se pouze po tvém samostatném souhlasu pro danou funkci, jak popisuje část 6a."],
     },
     {
       heading: "4. Právní základ",
       paragraphs: [
         "Údaje potřebné pro účet a funkce aplikace zpracováváme za účelem poskytnutí služby a plnění souvisejících povinností.",
         "U volitelných funkcí, jako je poloha, fotografie nebo oznámení, rozhoduješ prostřednictvím oprávnění zařízení nebo nastavení. Některé technické údaje mohou být zpracovávány na základě oprávněného zájmu na zabezpečení a spolehlivém provozu.",
+        "Externí AI zpracování fotografie, souhrnů deníku nebo vybraných poznámek je dobrovolné a vychází ze samostatného souhlasu. Souhlas můžeš v nastavení Umělá inteligence změnit nebo odvolat; odvolání neovlivňuje zákonnost dřívějšího zpracování. Uložení úlovku, běžný deník i místní přehledy fungují bez tohoto souhlasu.",
       ],
     },
     {
@@ -46,10 +48,22 @@ export const PRIVACY_POLICY = Object.freeze({
         "Google Firebase – autentizace, cloudová databáze a související serverové operace.",
         "Cloudinary – ukládání a doručování fotografií, pokud je cloudový foto transport v daném nasazení zapnutý.",
         "Vercel – hosting aplikace a serverových API funkcí.",
+        "Cloudflare, Inc. – pouze u výslovně povolených externích funkcí AI služba Workers AI s modelem Google Gemma 4; podrobnosti v části 6a.",
         "Open-Meteo – při načtení počasí aplikace odešle souřadnice místa, pro které se počasí vyhledává.",
         "OpenStreetMap nebo související poskytovatelé mapových dlaždic – při zobrazení mapy probíhá běžná síťová komunikace s jejich servery.",
       ],
       note: "Poskytovatelé mohou zpracovávat technické údaje, například IP adresu, podle vlastních podmínek a zásad ochrany osobních údajů.",
+    },
+    {
+      heading: "6a. Volitelná umělá inteligence",
+      paragraphs: [
+        "Externí funkce používají Cloudflare Workers AI s modelem Google Gemma 4 26B A4B. Model je provozován Cloudflare; nejde o odesílání do Gemini API. Dostupnost závisí na konfiguraci a bezplatné kapacitě služby. Oprávnění uděluješ zvlášť pro rozpoznávání ryb, vysvětlení deníku, doporučení a pomoc s historkami; samotné vytvoření účtu ani fotografie není souhlasem s AI.",
+        "Pro rozpoznání ryby odešleme obraz vybrané fotografie a katalog druhů. Z fotografie před odesláním odstraníme vložené EXIF údaje, včetně GPS a času pořízení. Obraz může stále obsahovat obličeje nebo místo viditelné na fotografii; vybírej jen snímky, které máš právo takto zpracovat. Přesné GPS souřadnice ani další údaje z deníku k fotografii nepřidáváme.",
+        "Pro vysvětlení deníku a doporučení se nejprve vypočítají statistiky v aplikaci a externí model obdrží odvozené souhrny, nikoli celý deník, fotografie nebo přesné GPS. Pro historky odešleme pouze poznámky, které k dané úpravě vybereš. Text sám může obsahovat osobní údaje nebo popis místa; neposílej údaje, které k úpravě nejsou potřebné.",
+        "Cloudflare uvádí, že obsah standardních nestavových požadavků Workers AI nepoužívá k tréninku modelů a neuchovává ho déle, než vyžaduje zpracování a doručení odpovědi. Mohou platit právní a bezpečnostní výjimky a uchovávat se provozní metadata. Nejde o záruku absolutní nulové retence ani zpracování výhradně v EU. Pro aplikaci se nepoužívá ukládání obsahu do AI Gateway ani placený náhradní poskytovatel.",
+        "Nastavení souhlasu a uložené výsledky jsou přiřazené tvému účtu. Odvoláním souhlasu zastavíš další externí požadavky a zahájí se odstranění uložených návrhů AI; při výpadku může odstranění vyžadovat opakování nebo pomoc podpory. Již odeslané zpracování nelze vzít zpět. Ručně přijaté nebo upravené údaje v běžném deníku zůstávají jeho součástí. Souhlas a dostupné uložené výsledky zahrnuje export účtu; při smazání účtu se odstraňují s ostatními cloudovými údaji.",
+      ],
+      note: "AI se může mýlit. Druh zůstává návrhem do tvého potvrzení; text před uložením zkontroluj. Model nesmí sám měnit potvrzené druhy, míry ani poznámky. Pokud pro své rozhodnutí potřebuješ souhlas zákonného zástupce, používej externí AI pouze s jeho souhlasem.",
     },
     {
       heading: "7. Přenos mimo Evropský hospodářský prostor",
@@ -102,7 +116,7 @@ export const PRIVACY_POLICY = Object.freeze({
 
 export const TERMS_OF_USE = Object.freeze({
   title: "Podmínky používání",
-  lastUpdated: "2. listopadu 2026",
+  lastUpdated: "5. listopadu 2026",
   sections: [
     { heading: "1. Provozovatel", paragraphs: ["ChytnuCz provozuje David Moravec, fyzická osoba – nepodnikatel. Kontakt: David.Moravec2@seznam.cz."] },
     { heading: "2. Charakter služby", paragraphs: ["ChytnuCz je bezplatná aplikace určená především pro osobní rybářský deník. Může obsahovat evidenci úlovků, fotografie, mapy a GPS, vycházky, statistiky, výzvy, achievementy, XP, počasí, revíry, zálohu a synchronizaci mezi zařízeními. V současné verzi nejsou aktivní placené funkce ani reklamy."] },
@@ -118,7 +132,8 @@ export const TERMS_OF_USE = Object.freeze({
     { heading: "12. Smazání úlovku a fotografie", paragraphs: ["Smazaný obsah přestane být v aplikaci aktivně zobrazován. U synchronizované fotografie může aplikace zařadit odstranění vzdáleného objektu do fronty; dokončení závisí na synchronizaci a dostupnosti poskytovatele a nemá garantovanou lhůtu 24 hodin. Minimální technické synchronizační záznamy mohou zůstat po dobu nutnou k dokončení synchronizace."] },
     { heading: "13. Smazání účtu", paragraphs: ["Smazání účtu můžeš zahájit v Nastavení po opětovném ověření přihlášení. Související cloudové záznamy a fotografie se odstraňují postupně; dokončení závisí na dostupnosti poskytovatelů a nemá garantovanou lhůtu 24 hodin. Místní údaje na jiných zařízeních a starší nepřiřazené místní záznamy mohou vyžadovat samostatné odstranění. Při potížích kontaktuj provozovatele e-mailem."] },
     { heading: "14. Dostupnost služby", paragraphs: ["ChytnuCz je poskytováno bezplatně a bez záruky nepřetržité dostupnosti. Může dojít k údržbě, výpadku serveru nebo služby třetí strany, změně API, technické chybě či dočasnému omezení funkce."] },
-    { heading: "15. Služby třetích stran", paragraphs: ["Aplikace může využívat Google Firebase, Cloudinary, Vercel, Open-Meteo a OpenStreetMap nebo jiné poskytovatele mapových dlaždic. Tyto služby mají vlastní podmínky, pravidla dostupnosti a zásady ochrany osobních údajů."] },
+    { heading: "15. Služby třetích stran", paragraphs: ["Aplikace může využívat Google Firebase, Cloudinary, Vercel, Open-Meteo a OpenStreetMap nebo jiné poskytovatele mapových dlaždic. Volitelné externí funkce AI využívají po souhlasu Cloudflare Workers AI a model Google Gemma 4. Tyto služby mají vlastní podmínky, pravidla dostupnosti a zásady ochrany osobních údajů."] },
+    { heading: "15a. Návrhy umělé inteligence", paragraphs: ["AI funkce jsou dobrovolné a mohou být omezené bezplatnou kapacitou. Návrh druhu není potvrzené určení ryby, číselné skóre modelu není ověřená pravděpodobnost a doporučení nezaručuje úspěšný lov. Model neodvozuje délku nebo hmotnost z běžné fotografie. Vyprávění před uložením zkontroluj; AI nesmí bez tvého schválení přepsat poznámky ani automaticky publikovat obsah. Uložení úlovku a používání deníku zůstává dostupné bez externí AI."] },
     { heading: "16. Změny a ukončení funkcí", paragraphs: ["Funkce aplikace mohou být upraveny, přidány, dočasně vypnuty nebo odstraněny. Pokud změna ovlivní nakládání s osobními údaji, aktualizujeme také zásady ochrany osobních údajů."] },
     { heading: "17. Odpovědnost za rozhodnutí", paragraphs: ["ChytnuCz je pomocný nástroj. Informace o počasí, aktivitě ryb, GPS, mapách a revírech mohou být orientační nebo neaktuální. Nezakládej na nich rozhodnutí bez ověření u vhodného zdroje. Tím nejsou dotčena práva ani odpovědnost, které nelze podle práva vyloučit."] },
     { heading: "18. Ochrana osobních údajů", paragraphs: ["Zpracování osobních údajů popisují samostatné Zásady ochrany osobních údajů ChytnuCz, dostupné přímo v aplikaci a před vytvořením účtu."] },

@@ -160,6 +160,44 @@ after(async () => {
   await testEnv?.cleanup();
 });
 
+test("AI consent a návrhy čte pouze vlastník; klient nemůže zapisovat ani mazat", async () => {
+  const consent = { ownerId: "angler-a", version: 1, provider: "cloudflare", revision: 1,
+    capabilities: { species: true, stories: false, diary: false, recommendations: false },
+    grantedAt: "2026-11-05T08:00:00.000Z", revokedAt: null, updatedAt: "2026-11-05T08:00:00.000Z" };
+  const result = { ownerId: "angler-a", type: "species", provider: "cloudflare", modelId: "test-model",
+    createdAt: "2026-11-05T08:00:00.000Z", catchId: "catch-a", photoId: "seed-photo",
+    result: { status: "suggestion", speciesKey: "commonCarp", confidence: 0.8, fishCount: 1, alternatives: [] } };
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    const db = context.firestore();
+    await setDoc(doc(db, "users/angler-a/aiPreferences/consent"), consent);
+    await setDoc(doc(db, "users/angler-a/aiResults/result-a"), result);
+    // A malformed server row cannot expose another owner's information.
+    await setDoc(doc(db, "users/angler-a/aiResults/wrong-owner"), { ...result, ownerId: "angler-b" });
+  });
+  for (const [collectionName, id, data] of [["aiPreferences", "consent", consent], ["aiResults", "result-a", result]]) {
+    const path = `users/angler-a/${collectionName}/${id}`;
+    const ownRef = doc(alice.firestore(), path);
+    await assertSucceeds(getDoc(ownRef));
+    assert.equal((await assertSucceeds(getDocs(query(collection(alice.firestore(), `users/angler-a/${collectionName}`),
+      where("ownerId", "==", "angler-a"))))).size, 1);
+    await assertFails(getDocs(collection(alice.firestore(), `users/angler-a/${collectionName}`)));
+    for (const context of [bob, anonymous]) {
+      await assertFails(getDoc(doc(context.firestore(), path)));
+      await assertFails(getDocs(query(collection(context.firestore(), `users/angler-a/${collectionName}`), where("ownerId", "==", "angler-a"))));
+      await assertFails(setDoc(doc(context.firestore(), `users/angler-a/${collectionName}/forged`), data));
+    }
+    await assertFails(setDoc(doc(alice.firestore(), `users/angler-a/${collectionName}/forged`), data));
+    await assertFails(updateDoc(ownRef, { provider: "other", revision: 2 }));
+    await assertFails(deleteDoc(ownRef));
+  }
+  await assertFails(getDoc(doc(alice.firestore(), "users/angler-a/aiResults/wrong-owner")));
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), "accountDeletions/angler-a"), { ownerId: "angler-a", status: "requested" });
+  });
+  await assertFails(getDoc(doc(alice.firestore(), "users/angler-a/aiPreferences/consent")));
+  await assertFails(getDocs(query(collection(alice.firestore(), "users/angler-a/aiResults"), where("ownerId", "==", "angler-a"))));
+});
+
 test("nepřihlášený uživatel nemůže číst, zapisovat ani mazat soukromý úlovek a výpravu", async () => {
   const db = anonymous.firestore();
   await assertFails(getDoc(doc(db, catchPath("angler-a", "catch-a"))));

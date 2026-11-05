@@ -31,3 +31,31 @@ test("terms explain offline use, user content, fishing rules and account deletio
   assert.match(text, /Smazání účtu můžeš zahájit v Nastavení/i);
   assert.match(text, /místní JSON zálohu/i);
 });
+
+test("AI privacy notice names actual processor, data minimization, opt-in, revocation and honest retention limits", () => {
+  const text = flatten(PRIVACY_POLICY);
+  assert.match(text, /Cloudflare Workers AI/);
+  assert.match(text, /Gemma 4 26B A4B/);
+  assert.match(text, /samostatného souhlasu/);
+  assert.match(text, /ve výchozím nastavení vypnuté/);
+  assert.match(text, /před odesláním odstraníme vložené EXIF údaje/);
+  assert.match(text, /při výpadku může odstranění vyžadovat opakování/);
+  assert.match(text, /nikoli celý deník/);
+  assert.match(text, /Pro historky odešleme pouze poznámky/);
+  assert.match(text, /právní a bezpečnostní výjimky/);
+  assert.match(text, /Nejde o záruku absolutní nulové retence/);
+  assert.match(text, /Odvoláním souhlasu zastavíš další externí požadavky/);
+  assert.match(text, /Souhlas a dostupné uložené výsledky zahrnuje export účtu/);
+  assert.match(text, /při smazání účtu se odstraňují/);
+  assert.doesNotMatch(text, /generování příběhů nejsou aktivované/);
+});
+
+test("AI terms require review and preserve ordinary journal without guarantees or invented measurements", () => {
+  const text = flatten(TERMS_OF_USE);
+  assert.match(text, /dobrovolné/);
+  assert.match(text, /není ověřená pravděpodobnost/);
+  assert.match(text, /nezaručuje úspěšný lov/);
+  assert.match(text, /neodvozuje délku nebo hmotnost/);
+  assert.match(text, /bez tvého schválení přepsat poznámky/);
+  assert.match(text, /bez externí AI/);
+});

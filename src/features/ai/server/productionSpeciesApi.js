@@ -133,7 +133,7 @@ export function createFirebaseSpeciesDependencies({ env, admin = () => getAccoun
       if (original.length !== photo.size || createHash("sha256").update(original).digest("hex") !== photo.cloud.sha256) throw new Error("Photo digest mismatch.");
       const bytes = stripJpegMetadata(original);
       if (bytes.length > MAX_AI_IMAGE) throw new Error("AI photo too large.");
-      return { ownerId: uid, catchId, photoId, bytes, mimeType: "image/jpeg", metadataStripped: true };
+      return { ownerId: uid, catchId, photoId, bytes, mimeType: "image/jpeg", metadataStripped: true, sourceSha256: photo.cloud.sha256 };
     },
   };
 }

@@ -23,6 +23,7 @@ import ConfirmDialog from "../shared/components/ConfirmDialog";
 import "../features/catches/components/PhotoSyncStatus.css";
 import "./AddCatchPage.css";
 import { isIncompleteQuickCatch } from "../features/catches/data/quickCatch.js";
+import CatchAiAssistance from "../features/ai/CatchAiAssistance.jsx";
 
 function formatDate(value) {
   if (!value || !Number.isFinite(Date.parse(value))) return null;
@@ -268,6 +269,7 @@ function CatchDetailPage() {
       {methodFacts.length > 0 && <CatchDetailFacts title="Lov a nástraha" facts={methodFacts} />}
       {conditionFacts.length > 0 && <CatchDetailFacts title="Podmínky" facts={conditionFacts} />}
       {item.notes && <section className="catch-detail-section catch-detail-notes"><h2>Poznámka</h2><p>{item.notes}</p></section>}
+      <CatchAiAssistance key={`${scope.scopeKey}:${item.id}`} record={item} />
       {hasMapLocation && <Link className="catch-detail-map-link" to={`/map?catch=${encodeURIComponent(item.id)}`}>Zobrazit úlovek na soukromé mapě</Link>}
       <div className="catch-detail-actions">
         <Link className="save-catch-button" to={`/catch/${item.id}/share`}>Sdílet úlovek</Link>

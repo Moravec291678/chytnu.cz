@@ -93,6 +93,8 @@ export function createAccountDeletionService({ db, auth, photoDeletion, now = ()
         await Promise.all([
           db.doc(`serverRateLimits/photo-cloud-${createHash("sha256").update(uid).digest("hex")}`).delete(),
           db.doc(`serverRateLimits/progression-${uid}`).delete(),
+          db.doc(`serverRateLimits/ai-species-${createHash("sha256").update(uid).digest("hex")}`).delete(),
+          db.doc(`serverRateLimits/ai-free-cloudflare-user-${createHash("sha256").update(uid).digest("hex")}`).delete(),
         ]);
         await userRef.delete();
         phase = "auth";

@@ -1,12 +1,17 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { buildDiaryInsights } from "./diaryInsights.js";
+import DiaryAiExplanation from "./DiaryAiExplanation.jsx";
+import { AI_FEATURES } from "./aiPolicy.js";
+import { useDataScope } from "../auth/context/dataScopeContextValue.js";
 
 export default function DiaryIntelligence({ catches, trips, waters, analysisEnabled = true, recommendationsEnabled = true }) {
+  const scope = useDataScope();
   const [expanded, setExpanded] = useState(false);
-  const report = useMemo(() => expanded && (analysisEnabled || recommendationsEnabled) ? buildDiaryInsights(catches, { trips, waters }) : null,
-    [expanded, catches, trips, waters, analysisEnabled, recommendationsEnabled]);
-  if (!analysisEnabled && !recommendationsEnabled) return <section className="insights-section">
+  const externalEnabled = AI_FEATURES.diary || AI_FEATURES.recommendations;
+  const report = useMemo(() => expanded && (analysisEnabled || recommendationsEnabled || externalEnabled) ? buildDiaryInsights(catches, { trips, waters }) : null,
+    [expanded, catches, trips, waters, analysisEnabled, recommendationsEnabled, externalEnabled]);
+  if (!analysisEnabled && !recommendationsEnabled && !externalEnabled) return <section className="insights-section">
     <h2>Postřehy z deníku</h2><p>Místní rozbor je vypnutý. <Link to="/settings">Upravit nastavení</Link></p>
   </section>;
   return <section className="insights-section" aria-labelledby="diary-intelligence-title">
@@ -25,6 +30,7 @@ export default function DiaryIntelligence({ catches, trips, waters, analysisEnab
           <h3>Doporučení pro další výpravu</h3>
           <ul className="insights-list">{report.recommendations.map(item => <li key={item.id}><strong>{item.title}:</strong> {item.text}</li>)}</ul>
         </>}
+        <DiaryAiExplanation key={scope.scopeKey} report={report} />
         <details><summary>Z čeho rozbor vychází</summary>
           <p>Každý bod vychází z uvedených záznamů nebo z chybějících údajů. Četnost úlovků neříká pravděpodobnost úspěchu.</p>
           <ul className="insights-list">{report.limitations.map(line => <li key={line}>{line}</li>)}</ul>

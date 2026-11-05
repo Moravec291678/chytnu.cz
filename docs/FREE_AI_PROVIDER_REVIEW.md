@@ -1,12 +1,12 @@
 # Bezplatná AI pro ChytnuCz — ověření poskytovatelů
 
-Ověřeno z aktuálních oficiálních stránek **4. 11. 2026**. Průzkum nepoužil soukromé fotografie ani deník, nevytvořil účet a neaktivoval fakturaci. Přihlášený Cloudflare účet ani skutečná inference tímto průzkumem ověřeny nebyly. Informace o ceně, modelu a dostupnosti je nutné znovu ověřit před aktivací.
+Ověřeno z aktuálních oficiálních stránek **5. 11. 2026** a jediným skutečným serverovým požadavkem na veřejnou fotografii USFWS. Nebyly použity zákaznické záznamy ani soukromé fotografie; nebyla aktivována fakturace. Vlastník výslovně potvrdil Workers Free bez placených služeb a AI kreditů.
 
 ## Rozhodnutí
 
 Nejvhodnější nalezený kandidát pro skutečně bezplatné hostované zpracování je **Cloudflare Workers AI na Workers Free** s modelem **`@cf/google/gemma-4-26b-a4b-it`**. Cloudflare model uvádí s podporou obrázků i textu a výslovně jej řadí mezi modely dostupné na Free. Google k němu odkazuje licenci Apache 2.0. Nejde o Gemini API, jehož podmínky jsou jiné. Schopnost rozlišovat podobné české ryby a kvalita českého vyprávění však nebyly prakticky ověřeny; samotný katalog tyto výsledky nedokazuje. [Model](https://developers.cloudflare.com/workers-ai/models/gemma-4-26b-a4b-it/), [dostupnost na Free](https://developers.cloudflare.com/changelog/post/2026-07-28-models-require-workers-paid/), [licence](https://ai.google.dev/gemma/apache_2), [model card Googlu](https://ai.google.dev/gemma/docs/core/model_card_4).
 
-Bez přístupových údajů a úspěšné skutečné inference je správný stav **READY FOR KEY / NEOVĚŘENO**, nikoli ACTIVE. Denní statistiky a opatrná doporučení mohou současně fungovat lokálně deterministicky, s jasným označením, že nevznikla generativním modelem.
+Skutečná inference nyní prošla (viz záznam níže). Denní statistiky a místní doporučení nadále fungují deterministicky bez externí AI. Generované vysvětlení je oddělený návrh, který vyžaduje souhlas; nic samo nemění ani nezveřejňuje.
 
 ## Cena, limity a soukromí
 
@@ -44,7 +44,7 @@ Níže uvedené názvy nabídek jsou ověřené z aktuální oficiální dokumen
 3. Zvol **Create a Workers AI API Token**, zkontroluj předvyplněná oprávnění, pak **Create API Token** → **Copy API Token**. Ručně vytvořený token musí mít `Workers AI - Read` a `Workers AI - Edit` pro správný účet. Použij úzký token pro tuto aplikaci, nikoli globální API klíč.
 4. V části **Get Account ID** zkopíruj **Account ID**. Ověř na přehledu Workers AI, že kvóta a plán odpovídají Free. Ulož si token bezpečně, neposílej ho do chatu ani Gitu. [Oficiální postup](https://developers.cloudflare.com/workers-ai/get-started/rest-api/).
 
-Potvrzené názvy této integrace jsou `CLOUDFLARE_ACCOUNT_ID`, serverové tajemství `CLOUDFLARE_API_TOKEN`, `AI_PROVIDER=cloudflare` a `AI_CLOUDFLARE_MODEL=@cf/google/gemma-4-26b-a4b-it`. Vercel kontrola názvů zatím žádnou z těchto AI proměnných nepotvrdila jako nastavenou. Příznaky ve zdrojovém kódu zůstávají vypnuté, takže samotné přidání proměnných model nezpřístupní. Nepřidávej Gemini konfiguraci.
+Potvrzené názvy této integrace jsou `CLOUDFLARE_ACCOUNT_ID`, serverové tajemství `CLOUDFLARE_API_TOKEN`, `AI_PROVIDER=cloudflare` a `AI_CLOUDFLARE_MODEL=@cf/google/gemma-4-26b-a4b-it`. David mezitím oznámil jejich nastavení ve Vercelu; tento průzkum tajné hodnoty nečte. Samotná konfigurace nenahrazuje ověření účtu Workers Free, skutečný test modelu, souhlas uživatele ani kontrolovaný release. Konečný stav aktivace patří do aktuálního release reportu. Nepřidávej Gemini konfiguraci.
 
 5. Otevři [Vercel dashboard](https://vercel.com/dashboard), vyber projekt připojený k `Moravec291678/chytnu.cz` a otevři **Environment Variables** v postranním panelu projektu. Přidej potvrzené proměnné adaptéru pro **Production**; token ulož jako **Secret**. Nepoužívej `VITE_` ani veřejné proměnné.
 6. Ulož změny. Nové proměnné vyžadují nové nasazení; na staré deploymenty se automaticky nepromítnou. [Oficiální nastavení](https://vercel.com/docs/environment-variables/managing-environment-variables).
@@ -59,3 +59,22 @@ Potvrzené názvy této integrace jsou `CLOUDFLARE_ACCOUNT_ID`, serverové tajem
 - Při providerově chybě kvóty přestat opakovat a počkat do dalšího bezplatného období. Nepoužívat placené navýšení.
 - Zašifrované tajemství patří pouze do serverového prostředí; diagnostika nesmí obsahovat fotografie, GPS, deník či klíče.
 - Dokumentované limity se týkají AI služby. Nejsou příslibem neomezeného bezplatného provozu existujícího hostingu, databáze nebo fotografického úložiště. Žádné jejich placené změny nejsou součástí tohoto návrhu.
+
+## Podklady k oznámení v aplikaci
+
+Aktuální zásady v `src/pages/legalDocuments.js` popisují poskytovatele, dobrovolný souhlas pro každou funkci, odvolání, zpracování zbavené nepotřebných metadat, ruční potvrzení návrhů a export/výmaz účtových údajů. Text používá podmíněné formulace dostupnosti, takže netvrdí úspěšné zapnutí před skutečným testem.
+
+V aktuálně otevřených Cloudflare podmínkách nebyl nalezen stejný obecný zákaz pravděpodobně nezletilých uživatelů jako v Gemini API. Toto zjištění není právním stanoviskem ani nezbavuje provozovatele povinností pro souhlas nezletilých; aplikace zachovává vlastní informaci o věku a potřebném souhlasu zákonného zástupce. Apache 2.0 licence Gemma 4 umožňuje i komerční použití při splnění licenčních podmínek. Cloudflare self-serve smlouva pro evropské osobní údaje odkazuje DPA; z něj nelze dovozovat výhradní umístění zpracování v EU. [Licence](https://ai.google.dev/gemma/apache_2), [Cloudflare smlouva, část 6.1](https://www.cloudflare.com/terms/), [DPA](https://www.cloudflare.com/cloudflare-customer-dpa/).
+
+Před zapnutím každé funkce musí oznámení odpovídat skutečné implementaci: fotografie samotné mohou ukazovat osoby/místo i po odstranění EXIF, poznámka může obsahovat uživatelem napsané osobní údaje a již odeslaný požadavek nelze odvoláním souhlasu vzít zpět. Smazání lokálně přijatého textu a smazání poskytovatelových provozních záznamů nejsou totožné operace. Tyto rozdíly se nesmějí skrýt za tvrzení „žádné údaje se neukládají“.
+
+## Skutečný test a vydání 5. 11. 2026
+
+- Čtyři požadované proměnné ověřeny jako šifrované v Production projektu chytnu-cz. Dodatečná AI_ZERO_COST_CONFIRMED=true vychází z výslovného potvrzení vlastníka. Žádná tajná hodnota nebyla vypsána ani zapsána do repozitáře.
+- Původně přerušené nasazení dpl_DLAPj1Lomp9qnjoTD2HwzBC5MsW6 bylo READY, ale mělo commit32565fa, nikoli místní změny.
+- Testovací commit511d083, nové nasazení dpl_96TUn9HyZoxJMjmb8ADdH4RRLGof READY. Jediné skutečné modelové volání přes autentizovanou serverovou diagnostiku: veřejná fotografie kapra USFWS, zbavená metadat. Výstup HTTP200: {"status":"suggestion","speciesKey":"commonCarp","confidence":0.95,"alternatives":[],"fishCount":1}. Skóre není kalibrovaná pravděpodobnost. Předchozí pokus skončil na ochraně Vercel401 a poskytovatele nevolal.
+- Dočasný přístupový klíč odstraněn po testu; obsluha operator_check/operator_fish_check se ve finálním zdroji odstraňuje. Fixture je archivována pouze v tools/fixtures/ai, mimo veřejný web a offline cache.
+- Výsledek dokazuje dostupnost účtu/modelu, obrazový vstup a validní strukturovaný návrh na jednom snímku. Neprokazuje obecnou přesnost ryb, kalibraci skóre, kvalitu českých historek ani chování fyzického iPhonu. Samostatné živé textové volání nebylo provedeno, protože zadání dovolilo právě jeden omezený test. Textové operace mají automatické testy kontraktu/validace/bezpečnosti a používají stejný ověřený endpoint/model.
+- Produkční obsluha získává data pouze serverově po Firebase ověření vlastníka a samostatném souhlasu pro danou funkci. Fotografie JPEG se ověřují hashem a zbavují metadat. Textové úpravy jsou návrhy; druh vyžaduje potvrzení v editoru. Ruční text lze přijmout jen atomicky proti původní poznámce a revizi; smazaný úlovek nevznikne znovu.
+- Limit je záměrně malý: jedna nová inference na účet za UTC den a tři pro celou aplikaci, se společnou transakční rezervací (ne skutečné měření neuronů); cache nečerpá další inferenci. Jedno dnešní místo spotřeboval ověřovací snímek. Tvrdou hranici nákladů tvoří Workers Free bez upgradu. Při vyčerpání aplikace odmítne další volání; bez placeného fallbacku či opakování.
+- David: v aplikaci Nastavení → Umělá inteligence a místní postřehy → dobrovolně vyber funkce a Uložit souhlas s AI. Žádná další konfigurace klíčů ani placený účet nejsou potřeba. Pro vlastní kontrolu přijatelnosti použij nejprve jednu funkci; denní limit je společný všem čtyřem.

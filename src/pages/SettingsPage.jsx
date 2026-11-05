@@ -17,6 +17,8 @@ import { inspectPhotoDelivery } from "../features/catches/data/photoCloudService
 import { getRuntimeLabel } from "../features/sync/data/runtimeDiagnostics.js";
 import { useModalFocusTrap } from "../shared/hooks/useModalFocusTrap.js";
 import "./SettingsPage.css";
+import AiSettings from "../features/ai/AiSettings.jsx";
+import { AI_FEATURES } from "../features/ai/aiPolicy.js";
 
 /* global __APP_BUILD_ID__ */
 
@@ -278,11 +280,14 @@ export default function SettingsPage() {
 
       <section className="settings-card" aria-labelledby="settings-ai-title">
         <h2 id="settings-ai-title">Umělá inteligence a místní postřehy</h2>
-        <p>Externí AI je vypnutá. Fotografie ani obsah deníku se neposílají AI poskytovateli. Rozpoznávání ryb a pomoc s historkami čekají na ověřenou bezplatnou službu a výslovný souhlas.</p>
+        {Object.values(AI_FEATURES).some(Boolean)
+          ? <p>Externí AI je volitelná a vyžaduje samostatný souhlas níže. Rychlé uložení úlovku ani místní přehledy na ní nezávisejí.</p>
+          : <p>Externí AI je vypnutá. Fotografie ani obsah deníku se neposílají AI poskytovateli. Rozpoznávání ryb a pomoc s historkami čekají na ověřenou bezplatnou službu a výslovný souhlas.</p>}
         <label className="settings-toggle"><input type="checkbox" checked={preferences.localDiaryAnalysis !== false} onChange={event => update({ localDiaryAnalysis: event.target.checked })} /> Místní analýza deníku</label>
         <label className="settings-toggle"><input type="checkbox" checked={preferences.localFishingRecommendations !== false} onChange={event => update({ localFishingRecommendations: event.target.checked })} /> Místní doporučení pro další výpravu</label>
         <p>Tyto výpočty fungují zdarma v zařízení i bez AI. Nejde o souhlas s externím zpracováním.</p>
         <Link className="settings-link" to="/insights">Otevřít rozbor deníku <span aria-hidden="true">→</span></Link>
+        <AiSettings key={scope.scopeKey} />
       </section>
 
       <section className="settings-card" aria-labelledby="settings-export-title">

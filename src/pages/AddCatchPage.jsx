@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import { speciesSuggestionForEditor } from "../features/ai/approveSpeciesInEditor.js";
 import {
   DEFAULT_BAITS,
   DEFAULT_METHODS,
@@ -425,6 +426,8 @@ function AddCatchPage() {
     if (!id || !existingCatch || loadedId === id) return;
     const photoUrls = photoUrlsRef.current;
     const values = catchToForm(existingCatch);
+    const proposedSpecies = speciesSuggestionForEditor(existingCatch, location.state?.aiSpeciesSuggestion);
+    if (proposedSpecies) values.speciesKey = proposedSpecies.key;
     values.photos = values.photos.map((item) => {
       if (!(item.blob instanceof Blob)) return { ...item, previewUrl: "" };
       const previewUrl = URL.createObjectURL(item.blob);
@@ -449,7 +452,7 @@ function AddCatchPage() {
       setLoadedId(id);
     });
     return () => { active = false; };
-  }, [existingCatch, id, loadedId]);
+  }, [existingCatch, id, loadedId, location.state?.aiSpeciesSuggestion]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -597,7 +600,9 @@ function AddCatchPage() {
             "speciesKey", "lengthCm", "weightKg", "moonPhase", "airTempC", "pressureHpa", "windKmh"].map(field => [field, "manual"])) } };
       }
       let progressionEventIds = [];
-      if (existingCatch) await updateCatch(record);
+      if (existingCatch) await updateCatch(record, location.state?.aiSpeciesSuggestion
+        ? { expectedRevision: location.state.aiSpeciesSuggestion.expectedRevision,
+          expectedServerRevision: location.state.aiSpeciesSuggestion.expectedServerRevision } : undefined);
       else {
         progressionEventIds = (await createCatch(record))?.progressionEventIds ?? [];
         await catchDraftRepository.remove(scope).catch(() => {});

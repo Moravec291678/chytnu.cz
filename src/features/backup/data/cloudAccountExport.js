@@ -45,6 +45,16 @@ function portableNotification(record) {
     .filter((key) => record?.[key] !== undefined).map((key) => [key, record[key]]));
 }
 
+function portableAiConsent(record) {
+  return Object.fromEntries(["id", "version", "provider", "capabilities", "grantedAt", "revokedAt", "revision", "updatedAt"]
+    .filter((key) => record?.[key] !== undefined).map((key) => [key, record[key]]));
+}
+
+function portableAiResult(record) {
+  return Object.fromEntries(["id", "type", "provider", "modelId", "createdAt", "result", "catchId", "photoId"]
+    .filter((key) => record?.[key] !== undefined).map((key) => [key, record[key]]));
+}
+
 function portablePhotoMetadata(id, data) {
   return Object.fromEntries(["name", "type", "size", "focalX", "focalY", "zoom", "sortIndex", "deletedAt"]
     .filter((key) => data?.[key] !== undefined).map((key) => [key, data[key]]).concat([["id", id]]));
@@ -155,7 +165,7 @@ export function createCloudAccountExportService({
     };
     reserve(JSON.stringify(jsonSafe(portableDeviceSupplement(deviceSupplement))).length + 1024);
     onProgress({ phase: "records" });
-    const names = ["catches", "trips", "waters", "notifications", "serverProgressionEvents", "serverProgressionState"];
+    const names = ["catches", "trips", "waters", "notifications", "serverProgressionEvents", "serverProgressionState", "aiPreferences", "aiResults"];
     const collections = {};
     for (const name of names) {
       collections[name] = await listCollection(ownerId, name, (count) => onProgress({ phase: "records", collection: name, count }), { reserve });
@@ -280,6 +290,8 @@ export function createCloudAccountExportService({
         trips: collections.trips.length,
         waters: collections.waters.length,
         notifications: collections.notifications.length,
+        aiConsentRecords: collections.aiPreferences.length,
+        aiResults: collections.aiResults.length,
         photos: photoCount,
         photosWithoutCloudBinary: warnings.length,
         warningCount: warnings.length,
@@ -290,6 +302,10 @@ export function createCloudAccountExportService({
         trips: collections.trips.map((item) => portableRecord(item.data ?? item)),
         waters: collections.waters.map((item) => portableRecord(item.data ?? item)),
         notifications: collections.notifications.map((item) => portableNotification(item.data ?? item)),
+        ai: {
+          preferences: collections.aiPreferences.map((item) => portableAiConsent(item.data)),
+          results: collections.aiResults.map((item) => portableAiResult(item.data)),
+        },
         deletedRecords,
         deletedPhotos: photoCollections,
         progression: {

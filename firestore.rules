@@ -328,6 +328,18 @@ service cloud.firestore {
       allow delete: if signedInAs(userId) && resource.data.ownerId == userId;
     }
 
+    // AI consent and cached output are written only by authenticated server APIs.
+    // Export queries must constrain ownerId, matching the other server-owned data.
+    match /users/{userId}/aiPreferences/{preferenceId} {
+      allow get, list: if signedInAs(userId) && resource.data.ownerId == userId;
+      allow create, update, delete: if false;
+    }
+
+    match /users/{userId}/aiResults/{resultId} {
+      allow get, list: if signedInAs(userId) && resource.data.ownerId == userId;
+      allow create, update, delete: if false;
+    }
+
     // Server-generated shadow rewards are readable by their owner but never client-writable.
     match /users/{userId}/serverProgressionEvents/{eventId} {
       allow get, list: if signedInAs(userId) && resource.data.ownerId == userId;

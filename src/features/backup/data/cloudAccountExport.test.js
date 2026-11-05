@@ -5,7 +5,39 @@ import { LOCAL_BACKUP_FORMAT } from "./backupFormat.js";
 
 const OWNER = "account-a";
 const makeItem = (id, data) => ({ id, data: { id, ownerId: OWNER, ...data } });
-const emptyNames = ["trips", "waters", "notifications", "serverProgressionEvents", "serverProgressionState"];
+const emptyNames = ["trips", "waters", "notifications", "serverProgressionEvents", "serverProgressionState", "aiPreferences", "aiResults"];
+
+test("account export includes owner AI consent and saved suggestions/drafts while excluding provider credentials and source hashes", async () => {
+  const grant = "2026-11-04T12:00:00.000Z";
+  const collections = {
+    aiPreferences: [makeItem("consent", { version: 1, provider: "cloudflare", capabilities: { species: true, stories: true, diary: false, recommendations: false },
+      grantedAt: grant, revokedAt: null, revision: 3, updatedAt: grant, apiToken: "not-exported" })],
+    aiResults: [makeItem("species-result", { type: "species", provider: "cloudflare", modelId: "test-model", createdAt: grant,
+      catchId: "c1", photoId: "p1", sourceHash: "internal-photo-hash", result: { status: "suggestion", speciesKey: "commonCarp", confidence: 0.8, alternatives: [], fishCount: 1 } }),
+    makeItem("story-result", { type: "story", provider: "cloudflare", modelId: "test-model", createdAt: grant,
+      sourceHash: "internal-note-hash", result: { originalNotes: "Původní historka.", text: "Návrh historky.", status: "draft", action: "improve" } })],
+  };
+  const service = createCloudAccountExportService({ getCollectionPage: async ({ collectionName }) => ({ items: collections[collectionName] ?? [], cursor: null, done: true }),
+    currentOwnerId: () => OWNER, downloadPhoto: async () => assert.fail() });
+  const result = await service.exportAccount({ ownerId: OWNER });
+  assert.equal(result.coverage.aiConsentRecords, 1);
+  assert.equal(result.coverage.aiResults, 2);
+  assert.equal(result.records.ai.preferences[0].revision, 3);
+  assert.equal(result.records.ai.preferences[0].capabilities.species, true);
+  assert.equal(result.records.ai.results[0].result.speciesKey, "commonCarp");
+  assert.equal(result.records.ai.results[1].result.originalNotes, "Původní historka.");
+  const exported = JSON.stringify(result.records.ai);
+  for (const internal of ["ownerId", "not-exported", "internal-photo-hash", "internal-note-hash"]) assert.ok(!exported.includes(internal));
+});
+
+test("account export rejects cross-user AI consent and cached results", async () => {
+  for (const name of ["aiPreferences", "aiResults"]) {
+    const service = createCloudAccountExportService({ getCollectionPage: async ({ collectionName }) => ({ items: collectionName === name
+      ? [makeItem("wrong", { ownerId: "another-account" })] : [], cursor: null, done: true }),
+    currentOwnerId: () => OWNER, downloadPhoto: async () => assert.fail() });
+    await assert.rejects(() => service.exportAccount({ ownerId: OWNER }), /platného vlastníka/);
+  }
+});
 
 test("cloud export decodes normalized Quick Catch wire metadata while preserving unknown species and null measurements", async () => {
   const metadata = { capturedAt: "2026-11-04T12:00:00.000Z", inputSource: "camera", timeZone: "Europe/Prague",

@@ -411,3 +411,52 @@ test("verified delivery cache rejects stale cloud identity inside the write tran
   assert.equal(await catchRepository.cachePhotoBlob("cache-identity", "photo-1", verified, { ...scope, expectedPhotoCloud: cloud }), verified);
   assert.equal(await (await catchRepository.get("cache-identity", scope)).photos[0].blob.text(), "matching verified bytes");
 });
+
+test("AI story approval is atomic, preserves photos/facts and rejects stale, deleted and cross-owner records", async () => {
+  await deleteDatabase();
+  const scope = { ownerId: "story-owner", scopeKey: "account:story-owner" };
+  const stored = await catchRepository.put(makeCatch("story", { notes: "Původní poznámka", photos: [{ id: "p", cloud: { state: "synced", sha256: "digest" } }] }), scope);
+  const draft = { originalNotes: stored.notes, text: "Schválená poznámka", action: "improve", expectedRevision: stored.sync.revision };
+  await assert.rejects(catchRepository.approveAiStoryDraft("story", draft, { ownerId: "other", scopeKey: "account:other" }));
+  const result = await catchRepository.approveAiStoryDraft("story", draft, scope);
+  assert.equal(result.notes, draft.text);
+  assert.deepEqual(result.photos, stored.photos);
+  assert.equal(result.speciesKey, stored.speciesKey);
+  assert.equal(result.sync.revision, stored.sync.revision + 1);
+  await assert.rejects(catchRepository.approveAiStoryDraft("story", draft, scope));
+  await assert.rejects(catchRepository.approveAiStoryDraft("story", { ...draft, expectedRevision: result.sync.revision }, scope));
+  await catchRepository.delete("story", scope);
+  await assert.rejects(catchRepository.approveAiStoryDraft("story", { ...draft, expectedRevision: result.sync.revision }, scope));
+  assert.equal(await catchRepository.get("story", scope), undefined);
+});
+
+test("saving an approved species proposal cannot overwrite later edits or resurrect deletion", async () => {
+  await deleteDatabase();
+  const scope = await guestScope();
+  const stored = await catchRepository.put(makeCatch("species-review", { speciesKey: "", captureMode: "quick" }), scope);
+  const proposal = { ...stored, speciesKey: "commonCarp", sync: { ...stored.sync, revision: stored.sync.revision + 1 } };
+  const manuallyChanged = await catchRepository.put({ ...stored, speciesKey: "pike", sync: { ...stored.sync, revision: stored.sync.revision + 1 } }, scope);
+  await assert.rejects(catchRepository.put(proposal, { ...scope, expectedRevision: stored.sync.revision }));
+  assert.equal((await catchRepository.get(stored.id, scope)).speciesKey, manuallyChanged.speciesKey);
+  await catchRepository.delete(stored.id, scope);
+  await assert.rejects(catchRepository.put(proposal, { ...scope, expectedRevision: stored.sync.revision }));
+  assert.equal(await catchRepository.get(stored.id, scope), undefined);
+});
+
+test("AI editor CAS rejects a remote edit that advances only the server revision", async () => {
+  await deleteDatabase();
+  const scope = await guestScope();
+  const stored = await catchRepository.put(makeCatch("remote-ai-review", { speciesKey: "", lengthCm: 60, sync: { revision: 1, serverRevision: 3 } }), scope);
+  const db = await openLocalDatabase();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(CATCH_STORE_NAME, "readwrite");
+    tx.objectStore(CATCH_STORE_NAME).put({ ...stored, lengthCm: 70, sync: { ...stored.sync, serverRevision: 4 } });
+    tx.oncomplete = resolve; tx.onerror = () => reject(tx.error);
+  });
+  db.close();
+  await assert.rejects(catchRepository.put({ ...stored, speciesKey: "commonCarp" }, { ...scope, expectedRevision: stored.sync.revision, expectedServerRevision: 3 }));
+  const current = await catchRepository.get(stored.id, scope);
+  assert.equal(current.lengthCm, 70);
+  assert.equal(current.speciesKey, "");
+  assert.equal(current.sync.serverRevision, 4);
+});

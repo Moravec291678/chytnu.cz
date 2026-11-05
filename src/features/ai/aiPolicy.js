@@ -1,5 +1,5 @@
 // Deliberately independent: no capability becomes active through another flag.
-export const AI_FEATURES = Object.freeze({ species: false, diary: false, recommendations: false, stories: false });
+export const AI_FEATURES = Object.freeze({ species: true, diary: true, recommendations: true, stories: true });
 export const AI_CONSENT_VERSION = 1;
 
 export function hasAiConsent(consent, capability, provider) {

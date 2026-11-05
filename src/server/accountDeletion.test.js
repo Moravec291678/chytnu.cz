@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createAccountDeletionService } from "./accountDeletion.js";
+import { createHash } from "node:crypto";
 
 function fakeFirestore(initial = {}) {
   const rows = new Map(Object.entries(initial));
@@ -96,6 +97,28 @@ test("deletes only owner A including nested data and queues owned photo before A
   await service.request("A");
   await service.processOwner("A");
   assert.deepEqual(deleted, ["A"]);
+});
+
+test("account deletion removes AI consent, cached suggestions/drafts and per-user AI quotas while preserving other owners and global quota", async () => {
+  const hash = createHash("sha256").update("A").digest("hex");
+  const { db, service } = fixture({
+    "users/A/aiPreferences/consent": { ownerId: "A", provider: "cloudflare", capabilities: { species: true } },
+    "users/A/aiResults/photo-result": { ownerId: "A", type: "species", result: { speciesKey: "commonCarp" } },
+    "users/A/aiResults/story-result": { ownerId: "A", type: "story", result: { originalNotes: "Soukromý zápis", text: "Návrh" } },
+    "users/B/aiPreferences/consent": { ownerId: "B", provider: "cloudflare" },
+    "users/B/aiResults/other": { ownerId: "B", type: "species" },
+    [`serverRateLimits/ai-species-${hash}`]: { minuteCount: 1 },
+    [`serverRateLimits/ai-free-cloudflare-user-${hash}`]: { reservedNeurons: 2500 },
+    "serverRateLimits/ai-free-cloudflare-global": { reservedNeurons: 5000 },
+  });
+  await service.request("A");
+  assert.equal((await drain(service)).status, "completed");
+  assert.equal([...db.rows.keys()].some(key => key.startsWith("users/A/")), false);
+  assert.equal(db.rows.has(`serverRateLimits/ai-species-${hash}`), false);
+  assert.equal(db.rows.has(`serverRateLimits/ai-free-cloudflare-user-${hash}`), false);
+  assert.equal(db.rows.get("users/B/aiPreferences/consent").ownerId, "B");
+  assert.equal(db.rows.get("users/B/aiResults/other").ownerId, "B");
+  assert.equal(db.rows.get("serverRateLimits/ai-free-cloudflare-global").reservedNeurons, 5000);
 });
 
 test("legacy catch with five photos queues every photo", async () => {
