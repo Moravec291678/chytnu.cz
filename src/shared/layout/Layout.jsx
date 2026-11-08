@@ -23,6 +23,7 @@ function NavIcon({ name }) {
 
 function Layout({ children }) {
   const { pathname } = useLocation();
+  const adminRoute = pathname === "/admin" || pathname.startsWith("/admin/");
   const sync = useOptionalSync();
   const [isOnline, setIsOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine !== false);
   const [compactSyncId, setCompactSyncId] = useState(null);
@@ -46,7 +47,7 @@ function Layout({ children }) {
   const journalActive = pathname.startsWith("/journal") || pathname.startsWith("/catch/") || pathname.startsWith("/species/") || pathname === "/gallery" || pathname === "/album" || pathname === "/map";
   const tripsActive = pathname === "/trips" || pathname.startsWith("/trips/");
   return (
-        <div className={pathname === "/gallery" ? "layout layout-gallery" : "layout"}>
+        <div className={adminRoute ? "layout layout-admin" : pathname === "/gallery" ? "layout layout-gallery" : "layout"}>
       <SyncStatus sync={sync} isOnline={isOnline} compact={sync?.status === "syncing" && sync?.showSyncStatus && compactSyncId === syncPresentationId} />
       <PwaUpdateNotice syncing={sync?.status === "syncing"} />
       <main className="layout-main">{children}</main>

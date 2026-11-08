@@ -21,8 +21,13 @@ test("admin route, Profile link and delegated navigation render safely without t
     for (const section of ["users", "limits", "features", "ai", "tasks", "monitoring", "audit", "settings"]) assert.match(owner, new RegExp(`href="/admin/${section}"`));
     const { default: Badge } = await server.ssrLoadModule("/src/features/admin/CollaboratorBadge.jsx");
     const coAccess = { uid: "co", role: "CO_CREATOR", permissions: ["tasks", "monitoring"] };
+    const link = render(React.createElement(ProfileLink, { access: coAccess }), "/profile");
+    assert.match(link, /href="\/admin"/); assert.match(link, /Správa aplikace, uživatelů a nastavení/);
+    assert.equal(render(React.createElement(ProfileLink, { access: { role: "TESTER" } }), "/profile"), "");
     const co = render(React.createElement(AdminWorkspace, { session: { client, access: coAccess } }));
     assert.match(co, /Spolutvůrce ChytnuCz/);
+    assert.match(co, /admin-workspace/); assert.match(co, /Produkt a vývoj/);
+    assert.doesNotMatch(co, /Gamifikace|Komunikace/);
     assert.match(co, /href="\/admin\/tasks"/);
     assert.doesNotMatch(co, /href="\/admin\/(users|limits|features|settings|audit)"/);
     assert.match(render(React.createElement(Badge, { access: coAccess })), /Co-Creator &amp; Fishing Lead/);

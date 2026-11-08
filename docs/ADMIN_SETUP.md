@@ -6,6 +6,10 @@ Spolutvůrce se samostatně provisionuje serverovou proměnnou `CHYTNU_CO_CREATO
 
 Odznaky Zakladatel / Founder & Owner a Spolutvůrce / Co-Creator & Fishing Lead jsou odvozené ze serverové odpovědi pro aktuální přihlášený účet. V místní komunitě se zobrazují jen u vlastního ověřeného autora. Publikované profily s ověřenou identitou dalších autorů zatím nejsou zdrojem pro tyto odznaky; jméno v komentáři nikdy není důkazem role.
 
+Etapa 1: Profil uvádí úplný název Zakladatel ChytnuCz / Spolutvůrce ChytnuCz a navigaci do administrace s podtitulem. Stejný odznak používá autorizovaný seznam účtů. Serverová odpověď `self.identity` je pouze bezpečná projekce `role`, `label`, `shortLabel`, `badge`, `theme`; neobsahuje UID, e-mail, oprávnění ani soukromý deník. Není tím zaveden nový veřejný endpoint. Budoucí veřejné profily mohou tuto projekci převzít až od svého důvěryhodného serverového zdroje.
+
+Desktopová administrace používá boční navigaci; mobilní varianta vodorovný seznam existujících sekcí. Neimplementované obsahové, komunikační ani gamifikační moduly se nezobrazují jako nefunkční odkazy. Jejich rozšíření patří do etap 2–5.
+
 1. V [Firebase Authentication projektu chutnucz](https://console.firebase.google.com/project/chutnucz/authentication/users) otevři **Users / Uživatelé**, vyhledej svůj existující účet a zkopíruj jeho **User UID**. Nejde o e-mail.
 2. Ve [Vercel → chytnu-cz → Settings → Environment Variables](https://vercel.com/moravec291678s-projects/chytnu-cz/settings/environment-variables) přidej `CHYTNU_OWNER_UID` s tímto UID pouze do prostředí **Production**. Nepoužívej prefix `VITE_` a hodnotu nevkládej do zdrojového kódu.
 3. V **Deployments** otevři poslední správné produkční nasazení → **… → Redeploy**, prostředí **Production**. Počkej na **Ready**. Nová proměnná se do již běžícího nasazení nepropíše.

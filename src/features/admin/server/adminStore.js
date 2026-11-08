@@ -1,4 +1,5 @@
 import { configuredCoCreatorUid } from "./adminAccess.js";
+import { collaboratorIdentity } from "../collaboratorIdentity.js";
 import { randomUUID } from "node:crypto";
 import { Buffer } from "node:buffer";
 import { resolveAccess, hasAdminPermission, normalizeRuntimeConfig, normalizeAccountLimits, normalizeFeatureEntitlements, validAdminUid } from "../adminPolicy.js";
@@ -215,7 +216,7 @@ export function createAdminService({ db, auth, ownerUid = "", env = {}, now = ()
     "config.get": "owner", "config.update": "owner", "tasks.list": "tasks", "tasks.save": "tasks", "tasks.delete": "tasks", "audit.list": "audit", monitoring: "monitoring" };
   return { async execute(input, identity) {
     const access = await actor(identity.uid);
-    if (input.action === "self") return { access };
+    if (input.action === "self") return { access, identity: collaboratorIdentity(access) };
     permit(access, permissions[input.action]);
     if (input.action === "overview") return overview(access);
     if (input.action === "users.list") return listUsers(input);

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import Layout from "../../shared/layout/Layout.jsx";
 import ConfirmDialog from "../../shared/components/ConfirmDialog.jsx";
+import CollaboratorBadge from "./CollaboratorBadge.jsx";
 import { ADMIN_ROLE_LABELS } from "./adminPolicy.js";
 import { canOpenAdmin, hasAdminPermission } from "./adminClient.js";
 import { useAdminSession, useAdminResource } from "./useAdminSession.js";
@@ -18,6 +19,8 @@ const PRIORITIES = { low: "Nízká", normal: "Běžná", high: "Vysoká", critic
 const NAVIGATION = [["", "Přehled", null], ["users", "Uživatelé", "users.read"], ["limits", "Limity", "owner"],
   ["features", "Funkce", "owner"], ["ai", "AI", "monitoring"], ["tasks", "Úkoly a vývoj", "tasks"],
   ["monitoring", "Provoz", "monitoring"], ["audit", "Audit", "audit"], ["settings", "Nastavení", "owner"]];
+const NAVIGATION_GROUPS = [["Přehled", [""]], ["Uživatelé", ["users"]], ["Produkt a vývoj", ["tasks"]],
+  ["AI a funkce", ["ai", "features", "limits"]], ["Monitoring", ["monitoring"]], ["Audit a nastavení", ["audit", "settings"]]];
 const timestamp = value => value && Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString("cs-CZ") : "Nedostupné";
 const metric = value => typeof value === "number" && Number.isFinite(value) ? value.toLocaleString("cs-CZ") : "Nedostupné";
 const datetimeInput = value => {
@@ -56,8 +59,13 @@ export function AdminWorkspace({ session }) {
   };
   return <Layout><div className="admin-page">
     <header className="admin-header"><div><p className="admin-kicker">{ADMIN_ROLE_LABELS[access.role] ?? access.role}</p><h1>Administrace ChytnuCz</h1></div><Link to="/profile">← Zpět do aplikace</Link></header>
-    <nav className="admin-nav" aria-label="Sekce administrace">{NAVIGATION.filter(([, , permission]) => permitted(access, permission)).map(([path, label]) =>
-      <NavLink key={path} to={`/admin${path ? `/${path}` : ""}`} end>{label}</NavLink>)}</nav>
+    <div className="admin-workspace">
+    <nav className="admin-nav" aria-label="Sekce administrace">{NAVIGATION_GROUPS.map(([group, paths]) => {
+      const entries = NAVIGATION.filter(([path, , permission]) => paths.includes(path) && permitted(access, permission));
+      return entries.length ? <div className="admin-nav-group" key={group}><h2>{group}</h2>{entries.map(([path, label]) =>
+        <NavLink key={path} to={`/admin${path ? `/${path}` : ""}`} end>{label}</NavLink>)}</div> : null;
+    })}</nav>
+    <div className="admin-content" role="region" aria-label={item?.[1] ?? "Administrace"}>
     <p className="admin-note">Správa neumožňuje prohlížení soukromých úlovků, fotografií ani přesných míst rybářů.</p>
     {message && <p role="status" className="admin-success">{message}</p>}{error && <p role="alert" className="admin-error">{error}</p>}
     {!item || !permitted(access, item[2]) ? <p role="alert">Tato sekce není pro tvé oprávnění dostupná.</p>
@@ -67,6 +75,7 @@ export function AdminWorkspace({ session }) {
             : section === "audit" ? <AuditPanel client={client} />
               : ["ai", "monitoring"].includes(section) ? <MonitoringPanel client={client} ai={section === "ai"} access={access} />
                 : <OverviewPanel client={client} access={access} />}
+    </div></div>
     {confirmation && <ConfirmDialog titleId="admin-confirm-title" descriptionId="admin-confirm-description" title="Potvrdit administrativní změnu?"
       description={confirmation.description} busy={busy} confirmLabel="Potvrdit změnu" busyLabel="Ukládám…" confirmClassName="admin-confirm-button"
       onCancel={() => setConfirmation(null)} onConfirm={() => void mutate(confirmation)} />}
@@ -108,7 +117,7 @@ function UsersPanel({ client, access, change, busy }) {
       <label>Stav<select value={filters.status} onChange={event => setFilters({ ...filters, status: event.target.value })}><option value="">Všechny stavy</option><option value="active">Aktivní</option><option value="suspended">Pozastavený</option></select></label><button type="submit">Vyhledat</button></form>
     <p className="admin-note">Hledání používá přesné UID nebo e-mail. Filtry se vyhodnocují v právě načtené omezené stránce, nikoli skenováním celé databáze.</p>
     <ResourceStatus resource={resource} />
-    {resource.data && <><ul className="admin-records">{resource.data.users?.map(user => <li key={user.uid}><div><strong>{user.email || user.displayName || "Účet bez e-mailu"}</strong><code>{user.uid}</code><span>{ADMIN_ROLE_LABELS[user.role] ?? user.role} · {user.suspended || user.disabled ? "Pozastavený" : "Aktivní"}</span></div><button type="button" onClick={() => setSelected(user.uid)}>Detail účtu</button></li>)}</ul>
+    {resource.data && <><ul className="admin-records">{resource.data.users?.map(user => <li key={user.uid}><div><strong>{user.email || user.displayName || "Účet bez e-mailu"}</strong><CollaboratorBadge access={user} /><code>{user.uid}</code><span>{ADMIN_ROLE_LABELS[user.role] ?? user.role} · {user.suspended || user.disabled ? "Pozastavený" : "Aktivní"}</span></div><button type="button" onClick={() => setSelected(user.uid)}>Detail účtu</button></li>)}</ul>
       {!resource.data.users?.length && <p>Na této stránce nebyl nalezen odpovídající účet.</p>}
       <Pagination nextCursor={resource.data.nextCursor} {...{ cursor, setCursor, history, setHistory }} /></>}
     {selected && <UserEditor key={selected} uid={selected} {...{ client, access, change, busy }} onSaved={resource.refresh} onClose={() => setSelected(null)} />}

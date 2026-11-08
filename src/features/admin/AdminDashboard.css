@@ -4,7 +4,13 @@
 .admin-header { display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
 .admin-page a { color: var(--accent-green); overflow-wrap: anywhere; min-height: 44px; display: inline-flex; align-items: center; }
 .admin-kicker { font-size: var(--font-size-11); color: var(--accent-green); letter-spacing: .1em; }
-.admin-nav { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+.admin-workspace { display: grid; gap: var(--space-4); min-width: 0; }
+.admin-content { display: grid; gap: var(--space-4); min-width: 0; align-content: start; }
+.admin-nav { display: flex; gap: var(--space-2); overflow-x: auto; min-width: 0; padding-bottom: var(--space-2); }
+.admin-nav-group { display: contents; }
+.admin-nav-group h2 { display: none; }
+.admin-nav a { white-space: nowrap; flex-shrink: 0; }
+.admin-nav a:focus-visible { outline: 2px solid var(--accent-green); outline-offset: 2px; }
 .admin-nav a { padding: var(--space-2) var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-sm); text-decoration: none; color: var(--text-secondary); }
 .admin-nav a.active { background: var(--accent-green); color: #09271b; border-color: var(--accent-green); font-weight: 700; }
 .admin-panel, .admin-subpanel { display: grid; gap: var(--space-4); padding: var(--space-4); background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--radius-md); min-width: 0; }
@@ -33,6 +39,14 @@
 .admin-records li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-sm); }
 .admin-records li > div:first-child { display: grid; gap: var(--space-1); min-width: 0; flex: 1 1 200px; }
 .admin-records code { font-size: var(--font-size-11); overflow-wrap: anywhere; white-space: normal; }
-.admin-records span { color: var(--text-secondary); font-size: var(--font-size-12); }
+.admin-records li > div > span:not(.collaborator-badge) { color: var(--text-secondary); font-size: var(--font-size-12); }
 .admin-feature { display: grid; gap: var(--space-3); padding-bottom: var(--space-3); border-bottom: 1px solid var(--border); }
 @media (max-width: 700px) { .admin-filter, .admin-facts { grid-template-columns: 1fr; } .admin-panel, .admin-subpanel { padding: var(--space-3); } }
+@media (min-width: 900px) {
+  .layout-admin, .layout-admin .bottom-nav { max-width: 1200px; }
+  .admin-workspace { grid-template-columns: 210px minmax(0, 1fr); align-items: start; }
+  .admin-nav { display: grid; position: sticky; top: var(--space-4); overflow: visible; gap: var(--space-4); }
+  .admin-nav-group { display: grid; gap: var(--space-2); }
+  .admin-nav-group h2 { display: block; color: var(--text-secondary); font-size: var(--font-size-11); font-weight: 600; }
+  .admin-nav a { white-space: normal; }
+}

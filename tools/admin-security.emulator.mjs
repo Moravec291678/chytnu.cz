@@ -27,7 +27,11 @@ try {
     const response = await fetch("http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo-api-key", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password, returnSecureToken: true }) });
     assert.equal(response.status, 200); tokens[role] = (await response.json()).idToken;
   }
-  assert.equal((await request("co", "self")).access.role, "CO_CREATOR");
+  const coIdentity = await request("co", "self");
+  assert.equal(coIdentity.access.role, "CO_CREATOR");
+  assert.deepEqual(Object.keys(coIdentity.identity).sort(), ["badge", "label", "role", "shortLabel", "theme"]);
+  assert.equal(coIdentity.identity.label, "Spolutvůrce ChytnuCz");
+  assert.equal(JSON.stringify(coIdentity.identity).includes(uids.co), false);
   await request("co", "overview");
   await request("co", "tasks.list");
   await request("co", "monitoring");
@@ -35,8 +39,11 @@ try {
   await request("co", "users.update", { uid: uids.owner, patch: { suspended: true }, expectedRevision: 0 }, 403);
   await request("owner", "users.update", { uid: uids.user, patch: { role: "CO_CREATOR" }, expectedRevision: 0 }, 400);
   await request("anonymous", "overview", {}, 401);
-  assert.equal((await request("owner", "self")).access.role, "OWNER");
-  assert.equal((await request("user", "self")).access.role, "USER");
+  const founder = await request("owner", "self");
+  assert.equal(founder.access.role, "OWNER"); assert.equal(founder.identity.label, "Zakladatel ChytnuCz");
+  await db.doc(`users/${uids.user}/profile/identity-spoof`).set({ role: "OWNER", badge: "founder", displayName: "Zakladatel" });
+  const ordinary = await request("user", "self");
+  assert.equal(ordinary.access.role, "USER"); assert.equal(ordinary.identity, null);
   await request("user", "overview", {}, 403);
   await request("user", "users.update", { uid: uids.user, patch: { role: "ADMIN" }, expectedRevision: 0 }, 403);
   await request("owner", "users.update", { uid: uids.tester, patch: { role: "TESTER" }, expectedRevision: 0 });

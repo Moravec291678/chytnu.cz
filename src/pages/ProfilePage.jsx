@@ -40,6 +40,7 @@ import { runManualSync } from "../shared/layout/syncStatusView.js";
 import { isFeatureEnabled } from "../shared/config/featureFlags.js";
 import "./ProfilePage.css";
 import CollaboratorBadge from "../features/admin/CollaboratorBadge.jsx";
+import { collaboratorIdentity } from "../features/admin/collaboratorIdentity.js";
 import { useAdminSession } from "../features/admin/useAdminSession.js";
 import ProfileAdminLink from "../features/admin/ProfileAdminLink.jsx";
 
@@ -51,6 +52,7 @@ function formatCount(count, one, few, many) {
 
 function ProfilePage() {
   const { access: adminAccess } = useAdminSession();
+  const principalIdentity = collaboratorIdentity(adminAccess);
   const navigate = useNavigate();
   const location = useLocation();
   const fileInput = useRef(null);
@@ -399,16 +401,15 @@ function ProfilePage() {
     <div className="profile-page">
       <header className="profile-header">
         <h1>Profil</h1>
-        <p>Tvůj rybářský příběh a postup.</p>
-      </header>
-      <ProfileAdminLink access={adminAccess} />
+        <p className={principalIdentity ? `profile-principal-label profile-principal-label--${principalIdentity.theme}` : undefined}>{principalIdentity?.label ?? "Tvůj rybářský příběh a postup."}</p>
 
       <section className="profile-identity" aria-label="Aktuální profil">
         <span className="profile-avatar" aria-hidden="true">{avatarInitial}</span>
-        <div><strong>{profileIdentity}</strong><CollaboratorBadge access={adminAccess} /><span>{progression.rank.name} · {progression.rank.title}</span></div>
+        <div><div className="profile-name-and-badge"><strong>{profileIdentity}</strong><CollaboratorBadge access={adminAccess} /></div><span>{progression.rank.name} · {progression.rank.title}</span></div>
         <span className="profile-status-badge">{privacyLoading ? "Načítám" : privacySettings.profileVisibility === "public" ? "Zatím nepublikován" : "Soukromý"}</span>
         <span className="profile-level-badge">Úroveň {progression.level}</span>
       </section>
+      </header>
 
       <section className="profile-level-card" aria-label="Rybářský postup">
         <div><strong>Úroveň {progression.level}</strong><span>{progression.xp} XP{progression.nextThreshold ? ` · další při ${progression.nextThreshold} XP` : ""}</span></div>
@@ -426,7 +427,8 @@ function ProfilePage() {
       </section>
 
       <nav className="profile-quick-links" aria-label="Osobní přehledy">
-        <Link className="profile-stats-link profile-waters-link" to="/waters"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true" focusable="false"><path d="M20 10c0 6-8 11-8 11S4 16 4 10a8 8 0 1 1 16 0Z" /><circle cx="12" cy="10" r="2.5" /></svg><span><strong>Moje revíry</strong><small>Uložené revíry, oblíbené vody a správa lokalit</small></span><b aria-hidden="true">→</b></Link>
+        <ProfileAdminLink access={adminAccess} />
+        <Link className="profile-stats-link profile-waters-link" to="/waters"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true" focusable="false"><path d="M20 10c0 6-8 11-8 11S4 16 4 10a8 8 0 1 1 16 0Z" /><circle cx="12" cy="10" r="2.5" /></svg><span><strong>Moje revíry</strong><small>Uložené revíry a oblíbené vody</small></span><b aria-hidden="true">→</b></Link>
         <Link className="profile-stats-link" to="/stats"><span><strong>Statistiky</strong><small>Analýza úlovků a vycházek</small></span><b aria-hidden="true">→</b></Link>
         <Link className="profile-secondary-link" to="/gallery"><span aria-hidden="true">▦ </span>Galerie <span aria-hidden="true">→</span></Link>
         <Link className="profile-secondary-link" to="/insights">Osobní přehledy <span aria-hidden="true">→</span></Link>

@@ -1,6 +1,6 @@
 export const ADMIN_ROLES = Object.freeze(["OWNER", "CO_CREATOR", "ADMIN", "TESTER", "USER"]);
 export const CO_CREATOR_PERMISSIONS = Object.freeze(["tasks", "monitoring"]);
-export const ADMIN_ROLE_LABELS = Object.freeze({ OWNER: "Zakladatel", CO_CREATOR: "Spolutvůrce ChytnuCz", ADMIN: "ADMIN", TESTER: "TESTER", USER: "USER" });
+export const ADMIN_ROLE_LABELS = Object.freeze({ OWNER: "Zakladatel ChytnuCz", CO_CREATOR: "Spolutvůrce ChytnuCz", ADMIN: "ADMIN", TESTER: "TESTER", USER: "USER" });
 export const ADMIN_PERMISSIONS = Object.freeze(["users.read", "users.manage", "tasks", "audit", "monitoring"]);
 export const RUNTIME_FEATURES = Object.freeze(["species", "diary", "recommendations", "stories"]);
 export const FEATURE_AUDIENCES = Object.freeze(["everyone", "testers", "owner", "selected", "disabled"]);

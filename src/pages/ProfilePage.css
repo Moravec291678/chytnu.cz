@@ -216,6 +216,12 @@
   flex: 1;
 }
 
+.profile-name-and-badge { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); min-width: 0; }
+.profile-name-and-badge > strong { min-width: 0; overflow-wrap: anywhere; }
+.profile-header .profile-principal-label--founder { color: #ffe6a0; }
+.profile-header .profile-principal-label--creator { color: #e3ceff; }
+.profile-header .profile-identity { margin-top: var(--space-2-5); }
+
 .profile-stats-link strong {
   color: var(--accent-green);
   font-size: var(--font-size-14);
