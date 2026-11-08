@@ -164,3 +164,12 @@ test("Home interpretation uses bounded anonymous numeric evidence and rejects fa
   const fabricated = createCloudflareHomeProvider({ ...configuration, fetchImpl: async () => reply({ text: "Úspěšnost je 90 %." }) });
   await assert.rejects(fabricated({ summary }), error => error.aiCode === "invalid_ai_response");
 });
+
+
+test("provider usage comes from the authenticated response, separate from model JSON", async () => {
+  const usage = { prompt_tokens: 1200, completion_tokens: 90, total_tokens: 1290 }; let observed;
+  const provider = createCloudflareSpeciesProvider({ ...configuration, fetchImpl: async () => new Response(JSON.stringify({ usage,
+    choices: [{ finish_reason: "stop", message: { content: JSON.stringify(suggestion) } }] }), { headers: { "content-type": "application/json" } }) });
+  assert.deepEqual(await provider({ ...image, onUsage: value => { observed = value; } }), suggestion);
+  assert.deepEqual(observed, usage);
+});

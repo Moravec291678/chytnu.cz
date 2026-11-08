@@ -39,3 +39,14 @@ test("account deletion fences both claiming and finishing leases without recreat
   assert.equal(db.data.has(`users/owner/aiResults/lease-${key}`), false);
   await assert.rejects(lease.claim("owner", key, { consentRevision: 1 }), error => error.aiCode === "account_unavailable");
 });
+
+
+test("server policy change clears only internal-limit cooldowns, never running or provider-capacity leases", async () => {
+  const db=database(), key="d".repeat(64), lease=createAiRequestLease({db,now:()=>1000});
+  const original=await lease.claim("owner",key,{consentRevision:1,policyVersion:"old"});
+  await assert.rejects(lease.claim("owner",key,{consentRevision:1,policyVersion:"new"}), e=>e.aiCode==="request_in_progress");
+  await lease.finish("owner",key,original,{code:"user_daily_limit",retryAt:"2026-11-09T00:00:00Z"});
+  const current=await lease.claim("owner",key,{consentRevision:1,policyVersion:"new"});
+  await lease.finish("owner",key,current,{code:"provider_quota",retryAt:"2026-11-09T00:00:00Z"});
+  await assert.rejects(lease.claim("owner",key,{consentRevision:1,policyVersion:"newer"}),e=>e.aiCode==="provider_quota");
+});

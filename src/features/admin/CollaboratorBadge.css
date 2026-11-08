@@ -1,0 +1,12 @@
+.collaborator-badge { display: inline-flex; align-items: center; gap: 7px; width: fit-content; max-width: 100%; padding: 6px 10px; border: 1px solid; border-radius: 10px; vertical-align: middle; line-height: 1.25; }
+.collaborator-badge--founder { color: #ffe6a0; border-color: #c89a4680; background: linear-gradient(125deg, #44351c, #24291f); box-shadow: inset 0 1px #ffebae20; }
+.collaborator-badge--creator { color: #e3ceff; border-color: #b18ae880; background: linear-gradient(125deg, #3d2a52, #242335); box-shadow: inset 0 1px #e0c4ff20; }
+.collaborator-badge svg { width: 23px; height: 23px; flex: 0 0 23px; fill: currentColor; }
+.collaborator-badge .collaborator-gem-facet { fill: none; stroke: #493060; stroke-width: 1.1; }
+.collaborator-badge > span { display: grid; gap: 2px; }
+.collaborator-badge b { font-size: 12px; font-weight: 700; }
+.collaborator-badge small { font-size: 10px; overflow-wrap: anywhere; }
+.profile-identity .collaborator-badge, .profile-identity .collaborator-badge span { color: inherit; }
+.profile-identity .collaborator-badge--founder { color: #ffe6a0; }
+.profile-identity .collaborator-badge--creator { color: #e3ceff; }
+@media (max-width: 400px) { .collaborator-badge { padding: 5px 7px; gap: 5px; } }

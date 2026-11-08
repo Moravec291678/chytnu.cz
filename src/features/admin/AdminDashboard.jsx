@@ -2,12 +2,13 @@ import { useState } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import Layout from "../../shared/layout/Layout.jsx";
 import ConfirmDialog from "../../shared/components/ConfirmDialog.jsx";
+import { ADMIN_ROLE_LABELS } from "./adminPolicy.js";
 import { canOpenAdmin, hasAdminPermission } from "./adminClient.js";
 import { useAdminSession, useAdminResource } from "./useAdminSession.js";
 import "./AdminDashboard.css";
 
 const CAPABILITIES = { species: "Rozpoznávání ryb", diary: "AI rozbor deníku", recommendations: "AI doporučení", stories: "AI vyprávění" };
-const AUDIENCE_NAMES = { everyone: "Všichni", testers: "Testeři", owner: "Pouze OWNER", selected: "Vybrané účty", disabled: "Vypnuto" };
+const AUDIENCE_NAMES = { everyone: "Všichni", testers: "Testeři", owner: "OWNER a spolutvůrce", selected: "Vybrané účty", disabled: "Vypnuto" };
 const PERMISSIONS = { "users.read": "Čtení účtů", "users.manage": "Správa běžných účtů", tasks: "Úkoly", audit: "Audit", monitoring: "Provoz a monitoring" };
 const CATEGORIES = ["Bug", "Feature", "Improvement", "Design", "Security", "Maintenance"];
 const CATEGORY_NAMES = { Bug: "Chyba", Feature: "Funkce", Improvement: "Vylepšení", Design: "Design", Security: "Bezpečnost", Maintenance: "Údržba" };
@@ -54,7 +55,7 @@ export function AdminWorkspace({ session }) {
     if (description) setConfirmation({ action, payload, saved, description }); else void mutate({ action, payload, saved });
   };
   return <Layout><div className="admin-page">
-    <header className="admin-header"><div><p className="admin-kicker">{access.role}</p><h1>Administrace ChytnuCz</h1></div><Link to="/profile">← Zpět do aplikace</Link></header>
+    <header className="admin-header"><div><p className="admin-kicker">{ADMIN_ROLE_LABELS[access.role] ?? access.role}</p><h1>Administrace ChytnuCz</h1></div><Link to="/profile">← Zpět do aplikace</Link></header>
     <nav className="admin-nav" aria-label="Sekce administrace">{NAVIGATION.filter(([, , permission]) => permitted(access, permission)).map(([path, label]) =>
       <NavLink key={path} to={`/admin${path ? `/${path}` : ""}`} end>{label}</NavLink>)}</nav>
     <p className="admin-note">Správa neumožňuje prohlížení soukromých úlovků, fotografií ani přesných míst rybářů.</p>
@@ -103,11 +104,11 @@ function UsersPanel({ client, access, change, busy }) {
   const applyFilters = event => { event.preventDefault(); setQuery(Object.fromEntries(Object.entries(filters).filter(([, value]) => value))); setCursor(null); setHistory([]); };
   return <section className="admin-panel"><h2>Správa uživatelů</h2>
     <form className="admin-filter" onSubmit={applyFilters}><label>Přesné UID nebo e-mail<input maxLength={254} value={filters.search} onChange={event => setFilters({ ...filters, search: event.target.value })} /></label>
-      <label>Role<select value={filters.role} onChange={event => setFilters({ ...filters, role: event.target.value })}><option value="">Všechny role</option>{["OWNER", "ADMIN", "TESTER", "USER"].map(value => <option key={value}>{value}</option>)}</select></label>
+      <label>Role<select value={filters.role} onChange={event => setFilters({ ...filters, role: event.target.value })}><option value="">Všechny role</option>{["OWNER", "CO_CREATOR", "ADMIN", "TESTER", "USER"].map(value => <option key={value}>{value}</option>)}</select></label>
       <label>Stav<select value={filters.status} onChange={event => setFilters({ ...filters, status: event.target.value })}><option value="">Všechny stavy</option><option value="active">Aktivní</option><option value="suspended">Pozastavený</option></select></label><button type="submit">Vyhledat</button></form>
     <p className="admin-note">Hledání používá přesné UID nebo e-mail. Filtry se vyhodnocují v právě načtené omezené stránce, nikoli skenováním celé databáze.</p>
     <ResourceStatus resource={resource} />
-    {resource.data && <><ul className="admin-records">{resource.data.users?.map(user => <li key={user.uid}><div><strong>{user.email || user.displayName || "Účet bez e-mailu"}</strong><code>{user.uid}</code><span>{user.role} · {user.suspended || user.disabled ? "Pozastavený" : "Aktivní"}</span></div><button type="button" onClick={() => setSelected(user.uid)}>Detail účtu</button></li>)}</ul>
+    {resource.data && <><ul className="admin-records">{resource.data.users?.map(user => <li key={user.uid}><div><strong>{user.email || user.displayName || "Účet bez e-mailu"}</strong><code>{user.uid}</code><span>{ADMIN_ROLE_LABELS[user.role] ?? user.role} · {user.suspended || user.disabled ? "Pozastavený" : "Aktivní"}</span></div><button type="button" onClick={() => setSelected(user.uid)}>Detail účtu</button></li>)}</ul>
       {!resource.data.users?.length && <p>Na této stránce nebyl nalezen odpovídající účet.</p>}
       <Pagination nextCursor={resource.data.nextCursor} {...{ cursor, setCursor, history, setHistory }} /></>}
     {selected && <UserEditor key={selected} uid={selected} {...{ client, access, change, busy }} onSaved={resource.refresh} onClose={() => setSelected(null)} />}
@@ -124,7 +125,7 @@ function UserEditor({ uid, client, access, change, busy, onSaved, onClose }) {
 function UserForm({ user, access, busy, save }) {
   const [values, setValues] = useState(() => ({ role: user.role, suspended: Boolean(user.suspended || user.disabled), permissions: user.permissions ?? [],
     limits: user.limits ?? {}, entitlements: user.entitlements ?? {}, overrideExpiresAt: datetimeInput(user.overrideExpiresAt) }));
-  const owner = access.role === "OWNER", protectedUser = user.role === "OWNER" || (!owner && user.role === "ADMIN");
+  const owner = access.role === "OWNER", protectedUser = ["OWNER", "CO_CREATOR"].includes(user.role) || (!owner && ["ADMIN", "CO_CREATOR"].includes(user.role));
   const editable = !protectedUser && (owner || hasAdminPermission(access, "users.manage"));
   const set = (key, value) => setValues(previous => ({ ...previous, [key]: value }));
   const submit = event => {
@@ -135,7 +136,7 @@ function UserForm({ user, access, busy, save }) {
   return <form onSubmit={submit} className="admin-form"><Facts items={[["UID", user.uid], ["E-mail", user.email], ["Vytvořen", timestamp(user.createdAt)], ["Poslední přihlášení", timestamp(user.lastSignInAt)]]} />
     {user.authState === "pending" && <p role="status">Synchronizace stavu účtu s Firebase Authentication čeká na dokončení. Zopakuj změnu stavu.</p>}
     {owner && <label>Role<select disabled={!editable || busy} value={values.role} onChange={event => set("role", event.target.value)}>
-      {user.role === "OWNER" ? <option>OWNER</option> : ["USER", "TESTER", "ADMIN"].map(role => <option key={role}>{role}</option>)}
+      {["OWNER", "CO_CREATOR"].includes(user.role) ? <option value={user.role}>{ADMIN_ROLE_LABELS[user.role]}</option> : ["USER", "TESTER", "ADMIN"].map(role => <option key={role}>{role}</option>)}
     </select></label>}
     <label className="admin-check"><input type="checkbox" checked={values.suspended} disabled={!editable || busy} onChange={event => set("suspended", event.target.checked)} />Pozastavit účet</label>
     {owner && <><fieldset disabled={!editable || busy}><legend>Delegovaná oprávnění ADMIN</legend>{Object.entries(PERMISSIONS).map(([key, label]) => <label key={key} className="admin-check"><input type="checkbox" checked={values.permissions.includes(key)} onChange={event => set("permissions", event.target.checked ? [...values.permissions, key] : values.permissions.filter(value => value !== key))} />{label}</label>)}</fieldset>
@@ -178,7 +179,7 @@ function ConfigurationForm({ config, section, save, busy }) {
     {showFeatures && <fieldset disabled={busy}><legend>Dostupnost podporovaných funkcí</legend>{Object.entries(CAPABILITIES).map(([key, label]) => {
       const feature = features[key] ?? { audience: "disabled", userIds: [] };
       return <div className="admin-feature" key={key}><label>{label}<select value={feature.audience ?? feature.mode ?? "disabled"} onChange={event => setFeatures({ ...features, [key]: { ...feature, audience: event.target.value } })}>
-        {[['everyone','Všichni'],['testers','Testeři'],['owner','Pouze OWNER'],['selected','Vybrané účty'],['disabled','Vypnuto']].map(([value, text]) => <option value={value} key={value}>{text}</option>)}
+        {[['everyone','Všichni'],['testers','Testeři'],['owner','OWNER a spolutvůrce'],['selected','Vybrané účty'],['disabled','Vypnuto']].map(([value, text]) => <option value={value} key={value}>{text}</option>)}
       </select></label>{feature.audience === "selected" && <label>UID vybraných účtů (jedno na řádek, nejvýše 100)<textarea rows="3" maxLength={13000} value={selectedUids[key] ?? ""}
         onChange={event => setSelectedUids({ ...selectedUids, [key]: event.target.value })} /></label>}</div>;
     })}<p className="admin-note">Tyto volby mění dostupnost externí AI. Nezastavují místní ukládání, deník, bezpečnost ani offline funkce. Souhlas uživatele je vyžadován samostatně.</p></fieldset>}

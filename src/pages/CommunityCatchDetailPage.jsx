@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import CollaboratorBadge from "../features/admin/CollaboratorBadge.jsx";
+import { useAdminSession } from "../features/admin/useAdminSession.js";
 import { useAuth } from "../features/auth/context/authContextValue.js";
 import { useDataScope } from "../features/auth/context/dataScopeContextValue.js";
 import { useCatches } from "../features/catches/context/useCatches.js";
@@ -26,6 +28,7 @@ function formatDateTime(value) {
 function CommunityCatchDetailPage() {
   const { catchId } = useParams();
   const auth = useAuth();
+  const { access: collaboratorAccess } = useAdminSession();
   const scope = useDataScope();
   const { state } = useCatches();
   const record = state.catches.find((item) => item.id === catchId);
@@ -161,7 +164,7 @@ function CommunityCatchDetailPage() {
           <Link to="/community">← Komunita</Link>
           <span>MÍSTNÍ VEŘEJNÝ NÁHLED</span>
           <div className="community-detail-title-row"><h1>{projection.species}</h1>{rarity && <b>{rarity.label}</b>}</div>
-          <p>{profileName}</p>
+          <p>{profileName} <CollaboratorBadge access={collaboratorAccess} /></p>
         </header>
 
         {projection.photos[0]?.publicUrl && <img className="community-detail-photo" src={projection.photos[0].publicUrl} alt={`Veřejná fotografie úlovku ${projection.species}`} />}
@@ -189,7 +192,7 @@ function CommunityCatchDetailPage() {
             <div className="community-comments-list">
               {comments.map((comment) => (
                 <article key={comment.id}>
-                  <div><strong>{comment.author}</strong>{formatDateTime(comment.createdAt) && <time dateTime={comment.createdAt}>{formatDateTime(comment.createdAt)}</time>}</div>
+                  <div><strong>{comment.author}</strong>{comment.authorKey === scope.scopeKey && scope.ownerId === collaboratorAccess?.uid && <CollaboratorBadge access={collaboratorAccess} />}{formatDateTime(comment.createdAt) && <time dateTime={comment.createdAt}>{formatDateTime(comment.createdAt)}</time>}</div>
                   <p>{comment.text}</p>
                   <button type="button" disabled={commentBusy} onClick={() => deleteComment(comment.id)}>Smazat vlastní</button>
                 </article>

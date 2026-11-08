@@ -10,10 +10,10 @@ import { verifyFirebaseIdToken } from "../src/server/cloudinaryApi.js";
 if (process.env.FIRESTORE_EMULATOR_HOST !== "127.0.0.1:8080" || process.env.FIREBASE_AUTH_EMULATOR_HOST !== "127.0.0.1:9099") throw new Error("Admin integration test requires local Firebase emulators.");
 const app = initializeApp({ projectId: "demo-chytnucz-local" }, `admin-security-${randomUUID()}`);
 const db = getFirestore(app), auth = getAuth(app), suffix = randomUUID();
-const uids = Object.fromEntries(["owner", "admin", "tester", "user"].map(role => [role, `admin-test-${role}-${suffix}`]));
+const uids = Object.fromEntries(["owner", "co", "admin", "tester", "user"].map(role => [role, `admin-test-${role}-${suffix}`]));
 const tokens = {};
 let checks = 0;
-const handler = createAdminHandler({ verifyToken: token => verifyFirebaseIdToken(auth, token), service: createAdminService({ db, auth, ownerUid: uids.owner }) });
+const handler = createAdminHandler({ verifyToken: token => verifyFirebaseIdToken(auth, token), service: createAdminService({ db, auth, ownerUid: uids.owner, env: { CHYTNU_OWNER_UID: uids.owner, CHYTNU_CO_CREATOR_UID: uids.co } }) });
 async function request(role, action, payload = {}, status = 200) {
   const res = { statusCode: 200, setHeader() {}, status(code) { this.statusCode = code; return this; }, json(value) { this.body = value; return this; } };
   await handler({ method: "POST", headers: tokens[role] ? { authorization: `Bearer ${tokens[role]}` } : {}, body: { action, ...payload } }, res);
@@ -27,6 +27,13 @@ try {
     const response = await fetch("http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo-api-key", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password, returnSecureToken: true }) });
     assert.equal(response.status, 200); tokens[role] = (await response.json()).idToken;
   }
+  assert.equal((await request("co", "self")).access.role, "CO_CREATOR");
+  await request("co", "overview");
+  await request("co", "tasks.list");
+  await request("co", "monitoring");
+  for (const action of ["config.get", "users.list", "audit.list"]) await request("co", action, {}, 403);
+  await request("co", "users.update", { uid: uids.owner, patch: { suspended: true }, expectedRevision: 0 }, 403);
+  await request("owner", "users.update", { uid: uids.user, patch: { role: "CO_CREATOR" }, expectedRevision: 0 }, 400);
   await request("anonymous", "overview", {}, 401);
   assert.equal((await request("owner", "self")).access.role, "OWNER");
   assert.equal((await request("user", "self")).access.role, "USER");

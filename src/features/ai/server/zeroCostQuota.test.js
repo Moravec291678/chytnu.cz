@@ -1,3 +1,4 @@
+import { measuredNeurons, settleCloudflareReservation } from "./cloudflareAccounting.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { blockZeroCostQuota, createZeroCostQuota, ZERO_COST_AI_LIMITS } from "./zeroCostQuota.js";
@@ -148,4 +149,54 @@ test("strict OWNER audience and global feature disable cannot be bypassed by ind
   db.records.set("adminConfig/runtime", { limits: { globalDailyReservation: 10000 } });
   assert.equal((await createZeroCostQuota(options)("user")).code, "quota_unavailable");
   assert.equal([...db.records.keys()].some(path => path.startsWith("serverRateLimits/")), false);
+});
+
+
+test("CO_CREATOR is exempt, forged metadata is not, and ordinary users cannot consume the collaborator reserve", async () => {
+  const now = () => Date.parse("2026-11-08T10:00:00Z"), db = database();
+  const env = { CHYTNU_OWNER_UID: "owner", CHYTNU_CO_CREATOR_UID: "co" };
+  const consume = createZeroCostQuota({ db, Timestamp, now, env, detailed: true });
+  assert.equal((await consume("ordinary-a")).allowed, true);
+  assert.equal((await consume("ordinary-b")).allowed, true);
+  assert.equal((await consume("ordinary-c")).code, "app_daily_limit");
+  assert.equal((await consume("co")).allowed, true);
+  assert.equal((await consume("owner")).code, "app_daily_limit");
+  const fresh = database(); fresh.records.set("adminAccounts/co", { limits: { dailyReservation: 0 } });
+  const privileged = createZeroCostQuota({ db: fresh, Timestamp, now, env, detailed: true });
+  for (let i=0; i<3; i++) assert.equal((await privileged("co")).allowed, true);
+  assert.equal((await privileged("co")).code, "app_daily_limit");
+  const fake = database(); fake.records.set("adminAccounts/fake", { role: "CO_CREATOR", internalLimitExempt: true });
+  const untrusted = createZeroCostQuota({ db: fake, Timestamp, now, detailed: true });
+  await untrusted("fake"); await untrusted("fake"); assert.equal((await untrusted("fake")).code, "user_daily_limit");
+});
+
+test("provider token accounting reconciles once, fences owner/day, and preserves the provider circuit", async () => {
+  const time = Date.parse("2026-11-08T10:00:00Z"), db = database(), options = { db, Timestamp, now: () => time, detailed: true, trackUsage: true };
+  const usage = { prompt_tokens: 2000, completion_tokens: 100, total_tokens: 2100 };
+  assert.equal(measuredNeurons(usage), 21);
+  for (const invalid of [null, {}, { ...usage, total_tokens: 2 }, { ...usage, prompt_tokens: -1 }, { ...usage, completion_tokens: 513 }]) assert.equal(measuredNeurons(invalid), null);
+  const ticket = await createZeroCostQuota(options)("user");
+  const settle = (changes = {}) => settleCloudflareReservation({ db, uid: "user", reservationId: ticket.reservationId, usage, now: time, ...changes });
+  assert.equal(await settle({ uid: "other" }), false);
+  assert.equal(await settle({ now: time + 86400000 }), false);
+  assert.equal(db.records.get("serverRateLimits/ai-free-cloudflare-global").reservedNeurons, 2500);
+  await blockZeroCostQuota(options);
+  assert.deepEqual(await Promise.all([settle(),settle()]), [true,false]);
+  const global = db.records.get("serverRateLimits/ai-free-cloudflare-global");
+  assert.equal(global.reservedNeurons, 21); assert.equal(global.ordinaryReservedNeurons, 21);
+  assert.equal(global.blockedDay, Math.floor(time/86400000));
+  assert.equal((await createZeroCostQuota(options)("other")).code, "provider_quota");
+});
+
+test("successful bounded requests use measured totals while unknown usage keeps full reservations", async () => {
+  const time = Date.parse("2026-11-08T10:00:00Z"), db = database(), env = { CHYTNU_CO_CREATOR_UID: "co" };
+  const consume = createZeroCostQuota({ db, Timestamp, now: () => time, env, detailed: true, trackUsage: true });
+  for (let i=0; i<5; i++) {
+    const ticket = await consume("co"); assert.equal(ticket.allowed, true);
+    assert.equal(await settleCloudflareReservation({ db, uid: "co", reservationId: ticket.reservationId, usage: { prompt_tokens: 2000, completion_tokens: 100, total_tokens: 2100 }, now: time }), true);
+  }
+  assert.equal(db.records.get("serverRateLimits/ai-free-cloudflare-global").reservedNeurons, 105);
+  const ticket = await consume("co");
+  assert.equal(await settleCloudflareReservation({ db, uid: "co", reservationId: ticket.reservationId, usage: null, now: time }), false);
+  assert.equal(db.records.get("serverRateLimits/ai-free-cloudflare-global").reservedNeurons, 2605);
 });

@@ -1,7 +1,7 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { nextUtcDay } from "./aiServiceError.js";
 import { effectiveUserReservation, isRuntimeFeatureEnabled, normalizeRuntimeConfig, resolveAccess } from "../../admin/adminPolicy.js";
-import { configuredOwnerUid } from "../../admin/server/adminAccess.js";
+import { configuredOwnerUid, configuredCoCreatorUid } from "../../admin/server/adminAccess.js";
 
 // Reservations are deliberately conservative application limits, not provider
 // token metering or proof of the account's billing plan. Workers Free's enforced
@@ -21,7 +21,7 @@ function reservedForDay(snapshot, day) {
 
 export function createZeroCostQuota({ db, Timestamp, now = () => Date.now(),
   globalDailyReservation = ZERO_COST_AI_LIMITS.globalDailyReservation,
-  perUserDailyReservation = ZERO_COST_AI_LIMITS.perUserDailyReservation, detailed = false, env = {} } = {}) {
+  perUserDailyReservation = ZERO_COST_AI_LIMITS.perUserDailyReservation, detailed = false, trackUsage = false, env = {} } = {}) {
   if (typeof db?.runTransaction !== "function" || typeof db?.doc !== "function" || typeof Timestamp?.fromMillis !== "function"
     || !Number.isInteger(globalDailyReservation) || globalDailyReservation < 1 || globalDailyReservation > ZERO_COST_AI_LIMITS.globalDailyReservation
     || !Number.isInteger(perUserDailyReservation) || perUserDailyReservation < 1 || perUserDailyReservation > ZERO_COST_AI_LIMITS.perUserDailyReservation) {
@@ -38,6 +38,7 @@ export function createZeroCostQuota({ db, Timestamp, now = () => Date.now(),
     const amount = isText ? ZERO_COST_AI_LIMITS.textRequestReservation : ZERO_COST_AI_LIMITS.requestReservation;
     const globalRef = db.doc("serverRateLimits/ai-free-cloudflare-global");
     const userRef = db.doc(`serverRateLimits/ai-free-cloudflare-user-${createHash("sha256").update(uid).digest("hex")}`);
+    const reservationId = detailed && trackUsage ? randomUUID() : null;
     try {
       return await db.runTransaction(async (transaction) => {
         // All reads precede writes. The global and per-user allowance are
@@ -46,7 +47,7 @@ export function createZeroCostQuota({ db, Timestamp, now = () => Date.now(),
           transaction.get(globalRef), transaction.get(userRef), transaction.get(db.doc(`accountDeletions/${uid}`)),
           transaction.get(db.doc(`adminAccounts/${uid}`)), transaction.get(db.doc("adminConfig/runtime")), transaction.get(db.doc(`accountSuspensions/${uid}`)),
         ]);
-        const access = resolveAccess(uid, account.exists ? account.data() : {}, configuredOwnerUid(env), time);
+        const access = resolveAccess(uid, account.exists ? account.data() : {}, configuredOwnerUid(env), time, configuredCoCreatorUid(env));
         const runtime = normalizeRuntimeConfig(config.exists ? config.data() : {});
         if (deleted.exists || suspended.exists || access.suspended) return reject("account_unavailable");
         if (!isRuntimeFeatureEnabled(runtimeCapability, access, runtime)) return reject("ai_disabled");
@@ -60,14 +61,21 @@ export function createZeroCostQuota({ db, Timestamp, now = () => Date.now(),
         if (internalUserLimit !== null && userReserved + amount > Math.min(perUserDailyReservation, internalUserLimit)) return reject("user_daily_limit", time);
         if (globalReserved + amount > Math.min(globalDailyReservation, runtime.limits.globalDailyReservation)) return reject("app_daily_limit", time);
         const previous = globalSnapshot.exists ? globalSnapshot.data() : {};
+        const ordinaryReserved = previous.dayUtc === day ? previous.ordinaryReservedNeurons ?? 0 : 0;
+        if (!Number.isSafeInteger(ordinaryReserved) || ordinaryReserved < 0) return reject("quota_unavailable");
+        const reserveForCollaborators = configuredOwnerUid(env) || configuredCoCreatorUid(env) ? ZERO_COST_AI_LIMITS.requestReservation : 0;
+        if (!access.internalLimitExempt && ordinaryReserved + amount > Math.max(0, Math.min(globalDailyReservation, runtime.limits.globalDailyReservation) - reserveForCollaborators)) return reject("app_daily_limit", time);
         const textReserved = previous.dayUtc === day ? (previous.textReservedNeurons ?? 0) : 0;
         if (!Number.isSafeInteger(textReserved) || textReserved < 0) return reject("quota_unavailable");
         if (isText && textReserved + amount > Math.min(ZERO_COST_AI_LIMITS.textDailyReservation, runtime.limits.textDailyReservation)) return reject("text_daily_limit", time);
         const common = { dayUtc: day, expiresAt: Timestamp.fromMillis((day + 2) * DAY) };
         transaction.set(globalRef, { ...common, reservedNeurons: globalReserved + amount,
+          ordinaryReservedNeurons: ordinaryReserved + (access.internalLimitExempt ? 0 : amount),
           textReservedNeurons: textReserved + (isText ? amount : 0) });
         transaction.set(userRef, { ...common, reservedNeurons: userReserved + amount });
-        return detailed ? { allowed: true } : true;
+        if (reservationId) transaction.set(db.doc(`serverRateLimits/ai-reservation-${reservationId}`), { ...common,
+          userKey: userRef.path, amount, isText, ordinary: !access.internalLimitExempt, settled: false });
+        return detailed ? { allowed: true, ...(reservationId ? { reservationId } : {}) } : true;
       });
     } catch { return reject("quota_unavailable"); }
   };
@@ -84,7 +92,7 @@ export async function blockZeroCostQuota({ db, Timestamp, now = () => Date.now()
       const snapshot = await transaction.get(ref);
       const reserved = reservedForDay(snapshot, day);
       if (reserved === null) return false;
-      transaction.set(ref, { dayUtc: day, reservedNeurons: reserved, blockedDay: day,
+      transaction.set(ref, { ...(snapshot.exists && snapshot.data().dayUtc === day ? snapshot.data() : {}), dayUtc: day, reservedNeurons: reserved, blockedDay: day,
         expiresAt: Timestamp.fromMillis((day + 2) * DAY) });
       return true;
     });

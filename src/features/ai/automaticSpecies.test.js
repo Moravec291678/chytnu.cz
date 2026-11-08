@@ -105,3 +105,15 @@ test("one hard capacity refusal defers the remaining ready captures without an A
   const displayed = await readAutomaticSpecies(await catchRepository.listMetadata(scope), scope);
   assert.equal(displayed.filter(row => row.aiRecognition?.status === "deferred").length, 3);
 });
+
+
+test("trusted quota policy change wakes old deferred catches once and then respects the next refusal", async () => {
+  await seed(); let calls=0, policy="usage-v2:USER:0:0";
+  const worker=coordinator({getConsent:async()=>({...consent(),quotaPolicyVersion:policy}), automaticSpecies:async({statusOnly})=>{
+    if(statusOnly)return {status:"pending"}; calls++;
+    throw new AiClientError("user_daily_limit",{retryAt:"2026-11-09T00:00:00Z"});
+  }});
+  await worker.run(); await worker.run(); assert.equal(calls,1);
+  policy="usage-v2:CO_CREATOR:0:0";
+  await worker.run(); await worker.run(); worker.stop(); assert.equal(calls,2);
+});

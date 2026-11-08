@@ -10,7 +10,7 @@ export default function AutomaticSpeciesStatus({ record, compact = false }) {
   const species = suggestedSpeciesForDisplay(record), state = record.aiRecognition;
   const proposal = species && { ...record.aiSpeciesSuggestion, expectedRevision: record.sync?.revision,
     expectedServerRevision: record.sync?.serverRevision ?? null, photoHash: record.aiSpeciesSuggestion.sourceSha256 };
-  if (compact) return <span className="ai-species-caption">{species ? "Návrh AI · lze upravit" : LABELS[state?.status] ?? "Druh zatím neurčen"}</span>;
+  if (compact) return <span className="ai-species-caption">{species ? "Návrh AI · lze upravit" : state?.message || LABELS[state?.status] || "Druh zatím neurčen"}</span>;
   return <section className="ai-species-status" aria-label="Rozpoznání druhu">
     {species ? <>
       <p><strong>{species.label}</strong> · Návrh AI — lze upravit</p>

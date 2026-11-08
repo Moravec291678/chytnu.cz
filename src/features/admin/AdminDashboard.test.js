@@ -19,6 +19,15 @@ test("admin route, Profile link and delegated navigation render safely without t
     const client = { ownerId: "owner", request: async () => ({}) };
     const owner = render(React.createElement(AdminWorkspace, { session: { client, access: { uid: "owner", role: "OWNER", permissions: [] } } }));
     for (const section of ["users", "limits", "features", "ai", "tasks", "monitoring", "audit", "settings"]) assert.match(owner, new RegExp(`href="/admin/${section}"`));
+    const { default: Badge } = await server.ssrLoadModule("/src/features/admin/CollaboratorBadge.jsx");
+    const coAccess = { uid: "co", role: "CO_CREATOR", permissions: ["tasks", "monitoring"] };
+    const co = render(React.createElement(AdminWorkspace, { session: { client, access: coAccess } }));
+    assert.match(co, /Spolutvůrce ChytnuCz/);
+    assert.match(co, /href="\/admin\/tasks"/);
+    assert.doesNotMatch(co, /href="\/admin\/(users|limits|features|settings|audit)"/);
+    assert.match(render(React.createElement(Badge, { access: coAccess })), /Co-Creator &amp; Fishing Lead/);
+    assert.match(render(React.createElement(Badge, { access: { role: "OWNER" } })), /Founder &amp; Owner/);
+    assert.equal(render(React.createElement(Badge, { access: { role: "USER", badge: "OWNER" } })), "");
     const delegated = render(React.createElement(AdminWorkspace, { session: { client, access: { uid: "delegate", role: "ADMIN", permissions: ["tasks"] } } }), "/admin/tasks");
     assert.match(delegated, /Úkoly a vývoj/); assert.doesNotMatch(delegated, /href="\/admin\/(users|limits|features|settings|audit)"/);
     assert.match(render(React.createElement(AdminWorkspace, { session: { client, access: { uid: "delegate", role: "ADMIN", permissions: ["tasks"] } } }), "/admin/users"), /není pro tvé oprávnění dostupná/);

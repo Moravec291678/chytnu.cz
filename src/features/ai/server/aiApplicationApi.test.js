@@ -398,3 +398,16 @@ test("transactional result commit respects current runtime state and JSON manual
   db.data.delete("adminConfig/runtime"); db.data.set(`accountSuspensions/${uid}`, { suspendedAt: "2026-11-08T10:00:00Z" });
   assert.equal(await deps.saveResult(uid, "c".repeat(64), entry, { capability: "species", consentRevision: 1 }), false);
 });
+
+
+test("only a successful saved response settles its reservation; cache hits reserve nothing", async () => {
+  let settled = 0;
+  const { handler, state } = fixture({ consumeRateLimit: async () => ({ allowed: true, reservationId: "server-ticket" }),
+    speciesProvider: async ({ onUsage }) => { onUsage({ prompt_tokens: 2000, completion_tokens: 100, total_tokens: 2100 }); return suggestion; },
+    settleRateLimit: async (uid, ticket, usage) => { assert.equal(uid,"owner"); assert.equal(ticket,"server-ticket"); assert.equal(usage.total_tokens,2100); settled++; } });
+  assert.equal((await call(handler,{action:"species",catchId:"catch-1",photoId:"photo-1"})).code,200);
+  assert.equal((await call(handler,{action:"species",catchId:"catch-1",photoId:"photo-1"})).code,200);
+  assert.equal(settled,1); assert.equal(state.calls.save,1);
+  const failed = fixture({ consumeRateLimit: async () => ({ allowed:true, reservationId:"ticket" }), speciesProvider: async ({onUsage}) => { onUsage({prompt_tokens:1,completion_tokens:1,total_tokens:2}); throw new Error("timeout"); }, settleRateLimit: async () => assert.fail("Failed request must keep reservation") });
+  assert.equal((await call(failed.handler,{action:"species",catchId:"catch-1",photoId:"photo-1"})).code,503);
+});

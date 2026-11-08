@@ -39,6 +39,8 @@ import { waterRepository } from "../features/waters/data/waterRepository.js";
 import { runManualSync } from "../shared/layout/syncStatusView.js";
 import { isFeatureEnabled } from "../shared/config/featureFlags.js";
 import "./ProfilePage.css";
+import CollaboratorBadge from "../features/admin/CollaboratorBadge.jsx";
+import { useAdminSession } from "../features/admin/useAdminSession.js";
 import ProfileAdminLink from "../features/admin/ProfileAdminLink.jsx";
 
 function formatCount(count, one, few, many) {
@@ -48,6 +50,7 @@ function formatCount(count, one, few, many) {
 }
 
 function ProfilePage() {
+  const { access: adminAccess } = useAdminSession();
   const navigate = useNavigate();
   const location = useLocation();
   const fileInput = useRef(null);
@@ -398,11 +401,11 @@ function ProfilePage() {
         <h1>Profil</h1>
         <p>Tvůj rybářský příběh a postup.</p>
       </header>
-      <ProfileAdminLink />
+      <ProfileAdminLink access={adminAccess} />
 
       <section className="profile-identity" aria-label="Aktuální profil">
         <span className="profile-avatar" aria-hidden="true">{avatarInitial}</span>
-        <div><strong>{profileIdentity}</strong><span>{progression.rank.name} · {progression.rank.title}</span></div>
+        <div><strong>{profileIdentity}</strong><CollaboratorBadge access={adminAccess} /><span>{progression.rank.name} · {progression.rank.title}</span></div>
         <span className="profile-status-badge">{privacyLoading ? "Načítám" : privacySettings.profileVisibility === "public" ? "Zatím nepublikován" : "Soukromý"}</span>
         <span className="profile-level-badge">Úroveň {progression.level}</span>
       </section>

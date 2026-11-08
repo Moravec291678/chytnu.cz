@@ -9,7 +9,7 @@ export function createAiRequestLease({ db, now = () => Date.now() }) {
     return db.doc(`users/${uid}/aiResults/lease-${key}`);
   };
   return {
-    claim: async (uid, key, { consentRevision }) => {
+    claim: async (uid, key, { consentRevision, policyVersion = null }) => {
       const ref = refFor(uid, key), time = now(), ticket = randomUUID();
       return db.runTransaction(async tx => {
         const [snapshot, cached, deleted] = await Promise.all([tx.get(ref), tx.get(db.doc(`users/${uid}/aiResults/${key}`)), tx.get(db.doc(`accountDeletions/${uid}`))]);
@@ -19,10 +19,13 @@ export function createAiRequestLease({ db, now = () => Date.now() }) {
         }
         const previous = snapshot.exists ? snapshot.data() : null;
         if (previous && previous.ownerId !== uid) throw new AiServiceError("quota_unavailable");
-        if (Number.isFinite(previous?.retryAfterMs) && previous.retryAfterMs > time) {
-          throw new AiServiceError("request_in_progress", { retryAt: new Date(previous.retryAfterMs).toISOString() });
+        const policyChanged = typeof policyVersion === "string" && policyVersion !== previous?.policyVersion
+          && ["user_daily_limit", "app_daily_limit", "text_daily_limit"].includes(previous?.state);
+        if (!policyChanged && Number.isFinite(previous?.retryAfterMs) && previous.retryAfterMs > time) {
+          const code = ["user_daily_limit", "app_daily_limit", "text_daily_limit", "provider_quota", "provider_capacity", "provider_throttled", "provider_auth", "provider_configuration"].includes(previous.state) ? previous.state : "request_in_progress";
+          throw new AiServiceError(code, { retryAt: new Date(previous.retryAfterMs).toISOString() });
         }
-        tx.set(ref, { ownerId: uid, type: "inference-lease", consentRevision, ticket, state: "running",
+        tx.set(ref, { ownerId: uid, type: "inference-lease", consentRevision, policyVersion, ticket, state: "running",
           retryAfterMs: time + 120_000, createdAt: new Date(time).toISOString() });
         return ticket;
       });

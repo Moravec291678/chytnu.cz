@@ -1,4 +1,6 @@
-export const ADMIN_ROLES = Object.freeze(["OWNER", "ADMIN", "TESTER", "USER"]);
+export const ADMIN_ROLES = Object.freeze(["OWNER", "CO_CREATOR", "ADMIN", "TESTER", "USER"]);
+export const CO_CREATOR_PERMISSIONS = Object.freeze(["tasks", "monitoring"]);
+export const ADMIN_ROLE_LABELS = Object.freeze({ OWNER: "Zakladatel", CO_CREATOR: "Spolutvůrce ChytnuCz", ADMIN: "ADMIN", TESTER: "TESTER", USER: "USER" });
 export const ADMIN_PERMISSIONS = Object.freeze(["users.read", "users.manage", "tasks", "audit", "monitoring"]);
 export const RUNTIME_FEATURES = Object.freeze(["species", "diary", "recommendations", "stories"]);
 export const FEATURE_AUDIENCES = Object.freeze(["everyone", "testers", "owner", "selected", "disabled"]);
@@ -41,21 +43,21 @@ export function normalizeRuntimeConfig(value = {}) {
     ...(validAdminUid(value.updatedBy) ? { updatedBy: value.updatedBy } : {}) };
 }
 
-export function resolveAccess(uid, account = {}, ownerUid = "", now = Date.now()) {
+export function resolveAccess(uid, account = {}, ownerUid = "", now = Date.now(), coCreatorUid = "") {
   if (!validAdminUid(uid)) throw new TypeError("Neplatná identita účtu.");
-  const role = validAdminUid(ownerUid) && uid === ownerUid ? "OWNER" : ["ADMIN", "TESTER", "USER"].includes(account?.role) ? account.role : "USER";
+  const role = validAdminUid(ownerUid) && uid === ownerUid ? "OWNER" : validAdminUid(coCreatorUid) && uid === coCreatorUid ? "CO_CREATOR" : ["ADMIN", "TESTER", "USER"].includes(account?.role) ? account.role : "USER";
   const suspended = account?.suspended === true;
   const expires = account?.overrideExpiresAt;
   const overrideActive = expires == null || (typeof expires === "string" && Number.isFinite(Date.parse(expires)) && Date.parse(expires) > now);
-  return { uid, role, suspended, permissions: role === "OWNER" ? [...ADMIN_PERMISSIONS] : role === "ADMIN" ? normalizeAdminPermissions(account?.permissions ?? []) : [],
-    internalLimitExempt: role === "OWNER", revision: Number.isSafeInteger(account?.revision) ? account.revision : 0,
+  return { uid, role, suspended, permissions: role === "OWNER" ? [...ADMIN_PERMISSIONS] : role === "CO_CREATOR" ? [...CO_CREATOR_PERMISSIONS] : role === "ADMIN" ? normalizeAdminPermissions(account?.permissions ?? []) : [],
+    internalLimitExempt: ["OWNER", "CO_CREATOR"].includes(role), revision: Number.isSafeInteger(account?.revision) ? account.revision : 0,
     limits: overrideActive ? normalizeAccountLimits(account?.limits ?? {}) : {},
     entitlements: overrideActive ? normalizeFeatureEntitlements(account?.entitlements ?? {}) : {},
     overrideExpiresAt: expires ?? null };
 }
 
 export function hasAdminPermission(access, permission) {
-  return Boolean(access && !access.suspended && (access.role === "OWNER" || (access.role === "ADMIN" && access.permissions?.includes(permission))));
+  return Boolean(access && !access.suspended && (access.role === "OWNER" || (["ADMIN", "CO_CREATOR"].includes(access.role) && access.permissions?.includes(permission))));
 }
 
 export function effectiveUserReservation(access, config) {
@@ -67,7 +69,7 @@ export function effectiveUserReservation(access, config) {
 export function isRuntimeFeatureEnabled(capability, access, config) {
   const feature = config.features?.[capability];
   if (!feature || feature.audience === "disabled" || access.suspended) return false;
-  if (access.role === "OWNER") return true;
+  if (["OWNER", "CO_CREATOR"].includes(access.role)) return true;
   if (feature.audience === "owner") return false;
   if (typeof access.entitlements?.[capability] === "boolean") return access.entitlements[capability];
   return feature.audience === "everyone" || (feature.audience === "testers" && access.role === "TESTER")

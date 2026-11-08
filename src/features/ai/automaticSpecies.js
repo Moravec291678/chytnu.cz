@@ -75,7 +75,7 @@ export async function readAutomaticSpecies(records, scope) {
     if (!photo || !/^[a-f0-9]{64}$/.test(hashOf(photo) ?? "")) return record;
     const row = jobs.get(keyOf(scope.scopeKey, record, photo));
     if (!row) return record;
-    return { ...record, aiRecognition: { status: row.status, retryAt: row.retryAt, message: row.message },
+    return { ...record, aiRecognition: { status: row.status, retryAt: row.retryAt, message: row.message, code: row.code },
       ...(["suggestion", "unknown"].includes(row.status) && row.result ? { aiSpeciesSuggestion: { ...row.result,
         photoId: photo.id, ownerId: scope.ownerId, consentRevision: row.consentRevision } } : {}) };
   });
@@ -152,10 +152,11 @@ export function createAutomaticSpeciesCoordinator({ scope, repository, client, o
         if (["suggestion", "unknown"].includes(previous?.status) && previous.consentRevision === consent.revision) continue;
         if (photo.cloud?.state !== "synced") { await save({ status: "waiting_photo", consentRevision: consent.revision }); continue; }
         if (sharedDeferral) { await save({ status: "deferred", ...sharedDeferral, result: null }); continue; }
-        if (Date.parse(previous?.retryAt) > now()) { earliest = Math.min(earliest, Date.parse(previous.retryAt)); continue; }
-        const day = Math.floor(now() / DAY), attempts = previous?.day === day ? previous.attempts ?? 0 : 0;
+        const policyChanged = Boolean(consent.quotaPolicyVersion && previous?.quotaPolicyVersion !== consent.quotaPolicyVersion);
+        if (!policyChanged && Date.parse(previous?.retryAt) > now()) { earliest = Math.min(earliest, Date.parse(previous.retryAt)); continue; }
+        const day = Math.floor(now() / DAY), attempts = !policyChanged && previous?.day === day ? previous.attempts ?? 0 : 0;
         if (attempts >= 3) { earliest = Math.min(earliest, (day + 1) * DAY); continue; }
-        if (!await save({ status: "running", day, attempts: attempts + 1, consentRevision: consent.revision, retryAt: null })) continue;
+        if (!await save({ status: "running", day, attempts: attempts + 1, quotaPolicyVersion: consent.quotaPolicyVersion ?? null, consentRevision: consent.revision, retryAt: null })) continue;
         try {
           const cached = await client.automaticSpecies({ catchId: record.id, photoId: photo.id, statusOnly: true }, { consent, signal: controller.signal });
           const result = ["suggestion", "unknown"].includes(cached.status) ? cached
@@ -169,8 +170,8 @@ export function createAutomaticSpeciesCoordinator({ scope, repository, client, o
           if (stopped) break;
           const hard = ["provider_auth", "provider_configuration", "provider_throttled", "consent_required", "disabled"].includes(error.code);
           const retryAt = error.retryAt || new Date(hard ? (day + 1) * DAY : now() + 15 * 60_000).toISOString();
-          if (["user_daily_limit", "app_daily_limit", "provider_quota"].includes(error.code)) sharedDeferral = { retryAt, message: error.message };
-          await save({ status: hard ? "unavailable" : "deferred", message: error.message, retryAt, result: null });
+          if (["user_daily_limit", "app_daily_limit", "provider_quota"].includes(error.code)) sharedDeferral = { retryAt, message: error.message, code: error.code, quotaPolicyVersion: consent.quotaPolicyVersion ?? null };
+          await save({ status: hard ? "unavailable" : "deferred", code: error.code, message: error.message, retryAt, result: null });
           earliest = Math.min(earliest, Date.parse(retryAt));
         }
       }

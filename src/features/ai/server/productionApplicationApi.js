@@ -1,3 +1,4 @@
+import { settleCloudflareReservation } from "./cloudflareAccounting.js";
 import { AI_FEATURES } from "../aiPolicy.js";
 import { createAiApplicationApi, createFirebaseAiApplicationDependencies } from "./aiApplicationApi.js";
 import { createFirebaseSpeciesDependencies } from "./productionSpeciesApi.js";
@@ -33,7 +34,16 @@ export function createProductionAiApplication({ env = globalThis.process?.env ??
       },
       consumeRateLimit: async (uid, options) => {
         const { db, Timestamp } = await getAccountDeletionAdminContext(env);
-        return createZeroCostQuota({ db, Timestamp, detailed: true, env })(uid, options);
+        return createZeroCostQuota({ db, Timestamp, detailed: true, trackUsage: true, env })(uid, options);
+      },
+      getQuotaPolicy: async uid => {
+        const { db } = await getAccountDeletionAdminContext(env);
+        const { access, config } = await loadAdminRuntime(db, uid, { env });
+        return `usage-v2:${access.role}:${access.revision}:${config.revision}`;
+      },
+      settleRateLimit: async (uid, reservationId, usage) => {
+        const { db } = await getAccountDeletionAdminContext(env);
+        return settleCloudflareReservation({ db, uid, reservationId, usage });
       },
       claimRequest: async (uid, key, options) => {
         const { db } = await getAccountDeletionAdminContext(env);

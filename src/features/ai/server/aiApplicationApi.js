@@ -6,7 +6,7 @@ import { validateSpeciesSuggestion } from "../speciesSuggestion.js";
 import { getAccountDeletionAdminContext } from "../../../server/cloudinaryApi.js";
 import { AiServiceError, safeAiDiagnostic } from "./aiServiceError.js";
 import { effectiveUserReservation, isRuntimeFeatureEnabled, normalizeRuntimeConfig, resolveAccess } from "../../admin/adminPolicy.js";
-import { configuredOwnerUid } from "../../admin/server/adminAccess.js";
+import { configuredOwnerUid, configuredCoCreatorUid } from "../../admin/server/adminAccess.js";
 import { quickCatchMetadataFromRemote } from "../../catches/data/quickCatchMetadata.js";
 
 const ID = /^[A-Za-z0-9_-]{1,128}$/;
@@ -88,7 +88,7 @@ export function createAiApplicationApi({ enabled = false, features = AI_FEATURES
   verifyToken, getConsent, setConsent, getOwnedPhoto, getOwnedCatch, listOwnedCatches,
   getCachedResult, saveResult, consumeRateLimit, speciesProvider, textProvider, analysisProvider,
   getOwnedPhotoIdentity, claimRequest, finishRequest, homeProvider, getOwnedContext, buildHomeAnalysis,
-  authorizeRuntime, recordInference,
+  authorizeRuntime, recordInference, settleRateLimit, getQuotaPolicy,
   diagnostic = safeAiDiagnostic, now = () => Date.now() } = {}) {
   const observeInference = async outcome => { try { await recordInference?.(outcome); } catch { /* Best-effort operational aggregate only. */ } };
   const checkConsent = async (uid, capability, expectedRevision = null) => {
@@ -113,7 +113,7 @@ export function createAiApplicationApi({ enabled = false, features = AI_FEATURES
     try {
       if (body.action === "consent.get") {
         const consent = await getConsent(uid);
-        return send(res, 200, { consent: consent?.ownerId === uid ? consentView(consent) : null });
+        return send(res, 200, { consent: consent?.ownerId === uid ? consentView(consent) : null, ...(getQuotaPolicy ? { quotaPolicyVersion: await getQuotaPolicy(uid) } : {}) });
       }
       if (["consent.update", "consent.revoke"].includes(body.action)) {
         const value = await setConsent(uid, body.action === "consent.revoke" ? { revoke: true }
@@ -185,7 +185,8 @@ export function createAiApplicationApi({ enabled = false, features = AI_FEATURES
       await checkConsent(uid, capability, consent.revision);
       if (claimRequest) {
         leaseKey = key;
-        leaseTicket = await claimRequest(uid, key, { consentRevision: consent.revision });
+        leaseTicket = await claimRequest(uid, key, { consentRevision: consent.revision,
+          ...(getQuotaPolicy ? { policyVersion: await getQuotaPolicy(uid) } : {}) });
       }
       let speciesPayload = null;
       if (capability === "species") {
@@ -199,23 +200,25 @@ export function createAiApplicationApi({ enabled = false, features = AI_FEATURES
       const quota = await consumeRateLimit(uid, { capability });
       if (quota !== true && quota?.allowed !== true) throw new AiServiceError(quota?.code ?? "quota_unavailable", { retryAt: quota?.retryAt });
       await checkConsent(uid, capability, consent.revision);
+      let measuredUsage = null;
+      const onUsage = value => { measuredUsage = value; };
       inferenceCapability = capability;
       if (capability === "species") {
-        result = validateSpeciesSuggestion(await provider({ bytes: speciesPayload.bytes, mimeType: speciesPayload.mimeType }));
+        result = validateSpeciesSuggestion(await provider({ bytes: speciesPayload.bytes, mimeType: speciesPayload.mimeType, onUsage }));
       } else if (body.action === "home") {
-        const output = await provider({ summary: source.providerSummary });
+        const output = await provider({ summary: source.providerSummary, onUsage });
         if (typeof output?.text !== "string" || !output.text.trim() || output.text.length > 3000) throw new AiServiceError("invalid_ai_response");
         if (buildHomeAnalysis(await getOwnedContext(uid)).fingerprint !== source.fingerprint) throw failure("source_changed", 409);
         result = { status: "generated", text: output.text.trim(), fingerprint: source.fingerprint, modelVersion: source.version,
           consentRevision: consent.revision, evidenceIds: source.strongest.evidenceIds, generatedAt: new Date(now()).toISOString() };
       }
       else if (capability === "stories") {
-        const output = await provider({ notes: source.notes, action: body.task });
+        const output = await provider({ notes: source.notes, action: body.task, onUsage });
         result = { ...createStoryDraft(source.notes, output?.text, body.task), task: body.task, catchId: body.catchId,
           sourceNotes: source.notes, baseRevision: source.serverRevision ?? null };
       } else {
         // No notes, GPS, photo URLs, water names or evidence IDs reach the model.
-        const output = validateAnalysisOutput(await provider({ task: body.action, summary: source.providerSummary }));
+        const output = validateAnalysisOutput(await provider({ task: body.action, summary: source.providerSummary, onUsage }));
         result = { ...output, status: "generated", isHypothesis: true, requiresFactReview: true,
           summary: source.providerSummary, evidenceIds: source.evidenceIds, truncated: source.truncated,
           limitations: ["Popis zapsaných úlovků; nezahrnuje dobu lovu ani neúspěšné vycházky.",
@@ -230,6 +233,9 @@ export function createAiApplicationApi({ enabled = false, features = AI_FEATURES
       { capability, consentRevision: consent.revision, automaticSpecies: body.action === "species.auto",
         ...(source?.notes !== undefined ? { expectedNotes: source.notes } : {}) });
       if (!stored) throw failure("source_changed", 409);
+      if (quota?.reservationId && measuredUsage && settleRateLimit) {
+        try { await settleRateLimit(uid, quota.reservationId, measuredUsage); } catch { /* Keep the full reservation on uncertainty. */ }
+      }
       if (leaseTicket) await finishRequest?.(uid, leaseKey, leaseTicket).catch(() => {});
       return send(res, 200, capability === "species" ? { ...result, sourceSha256: photo.sourceSha256 } : result);
     } catch (caught) {
@@ -346,7 +352,7 @@ export function createFirebaseAiApplicationDependencies({ env, admin = () => get
           transaction.get(db.doc(`users/${uid}/aiPreferences/consent`)), transaction.get(db.doc(`adminAccounts/${uid}`)),
           transaction.get(db.doc("adminConfig/runtime")), transaction.get(db.doc(`accountSuspensions/${uid}`))]);
         const consent = consentSnapshot.exists ? consentSnapshot.data() : null;
-        const access = resolveAccess(uid, account.exists ? account.data() : {}, configuredOwnerUid(env), now());
+        const access = resolveAccess(uid, account.exists ? account.data() : {}, configuredOwnerUid(env), now(), configuredCoCreatorUid(env));
         const runtime = normalizeRuntimeConfig(config.exists ? config.data() : {});
         if (deleted.exists || suspended.exists || !isRuntimeFeatureEnabled(capability, access, runtime)
           || effectiveUserReservation(access, runtime) === 0 || consent?.ownerId !== uid || consent.revision !== consentRevision || !hasAiConsent(consent, capability, "cloudflare")) return false;

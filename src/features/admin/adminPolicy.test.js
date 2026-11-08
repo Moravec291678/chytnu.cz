@@ -32,3 +32,19 @@ test("feature audiences, owner-only and disabled controls apply before individua
   assert.equal(isRuntimeFeatureEnabled("species",user,config("selected")),true);
   assert.throws(()=>normalizeRuntimeConfig({features:{unrelated:{audience:"everyone"}}}));
 });
+
+
+test("CO_CREATOR requires a trusted UID and has only tasks/monitoring, quota exemption and eligible features", () => {
+  const co = resolveAccess("co", { role: "ADMIN", permissions: ["users.manage", "audit"] }, "owner", Date.now(), "co");
+  assert.equal(co.role, "CO_CREATOR");
+  assert.deepEqual(co.permissions, ["tasks", "monitoring"]);
+  assert.equal(co.internalLimitExempt, true);
+  assert.equal(hasAdminPermission(co, "tasks"), true);
+  for (const permission of ["users.manage", "users.read", "audit", "owner"]) assert.equal(hasAdminPermission(co, permission), false);
+  assert.equal(resolveAccess("impostor", { role: "CO_CREATOR" }, "owner", Date.now(), "co").role, "USER");
+  const runtime = normalizeRuntimeConfig({ features: { species: { audience: "testers" } } });
+  assert.equal(isRuntimeFeatureEnabled("species", co, runtime), true);
+  assert.equal(effectiveUserReservation(co, runtime), null);
+  runtime.features.species.audience = "disabled";
+  assert.equal(isRuntimeFeatureEnabled("species", co, runtime), false);
+});

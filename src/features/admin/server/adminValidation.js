@@ -80,7 +80,7 @@ export function validateAdminRequest(body) {
   if (request.uid !== undefined) validUid(request.uid);
   if (request.id !== undefined) validUid(request.id);
   if (body.action === "users.list") {
-    if (request.role && !["OWNER", "ADMIN", "TESTER", "USER"].includes(request.role)) throw adminError("invalid_role");
+    if (request.role && !["OWNER", "CO_CREATOR", "ADMIN", "TESTER", "USER"].includes(request.role)) throw adminError("invalid_role");
     if (request.status && !["active", "suspended"].includes(request.status)) throw adminError("invalid_status");
   }
   if (body.action === "tasks.list") {

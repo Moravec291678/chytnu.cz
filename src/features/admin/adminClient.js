@@ -43,4 +43,4 @@ export function createAdminClient({ ownerId, getOwnerId = firebaseAuth.currentUs
   } };
 }
 
-export const canOpenAdmin = access => Boolean(access && !access.suspended && (access.role === "OWNER" || access.role === "ADMIN" && access.permissions?.length > 0));
+export const canOpenAdmin = access => Boolean(access && !access.suspended && (access.role === "OWNER" || ["ADMIN", "CO_CREATOR"].includes(access.role) && access.permissions?.length > 0));

@@ -1,3 +1,4 @@
+import { configuredCoCreatorUid } from "./adminAccess.js";
 import { randomUUID } from "node:crypto";
 import { Buffer } from "node:buffer";
 import { resolveAccess, hasAdminPermission, normalizeRuntimeConfig, normalizeAccountLimits, normalizeFeatureEntitlements, validAdminUid } from "../adminPolicy.js";
@@ -27,6 +28,7 @@ function decode(value, kind) {
 export function createAdminService({ db, auth, ownerUid = "", env = {}, now = () => Date.now() } = {}) {
   if (typeof db?.doc !== "function" || typeof db?.runTransaction !== "function" || typeof auth?.getUser !== "function") throw new TypeError("Admin service dependencies are required.");
   const trustedOwner = validAdminUid(ownerUid) ? ownerUid : "";
+  const coCreatorUid = configuredCoCreatorUid(env);
   const at = () => new Date(now()).toISOString();
   const version = /^[a-f0-9]{40}$/.test(env.VERCEL_GIT_COMMIT_SHA ?? "") ? env.VERCEL_GIT_COMMIT_SHA : "development";
   const ref = uid => db.doc(`adminAccounts/${uid}`);
@@ -34,14 +36,14 @@ export function createAdminService({ db, auth, ownerUid = "", env = {}, now = ()
   async function actor(uid, transaction = null) {
     const get = transaction ? value => transaction.get(value) : value => value.get();
     const [record, suspended, deleted] = await Promise.all(accountRefs(uid).map(get));
-    const access = resolveAccess(uid, { ...(dataOf(record) ?? {}), ...(suspended.exists ? { suspended: true } : {}) }, trustedOwner, now());
+    const access = resolveAccess(uid, { ...(dataOf(record) ?? {}), ...(suspended.exists ? { suspended: true } : {}) }, trustedOwner, now(), coCreatorUid);
     required(!deleted.exists && !access.suspended, "account_unavailable");
     return access;
   }
   function permit(access, permission) {
     if (permission === "users.read" && hasAdminPermission(access, "users.manage")) return;
     required(permission === "owner" ? access.role === "OWNER" : permission === "admin"
-      ? access.role === "OWNER" || access.role === "ADMIN" && access.permissions.length > 0 : hasAdminPermission(access, permission));
+      ? access.role === "OWNER" || ["ADMIN", "CO_CREATOR"].includes(access.role) && access.permissions.length > 0 : hasAdminPermission(access, permission));
   }
   async function transaction(identity, permission, work) {
     const auditRef = db.doc(`adminAudit/${randomUUID()}`);
@@ -58,7 +60,7 @@ export function createAdminService({ db, auth, ownerUid = "", env = {}, now = ()
     catch (error) { if (error?.code === "auth/user-not-found") throw adminError("user_not_found", 404); throw error; }
   }
   function userDto(user, account = {}) {
-    const access = resolveAccess(user.uid, account ?? {}, trustedOwner, now());
+    const access = resolveAccess(user.uid, account ?? {}, trustedOwner, now(), coCreatorUid);
     return { uid: user.uid, email: typeof user.email === "string" ? user.email : null,
       displayName: typeof user.displayName === "string" ? user.displayName : null,
       role: access.role, suspended: access.suspended || user.disabled === true, disabled: user.disabled === true,
@@ -116,12 +118,13 @@ export function createAdminService({ db, auth, ownerUid = "", env = {}, now = ()
       required(!deleted.exists, "account_unavailable");
       const current = dataOf(target) ?? {};
       required(revision(current) === input.expectedRevision, "revision_conflict", 409);
-      const targetAccess = resolveAccess(input.uid, current, trustedOwner, now());
+      const targetAccess = resolveAccess(input.uid, current, trustedOwner, now(), coCreatorUid);
       required(targetAccess.role !== "OWNER", "owner_protected");
       if (access.role !== "OWNER") {
-        required(input.uid !== access.uid && targetAccess.role !== "ADMIN", "target_protected");
+        required(input.uid !== access.uid && !["ADMIN", "CO_CREATOR"].includes(targetAccess.role), "target_protected");
         required(Object.keys(input.patch).every(key => key === "suspended"), "owner_required");
       }
+      required(targetAccess.role !== "CO_CREATOR" || !Object.hasOwn(input.patch, "role"), "role_protected");
       const next = { role: "USER", suspended: targetAuth.disabled === true, permissions: [], limits: {}, entitlements: {}, overrideExpiresAt: null,
         ...current, ...input.patch, revision: revision(current) + 1, updatedAt: at(), updatedBy: identity.uid };
       if (next.role !== "ADMIN") {

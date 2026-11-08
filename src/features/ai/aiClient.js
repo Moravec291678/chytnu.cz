@@ -13,8 +13,8 @@ const MESSAGES = {
   account_changed: "Přihlášený účet se změnil. Otevři tuto stránku znovu.",
   quota_exceeded: "Bezplatný limit AI je pro dnešek vyčerpaný. Zkus to později.",
   rate_limited: "AI požadavek byl omezen. Úlovek je uložený; podrobnosti o limitu teď nejsou dostupné.",
-  user_daily_limit: "Pro dnešek jsi využil dostupné AI požadavky. Další budou dostupné po obnovení limitu.",
-  app_daily_limit: "Dnešní bezplatná kapacita AI je vyčerpaná. Místní funkce aplikace dál fungují.",
+  user_daily_limit: "Vyčerpal jsi svůj dnešní interní AI limit aplikace. Další pokus proběhne po jeho obnovení.",
+  app_daily_limit: "Dnešní interní bezpečnostní rozpočet AI aplikace je využitý. Nejde o potvrzení vyčerpání limitu Cloudflare.",
   text_daily_limit: "Dnešní kapacita textových AI nástrojů je využitá. Zbývající kapacitu chráníme pro fotografie úlovků.",
   provider_quota: "Bezplatný denní limit Cloudflare je vyčerpaný. Úlovky se dál ukládají; rozpoznání počká na obnovení kapacity.",
   request_in_progress: "Tento návrh se už připravuje. Výsledek načteme, až bude hotový.",
@@ -42,7 +42,7 @@ export class AiClientError extends Error {
   }
 }
 const identifier = (value) => typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value);
-const consentResult = (value) => value?.consent ? { ...value.consent, ...(value.cleanupPending === true ? { cleanupPending: true } : {}) } : null;
+const consentResult = (value) => value?.consent ? { ...value.consent, ...(typeof value.quotaPolicyVersion === "string" ? { quotaPolicyVersion: value.quotaPolicyVersion } : {}), ...(value.cleanupPending === true ? { cleanupPending: true } : {}) } : null;
 
 function taskPayload(capability, input) {
   if (capability === "species") {
