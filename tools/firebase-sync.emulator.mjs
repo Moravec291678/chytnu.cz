@@ -25,6 +25,7 @@ import { createSyncService } from "../src/features/sync/data/syncService.js";
 import { tripRepository } from "../src/features/trips/data/tripRepository.js";
 import { waterRepository } from "../src/features/waters/data/waterRepository.js";
 import { createQuickCapture, prepareQuickCatch, persistQuickCatch } from "../src/features/catches/data/quickCatch.js";
+import { buildTripCatchMarkers } from "../src/features/map/data/tripCatchMap.js";
 
 const projectId = "demo-chytnucz-local";
 const app = initializeApp({ apiKey: "demo-api-key", authDomain: "localhost", projectId }, `sync-test-${crypto.randomUUID()}`);
@@ -55,7 +56,9 @@ try {
 
   await tripRepository.start({
     schemaVersion: 1, id: tripId, title: "Testovací výprava", locationName: "Labe",
-    methodKey: null, createdAt: stamp, updatedAt: stamp, startedAt: stamp, endedAt: null,
+    methodKey: "feeder", waterId, baitKeys: ["corn"], waterDepthM: 3, bottomType: "gravel",
+    waterTemperatureMeasurement: { valueC: 12, measuredAt: stamp, source: "manual_trip" },
+    createdAt: stamp, updatedAt: stamp, startedAt: stamp, endedAt: null,
     sync: { status: "local", revision: 1 },
   }, accountScope);
   await waterRepository.put({
@@ -71,7 +74,7 @@ try {
     coordinates: { latitude: 50.087, longitude: 14.421 },
     gpsSource: "manual-map",
     conditions: { airTempC: 11, moonPhase: "full" },
-    conditionSources: { airTempC: "auto", moonPhase: "auto" },
+    conditionSources: { airTempC: "auto", moonPhase: "auto" }, environment: { conditions: { humidityPct: 75, precipitationMm: 0 } },
     verification: { status: "unverified", level: "limited", reason: "missing-location", photoHash: null, photoCaptureMetadata: null, locationSource: null, gpsAccuracyMeters: null, verifiedAt: null },
     waterDepthM: null, bottomType: null, tripId, method: null, baits: [], result: "released",
     photos: Array.from({ length: 4 }, (_, index) => ({ id: `photo-${index + 1}`, name: `kapr-${index + 1}.png`, type: photoBlob.type, blob: photoBlob, focalX: 0.2, focalY: 0.8, zoom: 1.4 })),
@@ -98,6 +101,9 @@ try {
   const remoteCatch = await getDoc(doc(db, "users", ownerId, "catches", catchId));
   const remoteWater = await getDoc(doc(db, "users", ownerId, "waters", waterId));
   assert.equal(remoteTrip.data().title, "Testovací výprava");
+  assert.equal(remoteTrip.data().waterDepthM, 3); assert.equal(remoteTrip.data().bottomType, "gravel");
+  assert.equal(remoteTrip.data().waterTemperatureMeasurement.valueC, 12);
+  assert.equal(JSON.parse(remoteCatch.data().environment).conditions.humidityPct, 75);
   assert.equal(remoteCatch.data().tripId, tripId);
   assert.equal(remoteWater.data().name, "Labe");
   assert.equal(remoteWater.data().id, waterId);
@@ -295,20 +301,21 @@ try {
   assert.equal(remainingAfterDelete.length, 3, "each newly cloud-ready photo requires its normal deletion job");
   assert.equal(remainingAfterDelete[0].operation, "photo-delete");
 
-  await waterRepository.delete(waterId, accountScope);
-  await firestoreService.run(ownerId);
-  assert.equal((await getDoc(doc(db, "users", ownerId, "waters", waterId))).data().deleted, true);
-
   // Use the actual one-photo creation contract, then exercise its wire metadata
   // and a second isolated IndexedDB device. READY/delivery here are synthetic.
   const quickHash = await sha256Blob(photoBlob);
-  const quick = await prepareQuickCatch(photoBlob, createQuickCapture("gallery"), {
+  const quickCapture = createQuickCapture("camera");
+  const quick = await prepareQuickCatch(photoBlob, quickCapture, {
     prepare: async () => ({ blob: photoBlob, type: photoBlob.type, size: photoBlob.size, sha256: quickHash }),
-    readMetadata: async () => null,
+    readMetadata: async () => null, ownerId, trip: await tripRepository.get(tripId, accountScope),
+    methods: [{ key: "feeder", label: "Feeder" }], baits: [{ key: "corn", label: "Kukuřice" }],
+    waters: [await waterRepository.get(waterId, accountScope)],
+    locationEvidence: { coordinates: { latitude: 50.091, longitude: 14.425 }, accuracyMeters: 8, capturedAt: quickCapture.capturedAt, source: "live-gps" },
   });
   await persistQuickCatch(quick, accountScope, catchRepository);
   await persistQuickCatch(quick, accountScope, catchRepository);
-  assert.equal((await firestoreService.run(ownerId)).status, "success");
+  const quickSync = await firestoreService.run(ownerId);
+  assert.equal(quickSync.status, "success", JSON.stringify(quickSync));
   const quickRemote = (await getDoc(doc(db, "users", ownerId, "catches", quick.id))).data();
   assert.equal(quickRemote.speciesKey, ""); assert.equal(quickRemote.lengthCm, null); assert.equal(quickRemote.weightKg, null);
   assert.equal(JSON.parse(quickRemote.quickCatch).capturedAt, quick.quickCatch.capturedAt);
@@ -317,19 +324,39 @@ try {
     record: { ...quickLocal, photos: quickLocal.photos.map(photo => ({ ...photo, cloud: {
       state: "synced", provider: "cloudinary", objectKey: `users/${ownerId}/catches/${quick.id}/photos/${photo.id}/original`, sha256: quickHash,
     } })) }, expectedRevision: quickRemote.serverRevision, operationId: `quick-ready-${crypto.randomUUID()}`, localRevision: 1 });
+  const readyQuick = await firestoreAdapter.read({ ownerId, entityType: "catch", entityId: quick.id });
+  await firestoreAdapter.write({ ownerId, entityType: "catch", entityId: quick.id,
+    record: { ...readyQuick.record, notes: "Updated full-context catch and photo frame", photos: readyQuick.record.photos.map(photo => ({ ...photo, focalX: 0.25 })),
+      method: { key: "float", label: "Plavaná", isCustom: false }, waterDepthM: 1,
+      conditions: { ...readyQuick.record.conditions, waterTempC: 15 }, conditionSources: { ...readyQuick.record.conditionSources, waterTempC: "manual" },
+      quickCatch: { ...readyQuick.record.quickCatch, provenance: { ...readyQuick.record.quickCatch.provenance, method: "manual", waterDepthM: "manual", waterTempC: "manual" } } },
+    expectedRevision: readyQuick.revision, operationId: `quick-edited-${crypto.randomUUID()}`, localRevision: 2 });
   const quickOriginDevice = globalThis.indexedDB;
   globalThis.indexedDB = new IDBFactory();
   try {
     assert.equal((await serviceFor(firestoreAdapter).run(ownerId)).status, "success");
     const received = await catchRepository.get(quick.id, accountScope);
     assert.equal(received.captureMode, "quick");
+    assert.equal(received.notes, "Updated full-context catch and photo frame");
     assert.equal(received.quickCatch.provenance.caughtAt, "device");
+    assert.equal(received.waterId, waterId); assert.equal(received.waterNumber, 411050);
+    assert.equal(received.waterDepthM, 1); assert.equal(received.bottomType, "gravel");
+    assert.equal(received.method.key, "float"); assert.equal(received.baits[0].key, "corn");
+    assert.equal(received.conditions.waterTempC, 15); assert.equal(received.quickCatch.provenance.waterTempC, "manual");
+    assert.deepEqual(received.quickCatch.tripSnapshot, quick.quickCatch.tripSnapshot);
+    assert.deepEqual(received.coordinates, quick.coordinates); assert.equal(received.locationEvidence.accuracyMeters, 8);
+    const secondTrip = await tripRepository.get(tripId, accountScope);
+    const markers = buildTripCatchMarkers([received], secondTrip, accountScope);
+    assert.equal(markers.length, 1); assert.equal(markers[0].id, quick.id); assert.equal(markers[0].latitude, 50.091);
     assert.equal(received.photos.length, 1); assert.equal(received.photos[0].cloud.state, "synced");
     const delivery = createPhotoCloudService({ provider: createCloudinaryPhotoProvider(), getCurrentOwnerId: () => ownerId,
       authenticatedRequest: async () => photoBlob });
     const delivered = await delivery.getPhotoBlob({ photo: received.photos[0], ownerId, catchId: quick.id, scopeKey: accountScope.scopeKey });
     assert.equal(await sha256Blob(delivered), quickHash);
   } finally { globalThis.indexedDB = quickOriginDevice; }
+  await waterRepository.delete(waterId, accountScope);
+  await firestoreService.run(ownerId);
+  assert.equal((await getDoc(doc(db, "users", ownerId, "waters", waterId))).data().deleted, true);
   console.log("Quick Catch emulator passed: actual local one-photo creation, retry identity, unknown fields, bounded metadata, synthetic READY and second-device photo delivery.");
 
   console.log("Firestore sync emulator passed: authenticated Trip/Catch/Water writes, four-photo new Catch limit, separately validated ordered photo documents, crop/primary/photo-delete synchronization, retained local Blob, exact operation replay, remote delta pull, idempotent resync, Catch/photo tombstones, and clean outbox.");

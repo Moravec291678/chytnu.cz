@@ -5,8 +5,10 @@ import CatchCard from "../features/catches/components/CatchCard";
 import { useCatches } from "../features/catches/context/useCatches";
 import { useTrips } from "../features/trips/context/useTrips";
 import { formatTripDuration, getTripDurationMs } from "../features/trips/data/tripModel";
-import { DEFAULT_METHODS } from "../shared/constants/constants";
+import { DEFAULT_BAITS, DEFAULT_METHODS } from "../shared/constants/constants";
+import { formatBottomType } from "../features/catches/data/catchFormatting.js";
 import ConfirmDialog from "../shared/components/ConfirmDialog";
+import TripCatchMap from "../features/trips/components/TripCatchMap.jsx";
 import "./TripFormPage.css";
 
 function TripDetailPage() {
@@ -49,7 +51,9 @@ function TripDetailPage() {
     <section className="trip-detail-summary"><div><span>Začátek</span><strong>{new Date(trip.startedAt).toLocaleString("cs-CZ")}</strong></div><div><span>Konec</span><strong>{trip.endedAt ? new Date(trip.endedAt).toLocaleString("cs-CZ") : "Vycházka probíhá"}</strong></div><div><span>Trvání</span><strong>{formatTripDuration(getTripDurationMs(trip))}</strong></div><div><span>Úlovky</span><strong>{catchState.loading || catchState.error ? "—" : tripCatches.length}</strong></div></section>
     {error && <p role="alert" className="trip-form-error">{error}</p>}
     {!trip.endedAt && <button className="trip-end-button" type="button" onClick={handleEnd} disabled={ending}>{ending ? "Ukončuji…" : "Ukončit vycházku"}</button>}
-    <Link className="trip-edit-link" to={`/trips/${trip.id}/edit`}>Upravit vycházku</Link>
+    <Link className="trip-edit-link" to={`/trips/${trip.id}/edit`}>Upravit vycházku a výchozí údaje</Link>
+    <TripDefaultsSummary trip={trip} />
+    {!catchState.loading && !catchState.error && <TripCatchMap trip={trip} catches={catchState.catches} />}
     <section className="trip-delete-section">
       {catchState.loading ? <p role="status">Načítám úlovky pro ověření vazeb…</p>
         : catchState.error ? <p>Vycházku nelze bezpečně smazat, dokud se nepodaří načíst její úlovky.</p>
@@ -61,6 +65,27 @@ function TripDetailPage() {
     <h2 className="section-title">Úlovky z vycházky</h2>
     {catchState.loading ? <p className="loading-state" role="status">Načítám úlovky vycházky…</p> : catchState.error ? null : tripCatches.length ? tripCatches.map((item) => <CatchCard key={item.id} catchedFish={item} />) : <div className="empty-search"><p>Úlovky přiřazené k této vycházce se zobrazí zde.</p><Link to="/add" state={{ tripId: trip.id }}>Přidat úlovek</Link></div>}
   </div></Layout>;
+}
+
+function TripDefaultsSummary({ trip }) {
+  const baits = (Array.isArray(trip.baitKeys) ? trip.baitKeys : []).map(key => DEFAULT_BAITS.find(bait => bait.key === key)?.label).filter(Boolean);
+  const measurement = trip.waterTemperatureMeasurement;
+  const measuredAt = Date.parse(measurement?.measuredAt);
+  const hasMeasurement = measurement?.source === "manual_trip" && Number.isFinite(measurement.valueC) && Number.isFinite(measuredAt);
+  const hasDefaults = trip.waterId || trip.methodKey || baits.length || Number.isFinite(trip.waterDepthM) || trip.bottomType || hasMeasurement;
+  if (!hasDefaults) return null;
+  return <details className="trip-defaults-fields trip-defaults-summary">
+    <summary>Výchozí údaje pro rychlé úlovky</summary>
+    <p>{trip.endedAt ? "Nastavení uložené u této vycházky." : "Použijí se u dalších fotografií. Změny neovlivní dřívější úlovky."}</p>
+    <dl>
+      {trip.waterId && <div><dt>Revír</dt><dd><Link to={`/waters/${encodeURIComponent(trip.waterId)}`}>Otevřít uložený revír</Link></dd></div>}
+      {trip.methodKey && <div><dt>Metoda</dt><dd>{DEFAULT_METHODS.find(method => method.key === trip.methodKey)?.label ?? trip.methodKey}</dd></div>}
+      {baits.length > 0 && <div><dt>Nástrahy</dt><dd>{baits.join(", ")}</dd></div>}
+      {Number.isFinite(trip.waterDepthM) && <div><dt>Hloubka lovu</dt><dd>{trip.waterDepthM.toLocaleString("cs-CZ")} m · údaj z vycházky</dd></div>}
+      {trip.bottomType && <div><dt>Typ dna</dt><dd>{formatBottomType(trip.bottomType)}</dd></div>}
+      {hasMeasurement && <div><dt>Teplota vody</dt><dd>{measurement.valueC.toLocaleString("cs-CZ")} °C · vlastní měření {new Date(measuredAt).toLocaleString("cs-CZ")}</dd></div>}
+    </dl>
+  </details>;
 }
 
 export default TripDetailPage;

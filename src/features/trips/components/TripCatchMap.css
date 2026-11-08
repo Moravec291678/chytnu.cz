@@ -1,0 +1,21 @@
+.trip-catch-map { min-width: 0; display: grid; gap: var(--space-3); }
+.trip-catch-map h2 { margin: 0; color: var(--text-primary); font-size: var(--font-size-lg); }
+.trip-catch-map > p, .trip-map-note { margin: 0; color: var(--text-secondary); font-size: var(--font-size-12); line-height: 1.5; }
+.trip-map-canvas { width: 100%; height: 340px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-2); overflow: hidden; z-index: 0; }
+.trip-catch-map .leaflet-control-zoom a { width: 44px; height: 44px; line-height: 44px; }
+.trip-catch-map .leaflet-popup-content { max-width: min(270px, 65vw); margin: 14px; }
+.trip-map-popup { color: #15231d; display: grid; gap: 16px; }
+.trip-map-popup-item { display: grid; gap: 7px; overflow-wrap: anywhere; }
+.trip-map-popup-item img { width: 100%; max-height: 130px; object-fit: cover; border-radius: 8px; }
+.trip-map-popup-item img[hidden] { display: none; }
+.trip-map-popup-item a { min-height: 44px; display: inline-flex; align-items: center; color: #006744; font-weight: 700; }
+.trip-map-list { padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-1); }
+.trip-map-list summary { min-height: 44px; align-content: center; cursor: pointer; color: var(--text-primary); }
+.trip-map-list ol { margin: var(--space-3) 0 0; padding-left: var(--space-5); }
+.trip-map-list li { margin-bottom: var(--space-3); overflow-wrap: anywhere; }
+.trip-map-list li > strong, .trip-map-list li > span { display: block; margin-bottom: var(--space-1); font-size: var(--font-size-12); }
+.trip-map-list li > span { color: var(--text-secondary); }
+.trip-map-list li > div { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
+.trip-map-list a { color: var(--accent-green); min-height: 44px; display: inline-flex; align-items: center; }
+.trip-catch-map button { min-height: 44px; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: var(--space-2); color: var(--text-primary); background: var(--surface-2); }
+@media (max-width: 360px) { .trip-map-canvas { height: 300px; } }
