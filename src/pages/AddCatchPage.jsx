@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { speciesSuggestionForEditor } from "../features/ai/approveSpeciesInEditor.js";
+import { ENVIRONMENT_LABELS } from "../features/catches/data/catchEnvironment.js";
 import {
   DEFAULT_BAITS,
   DEFAULT_METHODS,
@@ -597,7 +598,8 @@ function AddCatchPage() {
       if (record.quickCatch) {
         record.quickCatch = { ...record.quickCatch, provenance: { ...record.quickCatch.provenance,
           ...Object.fromEntries(["caughtAt", "coordinates", "tripId", "locationName", "waterId", "method", "baits",
-            "speciesKey", "lengthCm", "weightKg", "moonPhase", "airTempC", "pressureHpa", "windKmh"].map(field => [field, "manual"])) } };
+            "lengthCm", "weightKg", ...Object.keys(record.conditionSources ?? {}).filter(field => record.conditionSources[field] === "manual")].map(field => [field, "manual"])),
+          ...(record.speciesKey !== (existingCatch?.speciesKey ?? "") ? { speciesKey: "manual" } : {}) } };
       }
       let progressionEventIds = [];
       if (existingCatch) await updateCatch(record, location.state?.aiSpeciesSuggestion
@@ -1232,6 +1234,14 @@ function AddCatchPage() {
             </label>
           </div>
           <div className="conditions-moon">
+            {existingCatch?.quickCatch && <details className="catch-environment-editor"><summary>Další údaje o počasí</summary>
+              <p>Údaje jsou volitelné. Ruční oprava má přednost před automatickým doplněním.</p>
+              <div className="measurements-grid conditions-grid">{Object.entries(ENVIRONMENT_LABELS).map(([field, [label, unit]]) => <label className="input-group" key={field}>
+                <span>{label}{unit ? ` (${unit})` : ""}</span>
+                <input type="text" inputMode="decimal" value={catchData.environmentConditions?.[field] ?? ""}
+                  onChange={event => setCatchData(previous => ({ ...previous, environmentConditions: { ...previous.environmentConditions, [field]: event.target.value } }))} />
+              </label>)}</div>
+            </details>}
             <h3>Fáze měsíce</h3>
             <div className="conditions-moon-grid" role="group" aria-label="Fáze měsíce">
               {MOON_PHASES.map(([key, label]) => (

@@ -1,5 +1,11 @@
 .home-dashboard {
+  --home-content-gutter: var(--page-gutter);
   padding: 0 0 var(--space-3);
+}
+
+.home-dashboard > .quick-catch {
+  margin-inline: var(--home-content-gutter);
+  margin-bottom: var(--space-4);
 }
 
 .dashboard-header {
@@ -7,7 +13,7 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
-  padding: var(--space-4-25) var(--space-5) var(--space-3);
+  padding: var(--space-4-25) var(--home-content-gutter) var(--space-3);
 }
 
 .dashboard-header h1 {

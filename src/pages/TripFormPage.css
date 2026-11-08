@@ -162,3 +162,12 @@
 .trip-form-page .section-title {
   margin: var(--space-3) 0 -3px;
 }
+
+.trip-defaults-fields { display: grid; gap: var(--space-3); padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-1); }
+.trip-defaults-fields summary { cursor: pointer; min-height: 44px; align-content: center; color: var(--text-primary); font-weight: 700; }
+.trip-defaults-fields p { color: var(--text-secondary); line-height: 1.55; }
+.trip-defaults-fields fieldset { min-width: 0; border: 0; margin: 0; padding: 0; }
+.trip-defaults-fields legend { margin-bottom: var(--space-2); color: var(--text-secondary); }
+.trip-defaults-fields .bait-options { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.trip-defaults-fields label.bait-chip { display: flex; align-items: center; min-height: 44px; gap: var(--space-2); padding: var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.trip-defaults-fields input[type="checkbox"] { width: 18px; min-height: 18px; accent-color: var(--accent-green); }

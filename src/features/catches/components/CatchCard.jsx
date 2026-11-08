@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { suggestedSpeciesForDisplay } from "../../ai/automaticSpecies.js";
+import AutomaticSpeciesStatus from "../../ai/AutomaticSpeciesStatus.jsx";
 
 import {
   formatCatchDateTime,
@@ -90,6 +92,7 @@ export function FishMark({ speciesKey = "" }) {
 }
 
 function CatchCard({ catchedFish, isPersonalRecord = false }) {
+  const suggestedSpecies = suggestedSpeciesForDisplay(catchedFish);
   const primaryPhoto = getPrimaryAvailablePhoto(catchedFish);
   const weight = formatCatchWeight(catchedFish);
   const length = Number.isFinite(catchedFish.lengthCm)
@@ -103,7 +106,8 @@ function CatchCard({ catchedFish, isPersonalRecord = false }) {
           {primaryPhoto ? <CatchPhoto key={JSON.stringify([catchedFish.ownerId, catchedFish.id, primaryPhoto.id, primaryPhoto.cloud?.sha256])} blob={primaryPhoto.blob} species={catchedFish.species} photo={primaryPhoto} ownerId={catchedFish.ownerId} catchId={catchedFish.id} /> : <FishMark speciesKey={catchedFish.speciesKey} />}
 
           <div className="catch-card-info">
-            <h2>{catchedFish.species}</h2>
+            <h2>{suggestedSpecies?.label || catchedFish.species}</h2>
+            <AutomaticSpeciesStatus record={catchedFish} compact />
 
             <p>{formatCatchDateTime(catchedFish.caughtAt)}{catchedFish.locationName ? ` · ${catchedFish.locationName}` : ""}{catchedFish.method?.label ? ` · ${catchedFish.method.label}` : ""}</p>
 

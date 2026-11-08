@@ -13,7 +13,6 @@ import { useTrips } from "../features/trips/context/useTrips";
 import { formatBottomType } from "../features/catches/data/catchFormatting";
 import { getCatchRecognition, isNewLengthRecord } from "../features/catches/data/catchDetail.js";
 import { buildPrivateCatchMarkers } from "../features/map/data/catchMap";
-import { MOON_PHASE_EMOJI } from "../shared/constants/moonPhaseEmoji.js";
 import { DEFAULT_SPECIES } from "../shared/constants/constants.js";
 import { getCatchRarity } from "../features/catches/utils/rarity.js";
 import { getVerificationPresentation } from "../features/catches/data/verificationPresentation.js";
@@ -24,6 +23,9 @@ import "../features/catches/components/PhotoSyncStatus.css";
 import "./AddCatchPage.css";
 import { isIncompleteQuickCatch } from "../features/catches/data/quickCatch.js";
 import CatchAiAssistance from "../features/ai/CatchAiAssistance.jsx";
+import { buildCatchEnvironmentPresentation } from "../features/catches/data/catchEnvironmentPresentation.js";
+import AutomaticSpeciesStatus from "../features/ai/AutomaticSpeciesStatus.jsx";
+import { suggestedSpeciesForDisplay } from "../features/ai/automaticSpecies.js";
 
 function formatDate(value) {
   if (!value || !Number.isFinite(Date.parse(value))) return null;
@@ -36,21 +38,6 @@ function valueLabel(value, unit) {
 
 function formatNumber(value, maximumFractionDigits = 1) {
   return new Intl.NumberFormat("cs-CZ", { maximumFractionDigits }).format(value);
-}
-
-function getConditionFacts(conditions) {
-  const values = conditions ?? {};
-  const facts = [
-    ["Vzduch", valueLabel(values.airTempC ?? values.airTemperatureC, "°C")],
-    ["Voda", valueLabel(values.waterTempC ?? values.waterTemperatureC, "°C")],
-    ["Tlak", valueLabel(values.pressureHpa, "hPa")],
-    ["Vítr", values.windKmh === null || values.windKmh === undefined || values.windKmh === "" || !Number.isFinite(Number(values.windKmh))
-      ? null
-      : `${values.windDirection ? `${values.windDirection} ` : ""}${formatNumber(Number(values.windKmh))} km/h`],
-    ["Počasí", values.weather],
-    ["Fáze měsíce", MOON_PHASE_EMOJI[values.moonPhase] ?? values.moonPhase],
-  ];
-  return facts.filter(([, value]) => value !== null && value !== undefined && value !== "");
 }
 
 function CatchDetailPage() {
@@ -137,10 +124,10 @@ function CatchDetailPage() {
     ["Uložený revír", item.waterId ? <Link to={`/waters/${item.waterId}`}>Otevřít detail revíru →</Link> : null],
     ["Číslo revíru", item.waterNumber],
     ["Datum a čas", catchDateLabel],
-    ["Hloubka", item.waterDepthM === null || item.waterDepthM === undefined
-      ? null
-      : `${formatNumber(item.waterDepthM)} m${formatBottomType(item.bottomType) ? ` · ${formatBottomType(item.bottomType).toLocaleLowerCase("cs-CZ")}` : ""}`],
-    ["Obvod", valueLabel(item.girthCm, "cm")],
+    ["Přesnost polohy", valueLabel(item.locationEvidence?.accuracyMeters, "m")],
+    ["Poloha zaznamenána", item.locationEvidence?.capturedAt ? formatDate(item.locationEvidence.capturedAt) : null],
+    ["Zdroj fotografie", item.quickCatch ? item.quickCatch.inputSource === "camera" ? "Fotoaparát" : "Galerie" : null],
+    ["Časové pásmo zařízení při uložení", item.quickCatch?.timeZone],
     ["Vycházka", trip ? <Link to={`/trips/${trip.id}`}>{trip.title} →</Link> : null],
   ].filter(([, value]) => value !== null && value !== undefined && value !== "");
   const methodFacts = [
@@ -149,7 +136,9 @@ function CatchDetailPage() {
     ["Výsledek", item.result === "released" ? "Puštěno zpět" : item.result === "kept" ? "Ponecháno" : null],
     ["Délka boje", valueLabel(item.fightMinutes, "min")],
   ].filter(([, value]) => value !== null && value !== undefined && value !== "");
-  const conditionFacts = getConditionFacts(item.conditions);
+  const environment = buildCatchEnvironmentPresentation(item, { online: globalThis.navigator?.onLine !== false });
+  const suggestedSpecies = suggestedSpeciesForDisplay(item);
+  environment.water = environment.water.map(([label, value]) => [label, label === "Dno" ? formatBottomType(value) || value : value]);
   const recognition = getCatchRecognition(item, state.catches);
   const isPersonalBest = recognition.personalBest;
   const isSpeciesRecord = recognition.speciesRecord;
@@ -184,7 +173,7 @@ function CatchDetailPage() {
             </Link>
           </div>
         </header>
-        {item.speciesLatin && <p className="catch-detail-latin">{item.speciesLatin}</p>}
+        {(item.speciesLatin || suggestedSpecies?.latinName) && <p className="catch-detail-latin">{item.speciesLatin || suggestedSpecies.latinName}</p>}
         {item.speciesKey ? (
           <h1 className="catch-detail-species-heading">
             <Link to={`/species/${item.speciesKey}`} className="catch-detail-species-link" title="Zobrazit detail druhu">
@@ -192,8 +181,9 @@ function CatchDetailPage() {
             </Link>
           </h1>
         ) : (
-          <h1>{item.species}</h1>
+          <h1>{suggestedSpecies?.label || item.species}</h1>
         )}
+        <AutomaticSpeciesStatus record={item} />
         {catchDateLabel && <p className="catch-detail-date">{catchDateLabel}</p>}
         {item.quickCatch && <details className="catch-detail-date">
           <summary>Původ doplněných údajů</summary>
@@ -267,7 +257,11 @@ function CatchDetailPage() {
       ) : null}
       {placeFacts.length > 0 && <CatchDetailFacts title="Místo a čas" facts={placeFacts} />}
       {methodFacts.length > 0 && <CatchDetailFacts title="Lov a nástraha" facts={methodFacts} />}
-      {conditionFacts.length > 0 && <CatchDetailFacts title="Podmínky" facts={conditionFacts} />}
+      {environment.weather.length > 0 && <CatchDetailFacts title="Počasí" facts={environment.weather} />}
+      {environment.weatherSource && <p className="catch-detail-source">Zdroj: <a href="https://open-meteo.com/" target="_blank" rel="noreferrer">Open-Meteo</a> · {environment.weatherSource.kind === "historical-reanalysis" ? "historická reanalýza" : "meteorologický model"} pro {formatDate(environment.weatherSource.hour)}. Nejde o měření přímo u vody.</p>}
+      {environment.astronomy.length > 0 && <CatchDetailFacts title="Slunce a Měsíc" facts={environment.astronomy} />}
+      {environment.water.length > 0 && <CatchDetailFacts title="Podmínky u vody" facts={environment.water} />}
+      {environment.status && <section className="catch-detail-section catch-detail-enrichment"><h2>Automatické doplnění</h2><p role="status">{environment.status}</p><details><summary>Co může zůstat neznámé</summary><p>Teplotu vody, průtok ani stav hladiny bez ověřeného zdroje nedoplňujeme. Z fotografie neurčujeme míry, nástrahu ani hloubku. Chybějící údaj neznamená nulu.</p></details></section>}
       {item.notes && <section className="catch-detail-section catch-detail-notes"><h2>Poznámka</h2><p>{item.notes}</p></section>}
       <CatchAiAssistance key={`${scope.scopeKey}:${item.id}`} record={item} />
       {hasMapLocation && <Link className="catch-detail-map-link" to={`/map?catch=${encodeURIComponent(item.id)}`}>Zobrazit úlovek na soukromé mapě</Link>}

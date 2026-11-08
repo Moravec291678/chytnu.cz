@@ -5,6 +5,7 @@ import { DEFAULT_METHODS } from "../shared/constants/constants";
 import { createTripRecord } from "../features/trips/data/tripModel";
 import { useTrips } from "../features/trips/context/useTrips";
 import "./TripFormPage.css";
+import TripDefaultsFields from "../features/trips/components/TripDefaultsFields.jsx";
 
 function TripCreatePage() {
   const navigate = useNavigate();
@@ -39,6 +40,7 @@ function TripCreatePage() {
       <label>Název (volitelný)<input value={values.title} maxLength={80} onChange={(event) => update("title", event.target.value)} placeholder={`Vycházka · ${new Date().toLocaleDateString("cs-CZ")}`} /></label>
       <label>Lokalita (volitelná)<input value={values.locationName} maxLength={120} onChange={(event) => update("locationName", event.target.value)} placeholder="Název místa nebo revíru" /></label>
       <label>Metoda (volitelná)<select value={values.methodKey} onChange={(event) => update("methodKey", event.target.value)}><option value="">Neuvedena</option>{DEFAULT_METHODS.map((method) => <option key={method.key} value={method.key}>{method.label}</option>)}</select></label>
+      <TripDefaultsFields values={values} onChange={update} />
       {error && <p role="alert" className="trip-form-error">{error}</p>}
       <button type="submit" className="save-catch-button" disabled={saving || state.loading || Boolean(state.error) || state.trips.some((trip) => !trip.endedAt)}>{saving ? "Zahajuji…" : "Zahájit vycházku"}</button>
     </form>

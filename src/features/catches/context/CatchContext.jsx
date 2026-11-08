@@ -14,6 +14,8 @@ import { sha256Blob } from "../data/photoCloudProvider.js";
 import { verifyPhotoBlobReadback } from "../data/photoLocalBlob.js";
 import { userFacingErrorMessage } from "../../../shared/errors/userFacingError.js";
 import { recordPhotoUploadTrace } from "../data/photoUploadTrace.js";
+import { createAiClient, AI_CONSENT_CHANGED_EVENT } from "../../ai/aiClient.js";
+import { createAutomaticSpeciesCoordinator, readAutomaticSpecies, AUTOMATIC_SPECIES_CHANGED } from "../../ai/automaticSpecies.js";
 const initialState = {
   catches: [],
   sortBy: "vse",
@@ -108,7 +110,9 @@ export function CatchProvider({ children }) {
         void requestPhotoStorageDurability();
       }
       catches.sort((a, b) => new Date(b.caughtAt) - new Date(a.caughtAt));
-      dispatch({ type: "LOAD_CATCHES", payload: catches });
+      const displayed = await readAutomaticSpecies(catches, scope).catch(() => catches);
+      if (activeScopeKey.current !== requestedScopeKey) return;
+      dispatch({ type: "LOAD_CATCHES", payload: displayed });
     } catch (error) {
       dispatch({ type: "SET_ERROR", payload: userFacingErrorMessage(error, "Úlovky se nepodařilo načíst. Zkus to znovu.") });
     }
@@ -162,6 +166,33 @@ export function CatchProvider({ children }) {
       quickSaving.current = false;
       if (pending.cancelled && activeScopeKey.current === pending.scope.scopeKey) setQuickCaptureState({ status: "idle" });
     }
+  }, [scope, refresh]);
+
+  useEffect(() => {
+    if (scope.status !== "ready" || !scope.ownerId) return undefined;
+    const client = createAiClient({ ownerId: scope.ownerId });
+    const start = () => createAutomaticSpeciesCoordinator({ scope, repository: catchRepository, client,
+      changed: () => window.dispatchEvent(new Event(AUTOMATIC_SPECIES_CHANGED)) });
+    let coordinator = start();
+    const run = () => { if (document.visibilityState !== "hidden") void coordinator.run(); };
+    const consentChanged = () => { coordinator.stop(); coordinator = start(); run(); };
+    window.addEventListener("online", run);
+    window.addEventListener("focus", run);
+    document.addEventListener("visibilitychange", run);
+    window.addEventListener("chytnu:outbox-changed", run);
+    window.addEventListener("chytnu:local-data-restored", run);
+    window.addEventListener(AI_CONSENT_CHANGED_EVENT, consentChanged);
+    window.addEventListener(AUTOMATIC_SPECIES_CHANGED, refresh);
+    run();
+    return () => {
+      coordinator.stop();
+      window.removeEventListener("online", run); window.removeEventListener("focus", run);
+      document.removeEventListener("visibilitychange", run);
+      window.removeEventListener("chytnu:outbox-changed", run);
+      window.removeEventListener("chytnu:local-data-restored", run);
+      window.removeEventListener(AI_CONSENT_CHANGED_EVENT, consentChanged);
+      window.removeEventListener(AUTOMATIC_SPECIES_CHANGED, refresh);
+    };
   }, [scope, refresh]);
 
   useEffect(() => {

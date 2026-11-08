@@ -1,0 +1,75 @@
+/* External AI shares the diary's cards and controls, never a chat/debug UI. */
+.settings-ai-consent { min-width: 0; margin-top: var(--space-2); padding-top: var(--space-4); border-top: 1px solid var(--border); }
+.settings-ai-consent h3, .insights-ai-explanation h3 { color: var(--text-primary); font-size: var(--font-size-16); font-weight: 800; line-height: 1.4; }
+.settings-card .settings-ai-consent p, .insights-ai-explanation p, .catch-detail-section > details:not([class]) p {
+  min-width: 0; color: var(--text-secondary); font-size: var(--font-size-14); line-height: var(--body-line-height); overflow-wrap: anywhere;
+}
+.settings-ai-consent details, #diary-intelligence-report > details, .insights-ai-explanation details {
+  min-width: 0; padding: 0 var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-sm-roomy); background: var(--surface-2);
+}
+.settings-ai-consent details[open], #diary-intelligence-report > details[open], .insights-ai-explanation details[open] { padding-bottom: var(--space-3); }
+.settings-ai-consent details > p + p, .insights-ai-explanation details > p + p { margin-top: var(--space-2); }
+.settings-ai-consent .settings-toggle { display: flex; min-height: var(--control-height); align-items: flex-start; gap: var(--space-3); padding-block: var(--space-2); color: var(--text-primary); font-size: var(--font-size-14); line-height: 1.5; }
+.settings-ai-consent .settings-toggle input { margin-top: var(--space-0-5); }
+
+#diary-intelligence-report { display: grid; min-width: 0; gap: var(--space-3); }
+#diary-intelligence-report h3 { margin-top: var(--space-1); color: var(--text-primary); font-size: var(--font-size-15); line-height: 1.4; }
+.insights-section > summary { padding-inline: var(--space-4); font-size: var(--font-size-14); }
+.insights-section[open] > summary { border-bottom: 1px solid var(--border); }
+.insights-section > p { padding: var(--space-3) var(--space-4); }
+.insights-ai-explanation { display: grid; min-width: 0; gap: var(--space-3); padding: var(--space-4); border: 1px solid rgb(var(--accent-blue-rgb) / 35%); border-radius: var(--card-radius); background: var(--accent-blue-soft); }
+.insights-ai-explanation > div { display: grid; min-width: 0; gap: var(--space-2-5); }
+.insights-ai-explanation > div > div { display: grid; min-width: 0; gap: var(--space-3); padding: var(--space-3); border: 1px solid var(--border-strong); border-left: 3px solid var(--accent-blue); border-radius: var(--radius-sm); background: var(--surface-1); }
+.insights-ai-explanation h4 { color: var(--accent-blue); font-size: var(--font-size-14); font-weight: 800; line-height: 1.4; }
+.insights-ai-explanation .insights-analysis-button, .insights-section-body > .insights-analysis-button { width: 100%; min-height: var(--control-height); padding: var(--space-3); text-align: left; font-size: var(--font-size-14); line-height: 1.4; white-space: normal; }
+#diary-intelligence-report .insights-evidence { display: grid; gap: var(--space-1); max-height: 240px; padding-left: var(--space-5); overflow-y: auto; overscroll-behavior: contain; }
+#diary-intelligence-report .insights-evidence a { display: inline-flex; min-height: var(--control-height); align-items: center; color: var(--accent-green); font-size: var(--font-size-13); line-height: 1.5; overflow-wrap: anywhere; }
+
+.catch-detail-section > details:not([class]) > div { display: grid; min-width: 0; gap: var(--space-3); padding: var(--space-3); }
+.catch-detail-section > details:not([class]) h3 { margin-top: var(--space-2); color: var(--text-primary); font-size: var(--font-size-16); line-height: 1.4; }
+.catch-detail-section > details:not([class]) h4 { color: var(--accent-blue); font-size: var(--font-size-14); }
+.catch-detail-section > details:not([class]) .photo-action-button { max-width: 100%; padding: var(--space-2-5) var(--space-3); color: var(--accent-green); font-size: var(--font-size-14); line-height: 1.4; white-space: normal; }
+.catch-detail-section > details:not([class]) textarea { line-height: 1.6; }
+.catch-detail-section > details:not([class]) label { color: var(--text-primary); }
+
+.settings-ai-consent [role="status"], .settings-ai-consent [role="alert"],
+.insights-ai-explanation > [role="status"], .insights-ai-explanation > [role="alert"],
+.catch-detail-section > details:not([class]) [role="status"], .catch-detail-section > details:not([class]) [role="alert"] {
+  padding: var(--space-3); border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+  background: var(--surface-1); color: var(--text-primary); font-size: var(--font-size-14); line-height: 1.5;
+}
+.settings-ai-consent [role="alert"], .insights-ai-explanation > [role="alert"], .catch-detail-section > details:not([class]) [role="alert"] { border-color: rgb(var(--accent-orange-rgb) / 45%); background: var(--accent-orange-soft); }
+
+.ai-species-status {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-1);
+  color: var(--text-secondary);
+  font-size: var(--font-size-13);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.ai-species-caption {
+  display: block;
+  margin-top: var(--space-1);
+  color: var(--accent-blue);
+  font-size: var(--font-size-12);
+  font-weight: 700;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.ai-species-status > strong { color: var(--text-primary); }
+.ai-species-status :where(button, a) {
+  display: inline-flex;
+  min-height: var(--control-height);
+  align-items: center;
+  justify-self: start;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--control-radius);
+  background: var(--surface-2);
+  color: var(--accent-green);
+  font: inherit;
+  font-weight: 750;
+  text-decoration: none;
+}

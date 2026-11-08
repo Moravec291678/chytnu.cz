@@ -17,6 +17,7 @@ export default function AiSettings() {
   const scope = useDataScope();
   const client = useMemo(() => createAiClient({ ownerId: scope.ownerId }), [scope.ownerId]);
   const [state, setState] = useState({ ownerId: null, status: "loading", choices: emptyChoices(), consent: null });
+  const [automaticSpecies, setAutomaticSpecies] = useState(false);
   const ticket = useRef(0);
   const saving = useRef(false);
   const invalidateRequests = useCallback(() => { ticket.current++; }, []);
@@ -26,6 +27,7 @@ export default function AiSettings() {
     const controller = new AbortController();
     client.getConsent({ signal: controller.signal }).then((consent) => {
       if (sequence !== ticket.current) return;
+      setAutomaticSpecies(consent?.automaticSpecies === true);
       setState({ ownerId: scope.ownerId, status: "ready", consent,
         choices: Object.fromEntries(Object.keys(LABELS).map((key) => [key, hasAiConsent(consent, key, AI_PROVIDER)])) });
     }).catch((error) => {
@@ -43,11 +45,14 @@ export default function AiSettings() {
     const sequence = ++ticket.current;
     setState({ ...current, ownerId: scope.ownerId, status: "saving", error: "", message: "" });
     try {
-      const consent = revoke ? await client.revokeConsent() : await client.updateConsent(current.choices, { expectedRevision: current.consent?.revision ?? 0 });
+      const consent = revoke ? await client.revokeConsent() : await client.updateConsent(current.choices, {
+        expectedRevision: current.consent?.revision ?? 0, automaticSpecies: automaticSpecies && current.choices.species });
       if (sequence !== ticket.current) return;
+      setAutomaticSpecies(consent?.automaticSpecies === true);
       setState({ ownerId: scope.ownerId, status: "ready", consent,
         choices: Object.fromEntries(Object.keys(LABELS).map((key) => [key, hasAiConsent(consent, key, AI_PROVIDER)])),
-        message: (revoke || consent?.revokedAt ? "Souhlas s AI byl odvolán. Další obsah se bez nového souhlasu neodešle." : "Volby AI jsou uložené. Každou analýzu spustíš sám.")
+        message: (revoke || consent?.revokedAt ? "Souhlas s AI byl odvolán. Další obsah se bez nového souhlasu neodešle."
+          : consent?.automaticSpecies ? "Volby AI jsou uložené. Nové rychlé úlovky rozpoznáme automaticky, až bude fotografie nahraná a bezplatná kapacita dostupná." : "Volby AI jsou uložené. Každou analýzu spustíš sám.")
           + (consent?.cleanupPending ? " Smazání uložených návrhů ještě není dokončené. Zkus odvolání souhlasu zopakovat." : "") });
       window.dispatchEvent(new Event(AI_CONSENT_CHANGED_EVENT));
     } catch (error) {
@@ -55,6 +60,7 @@ export default function AiSettings() {
         try {
           const consent = await client.getConsent();
           if (sequence !== ticket.current) return;
+          setAutomaticSpecies(consent?.automaticSpecies === true);
           setState({ ownerId: scope.ownerId, status: "ready", consent, error: error.message,
             choices: Object.fromEntries(Object.keys(LABELS).map((key) => [key, hasAiConsent(consent, key, AI_PROVIDER)])) });
           window.dispatchEvent(new Event(AI_CONSENT_CHANGED_EVENT));
@@ -66,7 +72,7 @@ export default function AiSettings() {
   };
   return <div className="settings-ai-consent" style={{ display: "grid", gap: "var(--space-2-5)" }}>
     <h3>Volitelná AI přes Cloudflare</h3>
-    <p>Ve výchozím stavu je vše vypnuté. Povolení samo nic neanalyzuje; obsah odešleš až příslušným tlačítkem. AI může chybovat.</p>
+    <p>Ve výchozím stavu je vše vypnuté. Analýzy spouštíš tlačítkem; pro nové rychlé úlovky můžeš zvlášť povolit automatické rozpoznávání. AI může chybovat.</p>
     <details><summary>Co se odešle a komu</summary>
       <p>Poskytovatel: Cloudflare Workers AI. Při rozpoznávání odešleme vybranou fotografii zbavenou metadat. Přesná poloha ani celý deník se neposílají.</p>
       <p>Pro vysvětlení deníku a doporučení odešleme vypočítané souhrny bez jednotlivých úlovků, fotografií a poznámek. Pro práci s historkou odešleme pouze poznámku vybraného úlovku. Do poznámky proto nevkládej údaje, které externí službě sdělovat nechceš.</p>
@@ -77,6 +83,12 @@ export default function AiSettings() {
       <input type="checkbox" checked={current.choices[key]} disabled={busy} onChange={(event) => setState({ ...current, ownerId: scope.ownerId, choices: { ...current.choices, [key]: event.target.checked }, message: "" })} />
       <span>{LABELS[key]}</span>
     </label>)}
+    <label className="settings-toggle">
+      <input type="checkbox" checked={automaticSpecies && current.choices.species} disabled={busy || !current.choices.species}
+        onChange={event => setAutomaticSpecies(event.target.checked)} />
+      <span>Automaticky rozpoznávat ryby z fotografií nových rychlých úlovků</span>
+    </label>
+    <p>Po uložení tohoto souhlasu stačí vyfotit a odložit telefon. AI počká na nahrání snímku a volnou kapacitu. Při pozastavené PWA práce pokračuje až po jejím znovuotevření; fotografie je uložená nezávisle.</p>
     <p>Zaškrtnutím vybraných možností a stiskem „Uložit souhlas s AI“ souhlasíš s popsaným externím zpracováním těchto údajů.</p>
     <button className="settings-primary-button" type="button" disabled={busy} onClick={() => void changeConsent(false)}>{current.status === "saving" ? "Ukládám…" : "Uložit souhlas s AI"}</button>
     <button className="settings-secondary-button" type="button" disabled={busy} onClick={() => void changeConsent(true)}>Odvolat veškerý souhlas s AI</button>

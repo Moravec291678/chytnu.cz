@@ -1,10 +1,23 @@
-.quick-catch { margin: 0 0 16px; }
-.quick-catch-actions { display: flex; gap: 10px; }
-.quick-catch button { min-height: 48px; border-radius: 14px; padding: 12px 16px; font: inherit; font-weight: 600; cursor: pointer; }
-.quick-catch-primary { flex: 1; background: var(--gr, #2ecc71); color: #071c10; border: 1px solid transparent; }
-.quick-catch-gallery { background: var(--s1, #1c2635); color: var(--t1, #f0f6ff); border: 1px solid var(--bd, #2c3e52); }
-.quick-catch button:disabled { opacity: .6; cursor: wait; }
-.quick-catch p { font-size: 14px; margin: 10px 0 0; }
-.quick-catch a { color: var(--gr, #2ecc71); }
-.quick-catch [role="alert"] { color: var(--re, #e85555); }
-.quick-catch button:focus-visible { outline: 3px solid var(--bl, #3bade8); outline-offset: 3px; }
+.quick-catch { min-width: 0; margin: 0 0 var(--space-4); }
+.quick-catch-actions { display: flex; flex-wrap: wrap; gap: var(--space-2-5); }
+.quick-catch button {
+  min-width: 0; min-height: 48px; max-width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border-strong); border-radius: var(--radius-md);
+  background: var(--surface-2); color: var(--text-primary);
+  font: inherit; font-weight: 750; line-height: 1.35;
+  overflow-wrap: anywhere; cursor: pointer;
+}
+.quick-catch .quick-catch-primary {
+  flex: 1 1 150px; border-color: var(--accent-green);
+  background: var(--accent-green); color: var(--text-on-accent);
+}
+.quick-catch .quick-catch-gallery { flex: 0 1 auto; background: var(--surface-1); }
+.quick-catch button:disabled { opacity: var(--control-disabled-opacity); cursor: wait; }
+.quick-catch p { margin-top: var(--space-2-5); color: var(--text-secondary); font-size: var(--font-size-14); line-height: var(--body-line-height); overflow-wrap: anywhere; }
+.quick-catch a { color: var(--accent-green); }
+.quick-catch [role="alert"] { margin-top: var(--space-3); padding: var(--space-3); border: 1px solid rgb(var(--accent-red-rgb) / 40%); border-radius: var(--radius-sm); background: var(--accent-red-soft); }
+.quick-catch [role="alert"] p { color: var(--text-primary); }
+.quick-catch [role="alert"] p:first-child { margin-top: 0; }
+.quick-catch [role="alert"] button { margin-top: var(--space-3); }
+.quick-catch button:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 3px; }

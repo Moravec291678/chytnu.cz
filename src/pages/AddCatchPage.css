@@ -1239,3 +1239,9 @@
     grid-template-columns: 1fr;
   }
 }
+
+.catch-detail-source { margin: 0; padding-inline: var(--space-3); color: var(--text-secondary); font-size: var(--font-size-12); line-height: 1.6; overflow-wrap: anywhere; }
+.catch-detail-source a { color: var(--accent-green); }
+.catch-detail-enrichment p, .catch-environment-editor p { color: var(--text-secondary); line-height: 1.6; }
+.catch-detail-enrichment summary, .catch-environment-editor summary { cursor: pointer; min-height: 44px; align-content: center; font-weight: 700; }
+.catch-environment-editor { margin-block: var(--space-3); }

@@ -1,0 +1,56 @@
+/* Low-specificity defaults fill gaps in existing screens. Page styles retain
+   control of layout, image crops, maps, overlays and component-specific states. */
+.layout-main :where(h1, h2, h3, h4, p, li, dt, dd, label, legend) { overflow-wrap: anywhere; }
+.layout-main :where(button, input, select, textarea) { max-width: 100%; }
+
+.layout-main :where(button:not([class])) {
+  min-height: var(--control-height);
+  padding: var(--space-2-5) var(--space-3-5);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--control-radius);
+  background: var(--surface-2);
+  color: var(--text-primary);
+  font: inherit;
+  font-weight: 750;
+  line-height: 1.35;
+  white-space: normal;
+}
+
+.layout-main :where(summary) {
+  min-height: var(--control-height);
+  padding-block: var(--space-2-5);
+  color: var(--text-primary);
+  font-size: var(--font-size-14);
+  font-weight: 750;
+  line-height: 1.5;
+  cursor: pointer;
+}
+.layout-main :where(summary)::marker { color: var(--accent-green); }
+.layout-main :where(summary:focus-visible) { outline: 2px solid var(--accent-blue); outline-offset: 2px; border-radius: var(--radius-xs); }
+.layout-main :where(input[type="checkbox"], input[type="radio"]) { flex-shrink: 0; accent-color: var(--accent-green); }
+.layout-main :where(textarea) { resize: vertical; }
+
+/* Back links remain navigational links, with a comfortable touch target. */
+.layout-main :where(.settings-header > a, .notifications-header > a,
+  .insights-header > a, .stats-header > a, .progression-back-link) {
+  display: inline-flex; min-height: var(--control-height); align-items: center; line-height: 1.4;
+}
+
+.ui-button { min-width: 0; max-width: 100%; padding-block: var(--space-2); overflow-wrap: anywhere; }
+.catch-confirm-dialog :where(h2, p, button), .gallery-filter-panel :where(label, button, p) { overflow-wrap: anywhere; }
+.catch-confirm-dialog { scroll-padding-block: var(--space-4); }
+
+/* These existing explicit classes previously used 38–42px targets. */
+.layout-main .notification-mark-read, .layout-main .notifications-mark-all,
+.layout-main .web-push-toggle, .layout-main .settings-link { min-height: var(--control-height); }
+
+@media (max-width: 360px) {
+  .layout-main .notifications-heading-row { flex-wrap: wrap; }
+  .layout-main .notifications-mark-all { flex: 1 1 auto; }
+  .layout-main .web-push-settings { grid-template-columns: minmax(0, 1fr); }
+  .layout-main .web-push-toggle { justify-self: start; }
+}
+@media (orientation: landscape) and (max-height: 500px) {
+  .catch-confirm-backdrop { padding-block: var(--space-3); }
+  .catch-confirm-dialog { max-height: calc(100dvh - 2 * var(--space-3)); }
+}

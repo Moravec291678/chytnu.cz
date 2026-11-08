@@ -11,7 +11,8 @@ import { getMethodLabel } from "../shared/utils/getMethodLabel";
 import useLiveDuration from "../hooks/useLiveDuration";
 import { buildChallengeOverview } from "../features/progression/data/challenges";
 import { buildSeasonalChallenge } from "../features/progression/data/seasonalChallenge";
-import { buildHomeInsight } from "../features/home/utils/homeInsights";
+import HomeInsightCard from "../features/home/components/HomeInsightCard.jsx";
+import { useDataScope } from "../features/auth/context/dataScopeContextValue.js";
 import { useProgression } from "../features/progression/context/progressionContextValue.js";
 import { useNotifications } from "../features/notifications/context/notificationContextValue.js";
 import "./HomePage.css";
@@ -145,17 +146,8 @@ function WeeklyProgressCard({ tasks, streak }) {
   );
 }
 
-function HomeInsightCard({ insight }) {
-  return (
-    <section className="home-insight-card" aria-labelledby="home-insight-title">
-      <span className="home-progress-kicker">{insight.source}</span>
-      <h2 id="home-insight-title">{insight.title}</h2>
-      <p>{insight.message}</p>
-    </section>
-  );
-}
-
 function HomePage() {
+  const scope = useDataScope();
   const { unreadCount } = useNotifications();
   const { state: catchState, refresh: refreshCatches } = useCatches();
   const { state: tripState, refresh: refreshTrips } = useTrips();
@@ -192,7 +184,6 @@ function HomePage() {
     };
   }, [catches, ledger]);
   const weeklyStreak = ledger.summary.streak;
-  const insight = useMemo(() => buildHomeInsight(catches), [catches]);
   const tripsById = useMemo(() => new Map(tripState.trips.map((trip) => [trip.id, trip.title])), [tripState.trips]);
 
   return (
@@ -288,7 +279,7 @@ function HomePage() {
             />
           ))}
         </section>
-        {!catchState.loading && !catchState.error && <HomeInsightCard insight={insight} />}
+        {!catchState.loading && !catchState.error && <HomeInsightCard key={scope.scopeKey} catches={catches} trips={tripState.trips} contextReady={!tripState.loading && !tripState.error} />}
       </div>
     </Layout>
   );
