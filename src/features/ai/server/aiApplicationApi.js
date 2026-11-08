@@ -4,12 +4,13 @@ import { analyzeDiary } from "../diaryAnalysis.js";
 import { createStoryDraft } from "../storyDraft.js";
 import { validateSpeciesSuggestion } from "../speciesSuggestion.js";
 import { getAccountDeletionAdminContext } from "../../../server/cloudinaryApi.js";
+import { AiServiceError, safeAiDiagnostic } from "./aiServiceError.js";
 
 const ID = /^[A-Za-z0-9_-]{1,128}$/;
 const SHA = /^[a-f0-9]{64}$/;
 const CAPABILITIES = ["species", "stories", "diary", "recommendations"];
 const TASKS = ["summarize", "improve", "clarity", "title"];
-const ACTIONS = ["consent.get", "consent.update", "consent.revoke", "species", "story", "diary", "recommendations"];
+const ACTIONS = ["consent.get", "consent.update", "consent.revoke", "species", "species.auto", "species.status", "home", "story", "diary", "recommendations"];
 const EVIDENCE_KEYS = ["count", "species", "hours", "months", "methods", "baits", "measuredLengthCount", "meanLengthCm", "longestCm", "missing", "period", "limitations"];
 const encode = new TextEncoder();
 const hash = (value) => createHash("sha256").update(typeof value === "string" ? value : JSON.stringify(value)).digest("hex");
@@ -29,7 +30,8 @@ function consentView(value) {
   if (!value || value.version !== AI_CONSENT_VERSION || value.provider !== "cloudflare"
     || !validCapabilities(value.capabilities) || !Number.isSafeInteger(value.revision) || value.revision < 1) return null;
   return { version: value.version, provider: value.provider, capabilities: value.capabilities,
-    grantedAt: value.grantedAt ?? null, revokedAt: value.revokedAt ?? null, revision: value.revision };
+    grantedAt: value.grantedAt ?? null, revokedAt: value.revokedAt ?? null, revision: value.revision,
+    automaticSpecies: value.automaticSpecies === true, automaticSpeciesFrom: value.automaticSpeciesFrom ?? null };
 }
 
 function parseRequest(req) {
@@ -37,15 +39,18 @@ function parseRequest(req) {
   if (!raw || encode.encode(raw).length > 2048) throw failure("invalid_request", 400);
   const body = JSON.parse(raw);
   if (!body || typeof body !== "object" || Array.isArray(body) || !ACTIONS.includes(body.action)) throw failure("invalid_request", 400);
-  const allowed = body.action === "consent.update" ? ["action", "version", "expectedRevision", "capabilities"]
-    : body.action === "species" ? ["action", "catchId", "photoId"]
+  const speciesAction = body.action.startsWith("species");
+  const allowed = body.action === "consent.update" ? ["action", "version", "expectedRevision", "capabilities", ...(Object.hasOwn(body, "automaticSpecies") ? ["automaticSpecies"] : [])]
+    : speciesAction ? ["action", "catchId", "photoId"] : body.action === "home" ? ["action", "fingerprint"]
       : body.action === "story" ? ["action", "catchId", "task"] : ["action"];
   if (Object.keys(body).length !== allowed.length || Object.keys(body).some((key) => !allowed.includes(key))) throw failure("invalid_request", 400);
-  if (["species", "story"].includes(body.action) && (typeof body.catchId !== "string" || !ID.test(body.catchId))) throw failure("invalid_request", 400);
-  if (body.action === "species" && (typeof body.photoId !== "string" || !ID.test(body.photoId))) throw failure("invalid_request", 400);
+  if ((speciesAction || body.action === "story") && (typeof body.catchId !== "string" || !ID.test(body.catchId))) throw failure("invalid_request", 400);
+  if (speciesAction && (typeof body.photoId !== "string" || !ID.test(body.photoId))) throw failure("invalid_request", 400);
+  if (body.action === "home" && (typeof body.fingerprint !== "string" || body.fingerprint.length > 128 || !/^[A-Za-z0-9_-]+$/.test(body.fingerprint))) throw failure("invalid_request", 400);
   if (body.action === "story" && !TASKS.includes(body.task)) throw failure("invalid_request", 400);
   if (body.action === "consent.update" && (body.version !== AI_CONSENT_VERSION || !validCapabilities(body.capabilities)
-    || !Number.isSafeInteger(body.expectedRevision) || body.expectedRevision < 0)) throw failure("invalid_request", 400);
+    || !Number.isSafeInteger(body.expectedRevision) || body.expectedRevision < 0
+    || (Object.hasOwn(body, "automaticSpecies") && typeof body.automaticSpecies !== "boolean"))) throw failure("invalid_request", 400);
   return body;
 }
 
@@ -78,7 +83,9 @@ function boundedSummary(summary) {
 // and the already verified zero-cost provider configuration; nothing activates here.
 export function createAiApplicationApi({ enabled = false, features = AI_FEATURES, providerName = "cloudflare", modelId,
   verifyToken, getConsent, setConsent, getOwnedPhoto, getOwnedCatch, listOwnedCatches,
-  getCachedResult, saveResult, consumeRateLimit, speciesProvider, textProvider, analysisProvider } = {}) {
+  getCachedResult, saveResult, consumeRateLimit, speciesProvider, textProvider, analysisProvider,
+  getOwnedPhotoIdentity, claimRequest, finishRequest, homeProvider, getOwnedContext, buildHomeAnalysis,
+  diagnostic = safeAiDiagnostic, now = () => Date.now() } = {}) {
   const checkConsent = async (uid, capability, expectedRevision = null) => {
     const consent = await getConsent(uid);
     if (consent?.ownerId !== uid || !consentView(consent) || !hasAiConsent(consent, capability, providerName)
@@ -96,6 +103,7 @@ export function createAiApplicationApi({ enabled = false, features = AI_FEATURES
     let uid;
     try { uid = (await verifyToken(token))?.uid; } catch { return send(res, 401, { error: "authentication_required" }); }
     if (typeof uid !== "string" || !ID.test(uid)) return send(res, 401, { error: "authentication_required" });
+    let leaseKey = null, leaseTicket = null;
     try {
       if (body.action === "consent.get") {
         const consent = await getConsent(uid);
@@ -103,23 +111,35 @@ export function createAiApplicationApi({ enabled = false, features = AI_FEATURES
       }
       if (["consent.update", "consent.revoke"].includes(body.action)) {
         const value = await setConsent(uid, body.action === "consent.revoke" ? { revoke: true }
-          : { version: body.version, capabilities: body.capabilities, expectedRevision: body.expectedRevision });
+          : { version: body.version, capabilities: body.capabilities, expectedRevision: body.expectedRevision,
+            ...(Object.hasOwn(body, "automaticSpecies") ? { automaticSpecies: body.automaticSpecies } : {}) });
         return send(res, 200, { consent: consentView(value), ...(value.cleanupPending ? { cleanupPending: true } : {}) });
       }
-      const capability = body.action === "story" ? "stories" : body.action;
-      const provider = capability === "species" ? speciesProvider : capability === "stories" ? textProvider : analysisProvider;
+      const capability = body.action.startsWith("species") ? "species" : body.action === "home" ? "recommendations" : body.action === "story" ? "stories" : body.action;
+      const provider = body.action === "home" ? homeProvider : capability === "species" ? speciesProvider : capability === "stories" ? textProvider : analysisProvider;
       if (features[capability] !== true || typeof provider !== "function"
         || ![consumeRateLimit, getCachedResult, saveResult].every((fn) => typeof fn === "function")) throw failure("ai_disabled", 503);
       const consent = await checkConsent(uid, capability);
       let result, sourceHash, source, photo;
       if (capability === "species") {
         if (typeof getOwnedPhoto !== "function") throw failure("ai_disabled", 503);
-        photo = await getOwnedPhoto(uid, body.catchId, body.photoId);
+        photo = await (getOwnedPhotoIdentity ?? getOwnedPhoto)(uid, body.catchId, body.photoId);
         if (photo?.ownerId !== uid || photo.catchId !== body.catchId || photo.photoId !== body.photoId || photo.deleted) throw failure("photo_not_found", 404);
-        if (!(photo.bytes instanceof Uint8Array) || !photo.bytes.length || photo.bytes.length > 2 * 1024 * 1024
-          || photo.metadataStripped !== true || !["image/jpeg", "image/png", "image/webp"].includes(photo.mimeType)
+        if ((!getOwnedPhotoIdentity && (!(photo.bytes instanceof Uint8Array) || !photo.bytes.length || photo.bytes.length > 2 * 1024 * 1024
+          || photo.metadataStripped !== true)) || !["image/jpeg", "image/png", "image/webp"].includes(photo.mimeType)
           || !SHA.test(photo.sourceSha256 ?? "")) throw failure("unsupported_photo", 422);
+        if (body.action === "species.auto") {
+          if (!consent.automaticSpecies || !Number.isFinite(Date.parse(consent.automaticSpeciesFrom))) throw failure("consent_required", 403);
+          if (photo.confirmed || photo.captureMode !== "quick" || Date.parse(photo.createdAt) < Date.parse(consent.automaticSpeciesFrom)
+            || !Number.isFinite(Date.parse(photo.createdAt))) return send(res, 200, { status: "ineligible" });
+        }
         sourceHash = hash([body.catchId, body.photoId, photo.sourceSha256]);
+      } else if (body.action === "home") {
+        if (typeof getOwnedContext !== "function" || typeof buildHomeAnalysis !== "function") throw failure("ai_disabled", 503);
+        source = buildHomeAnalysis(await getOwnedContext(uid));
+        if (source.fingerprint !== body.fingerprint) throw failure("source_changed", 409);
+        if (!source.providerSummary?.candidates?.length) throw failure("insufficient_data", 422);
+        sourceHash = hash([source.version, source.fingerprint]);
       } else if (capability === "stories") {
         if (typeof getOwnedCatch !== "function") throw failure("ai_disabled", 503);
         source = await getOwnedCatch(uid, body.catchId);
@@ -137,12 +157,14 @@ export function createAiApplicationApi({ enabled = false, features = AI_FEATURES
         if (!analysis.providerSummary.count) throw failure("insufficient_data", 422);
         sourceHash = hash([analysis.providerSummary, analysis.evidenceIds, source.truncated]);
       }
-      const key = hash(["ai-v1", capability, modelId, sourceHash]);
+      const key = hash(["ai-v1", body.action === "home" ? "home" : capability, modelId, sourceHash]);
+      if (body.action === "species.status" && photo.confirmed) return send(res, 200, { status: "confirmed", sourceSha256: photo.sourceSha256 });
       const cached = await getCachedResult(uid, key);
-      if (cached?.ownerId === uid && cached.type === body.action && cached.provider === providerName
+      if (cached?.ownerId === uid && cached.type === (capability === "species" ? "species" : body.action) && cached.provider === providerName
         && cached.modelId === modelId && cached.sourceHash === sourceHash && cached.consentRevision === consent.revision) {
         await checkConsent(uid, capability, consent.revision);
         if (capability === "species") return send(res, 200, { ...validateSpeciesSuggestion(cached.result), sourceSha256: photo.sourceSha256 });
+        if (body.action === "home") return send(res, 200, { ...cached.result, consentRevision: consent.revision });
         if (capability === "stories") {
           createStoryDraft(source.notes, cached.result?.text, body.task);
           return send(res, 200, { ...cached.result, originalNotes: source.notes, sourceNotes: source.notes,
@@ -151,12 +173,35 @@ export function createAiApplicationApi({ enabled = false, features = AI_FEATURES
         const validated = validateAnalysisOutput({ text: cached.result?.text, evidenceKeys: cached.result?.evidenceKeys });
         return send(res, 200, { ...cached.result, ...validated });
       }
+      if (body.action === "species.status") return send(res, 200, { status: photo.confirmed ? "confirmed" : "pending", sourceSha256: photo.sourceSha256 });
       // Consent and source authority are checked before quota consumption. Cache
       // hits never consume another inference reservation.
       await checkConsent(uid, capability, consent.revision);
-      if (!await consumeRateLimit(uid)) throw failure("rate_limited", 429);
+      if (claimRequest) {
+        leaseKey = key;
+        leaseTicket = await claimRequest(uid, key, { consentRevision: consent.revision });
+      }
+      let speciesPayload = null;
+      if (capability === "species") {
+        try { speciesPayload = getOwnedPhotoIdentity ? await getOwnedPhoto(uid, body.catchId, body.photoId) : photo; }
+        catch { throw failure("photo_unavailable", 503); }
+        if (!speciesPayload || speciesPayload.sourceSha256 !== photo.sourceSha256) throw failure("source_changed", 409);
+        if (!(speciesPayload.bytes instanceof Uint8Array) || !speciesPayload.bytes.length || speciesPayload.bytes.length > 2 * 1024 * 1024
+          || speciesPayload.metadataStripped !== true) throw failure("unsupported_photo", 422);
+        await checkConsent(uid, capability, consent.revision);
+      }
+      const quota = await consumeRateLimit(uid, { capability });
+      if (quota !== true && quota?.allowed !== true) throw new AiServiceError(quota?.code ?? "quota_unavailable", { retryAt: quota?.retryAt });
       await checkConsent(uid, capability, consent.revision);
-      if (capability === "species") result = validateSpeciesSuggestion(await provider({ bytes: photo.bytes, mimeType: photo.mimeType }));
+      if (capability === "species") {
+        result = validateSpeciesSuggestion(await provider({ bytes: speciesPayload.bytes, mimeType: speciesPayload.mimeType }));
+      } else if (body.action === "home") {
+        const output = await provider({ summary: source.providerSummary });
+        if (typeof output?.text !== "string" || !output.text.trim() || output.text.length > 3000) throw new AiServiceError("invalid_ai_response");
+        if (buildHomeAnalysis(await getOwnedContext(uid)).fingerprint !== source.fingerprint) throw failure("source_changed", 409);
+        result = { status: "generated", text: output.text.trim(), fingerprint: source.fingerprint, modelVersion: source.version,
+          consentRevision: consent.revision, evidenceIds: source.strongest.evidenceIds, generatedAt: new Date(now()).toISOString() };
+      }
       else if (capability === "stories") {
         const output = await provider({ notes: source.notes, action: body.task });
         result = { ...createStoryDraft(source.notes, output?.text, body.task), task: body.task, catchId: body.catchId,
@@ -171,13 +216,20 @@ export function createAiApplicationApi({ enabled = false, features = AI_FEATURES
             ...(source.truncated ? ["Zpracováno nejvýše 500 posledních synchronizovaných úlovků."] : [])] };
       }
       await checkConsent(uid, capability, consent.revision);
-      const stored = await saveResult(uid, key, { ownerId: uid, type: body.action, provider: providerName, modelId, sourceHash,
+      const stored = await saveResult(uid, key, { ownerId: uid, type: capability === "species" ? "species" : body.action, provider: providerName, modelId, sourceHash,
         ...(body.catchId ? { catchId: body.catchId } : {}), ...(body.photoId ? { photoId: body.photoId, photoSha256: photo.sourceSha256 } : {}), result },
-      { capability, consentRevision: consent.revision, ...(source?.notes !== undefined ? { expectedNotes: source.notes } : {}) });
+      { capability, consentRevision: consent.revision, automaticSpecies: body.action === "species.auto",
+        ...(source?.notes !== undefined ? { expectedNotes: source.notes } : {}) });
       if (!stored) throw failure("source_changed", 409);
+      if (leaseTicket) await finishRequest?.(uid, leaseKey, leaseTicket).catch(() => {});
       return send(res, 200, capability === "species" ? { ...result, sourceSha256: photo.sourceSha256 } : result);
-    } catch (error) {
-      const known = ["invalid_request", "consent_conflict", "consent_required", "ai_disabled", "photo_not_found", "unsupported_photo",
+    } catch (caught) {
+      const error = caught instanceof TypeError ? new AiServiceError("invalid_ai_response") : caught;
+      if (leaseTicket) await finishRequest?.(uid, leaseKey, leaseTicket, { code: error.aiCode ?? "unavailable",
+        retryAt: error.retryAt ?? new Date(now() + 5 * 60_000).toISOString() }).catch(() => {});
+      diagnostic(error);
+      if (error instanceof AiServiceError) return send(res, error.aiStatus, { error: error.aiCode, ...(error.retryAt ? { retryAt: error.retryAt } : {}) });
+      const known = ["invalid_request", "consent_conflict", "consent_required", "ai_disabled", "photo_not_found", "photo_unavailable", "unsupported_photo",
         "catch_not_found", "unsupported_notes", "journal_unavailable", "insufficient_data", "rate_limited", "invalid_ai_response", "source_changed", "account_unavailable"];
       return send(res, known.includes(error?.aiCode) ? error.aiStatus : 503,
         { error: known.includes(error?.aiCode) ? error.aiCode : "ai_unavailable" });
@@ -214,7 +266,10 @@ export function createFirebaseAiApplicationDependencies({ env, admin = () => get
         const timestamp = new Date(now()).toISOString();
         const consent = { ownerId: uid, version: AI_CONSENT_VERSION, provider: "cloudflare", capabilities,
           grantedAt: granted ? timestamp : previous?.grantedAt ?? null, revokedAt: granted ? null : timestamp,
-          revision: revision + 1, updatedAt: timestamp };
+          revision: revision + 1, updatedAt: timestamp,
+          automaticSpecies: !values.revoke && capabilities.species && (values.automaticSpecies ?? previous?.automaticSpecies) === true,
+          automaticSpeciesFrom: !values.revoke && capabilities.species && (values.automaticSpecies ?? previous?.automaticSpecies) === true
+            ? previous?.automaticSpecies === true ? previous.automaticSpeciesFrom ?? timestamp : timestamp : null };
         transaction.set(ref, consent);
         return consent;
       });
@@ -251,6 +306,18 @@ export function createFirebaseAiApplicationDependencies({ env, admin = () => get
       const snapshot = await db.collection(`users/${uid}/catches`).orderBy("caughtAt", "desc").limit(501).get();
       return { records: snapshot.docs.slice(0, 500).map((doc) => doc.data()).filter((record) => own(record, uid, record.id)), truncated: snapshot.size > 500 };
     },
+    getOwnedContext: async (uid) => {
+      requireIdentity(uid);
+      const { db } = await admin();
+      if ((await db.doc(`accountDeletions/${uid}`).get()).exists) throw failure("account_unavailable", 403);
+      const read = async name => {
+        const snapshot = await db.collection(`users/${uid}/${name}`).limit(501).get();
+        if (snapshot.size > 500) throw failure("journal_unavailable", 503);
+        return snapshot.docs.map(doc => doc.data()).filter(record => own(record, uid, record.id));
+      };
+      const [catches, trips, waters] = await Promise.all([read("catches"), read("trips"), read("waters")]);
+      return { catches, trips, waters };
+    },
     getCachedResult: async (uid, key) => {
       requireIdentity(uid);
       if (!SHA.test(key)) return null;
@@ -260,7 +327,7 @@ export function createFirebaseAiApplicationDependencies({ env, admin = () => get
       const result = snapshot.exists ? snapshot.data() : null;
       return result?.ownerId === uid ? result : null;
     },
-    saveResult: async (uid, key, entry, { capability, consentRevision, expectedNotes } = {}) => {
+    saveResult: async (uid, key, entry, { capability, consentRevision, expectedNotes, automaticSpecies = false } = {}) => {
       requireIdentity(uid);
       if (!SHA.test(key) || entry.ownerId !== uid || !CAPABILITIES.includes(capability)) return false;
       const { db } = await admin();
@@ -274,6 +341,7 @@ export function createFirebaseAiApplicationDependencies({ env, admin = () => get
           const snapshot = await transaction.get(db.doc(`users/${uid}/catches/${entry.catchId}`));
           const record = snapshot.exists ? snapshot.data() : null;
           if (!own(record, uid, entry.catchId) || (expectedNotes !== undefined && record.notes !== expectedNotes)) return false;
+          if (automaticSpecies && (record.speciesKey || record.quickCatch?.provenance?.speciesKey === "manual")) return false;
           if (entry.photoId) {
             if (!ID.test(entry.photoId) || record.photoRefs?.[entry.photoId] !== true) return false;
             const photoSnapshot = await transaction.get(db.doc(`users/${uid}/catches/${entry.catchId}/photos/${entry.photoId}`));

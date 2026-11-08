@@ -63,6 +63,8 @@ async function deleteJournalScope(scope) {
   ];
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(stores, "readwrite");
+    deleteMatchingRecords(transaction.objectStore(APP_META_STORE_NAME), record => record.scopeKey === scope.scopeKey
+      && ["homePersonalInsight", "automaticSpecies"].includes(record.kind));
     transaction.objectStore(APP_META_STORE_NAME).put({ key: quickCaptureGenerationKey(scope.scopeKey), generation: crypto.randomUUID() });
     deleteIndexMatches(transaction.objectStore(CATCH_STORE_NAME), "scopeKey", scope.scopeKey);
     deleteIndexMatches(transaction.objectStore(TRIP_STORE_NAME), "scopeKey", scope.scopeKey);

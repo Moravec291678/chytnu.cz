@@ -1,6 +1,6 @@
 export const PRIVACY_POLICY = Object.freeze({
   title: "Zásady ochrany osobních údajů",
-  lastUpdated: "5. listopadu 2026",
+  lastUpdated: "8. listopadu 2026",
   sections: [
     {
       heading: "1. Správce osobních údajů",
@@ -58,6 +58,7 @@ export const PRIVACY_POLICY = Object.freeze({
       heading: "6a. Volitelná umělá inteligence",
       paragraphs: [
         "Externí funkce používají Cloudflare Workers AI s modelem Google Gemma 4 26B A4B. Model je provozován Cloudflare; nejde o odesílání do Gemini API. Dostupnost závisí na konfiguraci a bezplatné kapacitě služby. Oprávnění uděluješ zvlášť pro rozpoznávání ryb, vysvětlení deníku, doporučení a pomoc s historkami; samotné vytvoření účtu ani fotografie není souhlasem s AI.",
+        "Automatické rozpoznávání nových rychlých úlovků povoluješ zvláštní volbou v nastavení. Po jejím uložení se způsobilé nové fotografie odešlou ke zpracování po dokončení nahrání, bez dalšího tlačítka. Při chybě připojení nebo nedostupné bezplatné kapacitě požadavek počká. Odvolání souhlasu zastaví další odesílání; již probíhající zpracování nelze vzít zpět. Při pozastavené aplikaci není pokračování na pozadí zaručené.",
         "Pro rozpoznání ryby odešleme obraz vybrané fotografie a katalog druhů. Z fotografie před odesláním odstraníme vložené EXIF údaje, včetně GPS a času pořízení. Obraz může stále obsahovat obličeje nebo místo viditelné na fotografii; vybírej jen snímky, které máš právo takto zpracovat. Přesné GPS souřadnice ani další údaje z deníku k fotografii nepřidáváme.",
         "Pro vysvětlení deníku a doporučení se nejprve vypočítají statistiky v aplikaci a externí model obdrží odvozené souhrny, nikoli celý deník, fotografie nebo přesné GPS. Pro historky odešleme pouze poznámky, které k dané úpravě vybereš. Text sám může obsahovat osobní údaje nebo popis místa; neposílej údaje, které k úpravě nejsou potřebné.",
         "Cloudflare uvádí, že obsah standardních nestavových požadavků Workers AI nepoužívá k tréninku modelů a neuchovává ho déle, než vyžaduje zpracování a doručení odpovědi. Mohou platit právní a bezpečnostní výjimky a uchovávat se provozní metadata. Nejde o záruku absolutní nulové retence ani zpracování výhradně v EU. Pro aplikaci se nepoužívá ukládání obsahu do AI Gateway ani placený náhradní poskytovatel.",

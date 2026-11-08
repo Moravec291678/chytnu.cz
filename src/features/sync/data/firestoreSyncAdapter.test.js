@@ -129,3 +129,10 @@ test("one invalid or duplicate photo metadata record is isolated from valid Catc
   assert.ok(diagnostics.every((item) => item.syncStage === "pull:photos"));
   assert.doesNotMatch(JSON.stringify(diagnostics), /angler-a|catch-1|valid-1/);
 });
+
+test("trip remote projection includes optional defaults but leaves legacy documents compatible", () => {
+  const remote = toRemoteRecord("trip", { id: "t", ownerId: "owner", waterId: "water-1", baitKeys: ["corn"] }, "owner");
+  assert.equal(remote.waterId, "water-1"); assert.deepEqual(remote.baitKeys, ["corn"]);
+  const legacy = toRemoteRecord("trip", { id: "t", ownerId: "owner" }, "owner");
+  assert.equal(Object.hasOwn(legacy, "waterId"), false); assert.equal(Object.hasOwn(legacy, "baitKeys"), false);
+});

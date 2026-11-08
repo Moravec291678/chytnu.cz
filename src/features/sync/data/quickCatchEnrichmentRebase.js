@@ -1,4 +1,5 @@
 import { mergeQuickCatchEnrichment } from "../../catches/data/quickCatchEnrichment.js";
+import { ENVIRONMENT_FIELDS } from "../../catches/data/catchEnvironment.js";
 
 const SOURCES = new Set(["device", "exif", "gps", "weather_api", "derived"]);
 const CONDITION_FIELDS = ["airTempC", "pressureHpa", "windKmh"];
@@ -74,6 +75,10 @@ export function rebaseQuickCatchEnrichment(remote, local) {
     && withLocation.coordinates?.latitude === local.coordinates?.latitude
     && withLocation.coordinates?.longitude === local.coordinates?.longitude;
   if (sameWeatherContext) {
+    patch.values.environment = local.quickCatch.environment;
+    for (const field of [...Object.keys(ENVIRONMENT_FIELDS), "astronomy", "weather"]) {
+      if (auto(field) || field === "weather") patch.provenance[field] = field === "astronomy" ? "derived" : "weather_api";
+    }
     patch.values.conditions = {};
     for (const field of CONDITION_FIELDS) {
       if (auto(field) && provenance[field] === "weather_api" && local.conditionSources?.[field] === "auto") {

@@ -115,7 +115,7 @@ test("species cache reuses only matching owner/model/photo identity and does not
 });
 
 test("quota denial and invalid provider output never mutate a catch or save a fabricated result", async () => {
-  const denied = fixture({ consumeRateLimit: async () => false });
+  const denied = fixture({ consumeRateLimit: async () => ({ allowed: false, code: "user_daily_limit", retryAt: "2026-11-05T00:00:00Z" }) });
   assert.equal((await call(denied.handler, { action: "species", catchId: "catch-1", photoId: "photo-1" })).code, 429);
   assert.equal(denied.state.calls.species, 0);
   assert.equal(denied.state.calls.save, 0);
@@ -287,4 +287,69 @@ test("partial capability revocation invalidates older caches and cleanup failure
   assert.equal(revoked.cleanupPending, true);
   assert.ok(revoked.revokedAt);
   assert.ok(Object.values((await deps.getConsent("owner")).capabilities).every((value) => !value));
+});
+
+test("automatic species is separately opt-in and status reads never consume quota", async () => {
+  const setup = fixture();
+  setup.state.photo.captureMode = "quick"; setup.state.photo.createdAt = "2026-11-04T11:00:00Z";
+  assert.equal((await call(setup.handler, { action: "species.auto", catchId: "catch-1", photoId: "photo-1" })).code, 403);
+  assert.equal(setup.state.calls.quota, 0);
+  setup.state.consent.automaticSpecies = true; setup.state.consent.automaticSpeciesFrom = "2026-11-04T10:00:00Z";
+  const pending = await call(setup.handler, { action: "species.status", catchId: "catch-1", photoId: "photo-1" });
+  assert.equal(pending.body.status, "pending"); assert.equal(setup.state.calls.quota, 0);
+  const result = await call(setup.handler, { action: "species.auto", catchId: "catch-1", photoId: "photo-1" });
+  assert.equal(result.code, 200); assert.equal(result.body.speciesKey, "commonCarp");
+  await call(setup.handler, { action: "species.status", catchId: "catch-1", photoId: "photo-1" });
+  assert.equal(setup.state.calls.species, 1); assert.equal(setup.state.calls.quota, 1);
+  setup.state.photo.confirmed = true;
+  assert.equal((await call(setup.handler, { action: "species.status", catchId: "catch-1", photoId: "photo-1" })).body.status, "confirmed");
+  assert.equal((await call(setup.handler, { action: "species.auto", catchId: "catch-1", photoId: "photo-1" })).body.status, "ineligible");
+});
+
+test("structured application/provider errors expose safe codes and known reset only", async () => {
+  const { AiServiceError } = await import("./aiServiceError.js");
+  for (const code of ["user_daily_limit", "app_daily_limit", "text_daily_limit", "provider_quota", "quota_unavailable"]) {
+    const setup = fixture({ consumeRateLimit: async () => ({ allowed: false, code, retryAt: "2026-11-09T00:00:00Z" }), diagnostic() {} });
+    const result = await call(setup.handler, { action: "species", catchId: "catch-1", photoId: "photo-1" });
+    assert.equal(result.body.error, code); assert.equal(result.body.retryAt, "2026-11-09T00:00:00Z");
+    assert.equal(setup.state.calls.species, 0);
+  }
+  const setup = fixture({ speciesProvider: async () => { throw new AiServiceError("provider_auth", { providerCode: 10000 }); }, diagnostic() {} });
+  const result = await call(setup.handler, { action: "species", catchId: "catch-1", photoId: "photo-1" });
+  assert.deepEqual(result.body, { error: "provider_auth" });
+});
+
+test("Home rechecks owned deterministic fingerprint, caches prose and rejects stale or thin evidence before inference", async () => {
+  const report = { version: "personal-fishing-v1", fingerprint: "c".repeat(32), providerSummary: { candidates: [{ candidate: 1 }] },
+    strongest: { evidenceIds: ["catch-1"] } };
+  let generations = 0;
+  const setup = fixture({ getOwnedContext: async () => ({ catches: [record()] }), buildHomeAnalysis: () => report,
+    homeProvider: async () => { generations++; return { text: "Porovnej podobné výpravy se stejnou metodou." }; } });
+  assert.equal((await call(setup.handler, { action: "home", fingerprint: "b".repeat(32) })).code, 409);
+  const first = await call(setup.handler, { action: "home", fingerprint: report.fingerprint });
+  assert.equal(first.code, 200); assert.equal(first.body.modelVersion, report.version);
+  const cached = await call(setup.handler, { action: "home", fingerprint: report.fingerprint });
+  assert.equal(cached.code, 200); assert.equal(generations, 1); assert.equal(setup.state.calls.quota, 1);
+  report.providerSummary.candidates = [];
+  assert.equal((await call(setup.handler, { action: "home", fingerprint: report.fingerprint })).code, 422);
+  assert.equal(generations, 1);
+});
+
+test("automatic consent starts only at explicit opt-in, retains its original epoch, and revokes with photo permission", async () => {
+  const db = fakeFirestore();
+  const deps = createFirebaseAiApplicationDependencies({ env: {}, admin: async () => ({ db }), now: () => Date.parse("2026-11-08T10:00:00Z") });
+  const enabled = await deps.setConsent("owner", { version: 1, capabilities, expectedRevision: 0, automaticSpecies: true });
+  assert.equal(enabled.automaticSpecies, true); assert.equal(enabled.automaticSpeciesFrom, "2026-11-08T10:00:00.000Z");
+  const updated = await deps.setConsent("owner", { version: 1, capabilities, expectedRevision: 1 });
+  assert.equal(updated.automaticSpeciesFrom, enabled.automaticSpeciesFrom);
+  const revoked = await deps.setConsent("owner", { version: 1, expectedRevision: 2, capabilities: { ...capabilities, species: false } });
+  assert.equal(revoked.automaticSpecies, false); assert.equal(revoked.automaticSpeciesFrom, null);
+});
+
+test("unavailable image preflight consumes no inference reservation", async () => {
+  const setup = fixture({ getOwnedPhotoIdentity: async () => ({ ...photo(), bytes: undefined }),
+    getOwnedPhoto: async () => { throw new Error("private signed URL failure"); }, diagnostic() {} });
+  const result = await call(setup.handler, { action: "species", catchId: "catch-1", photoId: "photo-1" });
+  assert.equal(result.code, 503); assert.equal(result.body.error, "photo_unavailable");
+  assert.equal(setup.state.calls.quota, 0); assert.equal(setup.state.calls.species, 0);
 });

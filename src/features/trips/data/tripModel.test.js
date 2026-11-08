@@ -75,3 +75,14 @@ test("trip species are deduplicated by key, with a name fallback for legacy catc
   ];
   assert.deepEqual(getDistinctTripSpecies(catches), [catches[0], catches[2]]);
 });
+
+test("optional trip defaults survive edits and legacy trips remain compatible", () => {
+  const trip = createTripRecord({ waterId: "water-1", baitKeys: ["worm", "worm", "corn"] }, new Date("2026-11-08T10:00:00Z"));
+  assert.deepEqual(trip.baitKeys, ["worm", "corn"]);
+  const updated = updateTripRecord(trip, { ...tripToForm(trip), title: "Pokus", baitKeys: ["corn"] }, new Date("2026-11-08T12:00:00Z"));
+  assert.equal(updated.waterId, "water-1"); assert.deepEqual(updated.baitKeys, ["corn"]);
+  const legacy = tripToForm({ title: "Starší", startedAt: "2026-01-01T10:00:00Z" });
+  assert.equal(legacy.waterId, ""); assert.deepEqual(legacy.baitKeys, []);
+  assert.throws(() => createTripRecord({ waterId: "../other" }));
+  assert.throws(() => createTripRecord({ baitKeys: Array.from({ length: 6 }, (_, index) => `bait-${index}`) }));
+});

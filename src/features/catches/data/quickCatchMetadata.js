@@ -1,9 +1,11 @@
+import { normalizeCatchEnvironment, ENVIRONMENT_FIELDS } from "./catchEnvironment.js";
 // Deliberately bounded: photo bytes, GPS, notes and provider responses belong to
 // their existing fields, never to this bookkeeping envelope.
 export const QUICK_CATCH_PROVENANCE_FIELDS = Object.freeze([
   "caughtAt", "coordinates", "tripId", "locationName", "waterId", "waterNumber",
   "method", "baits", "moonPhase", "airTempC", "pressureHpa", "windKmh",
   "speciesKey", "lengthCm", "weightKg", "gpsLocation", "notes", "result",
+  ...Object.keys(ENVIRONMENT_FIELDS), "astronomy",
 ]);
 export const QUICK_CATCH_SOURCES = Object.freeze([
   "manual", "device", "exif", "active_trip", "saved_water", "gps", "weather_api", "derived", "ai_suggestion",
@@ -45,6 +47,8 @@ export function normalizeQuickCatchMetadata(value) {
       result.enrichment[step] = { status: job.status, attempts: job.attempts, nextAttemptAt: job.nextAttemptAt ?? null };
     }
   }
+  const environment = normalizeCatchEnvironment(value.environment);
+  if (environment) result.environment = environment;
   return result;
 }
 

@@ -398,3 +398,26 @@ test("legacy Waters deletion removes only rows with matching scope and leaves un
   assert.deepEqual(waters.map((item) => item.id).sort(), ["legacy-water-b", "legacy-water-unowned"]);
   assert.deepEqual(chats.map((item) => item.id), ["legacy-chat-b"]);
 });
+
+test("local deletion clears only known scoped AI cache kinds and preserves guest identity and unrelated metadata", async () => {
+  const guest = { scopeKey: await getActiveGuestScopeKey(), ownerId: null };
+  const db = await openLocalDatabase();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(APP_META_STORE_NAME, "readwrite"), store = tx.objectStore(APP_META_STORE_NAME);
+    store.put({ key: "home-cleanup", kind: "homePersonalInsight", scopeKey: guest.scopeKey, ownerId: null, result: { text: "private" } });
+    store.put({ key: "auto-cleanup", kind: "automaticSpecies", scopeKey: guest.scopeKey, ownerId: null });
+    store.put({ key: "other-metadata", scopeKey: guest.scopeKey, value: "retain" });
+    store.put({ key: "other-account-ai", kind: "homePersonalInsight", scopeKey: "account:other-meta", ownerId: "other-meta" });
+    tx.oncomplete = resolve; tx.onerror = () => reject(tx.error);
+  }); db.close();
+  await deleteLocalScopeData(guest, memoryStorage());
+  assert.equal(await getActiveGuestScopeKey(), guest.scopeKey);
+  const verify = await openLocalDatabase();
+  const records = await new Promise((resolve, reject) => {
+    const tx = verify.transaction(APP_META_STORE_NAME, "readonly"), request = tx.objectStore(APP_META_STORE_NAME).getAll();
+    request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error);
+  }); verify.close();
+  assert.equal(records.some(item => ["home-cleanup", "auto-cleanup"].includes(item.key)), false);
+  assert.ok(records.some(item => item.key === "other-metadata"));
+  assert.ok(records.some(item => item.key === "other-account-ai"));
+});

@@ -238,7 +238,7 @@ service cloud.firestore {
 
     function validTripContent(data, userId, tripId) {
       return data.keys().hasOnly([
-          'schemaVersion', 'id', 'ownerId', 'entityType', 'title', 'locationName', 'methodKey',
+          'schemaVersion', 'id', 'ownerId', 'entityType', 'title', 'locationName', 'methodKey', 'waterId', 'baitKeys',
           'createdAt', 'updatedAt', 'startedAt', 'endedAt', 'deleted', 'deletedAt',
           'serverRevision', 'syncSequence', 'lastOperationId', 'clientLocalRevision',
           'operationDigest', 'lastReceiptId', 'photoState'
@@ -247,10 +247,21 @@ service cloud.firestore {
         && data.title is string
         && data.locationName is string
         && optionalString(data.methodKey)
+        && (data.get('waterId', null) == null || validPhotoId(data.waterId))
+        && validTripBaits(data.get('baitKeys', []))
         && data.createdAt is string
         && data.updatedAt is string
         && data.startedAt is string
         && optionalString(data.endedAt);
+    }
+
+    function validTripBaits(value) {
+      return value is list && value.size() <= 5
+        && (value.size() < 1 || (value[0] is string && value[0].matches('^[A-Za-z0-9_-]{1,64}$')))
+        && (value.size() < 2 || (value[1] is string && value[1].matches('^[A-Za-z0-9_-]{1,64}$')))
+        && (value.size() < 3 || (value[2] is string && value[2].matches('^[A-Za-z0-9_-]{1,64}$')))
+        && (value.size() < 4 || (value[3] is string && value[3].matches('^[A-Za-z0-9_-]{1,64}$')))
+        && (value.size() < 5 || (value[4] is string && value[4].matches('^[A-Za-z0-9_-]{1,64}$')));
     }
 
     function validWaterContent(data, userId, waterId) {

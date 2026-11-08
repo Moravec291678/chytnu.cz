@@ -26,7 +26,7 @@ export function createQuickCapture(inputSource = "camera", now = new Date()) {
 }
 
 // One operation identity lives with the pending file, including failed-save retries.
-export async function prepareQuickCatch(file, capture, { trip = null, methods = [],
+export async function prepareQuickCatch(file, capture, { trip = null, methods = [], waters = [], baits = [],
   usedPhotoHashes = new Set(), prepare = preparePhotoForStorageAndUpload, readMetadata = readPhotoCaptureMetadata } = {}) {
   if (!(file instanceof Blob) || !file.size) throw new Error("Vyber platnou neprázdnou fotografii.");
   if (file.size > MAX_SOURCE_PHOTO_BYTES) throw new Error("Fotografii větší než 50 MB nelze zpracovat. Vyber menší soubor.");
@@ -38,7 +38,8 @@ export async function prepareQuickCatch(file, capture, { trip = null, methods = 
   const date = new Date(timestamp);
   const pad = value => String(value).padStart(2, "0");
   // An imported historical photograph must not inherit today's trip context.
-  const tripContext = buildQuickCatchContext({ trip, methods, capturedAt: timestamp });
+  const tripContext = capture.inputSource === "gallery" && automatic.provenance.caughtAt !== "exif"
+    ? { values: {}, provenance: {} } : buildQuickCatchContext({ trip, methods, waters, baits, capturedAt: timestamp });
   const form = { catchDate: `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`,
     catchTime: `${pad(date.getHours())}:${pad(date.getMinutes())}`, locationName: tripContext.values.locationName || "",
     waterId: "", waterNumber: "",
@@ -58,9 +59,9 @@ export async function prepareQuickCatch(file, capture, { trip = null, methods = 
   record.verification = evaluateCatchVerification({ photos: record.photos, coordinates: record.coordinates,
     gpsSource: record.gpsSource, caughtAt: record.caughtAt, tripId: record.tripId,
     activeTripId: tripContext.values.tripId, trips: trip ? [trip] : [], usedPhotoHashes, now: new Date(capture.capturedAt) });
-  record.quickCatch = { ...capture, provenance: { ...tripContext.provenance, ...automatic.provenance }, enrichment: {
+  record.quickCatch = { ...capture, ...(automatic.environment ? { environment: automatic.environment } : {}), provenance: { ...tripContext.provenance, ...automatic.provenance }, enrichment: {
     metadata: { status: "pending", attempts: 0, nextAttemptAt: null },
-    weather: { status: "pending", attempts: 0, nextAttemptAt: null },
+    weather: { status: capture.inputSource === "gallery" && automatic.provenance.caughtAt !== "exif" ? "unavailable" : "pending", attempts: 0, nextAttemptAt: null },
   } };
   delete record.quickCatch.id;
   delete record.quickCatch.photoId;

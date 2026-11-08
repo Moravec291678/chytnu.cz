@@ -136,6 +136,8 @@ export function toRemoteRecord(entityType, record, ownerId) {
       title: requireValue(record.title, ""),
       locationName: requireValue(record.locationName, ""),
       methodKey: requireValue(record.methodKey, null),
+      ...(record.waterId !== undefined ? { waterId: record.waterId || null } : {}),
+      ...(record.baitKeys !== undefined ? { baitKeys: record.baitKeys } : {}),
       startedAt: requireValue(record.startedAt, record.createdAt),
       endedAt: requireValue(record.endedAt, null),
     };

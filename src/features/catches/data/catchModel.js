@@ -5,6 +5,8 @@ import { hasCustomPhotoFrame, normalizePhotoFrame } from "./photoFraming.js";
 import { MAX_LEGACY_PHOTOS_PER_CATCH, MAX_PHOTOS_PER_CATCH, normalizePrimaryPhotoId } from "./catchPhotos.js";
 import { normalizeCatchVerification, normalizeLocationEvidence } from "./catchVerification.js";
 import { PRODUCT_LIMITS } from "../../../product/config/limits.js";
+import { ENVIRONMENT_FIELDS, ENVIRONMENT_LABELS, normalizeCatchEnvironment, calculateCatchAstronomy } from "./catchEnvironment.js";
+import { calculateMoonPhase } from "../../../shared/utils/moonPhase.js";
 
 const CONDITION_SOURCE_FIELDS = ["airTempC", "waterTempC", "pressureHpa", "windKmh", "moonPhase"];
 
@@ -58,6 +60,11 @@ export function validateCatchForm(data, { allowUnknownSpecies = false } = {}) {
   parseOptionalNumber(data.conditions?.waterTempC, "Teplota vody", errors, PRODUCT_LIMITS.catch.waterTempC);
   parseOptionalNumber(data.conditions?.pressureHpa, "Tlak", errors, PRODUCT_LIMITS.catch.pressureHpa);
   parseOptionalNumber(data.conditions?.windKmh, "Rychlost větru", errors, { max: PRODUCT_LIMITS.catch.windKmh });
+  for (const [field, [min, max]] of Object.entries(ENVIRONMENT_FIELDS)) {
+    parseOptionalNumber(data.environmentConditions?.[field], ENVIRONMENT_LABELS[field][0], errors, { min, max });
+  }
+  if (String(data.environmentConditions?.weatherCode ?? "").trim()
+    && !Number.isInteger(Number(String(data.environmentConditions.weatherCode).replace(",", ".")))) errors[ENVIRONMENT_LABELS.weatherCode[0]] = "Kód počasí musí být celé číslo.";
   return errors;
 }
 
@@ -85,7 +92,37 @@ export function createCatchRecord(data, species, methods, existing = null, baitC
   }
   const conditionSources = normalizeConditionSources(data.conditionSources ?? existing?.conditionSources, conditions);
   const now = new Date().toISOString();
-  const caughtAt = new Date(`${data.catchDate}T${data.catchTime || "12:00"}`).toISOString();
+  const selectedInstant = new Date(`${data.catchDate}T${data.catchTime || "12:00"}`).toISOString();
+  const caughtAt = existing && Math.floor(Date.parse(existing.caughtAt) / 60000) === Math.floor(Date.parse(selectedInstant) / 60000)
+    ? existing.caughtAt : selectedInstant;
+  let quickCatch = existing?.quickCatch;
+  if (quickCatch) {
+    const environment = normalizeCatchEnvironment(quickCatch.environment) ?? { conditions: {} };
+    const provenance = { ...quickCatch.provenance };
+    for (const field of Object.keys(ENVIRONMENT_FIELDS)) {
+      if (!Object.hasOwn(data.environmentConditions ?? {}, field)) continue;
+      const value = numeric(data.environmentConditions[field]);
+      if (value !== (environment.conditions[field] ?? null)) provenance[field] = "manual";
+      if (value === null) delete environment.conditions[field]; else environment.conditions[field] = value;
+    }
+    const coordinates = normalizeCoordinates(data.coordinates) ?? parseCoordinateText(data.gpsLocation);
+    const contextChanged = caughtAt !== existing.caughtAt || JSON.stringify(coordinates) !== JSON.stringify(existing.coordinates ?? null);
+    if (contextChanged) {
+      delete environment.weather;
+      for (const field of Object.keys(environment.conditions)) if (provenance[field] !== "manual") delete environment.conditions[field];
+      for (const field of ["airTempC", "pressureHpa", "windKmh"]) {
+        if (conditionSources[field] !== "auto") continue;
+        delete conditions[field]; delete conditionSources[field]; delete provenance[field];
+      }
+      if (conditionSources.moonPhase === "auto") conditions.moonPhase = calculateMoonPhase(data.catchDate, data.catchTime);
+    }
+    const astronomy = calculateCatchAstronomy(caughtAt, coordinates);
+    if (astronomy) { environment.astronomy = astronomy; provenance.astronomy = "derived"; }
+    else delete environment.astronomy;
+    quickCatch = { ...quickCatch, provenance,
+      ...(contextChanged ? { enrichment: { ...quickCatch.enrichment, weather: { status: "pending", attempts: 0, nextAttemptAt: null } } } : {}),
+      ...(normalizeCatchEnvironment(environment) ? { environment: normalizeCatchEnvironment(environment) } : { environment: null }) };
+  }
   const method = methods.find((item) => item.key === data.fishingMethod);
   const existingMethod = existing?.method?.key === data.fishingMethod ? existing.method : null;
   const existingBaits = new Map((existing?.baits ?? []).map((bait) => [bait.key, bait]));
@@ -107,6 +144,7 @@ export function createCatchRecord(data, species, methods, existing = null, baitC
   });
   return {
     ...(existing ?? {}),
+    ...(quickCatch ? { quickCatch } : {}),
     schemaVersion: 1,
     id: existing?.id ?? crypto.randomUUID(),
     createdAt: existing?.createdAt ?? now,
@@ -179,6 +217,7 @@ export function catchToForm(record) {
     bottomType: record.bottomType ?? "", speciesKey: record.speciesKey,
     resultKey: record.result ?? "unspecified", fishingMethod: record.method?.key ?? "",
     conditions,
+    environmentConditions: { ...(normalizeCatchEnvironment(record.quickCatch?.environment)?.conditions ?? {}) },
     conditionSources: normalizeConditionSources(record.conditionSources, conditions),
     photos: record.photos ?? [], baits: (record.baits ?? []).map((bait) => bait.key),
     primaryPhotoId: normalizePrimaryPhotoId(record.photos ?? [], record.primaryPhotoId),

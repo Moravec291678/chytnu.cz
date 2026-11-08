@@ -12,7 +12,19 @@ const MESSAGES = {
   disabled: "Tato AI funkce teď není zapnutá.", unauthenticated: "Pro AI se přihlas ke svému účtu.",
   account_changed: "Přihlášený účet se změnil. Otevři tuto stránku znovu.",
   quota_exceeded: "Bezplatný limit AI je pro dnešek vyčerpaný. Zkus to později.",
-  rate_limited: "AI teď zpracovává příliš mnoho požadavků. Zkus to později.",
+  rate_limited: "AI požadavek byl omezen. Úlovek je uložený; podrobnosti o limitu teď nejsou dostupné.",
+  user_daily_limit: "Pro dnešek jsi využil dostupné AI požadavky. Další budou dostupné po obnovení limitu.",
+  app_daily_limit: "Dnešní bezplatná kapacita AI je vyčerpaná. Místní funkce aplikace dál fungují.",
+  text_daily_limit: "Dnešní kapacita textových AI nástrojů je využitá. Zbývající kapacitu chráníme pro fotografie úlovků.",
+  provider_quota: "Bezplatný denní limit Cloudflare je vyčerpaný. Úlovky se dál ukládají; rozpoznání počká na obnovení kapacity.",
+  request_in_progress: "Tento návrh se už připravuje. Výsledek načteme, až bude hotový.",
+  provider_capacity: "AI je momentálně vytížená. Zkus to za chvíli.",
+  provider_throttled: "Poskytovatel AI požadavek omezil. Přesný typ omezení teď není dostupný. Úlovek zůstává uložený.",
+  provider_timeout: "AI neodpověděla včas. Tvůj deník a úlovky zůstávají uložené.",
+  provider_auth: "Spojení s poskytovatelem AI vyžaduje opravu nastavení. Úlovky se dál ukládají.",
+  provider_configuration: "Tato AI služba není správně nastavená. Místní funkce zůstávají dostupné.",
+  network_unavailable: "S AI se nepodařilo spojit. Tvůj deník a úlovky zůstávají uložené.",
+  quota_unavailable: "Dostupnou kapacitu AI se nepodařilo bezpečně ověřit. Zkus to později.",
   photo_not_ready: "Nejdřív nech fotografii nahrát po připojení. Úlovek už je uložený.",
   unavailable: "AI teď není dostupná. Zkus to později; tvé záznamy zůstávají uložené.",
   invalid_response: "AI nevrátila použitelný návrh. Zkus to později.",
@@ -23,7 +35,11 @@ const MESSAGES = {
   insufficient_data: "V synchronizovaném deníku zatím není dost podkladů. Místní přehled můžeš použít i bez AI.",
 };
 export class AiClientError extends Error {
-  constructor(code) { super(MESSAGES[code] ?? MESSAGES.unavailable); this.name = "AiClientError"; this.code = code; }
+  constructor(code, { retryAt = null } = {}) {
+    super(MESSAGES[code] ?? MESSAGES.unavailable); this.name = "AiClientError"; this.code = code;
+    this.retryAt = typeof retryAt === "string" && Number.isFinite(Date.parse(retryAt)) ? retryAt : null;
+    this.retryable = !["user_daily_limit", "app_daily_limit", "text_daily_limit", "provider_quota", "provider_throttled", "provider_auth", "provider_configuration", "consent_required", "disabled"].includes(code);
+  }
 }
 const identifier = (value) => typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value);
 const consentResult = (value) => value?.consent ? { ...value.consent, ...(value.cleanupPending === true ? { cleanupPending: true } : {}) } : null;
@@ -84,11 +100,11 @@ export function createAiClient({ ownerId = null, getOwnerId = firebaseAuth.curre
       if (controller.signal.aborted) throw new AiClientError("unavailable");
       if (!response.ok) {
         const rawCode = value?.error?.code ?? value?.error;
-        const aliases = { ai_disabled: "disabled", quota_blocked: "quota_exceeded", authentication_required: "unauthenticated",
-          invalid_ai_response: "invalid_response", source_changed: "stale_catch", unsupported_photo: "photo_not_ready", photo_not_found: "photo_not_ready",
+        const aliases = { ai_disabled: "disabled", quota_blocked: "quota_exceeded", authentication_required: "unauthenticated", account_unavailable: "account_changed",
+          invalid_ai_response: "invalid_response", source_changed: "stale_catch", unsupported_photo: "photo_not_ready", photo_not_found: "photo_not_ready", photo_unavailable: "photo_not_ready",
           unsupported_notes: "notes_required", insufficient_data: "insufficient_data" };
         const code = aliases[rawCode] ?? rawCode;
-        throw new AiClientError(typeof code === "string" ? code : "unavailable");
+        throw new AiClientError(typeof code === "string" ? code : "unavailable", { retryAt: value.retryAt });
       }
       return value;
     } catch (error) {
@@ -98,9 +114,32 @@ export function createAiClient({ ownerId = null, getOwnerId = firebaseAuth.curre
   }
   return {
     getConsent: (options) => request({ action: "consent.get" }, options).then(consentResult),
-    updateConsent: (capabilities, { expectedRevision = 0, ...options } = {}) => request({ action: "consent.update", version: AI_CONSENT_VERSION, expectedRevision,
+    updateConsent: (capabilities, { expectedRevision = 0, automaticSpecies, ...options } = {}) => request({ action: "consent.update", version: AI_CONSENT_VERSION, expectedRevision,
+      ...(typeof automaticSpecies === "boolean" ? { automaticSpecies } : {}),
       capabilities: Object.fromEntries(CAPABILITIES.map((key) => [key, capabilities?.[key] === true])) }, options).then(consentResult),
     revokeConsent: (options) => request({ action: "consent.revoke" }, options).then(consentResult),
+    async runHome({ fingerprint }, { consent, signal } = {}) {
+      if (!flags.recommendations) throw new AiClientError("disabled");
+      if (!hasAiConsent(consent, "recommendations", provider)) throw new AiClientError("consent_required");
+      if (!/^[a-f0-9]{32}$/.test(fingerprint ?? "")) throw new AiClientError("stale_catch");
+      const result = await request({ action: "home", fingerprint }, { signal });
+      if (result.status !== "generated" || result.fingerprint !== fingerprint || result.modelVersion !== "personal-fishing-v1"
+        || result.consentRevision !== consent.revision || typeof result.text !== "string" || !result.text.trim() || result.text.length > 3000
+        || !Number.isFinite(Date.parse(result.generatedAt)) || !Array.isArray(result.evidenceIds)
+        || !result.evidenceIds.length || result.evidenceIds.length > 500 || result.evidenceIds.some(id => !identifier(id))) throw new AiClientError("invalid_response");
+      return result;
+    },
+    async automaticSpecies({ catchId, photoId, statusOnly = false }, { consent, signal } = {}) {
+      if (!flags.species) throw new AiClientError("disabled");
+      if (!hasAiConsent(consent, "species", provider) || (!statusOnly && !consent.automaticSpecies)) throw new AiClientError("consent_required");
+      if (!identifier(catchId) || !identifier(photoId)) throw new AiClientError("invalid_response");
+      const result = await request({ action: statusOnly ? "species.status" : "species.auto", catchId, photoId }, { signal });
+      if (["pending", "confirmed", "ineligible"].includes(result.status)) return result;
+      const { sourceSha256, ...payload } = result;
+      if (!/^[a-f0-9]{64}$/.test(sourceSha256 ?? "")) throw new AiClientError("invalid_response");
+      try { return { ...validateSpeciesSuggestion(payload), sourceSha256 }; }
+      catch { throw new AiClientError("invalid_response"); }
+    },
     async run(capability, input, { consent, signal } = {}) {
       if (!CAPABILITIES.includes(capability) || flags[capability] !== true) throw new AiClientError("disabled");
       if (!hasAiConsent(consent, capability, provider)) throw new AiClientError("consent_required");

@@ -9,6 +9,7 @@ import { normalizeCatchVerification, normalizeLocationEvidence } from "../../cat
 import { createNotificationRecord } from "../../notifications/data/notificationModel.js";
 import { PRODUCT_LIMITS } from "../../../product/config/limits.js";
 import { normalizeQuickCatchMetadata } from "../../catches/data/quickCatchMetadata.js";
+import { normalizeTripDefaults } from "../../trips/data/tripModel.js";
 
 export const MAX_BACKUP_FILE_BYTES = PRODUCT_LIMITS.backupFileBytes;
 const MAX_PHOTO_BYTES = PRODUCT_LIMITS.photoBytes;
@@ -168,7 +169,9 @@ function decodeTrip(record) {
     fail(`Vycházka ${record.id} obsahuje neplatná synchronizační metadata.`);
   }
   if (record.endedAt && Date.parse(record.endedAt) < Date.parse(record.startedAt)) fail(`Vycházka ${record.id} končí před svým začátkem.`);
-  return { ...record, ownerId: null, sync: { status: "local", revision: Math.max(1, record.sync.revision) } };
+  let defaults;
+  try { defaults = Object.hasOwn(record, "waterId") || Object.hasOwn(record, "baitKeys") ? normalizeTripDefaults(record) : {}; } catch { fail(`Vycházka ${record.id} obsahuje neplatné výchozí údaje.`); }
+  return { ...record, ...defaults, ownerId: null, sync: { status: "local", revision: Math.max(1, record.sync.revision) } };
 }
 
 function requireUniqueIds(records, label) {

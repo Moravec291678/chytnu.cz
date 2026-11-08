@@ -1,9 +1,11 @@
 import { AI_FEATURES } from "../aiPolicy.js";
 import { createAiApplicationApi, createFirebaseAiApplicationDependencies } from "./aiApplicationApi.js";
 import { createFirebaseSpeciesDependencies } from "./productionSpeciesApi.js";
-import { CLOUDFLARE_ZERO_COST_MODEL, createCloudflareSpeciesProvider, createCloudflareTextProvider, createCloudflareAnalysisProvider } from "./cloudflareProvider.js";
+import { CLOUDFLARE_ZERO_COST_MODEL, createCloudflareSpeciesProvider, createCloudflareTextProvider, createCloudflareAnalysisProvider, createCloudflareHomeProvider } from "./cloudflareProvider.js";
+import { buildPersonalFishingAnalysis } from "../personalFishingAnalysis.js";
 import { createZeroCostQuota, blockZeroCostQuota } from "./zeroCostQuota.js";
 import { getAccountDeletionAdminContext } from "../../../server/cloudinaryApi.js";
+import { createAiRequestLease } from "./aiRequestLease.js";
 
 export function createProductionAiApplication({ env = globalThis.process?.env ?? {}, features = AI_FEATURES } = {}) {
   const enabled = Object.values(features).some(value => value === true) && env.AI_PROVIDER === "cloudflare"
@@ -17,13 +19,23 @@ export function createProductionAiApplication({ env = globalThis.process?.env ??
       } };
     return createAiApplicationApi({ enabled, features, providerName: "cloudflare", modelId: CLOUDFLARE_ZERO_COST_MODEL,
       ...createFirebaseSpeciesDependencies({ env }), ...createFirebaseAiApplicationDependencies({ env }),
-      consumeRateLimit: async uid => {
+      consumeRateLimit: async (uid, options) => {
         const { db, Timestamp } = await getAccountDeletionAdminContext(env);
-        return createZeroCostQuota({ db, Timestamp })(uid);
+        return createZeroCostQuota({ db, Timestamp, detailed: true })(uid, options);
+      },
+      claimRequest: async (uid, key, options) => {
+        const { db } = await getAccountDeletionAdminContext(env);
+        return createAiRequestLease({ db }).claim(uid, key, options);
+      },
+      finishRequest: async (uid, key, ticket, options) => {
+        const { db } = await getAccountDeletionAdminContext(env);
+        return createAiRequestLease({ db }).finish(uid, key, ticket, options);
       },
       speciesProvider: createCloudflareSpeciesProvider(configuration),
       textProvider: createCloudflareTextProvider(configuration),
       analysisProvider: createCloudflareAnalysisProvider(configuration),
+      homeProvider: createCloudflareHomeProvider(configuration),
+      buildHomeAnalysis: ({ catches, trips, waters }) => buildPersonalFishingAnalysis(catches, { trips, waters }),
     });
   } catch { return createAiApplicationApi(); }
 }

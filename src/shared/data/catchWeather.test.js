@@ -88,3 +88,28 @@ test("UTC hour rounding rolls the requested archive day forward correctly", asyn
     await assert.rejects(fetchCatchWeather(50, 14, "2020-02-03", "23:50", { timezone: "Other" }), /časové pásmo/);
   } finally { globalThis.fetch = originalFetch; clearCatchWeatherCache(); }
 });
+
+test("extended weather requests one catch day and validates model values plus contiguous pressure trend", async () => {
+  clearCatchWeatherCache();
+  const originalFetch = globalThis.fetch;
+  let requested;
+  globalThis.fetch = async url => {
+    requested = new URL(url);
+    return { ok: true, json: async () => ({ hourly: { time: ["2026-11-07T07:00", "2026-11-07T08:00", "2026-11-07T09:00", "2026-11-07T10:00"],
+      temperature_2m: [1, 2, 3, 4], surface_pressure: [1000, 1001, 1002, 1003], wind_speed_10m: [1, 1, 1, 2],
+      relative_humidity_2m: [null, null, null, 80], wind_direction_10m: [null, null, null, 120], wind_gusts_10m: [null, null, null, 999],
+      precipitation: [null, null, null, 0], cloud_cover: [null, null, null, 25], weather_code: [null, null, null, 2] } }) };
+  };
+  try {
+    const result = await fetchCatchWeather(50, 14, "2026-11-07", "10:10", { timezone: "UTC", includeDetails: true, now: new Date("2026-11-08T12:00:00Z") });
+    assert.equal(requested.searchParams.get("start_date"), "2026-11-07"); assert.equal(requested.searchParams.get("end_date"), "2026-11-07");
+    assert.equal(requested.searchParams.has("forecast_days"), false);
+    assert.match(requested.searchParams.get("hourly"), /relative_humidity_2m/);
+    assert.equal(result.environment.conditions.humidityPct, 80);
+    assert.equal(result.environment.conditions.precipitationMm, 0);
+    assert.equal(result.environment.conditions.pressureChange3hHpa, 3);
+    assert.equal(result.environment.conditions.windGustKmh, undefined);
+    assert.equal(result.environment.weather.kind, "forecast-model");
+    assert.equal(result.environment.weather.hour, "2026-11-07T10:00:00.000Z");
+  } finally { globalThis.fetch = originalFetch; clearCatchWeatherCache(); }
+});

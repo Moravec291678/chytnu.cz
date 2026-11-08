@@ -2,6 +2,7 @@ import { Buffer } from "node:buffer";
 import { DEFAULT_SPECIES } from "../../../shared/constants/speciesCatalog.js";
 import { validateSpeciesSuggestion } from "../speciesSuggestion.js";
 import { createStoryDraft } from "../storyDraft.js";
+import { AiServiceError, nextUtcDay } from "./aiServiceError.js";
 
 // SERVER ONLY. This fixed allowlist deliberately excludes models requiring paid
 // billing. No SDK, Gateway, alternate provider, fallback or implicit retry.
@@ -69,22 +70,38 @@ function createCompletion({ accountId, apiToken, model, fetchImpl = globalThis.f
         method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiToken}` },
         body, redirect: "error", cache: "no-store", signal: AbortSignal.timeout(timeoutMs),
       });
-      const result = await boundedResponseJson(response);
+      let result;
+      try { result = await boundedResponseJson(response); }
+      catch {
+        if (response.status === 401 || response.status === 403) throw new AiServiceError("provider_auth", { providerStatus: response.status });
+        if (response.status === 429) throw new AiServiceError("provider_throttled", { providerStatus: response.status });
+        if (response.status === 503) throw new AiServiceError("provider_capacity", { providerStatus: response.status });
+        throw new AiServiceError("invalid_ai_response", { providerStatus: response.status });
+      }
       const codes = [result.code, result.error?.code, ...(Array.isArray(result.errors) ? result.errors.map((error) => error?.code) : [])];
       // Official Workers AI error 3036 is the account's daily free allocation;
       // 3040 is temporary capacity, which must not close tomorrow's allowance.
       if ((response.status === 429 || result.success === false) && codes.some((code) => Number(code) === 3036)) {
-        await onQuotaExhausted?.();
-        throw new Error();
+        try { await onQuotaExhausted?.(); } catch { /* Still fail closed with the real provider classification. */ }
+        throw new AiServiceError("provider_quota", { retryAt: nextUtcDay(), providerStatus: response.status, providerCode: 3036 });
       }
+      const providerCode = codes.map(Number).find(Number.isSafeInteger) ?? null;
+      const details = { providerStatus: response.status, providerCode };
+      if (response.status === 401 || response.status === 403) throw new AiServiceError(providerCode === 5035 ? "provider_configuration" : "provider_auth", details);
+      if (response.status === 408 || codes.some(code => [3007, 3008].includes(Number(code)))) throw new AiServiceError("provider_timeout", details);
+      if (response.status === 503 || codes.some(code => Number(code) === 3040)) throw new AiServiceError("provider_capacity", details);
+      if (response.status === 429) throw new AiServiceError("provider_throttled", details);
+      if (!response.ok || result.error || result.success === false) throw new AiServiceError("provider_configuration", details);
       const choice = result.choices?.[0];
       if (!response.ok || result.error || result.success === false || result.choices?.length !== 1
         || choice?.finish_reason !== "stop" || choice.message?.refusal
-        || typeof choice.message?.content !== "string" || !choice.message.content.trim()) throw new Error();
-      return JSON.parse(choice.message.content);
-    } catch {
+        || typeof choice.message?.content !== "string" || !choice.message.content.trim()) throw new AiServiceError("invalid_ai_response", details);
+      try { return JSON.parse(choice.message.content); }
+      catch { throw new AiServiceError("invalid_ai_response", details); }
+    } catch (error) {
       // Never expose response bodies, prompt/image contents, URLs or credentials.
-      throw new Error("AI provider unavailable.");
+      if (error instanceof AiServiceError) throw error;
+      throw new AiServiceError(["TimeoutError", "AbortError"].includes(error?.name) ? "provider_timeout" : "network_unavailable");
     }
   };
 }
@@ -147,5 +164,27 @@ export function createCloudflareAnalysisProvider(configuration) {
       throw new TypeError("Invalid AI analysis response.");
     }
     return { text: output.text.trim(), evidenceKeys: [...new Set(output.evidenceKeys)] };
+  };
+}
+
+export function createCloudflareHomeProvider(configuration) {
+  const complete = createCompletion(configuration);
+  return async ({ summary }) => {
+    if (!summary || summary.version !== "personal-fishing-v1" || !Array.isArray(summary.candidates)
+      || Object.keys(summary).some(key => !["version", "recordCount", "candidates"].includes(key))
+      || !summary.candidates.length || summary.candidates.length > 3 || summary.candidates.some(item =>
+        !item || Object.keys(item).some(key => !["candidate", "family", "numbers", "evidenceCount", "limitation"].includes(key))
+        || !/^[a-z-]{1,64}$/.test(item.family ?? "") || !item.numbers || typeof item.numbers !== "object"
+        || Object.values(item.numbers).some(value => typeof value !== "number" || !Number.isFinite(value)))
+      || encoder.encode(JSON.stringify(summary)).length > 12_000) {
+      throw new TypeError("Invalid home evidence.");
+    }
+    const output = await complete("Jsi zkušený český analytik osobního rybářského deníku. Dostáváš deterministicky vypočtené, anonymizované kandidáty souvislostí. "
+      + "Vysvětli jen první (nejlépe podložený) kandidát jako opatrnou hypotézu a navrhni konkrétní srovnávací pokus pro příští výpravu. "
+      + "Nepřepisuj statistiky, neuváděj žádná čísla, nevymýšlej podmínky, místa ani příčiny. Četnost úlovků bez úplného úsilí není úspěšnost. "
+      + "Žádné obecné rady, žádné sliby záběru. Maximálně tři stručné české věty, vrať pouze JSON s jediným polem text.", JSON.stringify(summary));
+    if (!output || Object.keys(output).length !== 1 || typeof output.text !== "string"
+      || !output.text.trim() || output.text.length > 1200 || /\d/.test(output.text)) throw new AiServiceError("invalid_ai_response");
+    return { text: output.text.trim() };
   };
 }

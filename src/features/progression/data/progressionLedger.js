@@ -130,6 +130,7 @@ function eventOccurredAt(entityType, entityId, catches, trips, fallback) {
 }
 
 function speciesKeyFor(record) {
+  if (record?.captureMode === "quick" && !record.speciesKey) return null;
   return record?.speciesKey || normalizeText(record?.species ?? "") || null;
 }
 
@@ -389,7 +390,7 @@ export const progressionLedger = {
     }
     const firstBySpecies = new Map();
     for (const record of orderedCatches) {
-      const speciesKey = record.speciesKey || normalizeText(record.species ?? "");
+      const speciesKey = speciesKeyFor(record);
       if (speciesKey && !firstBySpecies.has(speciesKey)) firstBySpecies.set(speciesKey, record);
     }
     for (const [speciesKey, record] of firstBySpecies) add({ reasonKey: `species.first:${speciesKey}`, type: "species.first", xp: XP_RULES.newSpecies, sourceEntityType: "catch", sourceEntityId: record.id, occurredAt: record.caughtAt });
@@ -410,7 +411,7 @@ export const progressionLedger = {
       });
     }
     for (const item of calculateSpeciesMastery(orderedCatches)) {
-      const speciesCatches = orderedCatches.filter((record) => (record.speciesKey || normalizeText(record.species ?? "")) === item.speciesKey);
+      const speciesCatches = orderedCatches.filter((record) => speciesKeyFor(record) === item.speciesKey);
       for (const milestone of MASTERY_LEVELS.filter((entry) => item.catchCount >= entry.catches)) {
         const source = speciesCatches[milestone.catches - 1] ?? speciesCatches.at(-1);
         add({ reasonKey: `mastery.milestone:${item.speciesKey}:${milestone.level}`, type: "mastery.milestone", xp: milestone.level === 1 ? 0 : milestone.xp, sourceEntityType: "catch", sourceEntityId: source.id, occurredAt: source.caughtAt });

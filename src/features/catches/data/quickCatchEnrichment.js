@@ -2,6 +2,7 @@ import { normalizeCoordinates, formatCoordinates } from "./coordinates.js";
 import { calculateMoonPhase } from "../../../shared/utils/moonPhase.js";
 import { fetchCatchWeather } from "../../../shared/data/catchWeather.js";
 import { LIVE_GPS_MAX_ACCURACY_METERS, LIVE_GPS_MAX_AGE_MS } from "./catchVerification.js";
+import { calculateCatchAstronomy, normalizeCatchEnvironment, ENVIRONMENT_FIELDS } from "./catchEnvironment.js";
 
 const MAX_ATTEMPTS = 3;
 const originatingCameraCaptures = new Set();
@@ -54,11 +55,13 @@ export function buildInitialQuickCatchMetadata({ metadata, inputSource, captured
       provenance.moonPhase = "derived";
     }
   }
-  return { values, provenance };
+  const astronomy = calculateCatchAstronomy(values.caughtAt, coordinates);
+  if (astronomy) provenance.astronomy = "derived";
+  return { values, provenance, ...(astronomy ? { environment: { astronomy } } : {}) };
 }
 
 /** A historical imported image must not inherit the currently active trip. No nearest-water inference. */
-export function buildQuickCatchContext({ trip, methods = [], capturedAt }) {
+export function buildQuickCatchContext({ trip, methods = [], waters = [], baits = [], capturedAt }) {
   if (!trip || !trip.id || trip.endedAt || !validDate(trip.startedAt) || !validDate(capturedAt)
     || Date.parse(capturedAt) < Date.parse(trip.startedAt)) return { values: {}, provenance: {} };
   const values = { tripId: trip.id };
@@ -72,7 +75,21 @@ export function buildQuickCatchContext({ trip, methods = [], capturedAt }) {
     values.method = { key: method.key, label: method.label, isCustom: false };
     provenance.method = "active_trip";
   }
-  // The current Trip schema has neither waterId nor bait. Do not manufacture them.
+  const water = waters.find(item => item.id === trip.waterId && !item.deleted && (item.ownerId ?? null) === (trip.ownerId ?? null));
+  if (water) {
+    values.waterId = water.id;
+    provenance.waterId = "active_trip";
+    if (typeof water.name === "string" && water.name.trim()) { values.locationName = water.name.trim(); provenance.locationName = "saved_water"; }
+    const waterNumber = Number(water.waterNumber);
+    if (String(water.waterNumber ?? "").trim() && Number.isInteger(waterNumber) && waterNumber >= 0 && waterNumber <= 99999999) {
+      values.waterNumber = waterNumber; provenance.waterNumber = "saved_water";
+    }
+  }
+  const selectedBaits = (Array.isArray(trip.baitKeys) ? trip.baitKeys : []).map(key => baits.find(item => item.key === key)).filter(Boolean);
+  if (selectedBaits.length) {
+    values.baits = selectedBaits.map(item => ({ key: item.key, label: item.label, isCustom: false }));
+    provenance.baits = "active_trip";
+  }
   return { values, provenance };
 }
 
@@ -147,6 +164,21 @@ export function mergeQuickCatchEnrichment(record, patch) {
   }
   if (Object.keys(conditions).length) next.conditions = conditions;
   next.conditionSources = conditionSources;
+  const environment = normalizeCatchEnvironment(values.environment);
+  if (environment) {
+    const current = normalizeCatchEnvironment(record.quickCatch.environment) ?? { conditions: {} };
+    const merged = { ...current, conditions: { ...current.conditions } };
+    for (const field of Object.keys(ENVIRONMENT_FIELDS)) {
+      if (source[field] === "weather_api" && provenance[field] !== "manual"
+        && empty(merged.conditions[field]) && environment.conditions[field] !== undefined) {
+        merged.conditions[field] = environment.conditions[field]; provenance[field] = "weather_api";
+      }
+    }
+    if (environment.weather && source.weather === "weather_api") merged.weather = environment.weather;
+    if (environment.astronomy && source.astronomy === "derived" && provenance.astronomy !== "manual"
+      && environment.astronomy.forInstant === next.caughtAt) { merged.astronomy = environment.astronomy; provenance.astronomy = "derived"; }
+    next.quickCatch.environment = merged;
+  }
   for (const step of ["metadata", "weather"]) {
     const job = patch.jobs?.[step];
     if (!job || !["pending", "complete", "unavailable", "failed"].includes(job.status)
@@ -221,16 +253,20 @@ export function createQuickCatchEnrichmentCoordinator({ repository, scope, apply
             patch.values.locationEvidence = evidence;
             patch.provenance.coordinates = "gps";
           } else if (!record.coordinates) status = "unavailable";
+          const astronomy = calculateCatchAstronomy(record.caughtAt, evidence?.coordinates ?? record.coordinates);
+          if (astronomy) { patch.values.environment = { astronomy }; patch.provenance.astronomy = "derived"; }
         } else {
           const coordinates = safeCoordinates(record.coordinates);
           if (!coordinates) status = "unavailable";
           else {
             const { date, time } = utcWeatherParts(record);
-            const weather = await fetchWeather(coordinates.latitude, coordinates.longitude, date, time, { signal: controller.signal, timezone: "UTC" });
+            const weather = await fetchWeather(coordinates.latitude, coordinates.longitude, date, time, { signal: controller.signal, timezone: "UTC", includeDetails: true });
             patch.values.conditions = Object.fromEntries(Object.entries(WEATHER_FIELDS).filter(([field, range]) =>
               Number.isFinite(weather?.[field]) && weather[field] >= range[0] && weather[field] <= range[1]).map(([field]) => [field, weather[field]]));
             if (!Object.keys(patch.values.conditions).length) throw new Error("Počasí neobsahuje platné údaje.");
             patch.provenance = Object.fromEntries(Object.keys(WEATHER_FIELDS).map((field) => [field, "weather_api"]));
+            patch.values.environment = normalizeCatchEnvironment(weather?.environment);
+            Object.assign(patch.provenance, Object.fromEntries([...Object.keys(ENVIRONMENT_FIELDS), "weather"].map(field => [field, "weather_api"])));
           }
         }
         patch.jobs[step] = { ...claimedJob, status, nextAttemptAt: null };

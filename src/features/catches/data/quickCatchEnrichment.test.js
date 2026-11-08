@@ -319,3 +319,24 @@ test("overlapping wake events share the four-record concurrency limit", async ()
   for (const release of releases) release(null);
   await running;
 });
+
+test("trip water and known bait defaults inherit only explicit owned selections", () => {
+  const trip = { id: "trip-1", ownerId: "owner", startedAt: "2026-11-04T10:00:00Z", waterId: "water-1", baitKeys: ["corn", "invented"] };
+  const options = { trip, capturedAt, waters: [{ id: "water-1", ownerId: "owner", name: "Labe", waterNumber: "123456" }], baits: [{ key: "corn", label: "Kukuřice" }] };
+  const value = buildQuickCatchContext(options);
+  assert.equal(value.values.waterId, "water-1"); assert.equal(value.values.waterNumber, 123456);
+  assert.deepEqual(value.values.baits, [{ key: "corn", label: "Kukuřice", isCustom: false }]);
+  assert.equal(value.provenance.waterId, "active_trip");
+  assert.equal(buildQuickCatchContext({ ...options, waters: [{ id: "water-1", ownerId: "other", name: "Cizí" }] }).values.waterId, undefined);
+  assert.deepEqual(buildQuickCatchContext({ ...options, capturedAt: earlier }).values, {});
+});
+
+test("extended weather preserves manual values and cleared fields during delayed enrichment", () => {
+  const record = makeRecord({ quickCatch: { ...makeRecord().quickCatch, environment: { conditions: { humidityPct: 66 } },
+    provenance: { humidityPct: "manual", cloudCoverPct: "manual" } } });
+  const merged = mergeQuickCatchEnrichment(record, { values: { environment: { conditions: { humidityPct: 80, cloudCoverPct: 50, precipitationMm: 0 } } },
+    provenance: { humidityPct: "weather_api", cloudCoverPct: "weather_api", precipitationMm: "weather_api" } });
+  assert.equal(merged.quickCatch.environment.conditions.humidityPct, 66);
+  assert.equal(merged.quickCatch.environment.conditions.cloudCoverPct, undefined);
+  assert.equal(merged.quickCatch.environment.conditions.precipitationMm, 0);
+});

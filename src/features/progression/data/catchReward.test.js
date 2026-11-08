@@ -36,3 +36,9 @@ test("record comparison prioritizes length and uses measured weight only as a ti
   assert.deepEqual(getCatchRecordStatus(tie, [{ ...candidate, id: "tie", weightKg: 8, weightSource: "manual" }]), { personalRecord: true, speciesRecord: true });
   assert.deepEqual(getCatchRecordStatus({ ...tie, weightKg: 8 }, [{ ...candidate, id: "tie", weightKg: 9, weightSource: "manual" }]), { personalRecord: false, speciesRecord: false });
 });
+
+test("an unconfirmed Quick Catch with an AI proposal has no species record", () => {
+  const record = { id: "quick", captureMode: "quick", speciesKey: "", species: "Druh zatím neurčen", lengthCm: 60,
+    aiSpeciesSuggestion: { status: "suggestion", speciesKey: "commonCarp" } };
+  assert.equal(getCatchRecordStatus(record, []).speciesRecord, false);
+});

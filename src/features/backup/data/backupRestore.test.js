@@ -522,3 +522,14 @@ test("replace writes catches and trips together; a database failure preserves bo
   assert.deepEqual(db.snapshot().catches.map((row) => row.id), ["catch-1"]);
   assert.deepEqual(db.snapshot().trips.map((row) => row.id), ["trip-1"]);
 });
+
+test("trip defaults and rich environment survive local backup restore without private provider blobs", () => {
+  const trip = { ...makeTrip(), waterId: "water-1", baitKeys: ["corn"] };
+  const record = { ...makeCatch(), captureMode: "quick", quickCatch: { capturedAt: time, inputSource: "camera", provenance: { humidityPct: "weather_api" },
+    environment: { conditions: { humidityPct: 80, precipitationMm: 0 }, rawResponse: "must not export as trusted data" } } };
+  const parsed = makeBackup(makeDocument({ catches: [record], trips: [trip] }));
+  assert.equal(parsed.trips[0].waterId, "water-1");
+  assert.deepEqual(parsed.trips[0].baitKeys, ["corn"]);
+  assert.equal(parsed.catches[0].quickCatch.environment.conditions.precipitationMm, 0);
+  assert.equal(parsed.catches[0].quickCatch.environment.rawResponse, undefined);
+});

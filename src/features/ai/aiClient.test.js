@@ -142,3 +142,13 @@ test("diary and recommendations send no raw journal and reject malformed generat
   const bad = makeClient({ fetchImpl: async () => response({ text: { html: "bad" } }) });
   await assert.rejects(bad.client.run("diary", {}, { consent }), { code: "invalid_response" });
 });
+
+test("structured quota errors preserve reset and prohibit pointless retries; automatic consent is explicit", async () => {
+  const { AiClientError } = await import("./aiClient.js");
+  for (const code of ["user_daily_limit", "app_daily_limit", "text_daily_limit", "provider_quota"]) {
+    const error = new AiClientError(code, { retryAt: "2026-11-09T00:00:00Z" });
+    assert.equal(error.retryable, false); assert.equal(error.retryAt, "2026-11-09T00:00:00Z");
+    assert.doesNotMatch(error.message, /příliš mnoho požadavků/);
+  }
+  assert.equal(new AiClientError("provider_capacity").retryable, true);
+});

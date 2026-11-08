@@ -564,3 +564,11 @@ test("a marathon achievement is attributed to its qualifying Trip instead of an 
   assert.equal(event.sourceEntityId, "marathon-trip-source");
   assert.equal(event.occurredAt, "2026-10-19T03:00:00.000Z");
 });
+
+test("unknown Quick Catch and unconfirmed AI suggestions do not mint a first-species bonus", async () => {
+  const scope = await reset();
+  await catchRepository.put(record("unknown-photo", { captureMode: "quick", speciesKey: "", species: "Druh zatím neurčen",
+    aiSpeciesSuggestion: { speciesKey: "commonCarp", status: "suggestion" } }), scope);
+  await progressionLedger.reconcile(scope);
+  assert.equal((await progressionLedger.list(scope)).some(event => event.type === "species.first"), false);
+});

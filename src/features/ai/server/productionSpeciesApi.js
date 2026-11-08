@@ -80,6 +80,23 @@ export function createFirebaseSpeciesDependencies({ env, admin = () => getAccoun
   cloudinary = () => productionCloudinary(env), fetchImpl = globalThis.fetch, now = () => Date.now(),
   verifyIdentity = verifyFirebaseIdToken } = {}) {
   return {
+    getOwnedPhotoIdentity: async (uid, catchId, photoId) => {
+      const { db } = await admin();
+      const [deleted, catchSnapshot, photoSnapshot] = await Promise.all([
+        db.doc(`accountDeletions/${uid}`).get(), db.doc(`users/${uid}/catches/${catchId}`).get(),
+        db.doc(`users/${uid}/catches/${catchId}/photos/${photoId}`).get(),
+      ]);
+      if (deleted.exists || !catchSnapshot.exists || !photoSnapshot.exists) return null;
+      const record = catchSnapshot.data(), photo = photoSnapshot.data();
+      if (record.ownerId !== uid || record.id !== catchId || record.deleted || record.photoRefs?.[photoId] !== true
+        || photo.id !== photoId || photo.deleted || photo.cloud?.state !== "synced" || photo.cloud.provider !== "cloudinary"
+        || photo.cloud.objectKey !== `users/${uid}/catches/${catchId}/photos/${photoId}/original`
+        || !/^[a-f0-9]{64}$/.test(photo.cloud.sha256 ?? "") || photo.type !== "image/jpeg"
+        || !Number.isSafeInteger(photo.size) || photo.size <= 0 || photo.size > MAX_ORIGINAL) return null;
+      return { ownerId: uid, catchId, photoId, sourceSha256: photo.cloud.sha256, mimeType: "image/jpeg",
+        captureMode: record.captureMode, createdAt: record.createdAt,
+        confirmed: Boolean(record.speciesKey) || record.quickCatch?.provenance?.speciesKey === "manual" };
+    },
     verifyToken: async (token) => {
       const { auth, db } = await admin();
       const identity = await verifyIdentity(auth, token);

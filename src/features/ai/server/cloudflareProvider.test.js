@@ -133,3 +133,34 @@ test("analysis provider accepts only privacy-reduced summary and validates evide
   const invalid = createCloudflareAnalysisProvider({ ...configuration, fetchImpl: async () => reply({ text: "Invented", evidenceKeys: ["weather"] }) });
   await assert.rejects(invalid({ task: "recommendations", summary: { count: 2 } }), TypeError);
 });
+
+test("safe provider codes distinguish authorization, capacity, allocation, timeout and malformed output", async () => {
+  const cases = [[401, 10000, "provider_auth"], [403, 5035, "provider_configuration"], [429, 3040, "provider_capacity"],
+    [429, 3036, "provider_quota"], [408, 3007, "provider_timeout"]];
+  for (const [status, code, expected] of cases) {
+    let calls = 0;
+    const provider = createCloudflareSpeciesProvider({ ...configuration, fetchImpl: async () => {
+      calls++; return new Response(JSON.stringify({ success: false, errors: [{ code, message: "PRIVATE_NOT_LOGGED" }] }), { status });
+    } });
+    await assert.rejects(provider(image), error => error.aiCode === expected && error.message === "AI provider unavailable." && !error.message.includes("PRIVATE"));
+    assert.equal(calls, 1);
+  }
+  const bad = createCloudflareSpeciesProvider({ ...configuration, fetchImpl: async () => reply(suggestion, { finish_reason: "length" }) });
+  await assert.rejects(bad(image), error => error.aiCode === "invalid_ai_response");
+});
+
+test("Home interpretation uses bounded anonymous numeric evidence and rejects fabricated numeric prose", async () => {
+  const { createCloudflareHomeProvider } = await import("./cloudflareProvider.js");
+  const summary = { version: "personal-fishing-v1", recordCount: 12, candidates: [{ candidate: 1, family: "species-method-time", numbers: { countA: 8, countB: 4 }, evidenceCount: 12, limitation: "Recorded catches only." }] };
+  let calls = 0;
+  const provider = createCloudflareHomeProvider({ ...configuration, fetchImpl: async (url, init) => {
+    calls++; const body = JSON.parse(init.body);
+    assert.equal(body.messages[1].content, JSON.stringify(summary));
+    return reply({ text: "Souvislost může odrážet volbu místa nebo délku lovu. Porovnej podobně dlouhé výpravy se stejnou metodou." });
+  } });
+  assert.match((await provider({ summary })).text, /může/);
+  await assert.rejects(provider({ summary: { ...summary, notes: "private" } }), TypeError);
+  assert.equal(calls, 1);
+  const fabricated = createCloudflareHomeProvider({ ...configuration, fetchImpl: async () => reply({ text: "Úspěšnost je 90 %." }) });
+  await assert.rejects(fabricated({ summary }), error => error.aiCode === "invalid_ai_response");
+});

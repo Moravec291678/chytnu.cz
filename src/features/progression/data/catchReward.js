@@ -7,7 +7,7 @@ import { isCatchDateEligibleForProgression } from "../../catches/data/catchVerif
 export function getCatchRecordStatus(record, catches = [], now = new Date()) {
   if (!isCatchDateEligibleForProgression(record, now)) return { personalRecord: false, speciesRecord: false };
   const previousCatches = catches.filter((item) => item?.id !== record?.id && isCatchDateEligibleForProgression(item, now));
-  const speciesKey = record?.speciesKey || normalizeText(record?.species ?? "");
+  const speciesKey = record?.captureMode === "quick" && !record.speciesKey ? null : record?.speciesKey || normalizeText(record?.species ?? "");
   const previousSpeciesCatches = speciesKey
     ? previousCatches.filter((item) => (item?.speciesKey || normalizeText(item?.species ?? "")) === speciesKey)
     : [];
@@ -16,7 +16,7 @@ export function getCatchRecordStatus(record, catches = [], now = new Date()) {
   const measured = hasCatchLength(record) || isMeasuredCatchWeight(record);
   return {
     personalRecord: measured && (!previousPersonalRecord || compareCatchSize(record, previousPersonalRecord) > 0),
-    speciesRecord: measured && (!previousSpeciesRecord || compareCatchSize(record, previousSpeciesRecord) > 0),
+    speciesRecord: Boolean(speciesKey) && measured && (!previousSpeciesRecord || compareCatchSize(record, previousSpeciesRecord) > 0),
   };
 }
 

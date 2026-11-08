@@ -554,3 +554,18 @@ test("account deletion marker blocks old client reads and delayed writes without
   await assertSucceeds(getDoc(doc(bob.firestore(), tripPath("angler-b", "still-active"))));
   await assertFails(getDoc(doc(bob.firestore(), "accountDeletions/angler-a")));
 });
+
+test("volitelné výchozí revíry a nástrahy vycházky jsou omezené a owner-scoped", async () => {
+  const db = alice.firestore();
+  const base = makeSyncedCatch("trip-defaults", "angler-a");
+  const envelope = Object.fromEntries(["entityType", "deletedAt", "serverRevision", "syncSequence", "lastOperationId", "clientLocalRevision", "operationDigest", "lastReceiptId", "photoState"].map(key => [key, base[key]]));
+  const value = { ...makeTrip("trip-defaults", "angler-a"), ...envelope, entityType: "trip", waterId: "water-1", baitKeys: ["corn", "worm"] };
+  const ref = doc(db, tripPath("angler-a", "trip-defaults"));
+  await assertSucceeds(setDoc(ref, value));
+  assert.deepEqual((await getDoc(ref)).data().baitKeys, ["corn", "worm"]);
+  for (const changes of [{ waterId: "../other" }, { baitKeys: [42] }, { baitKeys: ["x".repeat(65)] },
+    { baitKeys: ["a", "b", "c", "d", "e", "f"] }, { baitKeys: [{ private: "not allowed" }] }]) {
+    await assertFails(setDoc(ref, { ...value, serverRevision: 2, ...changes }));
+  }
+  await assertFails(getDoc(doc(bob.firestore(), tripPath("angler-a", "trip-defaults"))));
+});

@@ -46,7 +46,7 @@ function portableNotification(record) {
 }
 
 function portableAiConsent(record) {
-  return Object.fromEntries(["id", "version", "provider", "capabilities", "grantedAt", "revokedAt", "revision", "updatedAt"]
+  return Object.fromEntries(["id", "version", "provider", "capabilities", "grantedAt", "revokedAt", "revision", "updatedAt", "automaticSpecies", "automaticSpeciesFrom"]
     .filter((key) => record?.[key] !== undefined).map((key) => [key, record[key]]));
 }
 

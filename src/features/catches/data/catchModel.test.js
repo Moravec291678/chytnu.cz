@@ -317,3 +317,40 @@ test("estimated weights update with species and length, while manual weight is n
   const manual = updateCatchFormField({ ...changedLength, weightSource: "manual", weightKg: "9,7" }, "lengthCm", "80");
   assert.equal(manual.weightKg, "9,7");
 });
+
+test("extended conditions are editable without dropping metadata, and manual clears block later autofill", () => {
+  const initial = createCatchRecord(minimalForm, { key: "carp", label: "Kapr" }, []);
+  initial.captureMode = "quick";
+  initial.quickCatch = { capturedAt: initial.caughtAt, inputSource: "camera", timeZone: "Europe/Prague", provenance: { humidityPct: "weather_api" },
+    environment: { conditions: { humidityPct: 80, precipitationMm: 0 } }, enrichment: { weather: { status: "complete", attempts: 1, nextAttemptAt: null } } };
+  const form = catchToForm(initial);
+  assert.equal(form.environmentConditions.precipitationMm, 0);
+  const updated = createCatchRecord({ ...form, environmentConditions: { ...form.environmentConditions, humidityPct: "" } }, { key: "carp", label: "Kapr" }, [], initial);
+  assert.equal(updated.quickCatch.environment.conditions.humidityPct, undefined);
+  assert.equal(updated.quickCatch.provenance.humidityPct, "manual");
+  assert.equal(updated.quickCatch.environment.conditions.precipitationMm, 0);
+  assert.equal(updated.quickCatch.enrichment.weather.status, "complete");
+  assert.ok(validateCatchForm({ ...minimalForm, environmentConditions: { humidityPct: 101 } })["Vlhkost"]);
+  assert.ok(validateCatchForm({ ...minimalForm, environmentConditions: { weatherCode: 1.5 } })["Kód počasí WMO"]);
+});
+
+test("editing a different field preserves capture seconds; corrected location invalidates auto weather but retains manual values", () => {
+  const initial = createCatchRecord(minimalForm, { key: "carp", label: "Kapr" }, []);
+  initial.caughtAt = new Date(Date.parse(initial.caughtAt) + 23567).toISOString();
+  initial.captureMode = "quick";
+  initial.coordinates = { latitude: 50, longitude: 14 };
+  initial.conditions = { airTempC: 8, pressureHpa: 1017 };
+  initial.conditionSources = { airTempC: "auto", pressureHpa: "manual" };
+  initial.quickCatch = { provenance: { airTempC: "weather_api", pressureHpa: "manual", humidityPct: "weather_api" },
+    environment: { conditions: { humidityPct: 80 } }, enrichment: { weather: { status: "complete", attempts: 1, nextAttemptAt: null } } };
+  const form = catchToForm(initial);
+  const unchanged = createCatchRecord({ ...form, notes: "upraveno" }, { key: "carp", label: "Kapr" }, [], initial);
+  assert.equal(unchanged.caughtAt, initial.caughtAt);
+  assert.equal(unchanged.conditions.airTempC, 8);
+  const moved = createCatchRecord({ ...form, coordinates: { latitude: 49, longitude: 15 } }, { key: "carp", label: "Kapr" }, [], initial);
+  assert.equal(moved.conditions.airTempC, undefined);
+  assert.equal(moved.conditions.pressureHpa, 1017);
+  assert.equal(moved.quickCatch.provenance.pressureHpa, "manual");
+  assert.equal(moved.quickCatch.environment.conditions.humidityPct, undefined);
+  assert.equal(moved.quickCatch.enrichment.weather.status, "pending");
+});

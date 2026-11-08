@@ -1,3 +1,11 @@
+export function normalizeTripDefaults(data) {
+  const waterId = data.waterId || null;
+  if (waterId !== null && (typeof waterId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(waterId))) throw new Error("Vyber platný uložený revír.");
+  const baitKeys = data.baitKeys ?? [];
+  if (!Array.isArray(baitKeys) || baitKeys.length > 5 || baitKeys.some(key => typeof key !== "string" || !/^[A-Za-z0-9_-]{1,64}$/.test(key))) throw new Error("Vyber nejvýše pět platných nástrah.");
+  return { waterId, baitKeys: [...new Set(baitKeys)] };
+}
+
 export function createTripRecord(data, now = new Date()) {
   const timestamp = now.toISOString();
   const title = data.title?.trim() || `Vycházka · ${now.toLocaleDateString("cs-CZ")}`;
@@ -7,6 +15,7 @@ export function createTripRecord(data, now = new Date()) {
     title,
     locationName: data.locationName?.trim() ?? "",
     methodKey: data.methodKey || null,
+    ...normalizeTripDefaults(data),
     createdAt: timestamp,
     updatedAt: timestamp,
     startedAt: timestamp,
@@ -36,6 +45,7 @@ export function tripToForm(trip) {
   };
   return {
     title: trip.title ?? "", locationName: trip.locationName ?? "", methodKey: trip.methodKey ?? "",
+    waterId: trip.waterId ?? "", baitKeys: [...(trip.baitKeys ?? [])],
     startedAt: localTime(trip.startedAt), endedAt: localTime(trip.endedAt),
   };
 }
@@ -59,6 +69,7 @@ export function updateTripRecord(trip, values, now = new Date()) {
   if (!endedAt && Date.parse(startedAt) > now.getTime()) throw new Error("Začátek aktivní vycházky nemůže být v budoucnosti.");
   return {
     ...trip, title, locationName, methodKey: values.methodKey || null, startedAt, endedAt,
+    ...normalizeTripDefaults({ waterId: trip.waterId, baitKeys: trip.baitKeys, ...values }),
     updatedAt: now.toISOString(),
     sync: { ...(trip.sync ?? {}), status: "local", revision: (trip.sync?.revision ?? 0) + 1 },
   };
