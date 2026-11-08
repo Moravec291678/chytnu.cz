@@ -22,4 +22,3 @@
 .home-personal-ai small { display: block; color: var(--text-secondary); line-height: 1.5; font-size: .8125rem; }
 .home-personal-detail summary:focus-visible, .home-personal-secondary:focus-visible, .home-personal-insight a:focus-visible { outline: 2px solid var(--accent-green); outline-offset: 3px; }
 @media (max-width: 375px) { .home-personal-secondary { width: 100%; } .home-personal-analysis-link { margin-inline: 0; } }
-
