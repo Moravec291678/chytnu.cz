@@ -20,6 +20,8 @@ import { SyncPortError } from "./syncPort.js";
 import { normalizeCatchPrivacy } from "../../privacy/data/privacyModel.js";
 import { normalizeCatchVerification, normalizeLocationEvidence } from "../../catches/data/catchVerification.js";
 import { quickCatchMetadataFromRemote, quickCatchMetadataToRemote } from "../../catches/data/quickCatchMetadata.js";
+import { normalizeTripDefaults, TRIP_ENVIRONMENT_FIELDS } from "../../trips/data/tripModel.js";
+import { catchEnvironmentFromRemote, catchEnvironmentToRemote } from "../../catches/data/catchEnvironment.js";
 
 const EMULATOR_HOST = "127.0.0.1";
 const EMULATOR_PORT = 8080;
@@ -119,6 +121,12 @@ function serializeConditionSources(sources) {
   return Object.fromEntries(Object.entries(sources).filter(([field, source]) => CONDITION_SOURCE_FIELDS.includes(field) && ["auto", "manual"].includes(source)));
 }
 
+// An absent key means an older local record; only an explicit null clears a
+// newer server default. This does not bypass the existing revision check.
+export function preserveTripEnvironmentDefaults(projected, current) {
+  return { ...Object.fromEntries(TRIP_ENVIRONMENT_FIELDS.filter(key => projected[key] === undefined && current?.[key] !== undefined).map(key => [key, current[key]])), ...projected };
+}
+
 export function toRemoteRecord(entityType, record, ownerId) {
   if (!record || record.id === undefined || record.ownerId !== ownerId) {
     throw new SyncPortError("permission_denied", "Záznam nemá ověřeného vlastníka.");
@@ -131,6 +139,7 @@ export function toRemoteRecord(entityType, record, ownerId) {
     updatedAt: requireValue(record.updatedAt, new Date().toISOString()),
   };
   if (entityType === "trip") {
+    const defaults = normalizeTripDefaults(record);
     return {
       ...common,
       title: requireValue(record.title, ""),
@@ -138,6 +147,7 @@ export function toRemoteRecord(entityType, record, ownerId) {
       methodKey: requireValue(record.methodKey, null),
       ...(record.waterId !== undefined ? { waterId: record.waterId || null } : {}),
       ...(record.baitKeys !== undefined ? { baitKeys: record.baitKeys } : {}),
+      ...Object.fromEntries(TRIP_ENVIRONMENT_FIELDS.filter(key => record[key] !== undefined).map(key => [key, defaults[key]])),
       startedAt: requireValue(record.startedAt, record.createdAt),
       endedAt: requireValue(record.endedAt, null),
     };
@@ -181,6 +191,7 @@ export function toRemoteRecord(entityType, record, ownerId) {
     caughtAt: requireValue(record.caughtAt, record.createdAt),
     ...(record.captureMode === "quick" ? { captureMode: "quick" } : {}),
     ...(record.quickCatch ? { quickCatch: quickCatchMetadataToRemote(record.quickCatch) } : {}),
+    ...(record.captureMode !== "quick" && record.environment !== undefined ? { environment: catchEnvironmentToRemote(record.environment) } : {}),
     catchDateTimeSource: ["manual", "photo-exif"].includes(record.catchDateTimeSource) ? record.catchDateTimeSource : "default",
     gpsSource: ["manual", "manual-map", "photo-exif", "live-gps"].includes(record.gpsSource) ? record.gpsSource : "default",
     species: requireValue(record.species, ""),
@@ -218,6 +229,7 @@ export function toRemoteRecord(entityType, record, ownerId) {
 function fromRemoteDocument(entityType, data, photos = undefined, photoMetadataError = null) {
   const record = { ...data };
   if (entityType === "catch") {
+    if (record.environment !== undefined) record.environment = catchEnvironmentFromRemote(record.environment);
     if (record.quickCatch) {
       const metadata = quickCatchMetadataFromRemote(record.quickCatch);
       if (metadata) record.quickCatch = metadata;
@@ -518,7 +530,8 @@ export function createFirestoreSyncAdapter({ now = () => new Date().toISOString(
             kind: "upsert", createdAt: now(),
           };
           const remoteDocument = {
-            ...parentContent,
+            ...(entityType === "catch" && parentContent.environment === undefined && current?.environment !== undefined ? { environment: current.environment } : {}),
+            ...(entityType === "trip" ? preserveTripEnvironmentDefaults(parentContent, current) : parentContent),
             entityType,
             serverRevision: revision,
             syncSequence: sequence,

@@ -284,6 +284,29 @@ test("rychlý úlovek přijímá neznámý druh a míry a pouze omezená metadat
   await assertFails(setDoc(catchRef, nextSyncedCatch(updated, { conditionSources: { airTempC: "guessed" } })));
 });
 
+test("optimalizace nezměněného obsahu neobchází validaci upravených polí", async () => {
+  const ref = doc(alice.firestore(), catchPath("angler-a", "catch-a"));
+  const original = (await getDoc(ref)).data();
+  const changed = nextSyncedCatch(original, { notes: "Pouze poznámka", isFavorite: true });
+  await assertSucceeds(setDoc(ref, changed));
+  for (const invalid of [{ notes: 42 }, { isFavorite: "yes" }, { updatedAt: 42 }, { lengthCm: -1 },
+    { conditions: { waterTempC: 100 } }, { privacy: { visibility: "public" } }, { unexpected: "field" }]) {
+    await assertFails(setDoc(ref, { ...nextSyncedCatch(changed), ...invalid }));
+  }
+});
+
+test("starší normalizátor nesmí vymazat uložený kontext rychlého úlovku", async () => {
+  const ref = doc(alice.firestore(), catchPath("angler-a", "catch-a"));
+  const original = (await getDoc(ref)).data();
+  const base = { capturedAt: "2026-11-08T09:00:00Z", inputSource: "camera",
+    tripSnapshot: { tripId: "trip-a", revision: 2, waterTemperatureMeasurement: { valueC: 12, measuredAt: "2026-11-08T08:00:00Z", source: "manual_trip" } } };
+  const withSnapshot = nextSyncedCatch(original, { captureMode: "quick", quickCatch: quickCatchMetadataToRemote(base) });
+  await assertSucceeds(setDoc(ref, withSnapshot));
+  const legacy = { ...base }; delete legacy.tripSnapshot;
+  await assertFails(setDoc(ref, nextSyncedCatch(withSnapshot, { quickCatch: quickCatchMetadataToRemote(legacy) })));
+  await assertSucceeds(setDoc(ref, nextSyncedCatch(withSnapshot, { notes: "Zachovaný historický kontext" })));
+});
+
 test("uživatel A nemůže číst, měnit ani mazat záznamy uživatele B", async () => {
   const db = alice.firestore();
   const foreignCatch = doc(db, catchPath("angler-b", "catch-b"));
@@ -555,17 +578,43 @@ test("account deletion marker blocks old client reads and delayed writes without
   await assertFails(getDoc(doc(bob.firestore(), "accountDeletions/angler-a")));
 });
 
+test("běžný úlovek přijímá pouze omezené environment JSON a starý klient jej nesmí vymazat vynecháním", async () => {
+  const ref = doc(alice.firestore(), catchPath("angler-a", "catch-a"));
+  const current = (await getDoc(ref)).data();
+  const environment = JSON.stringify({ conditions: { humidityPct: 80, precipitationMm: 0 } });
+  const updated = nextSyncedCatch(current, { environment });
+  await assertSucceeds(setDoc(ref, updated));
+  for (const invalid of [null, {}, 12, "x".repeat(4097)]) {
+    await assertFails(setDoc(ref, nextSyncedCatch(updated, { environment: invalid })));
+  }
+  const oldClient = nextSyncedCatch(updated); delete oldClient.environment;
+  await assertFails(setDoc(ref, oldClient));
+  await assertSucceeds(setDoc(ref, nextSyncedCatch(updated, { environment: "null" })));
+});
+
 test("volitelné výchozí revíry a nástrahy vycházky jsou omezené a owner-scoped", async () => {
   const db = alice.firestore();
   const base = makeSyncedCatch("trip-defaults", "angler-a");
   const envelope = Object.fromEntries(["entityType", "deletedAt", "serverRevision", "syncSequence", "lastOperationId", "clientLocalRevision", "operationDigest", "lastReceiptId", "photoState"].map(key => [key, base[key]]));
-  const value = { ...makeTrip("trip-defaults", "angler-a"), ...envelope, entityType: "trip", waterId: "water-1", baitKeys: ["corn", "worm"] };
+  const value = { ...makeTrip("trip-defaults", "angler-a"), ...envelope, entityType: "trip", waterId: "water-1", baitKeys: ["corn", "worm"],
+    waterDepthM: 3, bottomType: "gravel", waterTemperatureMeasurement: { valueC: 12, measuredAt: "2026-10-17T06:00:00.000Z", source: "manual_trip" } };
   const ref = doc(db, tripPath("angler-a", "trip-defaults"));
   await assertSucceeds(setDoc(ref, value));
   assert.deepEqual((await getDoc(ref)).data().baitKeys, ["corn", "worm"]);
   for (const changes of [{ waterId: "../other" }, { baitKeys: [42] }, { baitKeys: ["x".repeat(65)] },
-    { baitKeys: ["a", "b", "c", "d", "e", "f"] }, { baitKeys: [{ private: "not allowed" }] }]) {
+    { baitKeys: ["a", "b", "c", "d", "e", "f"] }, { baitKeys: [{ private: "not allowed" }] },
+    { waterDepthM: -1 }, { waterDepthM: 2001 }, { waterDepthM: "3" }, { bottomType: "invented" },
+    { waterTemperatureMeasurement: { valueC: 61, measuredAt: "2026-10-17T06:00:00.000Z", source: "manual_trip" } },
+    { waterTemperatureMeasurement: { valueC: 12, measuredAt: "invalid", source: "manual_trip" } },
+    { waterTemperatureMeasurement: { valueC: 12, measuredAt: "2026-10-17T06:00:00.000Z", source: "weather_api" } },
+    { waterTemperatureMeasurement: { valueC: 12, measuredAt: "2026-10-17T06:00:00.000Z", source: "manual_trip", privatePayload: true } }]) {
     await assertFails(setDoc(ref, { ...value, serverRevision: 2, ...changes }));
   }
+  for (const omitted of ["waterDepthM", "bottomType", "waterTemperatureMeasurement"]) {
+    const oldClient = { ...value, serverRevision: 2 }; delete oldClient[omitted];
+    await assertFails(setDoc(ref, oldClient));
+  }
+  await assertSucceeds(setDoc(ref, { ...value, startedAt: "2026-10-17T05:00:00.000Z", serverRevision: 2 }));
+  await assertSucceeds(setDoc(ref, { ...value, waterDepthM: null, bottomType: null, waterTemperatureMeasurement: null, serverRevision: 3 }));
   await assertFails(getDoc(doc(bob.firestore(), tripPath("angler-a", "trip-defaults"))));
 });

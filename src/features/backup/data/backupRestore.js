@@ -10,6 +10,7 @@ import { createNotificationRecord } from "../../notifications/data/notificationM
 import { PRODUCT_LIMITS } from "../../../product/config/limits.js";
 import { normalizeQuickCatchMetadata } from "../../catches/data/quickCatchMetadata.js";
 import { normalizeTripDefaults } from "../../trips/data/tripModel.js";
+import { normalizeCatchEnvironment } from "../../catches/data/catchEnvironment.js";
 
 export const MAX_BACKUP_FILE_BYTES = PRODUCT_LIMITS.backupFileBytes;
 const MAX_PHOTO_BYTES = PRODUCT_LIMITS.photoBytes;
@@ -145,6 +146,7 @@ function decodeCatch(record, tripIds) {
   return {
     ...record,
     ...(quickCatch ? { quickCatch } : {}),
+    ...(record.environment !== undefined ? { environment: record.captureMode === "quick" ? null : normalizeCatchEnvironment(record.environment) } : {}),
     ownerId: null,
     photos: photos.map((photo) => ({ ...photo, photoStatus: "local-only" })),
     primaryPhotoId: normalizePrimaryPhotoId(photos, record.primaryPhotoId),
@@ -170,7 +172,7 @@ function decodeTrip(record) {
   }
   if (record.endedAt && Date.parse(record.endedAt) < Date.parse(record.startedAt)) fail(`Vycházka ${record.id} končí před svým začátkem.`);
   let defaults;
-  try { defaults = Object.hasOwn(record, "waterId") || Object.hasOwn(record, "baitKeys") ? normalizeTripDefaults(record) : {}; } catch { fail(`Vycházka ${record.id} obsahuje neplatné výchozí údaje.`); }
+  try { defaults = ["waterId", "baitKeys", "waterDepthM", "bottomType", "waterTemperatureMeasurement"].some(key => Object.hasOwn(record, key)) ? normalizeTripDefaults(record) : {}; } catch { fail(`Vycházka ${record.id} obsahuje neplatné výchozí údaje.`); }
   return { ...record, ...defaults, ownerId: null, sync: { status: "local", revision: Math.max(1, record.sync.revision) } };
 }
 

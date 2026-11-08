@@ -1,8 +1,19 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { calculateCatchAstronomy, normalizeCatchEnvironment } from "./catchEnvironment.js";
+import { calculateCatchAstronomy, normalizeCatchEnvironment, catchEnvironmentFromRemote, catchEnvironmentToRemote } from "./catchEnvironment.js";
 import { buildCatchEnvironmentPresentation } from "./catchEnvironmentPresentation.js";
 import { quickCatchMetadataToRemote, quickCatchMetadataFromRemote } from "./quickCatchMetadata.js";
+
+test("ordinary Catch uses the same bounded normalized environment codec without trusting raw provider output", () => {
+  const value = { conditions: { humidityPct: 80, precipitationMm: 0, cloudCoverPct: 0 }, arbitrary: "not trusted",
+    weather: { provider: "open-meteo", kind: "historical-reanalysis", hour: "2026-10-01T10:00:00Z", fetchedAt: "2026-11-08T10:00:00Z" } };
+  const encoded = catchEnvironmentToRemote(value);
+  assert.ok(encoded.length < 4096);
+  assert.deepEqual(catchEnvironmentFromRemote(encoded), normalizeCatchEnvironment(value));
+  assert.equal(catchEnvironmentFromRemote(encoded).arbitrary, undefined);
+  for (const invalid of [null, {}, 42, "{broken", "x".repeat(4097)]) assert.equal(catchEnvironmentFromRemote(invalid), null);
+  assert.equal(catchEnvironmentFromRemote(catchEnvironmentToRemote(null)), null);
+});
 
 test("solar approximation uses the catch instant/location with realistic Prague solstice bounds", () => {
   const value = calculateCatchAstronomy("2026-06-21T12:00:00Z", { latitude: 50.0755, longitude: 14.4378 });

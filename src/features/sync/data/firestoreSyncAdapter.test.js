@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { sanitizeRemotePhotoMetadata, toRemoteRecord } from "./firestoreSyncAdapter.js";
+import { preserveTripEnvironmentDefaults, sanitizeRemotePhotoMetadata, toRemoteRecord } from "./firestoreSyncAdapter.js";
 
 test("Firestore catch projection preserves supported stored conditions only", () => {
   const record = {
@@ -37,6 +37,15 @@ test("Firestore catch projection writes null when conditions were not recorded",
 
   assert.equal(toRemoteRecord("catch", record, "angler-1").conditions, null);
   assert.equal(toRemoteRecord("catch", record, "angler-1").conditionSources, null);
+});
+
+test("normal Catch weather is projected using the bounded shared environment codec while Quick Catch retains only its envelope", () => {
+  const environment = { conditions: { humidityPct: 80, precipitationMm: 0 }, rawResponse: "untrusted" };
+  const record = { id: "normal", ownerId: "owner", environment };
+  const projected = toRemoteRecord("catch", record, "owner");
+  assert.deepEqual(JSON.parse(projected.environment), { conditions: { humidityPct: 80, precipitationMm: 0 } });
+  assert.equal(toRemoteRecord("catch", { ...record, environment: null }, "owner").environment, "null");
+  assert.equal(Object.hasOwn(toRemoteRecord("catch", { ...record, captureMode: "quick" }, "owner"), "environment"), false);
 });
 
 test("Firestore Catch projection preserves bounded verification evidence for cross-device XP eligibility", () => {
@@ -135,4 +144,16 @@ test("trip remote projection includes optional defaults but leaves legacy docume
   assert.equal(remote.waterId, "water-1"); assert.deepEqual(remote.baitKeys, ["corn"]);
   const legacy = toRemoteRecord("trip", { id: "t", ownerId: "owner" }, "owner");
   assert.equal(Object.hasOwn(legacy, "waterId"), false); assert.equal(Object.hasOwn(legacy, "baitKeys"), false);
+});
+
+test("trip environmental snapshot crosses Firestore projection and absent old-client keys cannot clear defaults", () => {
+  const defaults = { waterDepthM: 3, bottomType: "gravel", waterTemperatureMeasurement: { valueC: 12, measuredAt: "2026-11-08T08:00:00.000Z", source: "manual_trip" } };
+  const remote = toRemoteRecord("trip", { id: "t", ownerId: "owner", ...defaults }, "owner");
+  for (const key of Object.keys(defaults)) assert.deepEqual(remote[key], defaults[key]);
+  const legacy = toRemoteRecord("trip", { id: "t", ownerId: "owner" }, "owner");
+  assert.equal(Object.hasOwn(legacy, "waterDepthM"), false);
+  const retained = preserveTripEnvironmentDefaults(legacy, remote);
+  for (const key of Object.keys(defaults)) assert.deepEqual(retained[key], defaults[key]);
+  assert.equal(preserveTripEnvironmentDefaults({ ...legacy, waterDepthM: null }, remote).waterDepthM, null);
+  assert.throws(() => toRemoteRecord("trip", { id: "t", ownerId: "owner", waterTemperatureMeasurement: { ...defaults.waterTemperatureMeasurement, source: "ai" } }, "owner"));
 });

@@ -3,6 +3,14 @@ import assert from "node:assert/strict";
 import { createCloudAccountExportService, CLOUD_ACCOUNT_EXPORT_FORMAT, CLOUD_ACCOUNT_EXPORT_VERSION } from "./cloudAccountExport.js";
 import { LOCAL_BACKUP_FORMAT } from "./backupFormat.js";
 
+test("cloud account export normalizes ordinary Catch environment wire metadata", async () => {
+  const service = createCloudAccountExportService({ getCollectionPage: async ({ collectionName }) => ({ items: collectionName === "catches"
+    ? [makeItem("normal", { environment: JSON.stringify({ conditions: { humidityPct: 80, precipitationMm: 0 }, rawResponse: "untrusted" }), photoRefs: {} })] : [], cursor: null, done: true }),
+    currentOwnerId: () => OWNER, downloadPhoto: async () => assert.fail() });
+  const result = await service.exportAccount({ ownerId: OWNER });
+  assert.deepEqual(result.records.catches[0].environment, { conditions: { humidityPct: 80, precipitationMm: 0 } });
+});
+
 const OWNER = "account-a";
 const makeItem = (id, data) => ({ id, data: { id, ownerId: OWNER, ...data } });
 const emptyNames = ["trips", "waters", "notifications", "serverProgressionEvents", "serverProgressionState", "aiPreferences", "aiResults"];

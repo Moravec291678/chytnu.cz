@@ -10,6 +10,7 @@ import { buildSeasonalChallenge } from "../../progression/data/seasonalChallenge
 import { summaryForXp } from "../../progression/data/progressionLedger.js";
 import { PRODUCT_LIMITS } from "../../../product/config/limits.js";
 import { normalizeQuickCatchMetadata, quickCatchMetadataFromRemote } from "../../catches/data/quickCatchMetadata.js";
+import { catchEnvironmentFromRemote, normalizeCatchEnvironment } from "../../catches/data/catchEnvironment.js";
 
 export const CLOUD_ACCOUNT_EXPORT_FORMAT = "chytnucz-account-export";
 export const CLOUD_ACCOUNT_EXPORT_VERSION = 1;
@@ -36,6 +37,9 @@ function portableRecord(record) {
   if (value.verification && typeof value.verification === "object") {
     value.verification = { ...value.verification };
     delete value.verification.photoHash;
+  }
+  if (value.environment !== undefined) {
+    value.environment = typeof value.environment === "string" ? catchEnvironmentFromRemote(value.environment) : normalizeCatchEnvironment(value.environment);
   }
   return value;
 }

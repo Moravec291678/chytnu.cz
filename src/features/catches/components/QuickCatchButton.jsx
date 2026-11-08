@@ -7,6 +7,8 @@ import { DEFAULT_METHODS, DEFAULT_BAITS } from "../../../shared/constants/consta
 import { waterRepository } from "../../waters/data/waterRepository.js";
 import { useDataScope } from "../../auth/context/dataScopeContextValue.js";
 import { getCatchPhotoHash } from "../data/catchVerification.js";
+import { collectQuickCatchLocation } from "../data/quickCatchEnrichment.js";
+import { beginQuickCatchLocation, takeQuickCatchLocation, clearQuickCatchLocation } from "../data/quickCatchLocationWarmup.js";
 import "./QuickCatchButton.css";
 
 export default function QuickCatchButton() {
@@ -16,6 +18,7 @@ export default function QuickCatchButton() {
   const { state: trips } = useTrips();
   const scope = useDataScope();
   const [savedWaters, setSavedWaters] = useState({ scopeKey: null, waters: [] });
+  useEffect(() => () => clearQuickCatchLocation(scope.scopeKey), [scope.scopeKey]);
   useEffect(() => {
     if (scope.status !== "ready") return undefined;
     let active = true;
@@ -28,7 +31,9 @@ export default function QuickCatchButton() {
   const select = (event, inputSource) => {
     const file = event.target.files?.[0];
     event.target.value = "";
-    if (file) void saveQuickCapture(file, inputSource, { trip: getActiveTrip(trips.trips), methods: DEFAULT_METHODS, baits: DEFAULT_BAITS,
+    const locationEvidence = inputSource === "camera" ? takeQuickCatchLocation(scope.scopeKey, Date.now()) : null;
+    if (inputSource !== "camera") clearQuickCatchLocation(scope.scopeKey);
+    if (file) void saveQuickCapture(file, inputSource, { trip: getActiveTrip(trips.trips), methods: DEFAULT_METHODS, baits: DEFAULT_BAITS, locationEvidence,
       waters: savedWaters.scopeKey === scope.scopeKey ? savedWaters.waters : [],
       usedPhotoHashes: new Set(catches.catches.flatMap(record => (record.photos ?? []).map(getCatchPhotoHash)).filter(Boolean)) });
   };
@@ -36,7 +41,10 @@ export default function QuickCatchButton() {
     <input ref={camera} type="file" hidden accept="image/*" capture="environment" onChange={event => select(event, "camera")} />
     <input ref={gallery} type="file" hidden accept="image/*" onChange={event => select(event, "gallery")} />
     <div className="quick-catch-actions">
-      <button className="quick-catch-primary" type="button" disabled={locked || state.status === "error"} onClick={() => camera.current?.click()}>Rychlý úlovek</button>
+      <button className="quick-catch-primary" type="button" disabled={locked || state.status === "error"} onClick={() => {
+        void beginQuickCatchLocation(scope.scopeKey, { collectLocation: collectQuickCatchLocation });
+        camera.current?.click();
+      }}>Rychlý úlovek</button>
       <button className="quick-catch-gallery" type="button" disabled={locked || (state.status === "error" && !state.canReplace)} onClick={() => gallery.current?.click()}>{state.status === "error" ? "Vybrat jinou fotografii" : "Z galerie"}</button>
     </div>
     {state.status === "saving" && <p role="status">Ukládám fotografii…</p>}

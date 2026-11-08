@@ -61,7 +61,7 @@ export function TripProvider({ children }) {
   const endTrip = useCallback(async (trip) => {
     const ended = endTripRecord(trip);
     if (scope.status !== "ready") throw new Error("Místní profil se ještě načítá.");
-    const stored = await tripRepository.put(ended, scope);
+    const stored = await tripRepository.put(ended, { ...scope, expectedRevision: trip.sync?.revision ?? 1, expectedServerRevision: trip.sync?.serverRevision ?? null });
     await progressionLedger.reconcile(scope);
     if (activeScopeKey.current !== scope.scopeKey) return stored;
     dispatch({ type: "UPSERT", trip: stored });
@@ -71,7 +71,7 @@ export function TripProvider({ children }) {
   }, [scope]);
   const updateTrip = useCallback(async (trip, values) => {
     if (scope.status !== "ready") throw new Error("Místní profil se ještě načítá.");
-    const stored = await tripRepository.put(updateTripRecord(trip, values), scope);
+    const stored = await tripRepository.put(updateTripRecord(trip, values), { ...scope, expectedRevision: trip.sync?.revision ?? 1, expectedServerRevision: trip.sync?.serverRevision ?? null });
     await progressionLedger.reconcile(scope);
     if (activeScopeKey.current !== scope.scopeKey) return stored;
     dispatch({ type: "UPSERT", trip: stored });

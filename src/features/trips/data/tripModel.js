@@ -1,24 +1,60 @@
+import { PRODUCT_LIMITS } from "../../../product/config/limits.js";
+
+export const TRIP_BOTTOM_TYPES = Object.freeze(["mud", "sand", "gravel", "rocks"]);
+export const TRIP_ENVIRONMENT_FIELDS = Object.freeze(["waterDepthM", "bottomType", "waterTemperatureMeasurement"]);
+
+function optionalNumber(value, label, min, max) {
+  if (value == null || (typeof value === "string" && !value.trim())) return null;
+  const number = typeof value === "number" ? value : typeof value === "string" ? Number(value.trim().replace(",", ".")) : NaN;
+  if (!Number.isFinite(number) || number < min || number > max) throw new Error(`${label}: zadej číslo od ${min} do ${max}.`);
+  return number;
+}
+
 export function normalizeTripDefaults(data) {
   const waterId = data.waterId || null;
   if (waterId !== null && (typeof waterId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(waterId))) throw new Error("Vyber platný uložený revír.");
   const baitKeys = data.baitKeys ?? [];
   if (!Array.isArray(baitKeys) || baitKeys.length > 5 || baitKeys.some(key => typeof key !== "string" || !/^[A-Za-z0-9_-]{1,64}$/.test(key))) throw new Error("Vyber nejvýše pět platných nástrah.");
-  return { waterId, baitKeys: [...new Set(baitKeys)] };
+  const waterDepthM = optionalNumber(data.waterDepthM, "Hloubka lovu", 0, PRODUCT_LIMITS.catch.depthM);
+  const bottomType = data.bottomType || null;
+  if (bottomType !== null && !TRIP_BOTTOM_TYPES.includes(bottomType)) throw new Error("Vyber platný typ dna.");
+  let measurement = data.waterTemperatureMeasurement ?? null;
+  if (Object.hasOwn(data, "waterTempC")) {
+    const valueC = optionalNumber(data.waterTempC, "Teplota vody", PRODUCT_LIMITS.catch.waterTempC.min, PRODUCT_LIMITS.catch.waterTempC.max);
+    measurement = valueC === null ? null : { valueC, measuredAt: data.waterTempMeasuredAt, source: "manual_trip" };
+  }
+  let waterTemperatureMeasurement = null;
+  if (measurement !== null) {
+    if (!measurement || typeof measurement !== "object" || Array.isArray(measurement)
+      || Object.keys(measurement).some(key => !["valueC", "measuredAt", "source"].includes(key))
+      || measurement.source !== "manual_trip") throw new Error("Teplotu vody lze převzít jen z ručního měření vycházky.");
+    const valueC = optionalNumber(measurement.valueC, "Teplota vody", PRODUCT_LIMITS.catch.waterTempC.min, PRODUCT_LIMITS.catch.waterTempC.max);
+    if (valueC === null || typeof measurement.measuredAt !== "string" || !Number.isFinite(Date.parse(measurement.measuredAt))) throw new Error("Zadej čas měření teploty vody.");
+    waterTemperatureMeasurement = { valueC, measuredAt: new Date(measurement.measuredAt).toISOString(), source: "manual_trip" };
+  }
+  return { waterId, baitKeys: [...new Set(baitKeys)], waterDepthM, bottomType, waterTemperatureMeasurement };
 }
 
 export function createTripRecord(data, now = new Date()) {
   const timestamp = now.toISOString();
   const title = data.title?.trim() || `Vycházka · ${now.toLocaleDateString("cs-CZ")}`;
+  if (title.length > 80) throw new Error("Zadej název vycházky do 80 znaků.");
+  if ((data.locationName?.trim().length ?? 0) > 120) throw new Error("Lokalita může mít nejvýše 120 znaků.");
+  const start = data.startedAt ? Date.parse(data.startedAt) : now.getTime();
+  if (!Number.isFinite(start)) throw new Error("Zadej platný začátek vycházky.");
+  if (start > now.getTime()) throw new Error("Začátek aktivní vycházky nemůže být v budoucnosti.");
+  const defaults = normalizeTripDefaults(data);
+  if (defaults.waterTemperatureMeasurement && Date.parse(defaults.waterTemperatureMeasurement.measuredAt) > now.getTime()) throw new Error("Čas měření teploty vody nemůže být v budoucnosti.");
   return {
     schemaVersion: 1,
     id: crypto.randomUUID(),
     title,
     locationName: data.locationName?.trim() ?? "",
     methodKey: data.methodKey || null,
-    ...normalizeTripDefaults(data),
+    ...defaults,
     createdAt: timestamp,
     updatedAt: timestamp,
-    startedAt: timestamp,
+    startedAt: new Date(start).toISOString(),
     endedAt: null,
     sync: { status: "local", revision: 1 },
   };
@@ -46,6 +82,8 @@ export function tripToForm(trip) {
   return {
     title: trip.title ?? "", locationName: trip.locationName ?? "", methodKey: trip.methodKey ?? "",
     waterId: trip.waterId ?? "", baitKeys: [...(trip.baitKeys ?? [])],
+    waterDepthM: trip.waterDepthM ?? "", bottomType: trip.bottomType ?? "",
+    waterTempC: trip.waterTemperatureMeasurement?.valueC ?? "", waterTempMeasuredAt: localTime(trip.waterTemperatureMeasurement?.measuredAt),
     startedAt: localTime(trip.startedAt), endedAt: localTime(trip.endedAt),
   };
 }
@@ -67,9 +105,17 @@ export function updateTripRecord(trip, values, now = new Date()) {
   const endedAt = trip.endedAt ? timestamp(values.endedAt, trip.endedAt, previousForm.endedAt, "konec") : null;
   if (endedAt && Date.parse(endedAt) < Date.parse(startedAt)) throw new Error("Konec vycházky nemůže být před začátkem.");
   if (!endedAt && Date.parse(startedAt) > now.getTime()) throw new Error("Začátek aktivní vycházky nemůže být v budoucnosti.");
+  const defaultsInput = { ...trip, ...values };
+  // Keep the exact original measurement instant through unchanged local-time
+  // fields, including the repeated hour at the autumn DST transition.
+  if (Object.hasOwn(values, "waterTempC") && values.waterTempMeasuredAt === previousForm.waterTempMeasuredAt && trip.waterTemperatureMeasurement) {
+    defaultsInput.waterTempMeasuredAt = trip.waterTemperatureMeasurement.measuredAt;
+  }
+  const defaults = normalizeTripDefaults(defaultsInput);
+  if (defaults.waterTemperatureMeasurement && Date.parse(defaults.waterTemperatureMeasurement.measuredAt) > now.getTime()) throw new Error("Čas měření teploty vody nemůže být v budoucnosti.");
   return {
     ...trip, title, locationName, methodKey: values.methodKey || null, startedAt, endedAt,
-    ...normalizeTripDefaults({ waterId: trip.waterId, baitKeys: trip.baitKeys, ...values }),
+    ...defaults,
     updatedAt: now.toISOString(),
     sync: { ...(trip.sync ?? {}), status: "local", revision: (trip.sync?.revision ?? 0) + 1 },
   };

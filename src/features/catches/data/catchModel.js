@@ -7,6 +7,7 @@ import { normalizeCatchVerification, normalizeLocationEvidence } from "./catchVe
 import { PRODUCT_LIMITS } from "../../../product/config/limits.js";
 import { ENVIRONMENT_FIELDS, ENVIRONMENT_LABELS, normalizeCatchEnvironment, calculateCatchAstronomy } from "./catchEnvironment.js";
 import { calculateMoonPhase } from "../../../shared/utils/moonPhase.js";
+import { isTripWaterTemperatureRelevant } from "./quickCatchTripSnapshot.js";
 
 const CONDITION_SOURCE_FIELDS = ["airTempC", "waterTempC", "pressureHpa", "windKmh", "moonPhase"];
 
@@ -91,6 +92,11 @@ export function createCatchRecord(data, species, methods, existing = null, baitC
     if (value === null || value === undefined || value === "") delete conditions[key];
   }
   const conditionSources = normalizeConditionSources(data.conditionSources ?? existing?.conditionSources, conditions);
+  if (existing) {
+    for (const field of CONDITION_SOURCE_FIELDS) {
+      if ((conditions[field] ?? null) !== (existing.conditions?.[field] ?? null)) conditionSources[field] = "manual";
+    }
+  }
   const now = new Date().toISOString();
   const selectedInstant = new Date(`${data.catchDate}T${data.catchTime || "12:00"}`).toISOString();
   const caughtAt = existing && Math.floor(Date.parse(existing.caughtAt) / 60000) === Math.floor(Date.parse(selectedInstant) / 60000)
@@ -107,6 +113,10 @@ export function createCatchRecord(data, species, methods, existing = null, baitC
     }
     const coordinates = normalizeCoordinates(data.coordinates) ?? parseCoordinateText(data.gpsLocation);
     const contextChanged = caughtAt !== existing.caughtAt || JSON.stringify(coordinates) !== JSON.stringify(existing.coordinates ?? null);
+    if (contextChanged && provenance.waterTempC === "active_trip" && conditionSources.waterTempC === "auto"
+      && !isTripWaterTemperatureRelevant(quickCatch.tripSnapshot?.waterTemperatureMeasurement, caughtAt)) {
+      delete conditions.waterTempC; delete conditionSources.waterTempC; delete provenance.waterTempC;
+    }
     if (contextChanged) {
       delete environment.weather;
       for (const field of Object.keys(environment.conditions)) if (provenance[field] !== "manual") delete environment.conditions[field];
@@ -142,7 +152,8 @@ export function createCatchRecord(data, species, methods, existing = null, baitC
         cloud: photo.cloud ?? { state: "localOnly", provider: null, objectKey: null, sha256: null },
     };
   });
-  return {
+  const locationEvidence = normalizeLocationEvidence(Object.hasOwn(data, "locationEvidence") ? data.locationEvidence : existing?.locationEvidence);
+  const record = {
     ...(existing ?? {}),
     ...(quickCatch ? { quickCatch } : {}),
     schemaVersion: 1,
@@ -165,8 +176,7 @@ export function createCatchRecord(data, species, methods, existing = null, baitC
     waterNumber: numeric(data.waterNumber),
     gpsLocation: data.gpsLocation.trim(),
     coordinates: normalizeCoordinates(data.coordinates) ?? parseCoordinateText(data.gpsLocation),
-    ...((data.locationEvidence || existing?.locationEvidence) && normalizeLocationEvidence(data.locationEvidence ?? existing?.locationEvidence)
-      ? { locationEvidence: normalizeLocationEvidence(data.locationEvidence ?? existing?.locationEvidence) } : {}),
+    ...(locationEvidence ? { locationEvidence } : (Object.hasOwn(data, "locationEvidence") || existing?.locationEvidence) ? { locationEvidence: null } : {}),
     waterDepthM: numeric(data.depthM),
     bottomType: data.bottomType || null,
     conditions: Object.keys(conditions).length ? conditions : null,
@@ -189,6 +199,31 @@ export function createCatchRecord(data, species, methods, existing = null, baitC
     privacy: normalizeCatchPrivacy(data.privacy ?? existing?.privacy),
     ...(data.verification || existing?.verification ? { verification: normalizeCatchVerification(data.verification ?? existing?.verification) } : {}),
   };
+  if (!quickCatch) {
+    const environment = normalizeCatchEnvironment(existing?.environment) ?? { conditions: {} };
+    for (const field of Object.keys(ENVIRONMENT_FIELDS)) {
+      if (!Object.hasOwn(data.environmentConditions ?? {}, field)) continue;
+      const value = numeric(data.environmentConditions[field]);
+      if (value === null) delete environment.conditions[field]; else environment.conditions[field] = value;
+    }
+    const astronomy = calculateCatchAstronomy(caughtAt, record.coordinates);
+    if (astronomy) environment.astronomy = astronomy; else delete environment.astronomy;
+    const normalized = normalizeCatchEnvironment(environment);
+    if (normalized) record.environment = normalized;
+    else if (existing && Object.hasOwn(existing, "environment")) record.environment = null;
+    else delete record.environment;
+  }
+  if (existing && record.quickCatch) {
+    const provenance = { ...record.quickCatch.provenance };
+    for (const field of ["caughtAt", "coordinates", "tripId", "locationName", "waterId", "waterNumber", "method", "baits", "speciesKey",
+      "lengthCm", "weightKg", "girthCm", "fightMinutes", "waterDepthM", "bottomType", "notes", "result"]) {
+      if (JSON.stringify(record[field] ?? null) !== JSON.stringify(existing[field] ?? null)) provenance[field] = "manual";
+    }
+    if (data.gpsSource === "manual" && existing.gpsSource !== "manual") provenance.coordinates = "manual";
+    for (const field of CONDITION_SOURCE_FIELDS) if (conditionSources[field] === "manual") provenance[field] = "manual";
+    record.quickCatch = { ...record.quickCatch, provenance };
+  }
+  return record;
 }
 
 export function catchToForm(record) {
@@ -217,7 +252,7 @@ export function catchToForm(record) {
     bottomType: record.bottomType ?? "", speciesKey: record.speciesKey,
     resultKey: record.result ?? "unspecified", fishingMethod: record.method?.key ?? "",
     conditions,
-    environmentConditions: { ...(normalizeCatchEnvironment(record.quickCatch?.environment)?.conditions ?? {}) },
+    environmentConditions: { ...(normalizeCatchEnvironment(record.quickCatch?.environment ?? record.environment)?.conditions ?? {}) },
     conditionSources: normalizeConditionSources(record.conditionSources, conditions),
     photos: record.photos ?? [], baits: (record.baits ?? []).map((bait) => bait.key),
     primaryPhotoId: normalizePrimaryPhotoId(record.photos ?? [], record.primaryPhotoId),

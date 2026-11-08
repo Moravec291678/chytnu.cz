@@ -42,9 +42,16 @@ export const tripRepository = {
       const transaction = db.transaction([STORE_NAME, OUTBOX_STORE_NAME], "readwrite");
       const store = transaction.objectStore(STORE_NAME);
       let storedTrip = trip;
+      let failure;
       const request = store.get(trip.id);
       request.onsuccess = () => {
         const existing = request.result;
+        if (Object.hasOwn(options ?? {}, "expectedRevision") && (!existing
+          || (existing.sync?.revision ?? 1) !== options.expectedRevision
+          || (existing.sync?.serverRevision ?? null) !== (options.expectedServerRevision ?? null))) {
+          failure = Object.assign(new Error("Vycházka se mezitím změnila nebo byla smazána. Načti aktuální údaje a úpravu zopakuj."), { code: "trip_revision_conflict" });
+          transaction.abort(); return;
+        }
         if (existing && recordScopeKey(existing) !== requestedScope.scopeKey) {
           transaction.abort();
           return;
@@ -77,7 +84,7 @@ export const tripRepository = {
       request.onerror = () => transaction.abort();
       transaction.oncomplete = () => { db.close(); resolve(storedTrip); };
       transaction.onerror = () => { db.close(); reject(transaction.error ?? new Error("Vycházku se nepodařilo uložit.")); };
-      transaction.onabort = () => { db.close(); reject(transaction.error ?? new Error("Uložení vycházky bylo přerušeno.")); };
+      transaction.onabort = () => { db.close(); reject(failure ?? transaction.error ?? new Error("Uložení vycházky bylo přerušeno.")); };
     });
   },
   delete: async (id, options) => {

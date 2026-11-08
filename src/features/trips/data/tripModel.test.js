@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createTripRecord, endTripRecord, formatTripCatchCount, formatTripDuration, getActiveTrip, getDistinctTripSpecies, getTripCatchRatePerHour, getTripDurationMs, tripToForm, updateTripRecord } from "./tripModel.js";
+import { createTripRecord, endTripRecord, formatTripCatchCount, formatTripDuration, getActiveTrip, getDistinctTripSpecies, getTripCatchRatePerHour, getTripDurationMs, normalizeTripDefaults, tripToForm, updateTripRecord } from "./tripModel.js";
 
 test("trip records store stable local metadata and optional fields", () => {
   const now = new Date("2026-10-16T12:30:00.000Z");
@@ -85,4 +85,42 @@ test("optional trip defaults survive edits and legacy trips remain compatible", 
   assert.equal(legacy.waterId, ""); assert.deepEqual(legacy.baitKeys, []);
   assert.throws(() => createTripRecord({ waterId: "../other" }));
   assert.throws(() => createTripRecord({ baitKeys: Array.from({ length: 6 }, (_, index) => `bait-${index}`) }));
+});
+
+test("trip environment defaults validate units and preserve measured zero rather than inventing missing values", () => {
+  assert.deepEqual(normalizeTripDefaults({ waterDepthM: "3,5", bottomType: "gravel", waterTempC: "0", waterTempMeasuredAt: "2026-11-08T09:00:00Z" }), {
+    waterId: null, baitKeys: [], waterDepthM: 3.5, bottomType: "gravel",
+    waterTemperatureMeasurement: { valueC: 0, measuredAt: "2026-11-08T09:00:00.000Z", source: "manual_trip" },
+  });
+  const unknown = normalizeTripDefaults({ waterDepthM: " ", waterTempC: "" });
+  assert.equal(unknown.waterDepthM, null); assert.equal(unknown.waterTemperatureMeasurement, null);
+  for (const invalid of [{ waterDepthM: -1 }, { waterDepthM: 2001 }, { waterDepthM: true }, { waterDepthM: "abc" },
+    { bottomType: "invented" }, { waterTempC: 61, waterTempMeasuredAt: "2026-11-08T09:00Z" },
+    { waterTempC: "12" }, { waterTempC: "12", waterTempMeasuredAt: "invalid" },
+    { waterTemperatureMeasurement: { valueC: 12, measuredAt: "2026-11-08T09:00Z", source: "weather_api" } },
+    { waterTemperatureMeasurement: { valueC: 12, measuredAt: "2026-11-08T09:00Z", source: "manual_trip", extra: "untrusted" } }]) {
+    assert.throws(() => normalizeTripDefaults(invalid));
+  }
+});
+
+test("editing active trip environment changes future defaults without mutating the earlier snapshot and preserves exact measurement time", () => {
+  const original = createTripRecord({ waterDepthM: 3, bottomType: "gravel", waterTempC: 12,
+    waterTempMeasuredAt: "2026-10-25T02:30:00.123+01:00" }, new Date("2026-10-25T08:00:00Z"));
+  const updated = updateTripRecord(original, { ...tripToForm(original), waterDepthM: 1, methodKey: "float", baitKeys: ["worm"] }, new Date("2026-10-25T10:00:00Z"));
+  assert.equal(updated.waterDepthM, 1); assert.equal(original.waterDepthM, 3);
+  assert.equal(updated.waterTemperatureMeasurement.measuredAt, "2026-10-25T01:30:00.123Z");
+  assert.equal(updated.methodKey, "float"); assert.equal(original.methodKey, null);
+  const oldClientValues = { title: original.title, locationName: "Nová lokalita", methodKey: "feeder", startedAt: tripToForm(original).startedAt, endedAt: "" };
+  const retained = updateTripRecord(original, oldClientValues, new Date("2026-10-25T10:00:00Z"));
+  assert.equal(retained.waterDepthM, 3); assert.deepEqual(retained.waterTemperatureMeasurement, original.waterTemperatureMeasurement);
+  const cleared = updateTripRecord(updated, { ...tripToForm(updated), waterTempC: "", waterDepthM: "", bottomType: "" }, new Date("2026-10-25T11:00:00Z"));
+  assert.equal(cleared.waterTemperatureMeasurement, null); assert.equal(cleared.waterDepthM, null); assert.equal(cleared.bottomType, null);
+});
+
+test("trip creation honors explicitly chosen start and refuses future starts or future measurements", () => {
+  const now = new Date("2026-11-08T10:00:00Z");
+  assert.equal(createTripRecord({ startedAt: "2026-11-08T08:00:00Z" }, now).startedAt, "2026-11-08T08:00:00.000Z");
+  assert.throws(() => createTripRecord({ startedAt: "invalid" }, now));
+  assert.throws(() => createTripRecord({ startedAt: "2026-11-08T11:00:00Z" }, now), /budoucnosti/);
+  assert.throws(() => createTripRecord({ waterTempC: 12, waterTempMeasuredAt: "2026-11-08T11:00:00Z" }, now), /budoucnosti/);
 });

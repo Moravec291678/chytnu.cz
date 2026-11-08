@@ -35,9 +35,9 @@ function fixture(record, options = {}) {
     set record(value) { current = value; }, advance(ms) { now += ms; }, run() { return coordinator.run(current ? [current] : []); } };
 }
 
-test("camera uses event instant, gallery prefers valid historical EXIF, absent EXIF falls back", () => {
+test("camera and gallery prefer valid photo EXIF; absent EXIF falls back to the event instant", () => {
   const input = { capturedAt, metadata: { capturedAt: earlier }, inputSource: "camera" };
-  assert.equal(buildInitialQuickCatchMetadata(input).values.caughtAt, capturedAt);
+  assert.equal(buildInitialQuickCatchMetadata(input).values.caughtAt, earlier);
   const imported = buildInitialQuickCatchMetadata({ ...input, inputSource: "gallery" });
   assert.equal(imported.values.caughtAt, earlier);
   assert.equal(imported.provenance.caughtAt, "exif");
@@ -241,7 +241,7 @@ test("GPS only sampled for recent camera captures, never old images or after a l
   assert.equal(f.record.locationEvidence.accuracyMeters, 10);
   const old = structuredClone(camera);
   const g = fixture(old, { getLocation: location });
-  g.advance(16 * 60_000);
+  g.advance(2 * 60_000);
   await g.run();
   assert.equal(requests, 1);
   assert.equal(g.record.quickCatch.enrichment.metadata.status, "unavailable");
@@ -259,7 +259,7 @@ test("a synced camera capture on another device never acquires that device's cur
   assert.equal(f.record.quickCatch.enrichment.metadata.status, "pending");
   assert.equal(f.record.quickCatch.enrichment.weather.status, "pending");
   assert.equal(f.writes.length, 0);
-  f.advance(16 * 60_000);
+  f.advance(2 * 60_000);
   await f.run();
   assert.equal(requests, 0);
   assert.equal(f.record.quickCatch.enrichment.metadata.status, "unavailable");

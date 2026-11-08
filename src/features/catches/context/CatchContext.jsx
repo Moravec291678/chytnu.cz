@@ -16,6 +16,7 @@ import { userFacingErrorMessage } from "../../../shared/errors/userFacingError.j
 import { recordPhotoUploadTrace } from "../data/photoUploadTrace.js";
 import { createAiClient, AI_CONSENT_CHANGED_EVENT } from "../../ai/aiClient.js";
 import { createAutomaticSpeciesCoordinator, readAutomaticSpecies, AUTOMATIC_SPECIES_CHANGED } from "../../ai/automaticSpecies.js";
+import { privacyRepository } from "../../privacy/data/privacyRepository.js";
 const initialState = {
   catches: [],
   sortBy: "vse",
@@ -143,7 +144,10 @@ export function CatchProvider({ children }) {
       if (!Object.hasOwn(pending.scope, "quickCaptureGeneration")) {
         pending.scope = { ...pending.scope, quickCaptureGeneration: await catchRepository.getQuickCaptureGeneration(pending.scope) };
       }
-      pending.record ??= await prepareQuickCatch(pending.file, pending.capture, pending.context);
+      if (!pending.record) {
+        const privacyDefaults = await privacyRepository.get(pending.scope).catch(() => null);
+        pending.record = await prepareQuickCatch(pending.file, pending.capture, { ...pending.context, ownerId: pending.scope.ownerId, privacyDefaults });
+      }
       if (pendingQuickCapture.current !== pending) return;
       await persistQuickCatch(pending.record, pending.scope, catchRepository);
       if (pendingQuickCapture.current !== pending) return;

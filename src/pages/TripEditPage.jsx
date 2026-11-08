@@ -1,7 +1,6 @@
 import { useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import Layout from "../shared/layout/Layout";
-import { DEFAULT_METHODS } from "../shared/constants/constants";
 import { tripToForm } from "../features/trips/data/tripModel";
 import { useTrips } from "../features/trips/context/useTrips";
 import "./TripFormPage.css";
@@ -19,6 +18,7 @@ function TripEditPage() {
 }
 
 function TripEditForm({ trip, updateTrip, navigate }) {
+  const baseTrip = useRef(trip);
   const [values, setValues] = useState(() => tripToForm(trip));
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -31,7 +31,7 @@ function TripEditForm({ trip, updateTrip, navigate }) {
     setSaving(true);
     setError("");
     try {
-      await updateTrip(trip, values);
+      await updateTrip(baseTrip.current, values);
       navigate(`/trips/${trip.id}`, { replace: true });
     } catch (saveError) {
       setError(saveError?.message || "Vycházku se nepodařilo upravit.");
@@ -39,15 +39,14 @@ function TripEditForm({ trip, updateTrip, navigate }) {
   };
   return <Layout><div className="trip-form-page">
     <Link to={`/trips/${trip.id}`} className="trip-back-link">← Detail vycházky</Link>
-    <header><h1>Upravit vycházku</h1><p>Úlovky a jejich vazby zůstanou zachované.</p></header>
+    <header><h1>Upravit vycházku</h1><p>Nové výchozí údaje se použijí u dalších rychlých úlovků. Dřívější záznamy se nemění.</p></header>
     <form onSubmit={submit}>
       <label>Název<input value={values.title} maxLength={80} required onChange={(event) => update("title", event.target.value)} /></label>
       <label>Lokalita (volitelná)<input value={values.locationName} maxLength={120} onChange={(event) => update("locationName", event.target.value)} /></label>
-      <label>Metoda (volitelná)<select value={values.methodKey} onChange={(event) => update("methodKey", event.target.value)}><option value="">Neuvedena</option>{DEFAULT_METHODS.map((method) => <option key={method.key} value={method.key}>{method.label}</option>)}</select></label>
       <TripDefaultsFields values={values} onChange={update} />
       <label>Začátek<input type="datetime-local" step="1" value={values.startedAt} onChange={(event) => update("startedAt", event.target.value)} required /></label>
       {trip.endedAt && <label>Konec<input type="datetime-local" step="1" value={values.endedAt} onChange={(event) => update("endedAt", event.target.value)} required /></label>}
-      {error && <p className="trip-form-error" role="alert">{error}</p>}
+      {error && <div className="trip-form-error" role="alert"><p>{error}</p><button type="button" onClick={() => window.location.reload()}>Načíst aktuální údaje</button></div>}
       <button className="save-catch-button" type="submit" disabled={saving}>{saving ? "Ukládám…" : "Uložit změny"}</button>
     </form>
   </div></Layout>;

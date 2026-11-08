@@ -34,6 +34,19 @@ export function normalizeCatchEnvironment(value) {
   return Object.keys(result.conditions).length || result.weather || result.astronomy ? result : null;
 }
 
+export const MAX_CATCH_ENVIRONMENT_JSON_LENGTH = 4096;
+export function catchEnvironmentToRemote(value) {
+  const encoded = JSON.stringify(normalizeCatchEnvironment(value));
+  if (encoded.length > MAX_CATCH_ENVIRONMENT_JSON_LENGTH) throw new RangeError("Údaje prostředí úlovku jsou příliš velké.");
+  return encoded;
+}
+export function catchEnvironmentFromRemote(value) {
+  try {
+    return typeof value === "string" && value.length <= MAX_CATCH_ENVIRONMENT_JSON_LENGTH
+      ? normalizeCatchEnvironment(JSON.parse(value)) : null;
+  } catch { return null; }
+}
+
 // Standard solar-transit/hour-angle approximation (apparent horizon -0.833°).
 // An approximate recreational calculation, not an observed sunrise or forecast.
 export function calculateCatchAstronomy(caughtAt, coordinates) {

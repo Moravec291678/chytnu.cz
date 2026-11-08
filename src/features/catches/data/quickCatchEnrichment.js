@@ -1,8 +1,11 @@
 import { normalizeCoordinates, formatCoordinates } from "./coordinates.js";
 import { calculateMoonPhase } from "../../../shared/utils/moonPhase.js";
 import { fetchCatchWeather } from "../../../shared/data/catchWeather.js";
-import { LIVE_GPS_MAX_ACCURACY_METERS, LIVE_GPS_MAX_AGE_MS } from "./catchVerification.js";
+import { LIVE_GPS_MAX_ACCURACY_METERS } from "./catchVerification.js";
 import { calculateCatchAstronomy, normalizeCatchEnvironment, ENVIRONMENT_FIELDS } from "./catchEnvironment.js";
+import { normalizeQuickCatchTripSnapshot, isTripWaterTemperatureRelevant } from "./quickCatchTripSnapshot.js";
+import { PRODUCT_LIMITS } from "../../../product/config/limits.js";
+import { QUICK_CATCH_LOCATION_MAX_AGE_MS } from "./quickCatchLocationWarmup.js";
 
 const MAX_ATTEMPTS = 3;
 const originatingCameraCaptures = new Set();
@@ -31,7 +34,7 @@ export function quickCatchEnrichmentJob(status = "pending") {
 export function buildInitialQuickCatchMetadata({ metadata, inputSource, capturedAt }) {
   const values = { caughtAt: capturedAt, catchDateTimeSource: "default" };
   const provenance = { caughtAt: "device" };
-  if (inputSource === "gallery" && validDate(metadata?.capturedAt)
+  if (["camera", "gallery"].includes(inputSource) && validDate(metadata?.capturedAt)
     && Date.parse(metadata.capturedAt) <= Date.parse(capturedAt) + 5 * 60_000
     && Date.parse(metadata.capturedAt) >= Date.UTC(1900, 0, 1)) {
     values.caughtAt = new Date(metadata.capturedAt).toISOString();
@@ -79,7 +82,7 @@ export function buildQuickCatchContext({ trip, methods = [], waters = [], baits 
   if (water) {
     values.waterId = water.id;
     provenance.waterId = "active_trip";
-    if (typeof water.name === "string" && water.name.trim()) { values.locationName = water.name.trim(); provenance.locationName = "saved_water"; }
+    if (!values.locationName && typeof water.name === "string" && water.name.trim()) { values.locationName = water.name.trim(); provenance.locationName = "saved_water"; }
     const waterNumber = Number(water.waterNumber);
     if (String(water.waterNumber ?? "").trim() && Number.isInteger(waterNumber) && waterNumber >= 0 && waterNumber <= 99999999) {
       values.waterNumber = waterNumber; provenance.waterNumber = "saved_water";
@@ -90,7 +93,19 @@ export function buildQuickCatchContext({ trip, methods = [], waters = [], baits 
     values.baits = selectedBaits.map(item => ({ key: item.key, label: item.label, isCustom: false }));
     provenance.baits = "active_trip";
   }
-  return { values, provenance };
+  if (typeof trip.waterDepthM === "number" && Number.isFinite(trip.waterDepthM) && trip.waterDepthM >= 0 && trip.waterDepthM <= PRODUCT_LIMITS.catch.depthM) {
+    values.waterDepthM = trip.waterDepthM; provenance.waterDepthM = "active_trip";
+  }
+  if (["mud", "sand", "gravel", "rocks"].includes(trip.bottomType)) { values.bottomType = trip.bottomType; provenance.bottomType = "active_trip"; }
+  const tripSnapshot = normalizeQuickCatchTripSnapshot({ tripId: trip.id, revision: trip.sync?.revision, updatedAt: trip.updatedAt,
+    waterTemperatureMeasurement: trip.waterTemperatureMeasurement });
+  const measurement = tripSnapshot?.waterTemperatureMeasurement;
+  if (measurement && isTripWaterTemperatureRelevant(measurement, capturedAt)) {
+    values.conditions = { waterTempC: measurement.valueC };
+    values.conditionSources = { waterTempC: "auto" };
+    provenance.waterTempC = "active_trip";
+  }
+  return { values, provenance, tripSnapshot };
 }
 
 export function acceptQuickCatchPosition(position, { now = Date.now(), capturedAt = now } = {}) {
@@ -98,8 +113,8 @@ export function acceptQuickCatchPosition(position, { now = Date.now(), capturedA
   const timestamp = position?.timestamp;
   const accuracy = position?.coords?.accuracy;
   if (!coordinates || !Number.isFinite(timestamp) || !Number.isFinite(accuracy) || accuracy <= 0
-    || accuracy > LIVE_GPS_MAX_ACCURACY_METERS || now - timestamp > LIVE_GPS_MAX_AGE_MS
-    || timestamp > now + 5_000 || Math.abs(timestamp - capturedAt) > LIVE_GPS_MAX_AGE_MS) return null;
+    || accuracy > LIVE_GPS_MAX_ACCURACY_METERS || now - timestamp > QUICK_CATCH_LOCATION_MAX_AGE_MS
+    || timestamp > now + 5_000 || Math.abs(timestamp - capturedAt) > QUICK_CATCH_LOCATION_MAX_AGE_MS) return null;
   return { coordinates, capturedAt: new Date(timestamp).toISOString(), accuracyMeters: accuracy, source: "live-gps" };
 }
 
@@ -198,7 +213,7 @@ function stepReady(record, step, now, online) {
   if (!jobDue(record.quickCatch?.enrichment?.[step], now) || (step === "weather" && !online)) return false;
   if (step === "metadata" && !record.coordinates && record.quickCatch.inputSource === "camera"
     && !originatingCameraCaptures.has(record.id)
-    && Math.abs(now - Date.parse(record.quickCatch.capturedAt)) <= LIVE_GPS_MAX_AGE_MS) return false;
+    && Math.abs(now - Date.parse(record.quickCatch.capturedAt)) <= QUICK_CATCH_LOCATION_MAX_AGE_MS) return false;
   // Do not let another device close the weather job while capture-origin GPS is still being collected.
   if (step === "weather" && !record.coordinates && record.quickCatch.enrichment?.metadata?.status === "pending") return false;
   return true;
@@ -246,8 +261,9 @@ export function createQuickCatchEnrichmentCoordinator({ repository, scope, apply
           // A location obtained after reopening or for an old import is not evidence for that catch.
           const captureTime = Date.parse(record.quickCatch.capturedAt);
           const originSession = originatingCameraCaptures.delete(record.id);
-          const timelyCamera = originSession && record.quickCatch.inputSource === "camera" && Math.abs(now - captureTime) <= LIVE_GPS_MAX_AGE_MS;
-          const evidence = !record.coordinates && timelyCamera ? await getLocation({ capturedAt: captureTime, now }) : null;
+          const timelyCamera = originSession && record.quickCatch.inputSource === "camera" && Math.abs(now - captureTime) <= QUICK_CATCH_LOCATION_MAX_AGE_MS
+            && Math.abs(Date.parse(record.caughtAt) - captureTime) <= QUICK_CATCH_LOCATION_MAX_AGE_MS;
+          const evidence = !record.coordinates && timelyCamera ? await getLocation({ capturedAt: Date.parse(record.caughtAt), now }) : null;
           if (evidence) {
             patch.values.coordinates = evidence.coordinates;
             patch.values.locationEvidence = evidence;

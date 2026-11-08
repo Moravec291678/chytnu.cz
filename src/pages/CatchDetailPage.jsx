@@ -10,7 +10,6 @@ import { getPhotoAvailability, PHOTO_AVAILABILITY } from "../features/catches/da
 import PhotoSyncStatus from "../features/catches/components/PhotoSyncStatus.js";
 import { useDataScope } from "../features/auth/context/dataScopeContextValue.js";
 import { useTrips } from "../features/trips/context/useTrips";
-import { formatBottomType } from "../features/catches/data/catchFormatting";
 import { getCatchRecognition, isNewLengthRecord } from "../features/catches/data/catchDetail.js";
 import { buildPrivateCatchMarkers } from "../features/map/data/catchMap";
 import { DEFAULT_SPECIES } from "../shared/constants/constants.js";
@@ -26,6 +25,7 @@ import CatchAiAssistance from "../features/ai/CatchAiAssistance.jsx";
 import { buildCatchEnvironmentPresentation } from "../features/catches/data/catchEnvironmentPresentation.js";
 import AutomaticSpeciesStatus from "../features/ai/AutomaticSpeciesStatus.jsx";
 import { suggestedSpeciesForDisplay } from "../features/ai/automaticSpecies.js";
+import { normalizeCatchPrivacy } from "../features/privacy/data/privacyModel.js";
 
 function formatDate(value) {
   if (!value || !Number.isFinite(Date.parse(value))) return null;
@@ -123,7 +123,11 @@ function CatchDetailPage() {
     ["Revír", item.locationName],
     ["Uložený revír", item.waterId ? <Link to={`/waters/${item.waterId}`}>Otevřít detail revíru →</Link> : null],
     ["Číslo revíru", item.waterNumber],
-    ["Datum a čas", catchDateLabel],
+    ["Čas úlovku", catchDateLabel],
+    ["Čas pořízení fotografie", item.photos?.find(photo => photo.captureMetadata?.capturedAt)?.captureMetadata?.capturedAt ? formatDate(item.photos.find(photo => photo.captureMetadata?.capturedAt).captureMetadata.capturedAt) : null],
+    ["Fotografie uložena do aplikace", item.quickCatch?.capturedAt ? formatDate(item.quickCatch.capturedAt) : null],
+    ["GPS", item.coordinates ? `${item.coordinates.latitude}, ${item.coordinates.longitude}` : item.gpsLocation],
+    ["Zdroj polohy", ({ "photo-exif": "GPS fotografie", "live-gps": "Poloha zařízení při úlovku", "manual-map": "Ručně zvoleno na mapě", manual: "Ručně zadáno" })[item.gpsSource]],
     ["Přesnost polohy", valueLabel(item.locationEvidence?.accuracyMeters, "m")],
     ["Poloha zaznamenána", item.locationEvidence?.capturedAt ? formatDate(item.locationEvidence.capturedAt) : null],
     ["Zdroj fotografie", item.quickCatch ? item.quickCatch.inputSource === "camera" ? "Fotoaparát" : "Galerie" : null],
@@ -138,7 +142,7 @@ function CatchDetailPage() {
   ].filter(([, value]) => value !== null && value !== undefined && value !== "");
   const environment = buildCatchEnvironmentPresentation(item, { online: globalThis.navigator?.onLine !== false });
   const suggestedSpecies = suggestedSpeciesForDisplay(item);
-  environment.water = environment.water.map(([label, value]) => [label, label === "Dno" ? formatBottomType(value) || value : value]);
+  const privacy = normalizeCatchPrivacy(item.privacy);
   const recognition = getCatchRecognition(item, state.catches);
   const isPersonalBest = recognition.personalBest;
   const isSpeciesRecord = recognition.speciesRecord;
@@ -185,16 +189,17 @@ function CatchDetailPage() {
         )}
         <AutomaticSpeciesStatus record={item} />
         {catchDateLabel && <p className="catch-detail-date">{catchDateLabel}</p>}
+        {item.quickCatch && item.quickCatch.provenance?.caughtAt !== "manual" && <p className="catch-detail-date">Čas převzatý z fotografie nebo jejího uložení; přesný čas záběru nebyl potvrzen.</p>}
         {item.quickCatch && <details className="catch-detail-date">
           <summary>Původ doplněných údajů</summary>
           <dl>{Object.entries(item.quickCatch.provenance ?? {}).map(([field, source]) => {
             const labels = { caughtAt: "Datum a čas", coordinates: "Poloha", tripId: "Vycházka", locationName: "Místo",
-              waterId: "Revír", method: "Metoda", baits: "Nástrahy", moonPhase: "Fáze měsíce", airTempC: "Teplota vzduchu",
+              waterId: "Revír", waterNumber: "Číslo revíru", method: "Metoda", baits: "Nástrahy", waterDepthM: "Hloubka", bottomType: "Dno", waterTempC: "Teplota vody", moonPhase: "Fáze měsíce", airTempC: "Teplota vzduchu",
               pressureHpa: "Tlak", windKmh: "Vítr", speciesKey: "Druh ryby", lengthCm: "Délka", weightKg: "Hmotnost" };
             const sources = { manual: "Potvrzeno při úpravě", device: "Čas uložení v zařízení", exif: "Údaje fotografie",
               active_trip: "Aktivní vycházka", gps: "Poloha zařízení", weather_api: "Zdroj počasí", derived: "Výpočet podle data",
               ai_suggestion: "Návrh AI", saved_water: "Uložený revír" };
-            const value = ["moonPhase", "airTempC", "pressureHpa", "windKmh"].includes(field) ? item.conditions?.[field] : item[field];
+            const value = ["moonPhase", "airTempC", "pressureHpa", "windKmh", "waterTempC"].includes(field) ? item.conditions?.[field] : item[field];
             const present = value !== null && value !== undefined && value !== "" && (!Array.isArray(value) || value.length > 0);
             return labels[field] && sources[source] ? <div key={field}><dt>{labels[field]}</dt><dd>{present ? sources[source] : "Nezadáno"}</dd></div> : null;
           })}</dl>
@@ -256,6 +261,7 @@ function CatchDetailPage() {
         </section>
       ) : null}
       {placeFacts.length > 0 && <CatchDetailFacts title="Místo a čas" facts={placeFacts} />}
+      {Number.isFinite(item.girthCm) && <CatchDetailFacts title="Další míry ryby" facts={[["Obvod", valueLabel(item.girthCm, "cm")]]} />}
       {methodFacts.length > 0 && <CatchDetailFacts title="Lov a nástraha" facts={methodFacts} />}
       {environment.weather.length > 0 && <CatchDetailFacts title="Počasí" facts={environment.weather} />}
       {environment.weatherSource && <p className="catch-detail-source">Zdroj: <a href="https://open-meteo.com/" target="_blank" rel="noreferrer">Open-Meteo</a> · {environment.weatherSource.kind === "historical-reanalysis" ? "historická reanalýza" : "meteorologický model"} pro {formatDate(environment.weatherSource.hour)}. Nejde o měření přímo u vody.</p>}
@@ -263,6 +269,11 @@ function CatchDetailPage() {
       {environment.water.length > 0 && <CatchDetailFacts title="Podmínky u vody" facts={environment.water} />}
       {environment.status && <section className="catch-detail-section catch-detail-enrichment"><h2>Automatické doplnění</h2><p role="status">{environment.status}</p><details><summary>Co může zůstat neznámé</summary><p>Teplotu vody, průtok ani stav hladiny bez ověřeného zdroje nedoplňujeme. Z fotografie neurčujeme míry, nástrahu ani hloubku. Chybějící údaj neznamená nulu.</p></details></section>}
       {item.notes && <section className="catch-detail-section catch-detail-notes"><h2>Poznámka</h2><p>{item.notes}</p></section>}
+      <details className="catch-detail-section"><summary>Soukromí úlovku</summary><dl className="catch-detail-list">
+        {[["Úlovek", privacy.visibility === "private" ? "Soukromý" : "Veřejný"], ["Fotografie", privacy.photoVisibility === "private" ? "Soukromá" : "Veřejná"],
+          ["Sdílená poloha", privacy.privateSpot || privacy.locationPrecision === "none" ? "Skrytá" : privacy.locationPrecision === "approximate" ? "Přibližná" : "Přesná"],
+          ["Soukromé místo", privacy.privateSpot ? "Ano" : "Ne"]].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
+      </dl></details>
       <CatchAiAssistance key={`${scope.scopeKey}:${item.id}`} record={item} />
       {hasMapLocation && <Link className="catch-detail-map-link" to={`/map?catch=${encodeURIComponent(item.id)}`}>Zobrazit úlovek na soukromé mapě</Link>}
       <div className="catch-detail-actions">

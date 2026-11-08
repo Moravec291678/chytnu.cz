@@ -524,12 +524,22 @@ test("replace writes catches and trips together; a database failure preserves bo
 });
 
 test("trip defaults and rich environment survive local backup restore without private provider blobs", () => {
-  const trip = { ...makeTrip(), waterId: "water-1", baitKeys: ["corn"] };
+  const trip = { ...makeTrip(), waterId: "water-1", baitKeys: ["corn"], waterDepthM: 3, bottomType: "gravel",
+    waterTemperatureMeasurement: { valueC: 12, measuredAt: time, source: "manual_trip" } };
   const record = { ...makeCatch(), captureMode: "quick", quickCatch: { capturedAt: time, inputSource: "camera", provenance: { humidityPct: "weather_api" },
     environment: { conditions: { humidityPct: 80, precipitationMm: 0 }, rawResponse: "must not export as trusted data" } } };
   const parsed = makeBackup(makeDocument({ catches: [record], trips: [trip] }));
   assert.equal(parsed.trips[0].waterId, "water-1");
   assert.deepEqual(parsed.trips[0].baitKeys, ["corn"]);
+  assert.equal(parsed.trips[0].waterDepthM, 3); assert.equal(parsed.trips[0].bottomType, "gravel");
+  assert.deepEqual(parsed.trips[0].waterTemperatureMeasurement, trip.waterTemperatureMeasurement);
   assert.equal(parsed.catches[0].quickCatch.environment.conditions.precipitationMm, 0);
   assert.equal(parsed.catches[0].quickCatch.environment.rawResponse, undefined);
+});
+
+test("normal Catch extended environment survives backup restore with trusted values only", () => {
+  const record = { ...makeCatch(), environment: { conditions: { humidityPct: 80, precipitationMm: 0 }, rawResponse: "untrusted" } };
+  const parsed = makeBackup(makeDocument({ catches: [record] }));
+  assert.deepEqual(parsed.catches[0].environment, { conditions: { humidityPct: 80, precipitationMm: 0 } });
+  assert.equal(makeBackup(makeDocument({ catches: [{ ...record, environment: "invalid" }] })).catches[0].environment, null);
 });

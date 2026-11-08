@@ -595,12 +595,6 @@ function AddCatchPage() {
         });
       }
       const record = createCatchRecord({ ...catchData, verification }, selected, DEFAULT_METHODS, existingCatch, DEFAULT_BAITS);
-      if (record.quickCatch) {
-        record.quickCatch = { ...record.quickCatch, provenance: { ...record.quickCatch.provenance,
-          ...Object.fromEntries(["caughtAt", "coordinates", "tripId", "locationName", "waterId", "method", "baits",
-            "lengthCm", "weightKg", ...Object.keys(record.conditionSources ?? {}).filter(field => record.conditionSources[field] === "manual")].map(field => [field, "manual"])),
-          ...(record.speciesKey !== (existingCatch?.speciesKey ?? "") ? { speciesKey: "manual" } : {}) } };
-      }
       let progressionEventIds = [];
       if (existingCatch) await updateCatch(record, location.state?.aiSpeciesSuggestion
         ? { expectedRevision: location.state.aiSpeciesSuggestion.expectedRevision,
@@ -1093,7 +1087,8 @@ function AddCatchPage() {
             </label>
 
             <label className="input-group">
-              <span>Čas záběru</span>
+              <span>Čas úlovku</span>
+              {existingCatch?.quickCatch && catchData.catchDateTimeSource !== "manual" && <small>Čas fotografie nebo uložení. Přesný čas záběru můžeš upravit.</small>}
 
               <input
                 type="time"

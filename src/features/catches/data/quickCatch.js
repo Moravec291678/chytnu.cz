@@ -1,9 +1,10 @@
 import { createCatchRecord } from "./catchModel.js";
 import { MAX_SOURCE_PHOTO_BYTES, preparePhotoForStorageAndUpload } from "./photoInput.js";
 import { readPhotoCaptureMetadata } from "./photoCaptureMetadata.js";
-import { buildInitialQuickCatchMetadata, buildQuickCatchContext, registerQuickCatchCameraCapture } from "./quickCatchEnrichment.js";
+import { acceptQuickCatchPosition, buildInitialQuickCatchMetadata, buildQuickCatchContext, registerQuickCatchCameraCapture } from "./quickCatchEnrichment.js";
 import { recordPhotoUploadTrace } from "./photoUploadTrace.js";
 import { evaluateCatchVerification } from "./catchVerification.js";
+import { createCatchPrivacyFromDefaults, normalizeCatchPrivacy } from "../../privacy/data/privacyModel.js";
 
 const persistedOperations = new WeakSet();
 export const wasQuickCatchPersisted = record => persistedOperations.has(record);
@@ -26,7 +27,7 @@ export function createQuickCapture(inputSource = "camera", now = new Date()) {
 }
 
 // One operation identity lives with the pending file, including failed-save retries.
-export async function prepareQuickCatch(file, capture, { trip = null, methods = [], waters = [], baits = [],
+export async function prepareQuickCatch(file, capture, { trip = null, methods = [], waters = [], baits = [], privacyDefaults = null, ownerId, locationEvidence = null,
   usedPhotoHashes = new Set(), prepare = preparePhotoForStorageAndUpload, readMetadata = readPhotoCaptureMetadata } = {}) {
   if (!(file instanceof Blob) || !file.size) throw new Error("Vyber platnou neprázdnou fotografii.");
   if (file.size > MAX_SOURCE_PHOTO_BYTES) throw new Error("Fotografii větší než 50 MB nelze zpracovat. Vyber menší soubor.");
@@ -35,10 +36,20 @@ export async function prepareQuickCatch(file, capture, { trip = null, methods = 
   recordPhotoUploadTrace(capture.photoId, "photo_prepared", { catchId: capture.id, preparedBytes: photo.size, preparedMimeType: photo.type });
   const automatic = buildInitialQuickCatchMetadata({ metadata, inputSource: capture.inputSource, capturedAt: capture.capturedAt });
   const timestamp = automatic.values.caughtAt;
+  if (!automatic.values.coordinates && capture.inputSource === "camera" && locationEvidence?.source === "live-gps") {
+    const evidence = acceptQuickCatchPosition({ coords: { ...locationEvidence.coordinates, accuracy: locationEvidence.accuracyMeters }, timestamp: Date.parse(locationEvidence.capturedAt) },
+      { now: Date.parse(capture.capturedAt), capturedAt: Date.parse(timestamp) });
+    if (evidence) {
+      Object.assign(automatic.values, { coordinates: evidence.coordinates, gpsLocation: `${evidence.coordinates.latitude}, ${evidence.coordinates.longitude}`,
+        gpsSource: "live-gps", locationEvidence: evidence });
+      automatic.provenance.coordinates = "gps";
+    }
+  }
   const date = new Date(timestamp);
   const pad = value => String(value).padStart(2, "0");
   // An imported historical photograph must not inherit today's trip context.
-  const tripContext = capture.inputSource === "gallery" && automatic.provenance.caughtAt !== "exif"
+  // Current defaults cannot reconstruct the setup used by an earlier gallery photo.
+  const tripContext = capture.inputSource !== "camera" || (ownerId !== undefined && (trip?.ownerId ?? null) !== ownerId)
     ? { values: {}, provenance: {} } : buildQuickCatchContext({ trip, methods, waters, baits, capturedAt: timestamp });
   const form = { catchDate: `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`,
     catchTime: `${pad(date.getHours())}:${pad(date.getMinutes())}`, locationName: tripContext.values.locationName || "",
@@ -55,11 +66,19 @@ export async function prepareQuickCatch(file, capture, { trip = null, methods = 
   record.createdAt = capture.capturedAt;
   record.caughtAt = timestamp;
   Object.assign(record, automatic.values, tripContext.values);
+  record.conditions = { ...automatic.values.conditions, ...tripContext.values.conditions };
+  record.conditionSources = { ...automatic.values.conditionSources, ...tripContext.values.conditionSources };
+  // The normal form's implicit public default is not an authorization for photo-only capture.
+  record.privacy = privacyDefaults?.hasSavedSettings && privacyDefaults.defaultCatchVisibilityExplicit === true
+    && (ownerId === undefined || privacyDefaults.ownerId === ownerId)
+    ? createCatchPrivacyFromDefaults(privacyDefaults) : normalizeCatchPrivacy(null);
   record.captureMode = "quick";
+  delete record.environment;
   record.verification = evaluateCatchVerification({ photos: record.photos, coordinates: record.coordinates,
     gpsSource: record.gpsSource, caughtAt: record.caughtAt, tripId: record.tripId,
     activeTripId: tripContext.values.tripId, trips: trip ? [trip] : [], usedPhotoHashes, now: new Date(capture.capturedAt) });
-  record.quickCatch = { ...capture, ...(automatic.environment ? { environment: automatic.environment } : {}), provenance: { ...tripContext.provenance, ...automatic.provenance }, enrichment: {
+  record.quickCatch = { ...capture, ...(automatic.environment ? { environment: automatic.environment } : {}),
+    ...(tripContext.tripSnapshot ? { tripSnapshot: tripContext.tripSnapshot } : {}), provenance: { ...tripContext.provenance, ...automatic.provenance }, enrichment: {
     metadata: { status: "pending", attempts: 0, nextAttemptAt: null },
     weather: { status: capture.inputSource === "gallery" && automatic.provenance.caughtAt !== "exif" ? "unavailable" : "pending", attempts: 0, nextAttemptAt: null },
   } };
