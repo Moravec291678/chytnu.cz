@@ -426,6 +426,7 @@ function ProfilePage() {
       </section>
 
       <nav className="profile-quick-links" aria-label="Osobní přehledy">
+        <Link className="profile-stats-link profile-waters-link" to="/waters"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true" focusable="false"><path d="M20 10c0 6-8 11-8 11S4 16 4 10a8 8 0 1 1 16 0Z" /><circle cx="12" cy="10" r="2.5" /></svg><span><strong>Moje revíry</strong><small>Uložené revíry, oblíbené vody a správa lokalit</small></span><b aria-hidden="true">→</b></Link>
         <Link className="profile-stats-link" to="/stats"><span><strong>Statistiky</strong><small>Analýza úlovků a vycházek</small></span><b aria-hidden="true">→</b></Link>
         <Link className="profile-secondary-link" to="/gallery"><span aria-hidden="true">▦ </span>Galerie <span aria-hidden="true">→</span></Link>
         <Link className="profile-secondary-link" to="/insights">Osobní přehledy <span aria-hidden="true">→</span></Link>

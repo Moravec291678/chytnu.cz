@@ -205,6 +205,17 @@
   gap: var(--space-0-5);
 }
 
+.profile-waters-link > svg {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  color: var(--accent-green);
+}
+
+.profile-waters-link > span {
+  flex: 1;
+}
+
 .profile-stats-link strong {
   color: var(--accent-green);
   font-size: var(--font-size-14);
