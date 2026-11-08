@@ -353,3 +353,48 @@ test("unavailable image preflight consumes no inference reservation", async () =
   assert.equal(result.code, 503); assert.equal(result.body.error, "photo_unavailable");
   assert.equal(setup.state.calls.quota, 0); assert.equal(setup.state.calls.species, 0);
 });
+
+test("runtime denial or revocation is checked before quota/provider and cached result delivery", async () => {
+  const denied = fixture({ authorizeRuntime: async () => false, diagnostic() {} });
+  assert.equal((await call(denied.handler, { action: "species", catchId: "catch-1", photoId: "photo-1" })).body.error, "ai_disabled");
+  assert.equal(denied.state.calls.photo, 0); assert.equal(denied.state.calls.quota, 0);
+  let allowed = true;
+  const cached = fixture({ authorizeRuntime: async () => allowed, diagnostic() {} });
+  assert.equal((await call(cached.handler, { action: "species", catchId: "catch-1", photoId: "photo-1" })).code, 200);
+  allowed = false;
+  assert.equal((await call(cached.handler, { action: "species.status", catchId: "catch-1", photoId: "photo-1" })).body.error, "ai_disabled");
+  assert.equal(cached.state.calls.species, 1);
+  let checks = 0;
+  const changed = fixture({ authorizeRuntime: async () => ++checks < 3, diagnostic() {} });
+  assert.equal((await call(changed.handler, { action: "species", catchId: "catch-1", photoId: "photo-1" })).body.error, "ai_disabled");
+  assert.equal(changed.state.calls.quota, 0); assert.equal(changed.state.calls.species, 0);
+});
+
+test("provider diagnostics count actual attempts only, omit cache/quota checks and cannot break fishing APIs", async () => {
+  const events = [];
+  const setup = fixture({ recordInference: event => { events.push(event); }, diagnostic() {} });
+  assert.equal((await call(setup.handler, { action: "species", catchId: "catch-1", photoId: "photo-1" })).code, 200);
+  assert.equal((await call(setup.handler, { action: "species", catchId: "catch-1", photoId: "photo-1" })).code, 200);
+  assert.deepEqual(events, [{ capability: "species", status: "success" }]);
+  const offlineMonitoring = fixture({ recordInference: () => { throw new Error("monitor unavailable"); } });
+  assert.equal((await call(offlineMonitoring.handler, { action: "species", catchId: "catch-1", photoId: "photo-1" })).code, 200);
+  const rejected = fixture({ consumeRateLimit: async () => false, recordInference: event => events.push(event), diagnostic() {} });
+  await call(rejected.handler, { action: "species", catchId: "catch-1", photoId: "photo-1" });
+  assert.equal(events.length, 1);
+});
+
+test("transactional result commit respects current runtime state and JSON manual species-clear provenance", async () => {
+  const db = fakeFirestore(), uid = "owner";
+  const deps = createFirebaseAiApplicationDependencies({ env: {}, admin: async () => ({ db }), now: () => Date.parse("2026-11-08T10:00:00Z") });
+  db.data.set(`users/${uid}/aiPreferences/consent`, consent());
+  db.data.set(`users/${uid}/catches/catch-1`, { ...record(), speciesKey: "", photoRefs: { "photo-1": true },
+    quickCatch: JSON.stringify({ capturedAt: "2026-11-08T09:00:00Z", inputSource: "camera", provenance: { speciesKey: "manual" } }) });
+  db.data.set(`users/${uid}/catches/catch-1/photos/photo-1`, { id: "photo-1", cloud: { state: "synced", sha256: "a".repeat(64) } });
+  const entry = { ownerId: uid, type: "species", catchId: "catch-1", photoId: "photo-1", photoSha256: "a".repeat(64), result: suggestion };
+  assert.equal(await deps.saveResult(uid, "f".repeat(64), entry, { capability: "species", consentRevision: 1, automaticSpecies: true }), false);
+  assert.equal(await deps.saveResult(uid, "e".repeat(64), entry, { capability: "species", consentRevision: 1 }), true);
+  db.data.set("adminConfig/runtime", { features: { species: { audience: "disabled", userIds: [] } } });
+  assert.equal(await deps.saveResult(uid, "d".repeat(64), entry, { capability: "species", consentRevision: 1 }), false);
+  db.data.delete("adminConfig/runtime"); db.data.set(`accountSuspensions/${uid}`, { suspendedAt: "2026-11-08T10:00:00Z" });
+  assert.equal(await deps.saveResult(uid, "c".repeat(64), entry, { capability: "species", consentRevision: 1 }), false);
+});

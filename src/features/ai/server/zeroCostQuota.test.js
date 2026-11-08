@@ -105,3 +105,47 @@ test("detailed quota distinguishes user, global, text reserve, provider circuit 
   const broken = createZeroCostQuota({ ...options, db: { doc: db.doc, runTransaction: async () => { throw new Error("private secret"); } } });
   assert.deepEqual(await broken("owner"), { allowed: false, code: "quota_unavailable", retryAt: null });
 });
+
+test("configured OWNER bypasses only internal user caps, never global or text safety ceilings or disabled features", async () => {
+  const db = database(), options = { db, Timestamp, now: () => Date.parse("2026-11-08T10:00:00Z"), detailed: true, env: { CHYTNU_OWNER_UID: "configured-owner" } };
+  const consume = createZeroCostQuota(options);
+  for (let i = 0; i < 3; i++) assert.equal((await consume("configured-owner")).allowed, true);
+  assert.equal((await consume("configured-owner")).code, "app_daily_limit");
+  const ordinary = database(); ordinary.records.set("adminAccounts/forged-owner", { role: "OWNER" });
+  const consumeForged = createZeroCostQuota({ ...options, db: ordinary });
+  assert.equal((await consumeForged("forged-owner")).allowed, true); assert.equal((await consumeForged("forged-owner")).allowed, true);
+  assert.equal((await consumeForged("forged-owner")).code, "user_daily_limit");
+  const textDb = database(); const text = createZeroCostQuota({ ...options, db: textDb });
+  assert.equal((await text("configured-owner", { capability: "diary" })).allowed, true);
+  assert.equal((await text("configured-owner", { capability: "diary" })).allowed, true);
+  assert.equal((await text("configured-owner", { capability: "diary" })).code, "text_daily_limit");
+  textDb.records.set("adminConfig/runtime", { features: { species: { audience: "disabled", userIds: [] } } });
+  assert.equal((await text("configured-owner")).code, "ai_disabled");
+});
+
+test("tester and individual limits use fresh server policy; expired overrides and suspensions cannot grant quota", async () => {
+  const db = database(), now = () => Date.parse("2026-11-08T10:00:00Z");
+  db.records.set("adminConfig/runtime", { limits: { userDailyReservation: 0, testerDailyReservation: 2500 } });
+  db.records.set("adminAccounts/tester", { role: "TESTER" });
+  const consume = createZeroCostQuota({ db, Timestamp, now, detailed: true });
+  assert.equal((await consume("standard")).code, "user_daily_limit");
+  assert.equal((await consume("tester")).allowed, true); assert.equal((await consume("tester")).code, "user_daily_limit");
+  db.records.set("adminAccounts/temporary", { limits: { dailyReservation: 2500 }, overrideExpiresAt: "2026-11-08T11:00:00Z" });
+  assert.equal((await consume("temporary")).allowed, true);
+  db.records.set("adminAccounts/expired", { limits: { dailyReservation: 2500 }, overrideExpiresAt: "2026-11-08T09:59:59Z" });
+  assert.equal((await consume("expired")).code, "user_daily_limit");
+  db.records.set("accountSuspensions/temporary", { suspendedAt: "2026-11-08T10:00:00Z" });
+  assert.equal((await consume("temporary")).code, "account_unavailable");
+  db.records.set("adminAccounts/tester", { role: "USER" });
+  assert.equal((await consume("tester")).code, "user_daily_limit");
+});
+
+test("strict OWNER audience and global feature disable cannot be bypassed by individual grants or corrupt runtime limits", async () => {
+  const db = database(), options = { db, Timestamp, now: () => Date.parse("2026-11-08T10:00:00Z"), detailed: true };
+  db.records.set("adminAccounts/user", { entitlements: { species: true } });
+  db.records.set("adminConfig/runtime", { features: { species: { audience: "owner", userIds: [] } } });
+  assert.equal((await createZeroCostQuota(options)("user")).code, "ai_disabled");
+  db.records.set("adminConfig/runtime", { limits: { globalDailyReservation: 10000 } });
+  assert.equal((await createZeroCostQuota(options)("user")).code, "quota_unavailable");
+  assert.equal([...db.records.keys()].some(path => path.startsWith("serverRateLimits/")), false);
+});

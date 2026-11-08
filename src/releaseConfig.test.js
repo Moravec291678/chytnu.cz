@@ -9,7 +9,10 @@ test("Vercel config builds Vite into dist and preserves SPA routes", async () =>
   assert.equal(config.framework, "vite");
   assert.equal(config.buildCommand, "npm run build");
   assert.equal(config.outputDirectory, "dist");
-  assert.deepEqual(config.rewrites, [{ source: "/(.*)", destination: "/index.html" }]);
+  assert.deepEqual(config.rewrites, [
+    { source: "/api/admin", destination: "/api/account/delete?admin=1" },
+    { source: "/(.*)", destination: "/index.html" },
+  ]);
   assert.ok(config.headers.some((entry) => entry.source === "/sw.js"
     && entry.headers.some((header) => header.key === "Cache-Control" && header.value.includes("max-age=0"))));
   const baselineHeaders = config.headers.find((entry) => entry.source === "/(.*)")?.headers ?? [];

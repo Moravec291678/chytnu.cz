@@ -1,0 +1,68 @@
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { initializeApp, deleteApp } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
+import { getFirestore } from "firebase-admin/firestore";
+import { createAdminHandler } from "../src/features/admin/server/adminApi.js";
+import { createAdminService } from "../src/features/admin/server/adminStore.js";
+import { verifyFirebaseIdToken } from "../src/server/cloudinaryApi.js";
+
+if (process.env.FIRESTORE_EMULATOR_HOST !== "127.0.0.1:8080" || process.env.FIREBASE_AUTH_EMULATOR_HOST !== "127.0.0.1:9099") throw new Error("Admin integration test requires local Firebase emulators.");
+const app = initializeApp({ projectId: "demo-chytnucz-local" }, `admin-security-${randomUUID()}`);
+const db = getFirestore(app), auth = getAuth(app), suffix = randomUUID();
+const uids = Object.fromEntries(["owner", "admin", "tester", "user"].map(role => [role, `admin-test-${role}-${suffix}`]));
+const tokens = {};
+let checks = 0;
+const handler = createAdminHandler({ verifyToken: token => verifyFirebaseIdToken(auth, token), service: createAdminService({ db, auth, ownerUid: uids.owner }) });
+async function request(role, action, payload = {}, status = 200) {
+  const res = { statusCode: 200, setHeader() {}, status(code) { this.statusCode = code; return this; }, json(value) { this.body = value; return this; } };
+  await handler({ method: "POST", headers: tokens[role] ? { authorization: `Bearer ${tokens[role]}` } : {}, body: { action, ...payload } }, res);
+  assert.equal(res.statusCode, status, `${action}: ${JSON.stringify(res.body)}`); checks++;
+  return res.body;
+}
+try {
+  for (const [role, uid] of Object.entries(uids)) {
+    const email = `${uid}@example.test`, password = `Synthetic-${suffix}-9!`;
+    await auth.createUser({ uid, email, password });
+    const response = await fetch("http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo-api-key", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password, returnSecureToken: true }) });
+    assert.equal(response.status, 200); tokens[role] = (await response.json()).idToken;
+  }
+  await request("anonymous", "overview", {}, 401);
+  assert.equal((await request("owner", "self")).access.role, "OWNER");
+  assert.equal((await request("user", "self")).access.role, "USER");
+  await request("user", "overview", {}, 403);
+  await request("user", "users.update", { uid: uids.user, patch: { role: "ADMIN" }, expectedRevision: 0 }, 403);
+  await request("owner", "users.update", { uid: uids.tester, patch: { role: "TESTER" }, expectedRevision: 0 });
+  await request("tester", "overview", {}, 403);
+  await request("owner", "users.update", { uid: uids.admin, patch: { role: "ADMIN", permissions: ["tasks", "audit"] }, expectedRevision: 0 });
+  const task = (await request("admin", "tasks.save", { task: { title: "Synthetic integration task", description: "No fishing data", category: "Security", priority: "high", status: "New", dueAt: null } })).task;
+  await request("admin", "users.list", {}, 403);
+  await request("admin", "users.update", { uid: uids.admin, patch: { permissions: ["users.manage"] }, expectedRevision: 1 }, 403);
+  const edited = (await request("admin", "tasks.save", { id: task.id, expectedRevision: 1, task: { title: task.title, description: task.description, category: task.category, priority: task.priority, status: "Testing", dueAt: null } })).task;
+  assert.equal(edited.status, "Testing");
+  await request("admin", "tasks.delete", { id: task.id, expectedRevision: 1 }, 409);
+  await request("admin", "tasks.delete", { id: task.id, expectedRevision: 2 });
+  await request("owner", "users.update", { uid: uids.admin, patch: { role: "USER" }, expectedRevision: 1 });
+  await request("admin", "tasks.list", {}, 403);
+  await request("owner", "users.update", { uid: uids.owner, patch: { suspended: true }, expectedRevision: 0 }, 403);
+  await request("owner", "users.update", { uid: uids.user, patch: { role: "OWNER" }, expectedRevision: 0 }, 400);
+  const user = (await request("owner", "users.update", { uid: uids.user, expectedRevision: 0, patch: { limits: { dailyReservation: 350 }, entitlements: { species: false }, overrideExpiresAt: new Date(Date.now() + 86400000).toISOString() } })).user;
+  assert.equal(user.limits.dailyReservation, 350);
+  await db.doc(`users/${uids.user}/catches/private-fixture`).set({ private: true });
+  await request("owner", "users.update", { uid: uids.user, expectedRevision: 1, patch: { suspended: true } });
+  await request("user", "self", {}, 401);
+  assert.equal((await db.doc(`users/${uids.user}/catches/private-fixture`).get()).exists, true);
+  await request("owner", "users.update", { uid: uids.user, expectedRevision: 2, patch: { suspended: false } });
+  assert.equal((await auth.getUser(uids.user)).disabled, false);
+  const config = (await request("owner", "config.get")).config;
+  await request("owner", "config.update", { expectedRevision: config.revision, patch: { limits: { globalDailyReservation: 7501 } } }, 400);
+  await request("owner", "config.update", { expectedRevision: config.revision, patch: { features: { species: { audience: "owner", userIds: [] } } } });
+  await request("owner", "config.update", { expectedRevision: config.revision, patch: { limits: { userDailyReservation: 0 } } }, 409);
+  const audit = await request("owner", "audit.list");
+  assert.ok(audit.entries.length >= 8); assert.ok(audit.entries.every(row => row.actorUid && row.action && row.createdAt));
+  assert.equal(JSON.stringify(audit).includes("Synthetic integration task"), false);
+  const directory = await request("owner", "users.list"); assert.ok(directory.users.some(row => row.uid === uids.owner && row.role === "OWNER"));
+  const monitoring = await request("owner", "monitoring"); assert.equal(monitoring.syncErrors, null);
+  await request("owner", "users.get", { uid: uids.user, privateCatch: true }, 400);
+  console.log(`Admin security integration passed: ${checks} authenticated/unauthorized API checks; real emulator Auth, roles, revocation, suspension, limits, feature policy, task CRUD and audit.`);
+} finally { await deleteApp(app); }

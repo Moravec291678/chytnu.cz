@@ -307,6 +307,27 @@ test("starší normalizátor nesmí vymazat uložený kontext rychlého úlovku"
   await assertSucceeds(setDoc(ref, nextSyncedCatch(withSnapshot, { notes: "Zachovaný historický kontext" })));
 });
 
+test("administrace je pouze serverová; klient ani tvrzený OWNER nemůže měnit role, limity a audit", async () => {
+  const claimedOwner = testEnv.authenticatedContext("angler-a", { role: "OWNER", admin: true }).firestore();
+  for (const path of ["adminAccounts/angler-a", "adminConfig/runtime", "adminAudit/test", "adminTasks/test", "accountSuspensions/angler-a"]) {
+    await testEnv.withSecurityRulesDisabled(async context => setDoc(doc(context.firestore(), path), { role: "USER", revision: 1 }));
+    for (const db of [alice.firestore(), claimedOwner]) {
+      await assertFails(getDoc(doc(db, path)));
+      await assertFails(setDoc(doc(db, path), { role: "OWNER", limits: { dailyReservation: 999999 } }));
+      await assertFails(deleteDoc(doc(db, path)));
+    }
+  }
+});
+
+test("pozastavený účet ztrácí přístup ke svým cloudovým datům bez jejich smazání", async () => {
+  await testEnv.withSecurityRulesDisabled(async context => setDoc(doc(context.firestore(), "accountSuspensions/angler-a"), { suspended: true }));
+  await assertFails(getDoc(doc(alice.firestore(), catchPath("angler-a", "catch-a"))));
+  await assertFails(updateDoc(doc(alice.firestore(), catchPath("angler-a", "catch-a")), { notes: "blocked" }));
+  await assertSucceeds(getDoc(doc(bob.firestore(), catchPath("angler-b", "catch-b"))));
+  await testEnv.withSecurityRulesDisabled(async context => deleteDoc(doc(context.firestore(), "accountSuspensions/angler-a")));
+  await assertSucceeds(getDoc(doc(alice.firestore(), catchPath("angler-a", "catch-a"))));
+});
+
 test("uživatel A nemůže číst, měnit ani mazat záznamy uživatele B", async () => {
   const db = alice.firestore();
   const foreignCatch = doc(db, catchPath("angler-b", "catch-b"));

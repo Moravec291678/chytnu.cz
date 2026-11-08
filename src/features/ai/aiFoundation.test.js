@@ -138,6 +138,13 @@ test("real Firebase/Cloudinary dependency wiring scopes data, checks READY/hash/
     cloudinary: async () => ({ utils: { private_download_url: () => "https://api.cloudinary.com/trusted-download" } }),
     fetchImpl: async () => { fetchCount += 1; return new Response(jpeg); } });
   assert.equal((await deps.verifyToken("valid")).uid, "owner");
+  const catchDocument = documents.get("users/owner/catches/c");
+  catchDocument.captureMode = "quick"; catchDocument.speciesKey = "";
+  catchDocument.quickCatch = JSON.stringify({ capturedAt: "2026-11-08T09:00:00Z", inputSource: "camera", provenance: { speciesKey: "manual" } });
+  assert.equal((await deps.getOwnedPhotoIdentity("owner", "c", "p")).confirmed, true);
+  documents.set("accountSuspensions/owner", { suspendedAt: "2026-11-08T09:01:00Z" });
+  await assert.rejects(() => deps.verifyToken("valid"));
+  documents.delete("accountSuspensions/owner");
   assert.equal((await deps.getConsent("owner")).ownerId, "owner");
   assert.equal(await deps.getConsent("another"), null);
   const photo = await deps.getOwnedPhoto("owner", "c", "p");

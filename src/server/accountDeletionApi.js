@@ -1,10 +1,11 @@
 import { createCloudinaryPhotoDeletionService } from "./cloudinaryPhotoDeletion.js";
 import { createAccountDeletionService } from "./accountDeletion.js";
 import { cloudinaryPublicId, getAccountDeletionAdminContext, verifyFirebaseIdToken } from "./cloudinaryApi.js";
+import { configuredOwnerUid } from "../features/admin/server/adminAccess.js";
 
 const RECENT_AUTH_SECONDS = 5 * 60;
 
-export function createAccountDeletionHandler({ verifyToken, service, now = () => Date.now() } = {}) {
+export function createAccountDeletionHandler({ verifyToken, service, protectedOwnerUid = "", now = () => Date.now() } = {}) {
   if (typeof verifyToken !== "function" || !service?.request || !service?.advanceOwner) {
     throw new TypeError("Account deletion handler dependencies are required.");
   }
@@ -23,6 +24,7 @@ export function createAccountDeletionHandler({ verifyToken, service, now = () =>
     if (typeof uid !== "string" || !uid || uid.length > 128 || uid.includes("/")) {
       return res.status(403).json({ error: "invalid_identity" });
     }
+    if (protectedOwnerUid && uid === protectedOwnerUid) return res.status(403).json({ error: "owner_deletion_protected" });
     const authTime = identity.auth_time;
     if (!Number.isSafeInteger(authTime) || authTime > Math.floor(now() / 1000) + 60
       || Math.floor(now() / 1000) - authTime > RECENT_AUTH_SECONDS) {
@@ -44,5 +46,5 @@ export async function createProductionAccountDeletionHandler({ env = globalThis.
     getCloudinary: async () => { throw new Error("Cloudinary access is reserved for the cleanup worker."); },
     derivePublicId: cloudinaryPublicId, now });
   const service = createAccountDeletionService({ db, auth, photoDeletion, now });
-  return createAccountDeletionHandler({ verifyToken: (token) => verifyFirebaseIdToken(auth, token), service, now });
+  return createAccountDeletionHandler({ verifyToken: (token) => verifyFirebaseIdToken(auth, token), service, protectedOwnerUid: configuredOwnerUid(env), now });
 }

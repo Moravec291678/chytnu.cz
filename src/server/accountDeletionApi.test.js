@@ -40,3 +40,13 @@ test("account deletion rejects stale login", async () => {
   await handler({ method: "POST", headers: { authorization: "Bearer token" }, body: {} }, res);
   assert.equal(res.statusCode, 403);
 });
+
+test("configured OWNER cannot remove the final administration identity through account deletion", async () => {
+  const handler = createAccountDeletionHandler({ protectedOwnerUid: "ownerA", now: () => 1_000_000,
+    verifyToken: async () => ({ uid: "ownerA", auth_time: 999 }),
+    service: { request: async () => assert.fail("must not delete OWNER"), advanceOwner: async () => assert.fail("must not advance OWNER deletion") },
+  });
+  const res = response();
+  await handler({ method: "POST", headers: { authorization: "Bearer token" }, body: {} }, res);
+  assert.equal(res.statusCode, 403); assert.equal(res.body.error, "owner_deletion_protected");
+});

@@ -4,7 +4,8 @@ service cloud.firestore {
   match /databases/{database}/documents {
     function signedInAs(userId) {
       return request.auth != null && request.auth.uid == userId
-        && !exists(/databases/$(database)/documents/accountDeletions/$(userId));
+        && !exists(/databases/$(database)/documents/accountDeletions/$(userId))
+        && !exists(/databases/$(database)/documents/accountSuspensions/$(userId));
     }
 
     function optionalString(value) {
@@ -38,17 +39,23 @@ service cloud.firestore {
     }
 
     function validRecordedConditions(value) {
+      let air = value.get('airTempC', 0);
+      let water = value.get('waterTempC', 0);
+      let pressure = value.get('pressureHpa', 1000);
+      let wind = value.get('windKmh', 0);
+      let oldAir = value.get('airTemperatureC', 0);
+      let oldWater = value.get('waterTemperatureC', 0);
       return value is map
         && value.keys().hasOnly([
           'airTempC', 'waterTempC', 'pressureHpa', 'windKmh', 'moonPhase',
           'airTemperatureC', 'waterTemperatureC', 'weather', 'windDirection', 'pressureTrend'
         ])
-        && (!('airTempC' in value) || recordedNumber(value.airTempC, -60, 60))
-        && (!('waterTempC' in value) || recordedNumber(value.waterTempC, -10, 60))
-        && (!('pressureHpa' in value) || recordedNumber(value.pressureHpa, 300, 1200))
-        && (!('windKmh' in value) || recordedNumber(value.windKmh, 0, 300))
-        && (!('airTemperatureC' in value) || recordedNumber(value.airTemperatureC, -60, 60))
-        && (!('waterTemperatureC' in value) || recordedNumber(value.waterTemperatureC, -10, 60))
+        && air is number && air >= -60 && air <= 60
+        && water is number && water >= -10 && water <= 60
+        && pressure is number && pressure >= 300 && pressure <= 1200
+        && wind is number && wind >= 0 && wind <= 300
+        && oldAir is number && oldAir >= -60 && oldAir <= 60
+        && oldWater is number && oldWater >= -10 && oldWater <= 60
         && value.get('moonPhase', '') is string
         && value.get('weather', '') is string
         && value.get('windDirection', '') is string
@@ -143,8 +150,7 @@ service cloud.firestore {
     function validPhotoMutationParent(userId, catchId, photoId, deleted) {
       let parent = /databases/$(database)/documents/users/$(userId)/catches/$(catchId);
       let after = getAfter(parent).data;
-      return existsAfter(parent)
-        && after.ownerId == userId
+      return after.ownerId == userId
         && after.id == catchId
         && ((!exists(parent) && after.serverRevision == 1)
           || (exists(parent) && after.serverRevision == get(parent).data.serverRevision + 1))
@@ -217,7 +223,6 @@ service cloud.firestore {
         && photos is map
         && ((photos.size() == 0 && primary == null)
           || (photos.size() > 0
-            && primary is string
             && validPhotoId(primary)
             && photos.get(primary, false) == true
             ))

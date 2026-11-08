@@ -6,6 +6,9 @@ import { buildPersonalFishingAnalysis } from "../personalFishingAnalysis.js";
 import { createZeroCostQuota, blockZeroCostQuota } from "./zeroCostQuota.js";
 import { getAccountDeletionAdminContext } from "../../../server/cloudinaryApi.js";
 import { createAiRequestLease } from "./aiRequestLease.js";
+import { loadAdminRuntime } from "../../admin/server/adminAccess.js";
+import { isRuntimeFeatureEnabled } from "../../admin/adminPolicy.js";
+import { createAiOperationalDiagnostics } from "./aiOperationalDiagnostics.js";
 
 export function createProductionAiApplication({ env = globalThis.process?.env ?? {}, features = AI_FEATURES } = {}) {
   const enabled = Object.values(features).some(value => value === true) && env.AI_PROVIDER === "cloudflare"
@@ -19,9 +22,18 @@ export function createProductionAiApplication({ env = globalThis.process?.env ??
       } };
     return createAiApplicationApi({ enabled, features, providerName: "cloudflare", modelId: CLOUDFLARE_ZERO_COST_MODEL,
       ...createFirebaseSpeciesDependencies({ env }), ...createFirebaseAiApplicationDependencies({ env }),
+      authorizeRuntime: async (uid, capability) => {
+        const { db } = await getAccountDeletionAdminContext(env);
+        const { access, config } = await loadAdminRuntime(db, uid, { env });
+        return !access.suspended && isRuntimeFeatureEnabled(capability, access, config);
+      },
+      recordInference: async outcome => {
+        const { db } = await getAccountDeletionAdminContext(env);
+        return createAiOperationalDiagnostics({ db })(outcome);
+      },
       consumeRateLimit: async (uid, options) => {
         const { db, Timestamp } = await getAccountDeletionAdminContext(env);
-        return createZeroCostQuota({ db, Timestamp, detailed: true })(uid, options);
+        return createZeroCostQuota({ db, Timestamp, detailed: true, env })(uid, options);
       },
       claimRequest: async (uid, key, options) => {
         const { db } = await getAccountDeletionAdminContext(env);

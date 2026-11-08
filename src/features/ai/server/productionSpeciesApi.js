@@ -5,6 +5,9 @@ import { createSpeciesApi } from "./speciesApi.js";
 import { createCloudflareSpeciesProvider } from "./cloudflareProvider.js";
 import { createZeroCostQuota, blockZeroCostQuota } from "./zeroCostQuota.js";
 import { getAccountDeletionAdminContext, verifyFirebaseIdToken, cloudinaryPublicId } from "../../../server/cloudinaryApi.js";
+import { loadAdminRuntime } from "../../admin/server/adminAccess.js";
+import { isRuntimeFeatureEnabled } from "../../admin/adminPolicy.js";
+import { quickCatchMetadataFromRemote } from "../../catches/data/quickCatchMetadata.js";
 
 const MAX_ORIGINAL = 10 * 1024 * 1024;
 const MAX_AI_IMAGE = 2 * 1024 * 1024;
@@ -95,13 +98,15 @@ export function createFirebaseSpeciesDependencies({ env, admin = () => getAccoun
         || !Number.isSafeInteger(photo.size) || photo.size <= 0 || photo.size > MAX_ORIGINAL) return null;
       return { ownerId: uid, catchId, photoId, sourceSha256: photo.cloud.sha256, mimeType: "image/jpeg",
         captureMode: record.captureMode, createdAt: record.createdAt,
-        confirmed: Boolean(record.speciesKey) || record.quickCatch?.provenance?.speciesKey === "manual" };
+        confirmed: Boolean(record.speciesKey) || (typeof record.quickCatch === "string" ? quickCatchMetadataFromRemote(record.quickCatch) : record.quickCatch)?.provenance?.speciesKey === "manual" };
     },
     verifyToken: async (token) => {
       const { auth, db } = await admin();
       const identity = await verifyIdentity(auth, token);
-      if (typeof identity?.uid !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(identity.uid)
-        || (await db.doc(`accountDeletions/${identity.uid}`).get()).exists) throw new Error("Account unavailable.");
+      if (typeof identity?.uid !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(identity.uid)) throw new Error("Account unavailable.");
+      const [deleted, suspended, account] = await Promise.all([db.doc(`accountDeletions/${identity.uid}`).get(),
+        db.doc(`accountSuspensions/${identity.uid}`).get(), db.doc(`adminAccounts/${identity.uid}`).get()]);
+      if (deleted.exists || suspended.exists || account.data()?.suspended === true) throw new Error("Account unavailable.");
       return identity;
     },
     getConsent: async (uid) => {
@@ -164,7 +169,12 @@ export function createProductionSpeciesApi({ env = globalThis.process?.env ?? {}
     return createSpeciesApi({ enabled, providerName: "cloudflare", ...createFirebaseSpeciesDependencies({ env }),
       consumeRateLimit: async uid => {
         const { db, Timestamp } = await getAccountDeletionAdminContext(env);
-        return createZeroCostQuota({ db, Timestamp })(uid);
+        return createZeroCostQuota({ db, Timestamp, env })(uid);
+      },
+      authorizeRuntime: async uid => {
+        const { db } = await getAccountDeletionAdminContext(env);
+        const { access, config } = await loadAdminRuntime(db, uid, { env });
+        return !access.suspended && isRuntimeFeatureEnabled("species", access, config);
       },
       provider: createCloudflareSpeciesProvider({ accountId: env.CLOUDFLARE_ACCOUNT_ID, apiToken: env.CLOUDFLARE_API_TOKEN,
         model: env.AI_CLOUDFLARE_MODEL, onQuotaExhausted: async () => {

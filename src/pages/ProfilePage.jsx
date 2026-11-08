@@ -39,6 +39,7 @@ import { waterRepository } from "../features/waters/data/waterRepository.js";
 import { runManualSync } from "../shared/layout/syncStatusView.js";
 import { isFeatureEnabled } from "../shared/config/featureFlags.js";
 import "./ProfilePage.css";
+import ProfileAdminLink from "../features/admin/ProfileAdminLink.jsx";
 
 function formatCount(count, one, few, many) {
   if (count === 1) return `${count} ${one}`;
@@ -397,6 +398,7 @@ function ProfilePage() {
         <h1>Profil</h1>
         <p>Tvůj rybářský příběh a postup.</p>
       </header>
+      <ProfileAdminLink />
 
       <section className="profile-identity" aria-label="Aktuální profil">
         <span className="profile-avatar" aria-hidden="true">{avatarInitial}</span>

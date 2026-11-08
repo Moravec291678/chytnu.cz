@@ -31,6 +31,7 @@ const SpeciesDetailPage = lazy(() => import("../pages/SpeciesDetailPage"));
 const SpeciesAlbumPage = lazy(() => import("../pages/SpeciesAlbumPage"));
 const StatsPage = lazy(() => import("../pages/StatsPage"));
 const ProfilePage = lazy(() => import("../pages/ProfilePage"));
+const AdminDashboard = lazy(() => import("../features/admin/AdminDashboard.jsx"));
 const TripsPage = lazy(() => import("../pages/TripsPage"));
 const TripCreatePage = lazy(() => import("../pages/TripCreatePage"));
 const TripDetailPage = lazy(() => import("../pages/TripDetailPage"));
@@ -134,6 +135,7 @@ function App() {
       <Routes>
         <Route path="/" element={<HomeRoute />} />
         <Route path="/login" element={<PageSuspense><LoginPage /></PageSuspense>} />
+        <Route path="/admin/*" element={<PageSuspense><AdminDashboard /></PageSuspense>} />
         <Route path="/onboarding" element={<PageSuspense><OnboardingPage /></PageSuspense>} />
         <Route path="/journal" element={<PageSuspense><JournalPage /></PageSuspense>} />
         <Route path="/journal/calendar" element={<PageSuspense><CalendarPage /></PageSuspense>} />

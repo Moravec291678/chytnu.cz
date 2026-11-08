@@ -8,7 +8,7 @@ const send = (res, status, error) => { res.setHeader?.("Cache-Control", "no-stor
 // loaded by owner-scoped server identity, not a URL supplied by the caller.
 // Rate consumption must be persistent/atomic (e.g. the existing Firestore transaction pattern).
 // Fail closed when any dependency or release gate is absent.
-export function createSpeciesApi({ enabled = false, providerName, verifyToken, getConsent, getOwnedPhoto, consumeRateLimit, provider } = {}) {
+export function createSpeciesApi({ enabled = false, providerName, verifyToken, getConsent, getOwnedPhoto, consumeRateLimit, provider, authorizeRuntime } = {}) {
   return async (req, res) => {
     if (req.method !== "POST") { res.setHeader?.("Allow", "POST"); return send(res, 405, { error: "method_not_allowed" }); }
     if (!enabled || !providerName || ![verifyToken, getConsent, getOwnedPhoto, consumeRateLimit, provider].every((fn) => typeof fn === "function")) {
@@ -29,6 +29,7 @@ export function createSpeciesApi({ enabled = false, providerName, verifyToken, g
         || typeof body.catchId !== "string" || typeof body.photoId !== "string") throw new Error();
     } catch { return send(res, 400, { error: "invalid_request" }); }
     try {
+      if (authorizeRuntime && !await authorizeRuntime(uid)) return send(res, 503, { error: "ai_disabled" });
       if (!hasAiConsent(await getConsent(uid), "species", providerName)) return send(res, 403, { error: "consent_required" });
       if (!await consumeRateLimit(uid)) return send(res, 429, { error: "rate_limited" });
       const photo = await getOwnedPhoto(uid, body.catchId, body.photoId);
@@ -40,6 +41,7 @@ export function createSpeciesApi({ enabled = false, providerName, verifyToken, g
         return send(res, 422, { error: "unsupported_photo" });
       }
       // Revocation during download must prevent dispatch to the external model.
+      if (authorizeRuntime && !await authorizeRuntime(uid)) return send(res, 503, { error: "ai_disabled" });
       if (!hasAiConsent(await getConsent(uid), "species", providerName)) return send(res, 403, { error: "consent_required" });
       const output = await provider({ bytes: photo.bytes, mimeType: photo.mimeType });
       return send(res, 200, validateSpeciesSuggestion(output));
