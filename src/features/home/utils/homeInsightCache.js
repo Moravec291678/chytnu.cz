@@ -13,7 +13,7 @@ export function usableHomeAiResult(state, { ownerId, fingerprint, now = Date.now
   const result = state?.result, consent = state?.consent;
   const generated = Date.parse(result?.generatedAt);
   const allowed = new Set(evidenceIds);
-  return Boolean(ownerId && state.ownerId === ownerId && result?.ownerId === ownerId
+  return Boolean(ownerId && state?.ownerId === ownerId && result?.ownerId === ownerId
     && result.fingerprint === fingerprint && result.modelVersion === HOME_ANALYSIS_VERSION
     && result.consentRevision === consent?.revision && hasAiConsent(consent, "recommendations", "cloudflare")
     && Number.isFinite(generated) && generated <= now + 300_000 && now - generated <= MAX_AGE

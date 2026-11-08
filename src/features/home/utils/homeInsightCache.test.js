@@ -10,6 +10,13 @@ const consent = { version: 1, provider: "cloudflare", revision: 2, grantedAt: "2
 const data = ownerId => ({ ownerId, consent, result: { ownerId, status: "generated", text: "Ověř popsaný rozdíl stejnou metodou.", fingerprint: "fingerprint", modelVersion: HOME_ANALYSIS_VERSION,
   consentRevision: 2, evidenceIds: ["catch1"], generatedAt: new Date(now).toISOString() }, seenIds: ["a"], selection: { fingerprint: "fingerprint", id: "a", day: "2026-11-08" } });
 const check = ownerId => ({ ownerId, fingerprint: "fingerprint", now, evidenceIds: ["catch1"] });
+
+test("signed-in Home first render tolerates an unloaded, absent or incomplete AI cache", () => {
+  for (const state of [null, undefined, {}, { ownerId: "owner" }, { ownerId: "owner", result: null }, { ownerId: "owner", result: {} }]) {
+    assert.equal(usableHomeAiResult(state, check("owner")), false);
+    assert.equal(usableHomeAiResult(state, check(null)), false);
+  }
+});
 test("owner-scoped AI result and selection survive database close/reopen without crossing accounts", async () => {
   const scope = { scopeKey: "account:home-A", ownerId: "home-A" };
   const state = await loadHomeInsightState(scope);

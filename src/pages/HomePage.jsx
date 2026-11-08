@@ -12,6 +12,7 @@ import useLiveDuration from "../hooks/useLiveDuration";
 import { buildChallengeOverview } from "../features/progression/data/challenges";
 import { buildSeasonalChallenge } from "../features/progression/data/seasonalChallenge";
 import HomeInsightCard from "../features/home/components/HomeInsightCard.jsx";
+import HomeInsightBoundary from "../features/home/components/HomeInsightBoundary.jsx";
 import { useDataScope } from "../features/auth/context/dataScopeContextValue.js";
 import { useProgression } from "../features/progression/context/progressionContextValue.js";
 import { useNotifications } from "../features/notifications/context/notificationContextValue.js";
@@ -279,7 +280,7 @@ function HomePage() {
             />
           ))}
         </section>
-        {!catchState.loading && !catchState.error && <HomeInsightCard key={scope.scopeKey} catches={catches} trips={tripState.trips} contextReady={!tripState.loading && !tripState.error} />}
+        {!catchState.loading && !catchState.error && <HomeInsightBoundary key={scope.scopeKey}><HomeInsightCard catches={catches} trips={tripState.trips} contextReady={!tripState.loading && !tripState.error} /></HomeInsightBoundary>}
       </div>
     </Layout>
   );
