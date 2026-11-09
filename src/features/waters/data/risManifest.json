@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "version": "be90ad549cf77679",
+  "count": 1451,
+  "sourceUrl": "https://www.rybsvaz.cz/seznam-reviru",
+  "sourceName": "Český rybářský svaz – RIS",
+  "fetchedAt": "2026-11-08T19:51:00+00:00",
+  "sourceSha256": "22969decabfde74cee58886686313326ef9e7f96ca3c0ecbb234c132a68806be",
+  "duplicateNumbers": [
+    {
+      "number": "4510091",
+      "count": 2
+    }
+  ],
+  "missing": {
+    "coordinates": 188,
+    "areaHa": 124,
+    "lengthKm": 582
+  },
+  "notes": [
+    "Pravidla lovu se mohou měnit podle data; ověřte aktuální podmínky na oficiálním odkazu.",
+    "Souřadnice představují údaj uvedený na stránce revíru, nikoli hranici celé vodní plochy."
+  ]
+}

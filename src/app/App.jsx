@@ -32,6 +32,8 @@ const SpeciesAlbumPage = lazy(() => import("../pages/SpeciesAlbumPage"));
 const StatsPage = lazy(() => import("../pages/StatsPage"));
 const ProfilePage = lazy(() => import("../pages/ProfilePage"));
 const AdminDashboard = lazy(() => import("../features/admin/AdminDashboard.jsx"));
+const WaterCataloguePage = lazy(() => import("../pages/WaterCataloguePage.jsx"));
+const CatalogueWaterDetail = lazy(() => import("../pages/WaterCataloguePage.jsx").then(module => ({default:module.CatalogueWaterDetail})));
 const TripsPage = lazy(() => import("../pages/TripsPage"));
 const TripCreatePage = lazy(() => import("../pages/TripCreatePage"));
 const TripDetailPage = lazy(() => import("../pages/TripDetailPage"));
@@ -172,6 +174,8 @@ function App() {
         <Route path="/trips/:id" element={<PageSuspense><TripDetailPage /></PageSuspense>} />
         <Route path="/trips/:id/edit" element={<PageSuspense><TripEditPage /></PageSuspense>} />
         <Route path="/waters" element={<PageSuspense><WatersPage /></PageSuspense>} />
+        <Route path="/waters/catalogue" element={<PageSuspense><WaterCataloguePage /></PageSuspense>} />
+        <Route path="/waters/catalogue/:catalogueId" element={<PageSuspense><CatalogueWaterDetail /></PageSuspense>} />
         <Route path="/waters/new" element={<PageSuspense><WaterCreatePage /></PageSuspense>} />
         <Route path="/waters/:waterId/edit" element={<PageSuspense><WaterCreatePage /></PageSuspense>} />
         <Route path="/waters/:waterId" element={<PageSuspense><WaterDetailPage /></PageSuspense>} />

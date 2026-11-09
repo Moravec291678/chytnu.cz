@@ -319,6 +319,18 @@ test("administrace je pouze serverová; klient ani tvrzený OWNER nemůže měni
   }
 });
 
+test("RIS vazba revíru je volitelná, omezená a oddělená podle vlastníka", async () => {
+  const base = makeSyncedCatch("ris-water", "angler-a");
+  const envelope = Object.fromEntries(["entityType", "deleted", "deletedAt", "serverRevision", "syncSequence", "lastOperationId", "clientLocalRevision", "operationDigest", "lastReceiptId", "photoState"].map(key => [key, base[key]]));
+  const water = { ...envelope, entityType:"water", schemaVersion:1, id:"ris-water", ownerId:"angler-a", name:"Zdrojový revír", waterNumber:"471 232", type:"Neuvedeno", catalogueId:"ris-0123456789abcdef01234567", area:null, coordinates:null, notes:null, targetFish:[], isFavorite:true, moderationStatus:"pending", createdAt:base.createdAt, updatedAt:base.updatedAt };
+  const ref = doc(alice.firestore(), "users/angler-a/waters/ris-water");
+  await assertSucceeds(setDoc(ref,water));
+  await assertFails(getDoc(doc(bob.firestore(), "users/angler-a/waters/ris-water")));
+  for(const catalogueId of ["../other", "ris-not-valid", {private:true}]) await assertFails(setDoc(ref,{...water,serverRevision:2,catalogueId}));
+  const legacy = {...water,serverRevision:2}; delete legacy.catalogueId;
+  await assertSucceeds(setDoc(ref,legacy));
+});
+
 test("pozastavený účet ztrácí přístup ke svým cloudovým datům bez jejich smazání", async () => {
   await testEnv.withSecurityRulesDisabled(async context => setDoc(doc(context.firestore(), "accountSuspensions/angler-a"), { suspended: true }));
   await assertFails(getDoc(doc(alice.firestore(), catchPath("angler-a", "catch-a"))));

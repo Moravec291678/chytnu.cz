@@ -5,6 +5,7 @@ export const WATER_TYPES = Object.freeze([
   "Řeka",
   "Přehrada",
   "Lom",
+  "Neuvedeno",
 ]);
 
 export const WATER_ACTIVITY_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
@@ -48,6 +49,7 @@ export function createWaterRecord(data, scope = {}) {
     ownerId: scope?.ownerId || null,
     name: (data?.name || "").trim(),
     waterNumber: data?.waterNumber ? String(data.waterNumber).trim() : null,
+    ...(typeof data?.catalogueId === "string" && /^ris-[a-f0-9]{24}$/.test(data.catalogueId) ? { catalogueId: data.catalogueId } : {}),
     type: WATER_TYPES.includes(data?.type) ? data.type : "Rybník",
     area: (data?.area || "").trim() || null,
     coordinates: data?.coordinates || null,

@@ -180,6 +180,7 @@ function WaterDetailPage() {
       <section className="water-detail-hero">
         <p className="water-detail-kicker">{water.type}{water.waterNumber ? ` · č. ${water.waterNumber}` : ""}</p>
         <h1>{water.name}</h1>
+        {water.catalogueId && <Link to={`/waters/catalogue/${water.catalogueId}`}>Detail a pravidla ve veřejném katalogu RIS →</Link>}
         {water.area && <p className="water-detail-area">{water.area}</p>}
         <div className="water-detail-badges">
           {activeTripForWater && <span className="water-detail-badge water-detail-badge-active">Aktivní</span>}

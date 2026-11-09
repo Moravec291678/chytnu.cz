@@ -157,6 +157,7 @@ export function toRemoteRecord(entityType, record, ownerId) {
       ...common,
       name: requireValue(record.name, ""),
       waterNumber: requireValue(record.waterNumber, null),
+      ...(record.catalogueId !== undefined ? { catalogueId: record.catalogueId } : {}),
       type: requireValue(record.type, "Rybník"),
       area: requireValue(record.area, null),
       coordinates: requireValue(record.coordinates, null),
@@ -530,6 +531,7 @@ export function createFirestoreSyncAdapter({ now = () => new Date().toISOString(
             kind: "upsert", createdAt: now(),
           };
           const remoteDocument = {
+            ...(entityType === "water" && parentContent.catalogueId === undefined && current?.catalogueId !== undefined ? { catalogueId:current.catalogueId } : {}),
             ...(entityType === "catch" && parentContent.environment === undefined && current?.environment !== undefined ? { environment: current.environment } : {}),
             ...(entityType === "trip" ? preserveTripEnvironmentDefaults(parentContent, current) : parentContent),
             entityType,

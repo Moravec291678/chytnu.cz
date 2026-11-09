@@ -291,14 +291,15 @@ service cloud.firestore {
     function validWaterContent(data, userId, waterId) {
       return data.keys().hasOnly([
           'schemaVersion', 'id', 'ownerId', 'entityType', 'name', 'waterNumber', 'type', 'area',
-          'coordinates', 'notes', 'targetFish', 'isFavorite', 'moderationStatus', 'createdAt', 'updatedAt',
+          'coordinates', 'notes', 'targetFish', 'isFavorite', 'moderationStatus', 'createdAt', 'updatedAt', 'catalogueId',
           'deleted', 'deletedAt', 'serverRevision', 'syncSequence', 'lastOperationId', 'clientLocalRevision',
           'operationDigest', 'lastReceiptId', 'photoState'
         ])
         && data.schemaVersion == 1
         && data.name is string
         && optionalString(data.waterNumber)
-        && data.type in ['Rybník', 'Řeka', 'Přehrada', 'Lom']
+        && data.type in ['Rybník', 'Řeka', 'Přehrada', 'Lom', 'Neuvedeno']
+        && (!data.keys().hasAny(['catalogueId']) || data.catalogueId is string && data.catalogueId.matches('^ris-[a-f0-9]{24}$'))
         && optionalString(data.area)
         && validCoordinates(data.get('coordinates', null))
         && optionalString(data.notes)

@@ -9,6 +9,8 @@ import { waterRepository } from "../features/waters/data/waterRepository.js";
 import { useTrips } from "../features/trips/context/useTrips.js";
 import { EmptyState, ErrorState, LoadingSkeleton, NoResultsState, PermissionDeniedState } from "../shared/components/UIStates.jsx";
 import "./WatersPage.css";
+import "./WaterCataloguePage.css";
+import risManifest from "../features/waters/data/risManifest.json";
 
 const tabs = [
   { id: "favorites", label: "Oblíbené" },
@@ -134,6 +136,7 @@ function WatersPage() {
           <Link to="/waters/new" className="waters-add-btn" aria-label="Přidat revír">+</Link>
         </header>
 
+        <Link className="waters-catalogue-link" to="/waters/catalogue"><strong>Procházet katalog RIS →</strong><small>{risManifest.count.toLocaleString("cs-CZ")} revírů ČRS · pravidla, podrobnosti a uložení do mých revírů</small></Link>
         <label className="waters-search">
           <span className="sr-only">Hledat revír</span>
           <input

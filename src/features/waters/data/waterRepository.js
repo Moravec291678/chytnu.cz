@@ -11,7 +11,11 @@ import {
   WATER_STORE_NAME,
   WATER_CHAT_STORE_NAME,
   OUTBOX_STORE_NAME,
+  APP_META_STORE_NAME,
 } from "../../catches/data/catchRepository.js";
+import { quickCaptureGenerationKey } from "../../catches/data/quickCaptureLifecycle.js";
+import { createWaterRecord } from "./waterModel.js";
+import { findPersonalCatalogueWater, validCatalogueId } from "./risCatalogueModel.js";
 
 export const WATER_CHAT_MAX_LENGTH = 500;
 let legacyMigration;
@@ -136,6 +140,36 @@ async function readScopedWater(id, scopeKey) {
 }
 
 export const waterRepository = {
+  async selectCatalogueWater(row, scope, { generation } = {}) {
+    const { scopeKey, ownerId } = validateDataScope(scope);
+    if (!validCatalogueId(row?.id) || !row.name || !row.number) throw new TypeError("Neplatný revír katalogu.");
+    await migrateLegacyData();
+    const db = await openLocalDatabase();
+    return new Promise((resolve,reject) => {
+      const tx = db.transaction([WATER_STORE_NAME,OUTBOX_STORE_NAME,APP_META_STORE_NAME],"readwrite");
+      const store = tx.objectStore(WATER_STORE_NAME);
+      let result, failure;
+      const fence = tx.objectStore(APP_META_STORE_NAME).get(quickCaptureGenerationKey(scopeKey));
+      fence.onsuccess = () => {
+        if (generation !== undefined && (fence.result?.generation ?? null) !== generation) { failure = new Error("Aktivní místní data se změnila. Otevři revír znovu."); tx.abort(); return; }
+        const request = store.index("scopeKey").getAll(scopeKey);
+        request.onsuccess = () => {
+          const existing = findPersonalCatalogueWater(request.result.filter(water => !water.deleted), row);
+          if (existing?.catalogueId) { result = existing; return; }
+          // Reuse legacy IDs and user edits. A first selection gets the normal
+          // private Water identity; catalogue updates never rewrite this record.
+          result = existing ? { ...existing, catalogueId:row.id, updatedAt:new Date().toISOString() } : createWaterRecord({ name:row.name, waterNumber:row.number, catalogueId:row.id,
+            type:"Neuvedeno", area:row.union || "", coordinates:row.detail?.coordinates ?? row.coordinates ?? null, isFavorite:true }, scope);
+          const revision = (existing?.sync?.revision ?? 0) + 1;
+          result.sync = { ...(existing?.sync ?? {}), revision, status:"pending", photoStatus:"none" };
+          queueOutboxOperation(tx,{ entityType:"water", entityId:result.id, operation:"upsert", localRevision:revision, ownerId, scopeKey, baseServerRevision:existing?.sync?.serverRevision ?? null });
+          store.put(result);
+        };
+      };
+      tx.oncomplete = () => { db.close(); resolve(result); };
+      tx.onerror = tx.onabort = () => { db.close(); reject(failure ?? tx.error ?? new Error("Revír se nepodařilo uložit.")); };
+    });
+  },
   async list(scope = {}) {
     await migrateLegacyData();
     const db = await openLocalDatabase();

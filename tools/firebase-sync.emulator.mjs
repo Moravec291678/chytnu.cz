@@ -62,7 +62,7 @@ try {
     sync: { status: "local", revision: 1 },
   }, accountScope);
   await waterRepository.put({
-    schemaVersion: 1, id: waterId, ownerId, name: "Labe", waterNumber: "411050", type: "Řeka", area: null,
+    schemaVersion: 1, id: waterId, ownerId, name: "Labe", waterNumber: "411050", type: "Neuvedeno", catalogueId: "ris-0123456789abcdef01234567", area: null,
     coordinates: { latitude: 50.087, longitude: 14.421 }, notes: "emulator water", targetFish: ["Kapr"],
     isFavorite: false, moderationStatus: "pending", createdAt: stamp, updatedAt: stamp, sync: { status: "local", revision: 1 },
   }, accountScope);
@@ -107,6 +107,8 @@ try {
   assert.equal(remoteCatch.data().tripId, tripId);
   assert.equal(remoteWater.data().name, "Labe");
   assert.equal(remoteWater.data().id, waterId);
+  assert.equal(remoteWater.data().catalogueId, "ris-0123456789abcdef01234567");
+  assert.equal(remoteWater.data().type, "Neuvedeno");
   assert.deepEqual(remoteCatch.data().coordinates, { latitude: 50.087, longitude: 14.421 });
   assert.equal(remoteCatch.data().gpsSource, "manual-map");
   assert.equal(remoteCatch.data().verification.level, "limited");
@@ -262,6 +264,7 @@ try {
   try {
     assert.equal((await serviceFor(firestoreAdapter).run(ownerId)).status, "success");
     const received = await catchRepository.get(catchId, accountScope);
+    assert.equal((await waterRepository.get(waterId, accountScope)).catalogueId, "ris-0123456789abcdef01234567");
     assert.equal(received.photos[0].cloud.state, "synced");
     assert.equal(received.photos[0].cloud.sha256, hash);
     const rows = await Promise.all(received.photos.map(async (photo, index) => {
