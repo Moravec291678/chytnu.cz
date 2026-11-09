@@ -5,6 +5,7 @@ import { createTripRecord, tripToForm } from "../features/trips/data/tripModel";
 import { useTrips } from "../features/trips/context/useTrips";
 import "./TripFormPage.css";
 import TripDefaultsFields from "../features/trips/components/TripDefaultsFields.jsx";
+import { applyWaterToFishingForm } from "../features/waters/data/waterSelection.js";
 
 function TripCreatePage() {
   const navigate = useNavigate();
@@ -39,7 +40,7 @@ function TripCreatePage() {
       <label>Název (volitelný)<input value={values.title} maxLength={80} onChange={(event) => update("title", event.target.value)} placeholder={`Vycházka · ${new Date().toLocaleDateString("cs-CZ")}`} /></label>
       <label>Začátek<input type="datetime-local" step="1" value={values.startedAt} onChange={event => update("startedAt", event.target.value)} required /></label>
       <label>Lokalita (volitelná)<input value={values.locationName} maxLength={120} onChange={(event) => update("locationName", event.target.value)} placeholder="Název místa nebo revíru" /></label>
-      <TripDefaultsFields values={values} onChange={update} />
+      <TripDefaultsFields values={values} onChange={update} recentWaterIds={state.trips.map(trip=>trip.waterId)} onWaterSelect={(water,previous)=>setValues(current=>applyWaterToFishingForm(current,water,previous))} />
       {error && <p role="alert" className="trip-form-error">{error}</p>}
       <button type="submit" className="save-catch-button" disabled={saving || state.loading || Boolean(state.error) || state.trips.some((trip) => !trip.endedAt)}>{saving ? "Zahajuji…" : "Zahájit vycházku"}</button>
     </form>

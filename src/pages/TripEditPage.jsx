@@ -5,6 +5,7 @@ import { tripToForm } from "../features/trips/data/tripModel";
 import { useTrips } from "../features/trips/context/useTrips";
 import "./TripFormPage.css";
 import TripDefaultsFields from "../features/trips/components/TripDefaultsFields.jsx";
+import { applyWaterToFishingForm } from "../features/waters/data/waterSelection.js";
 
 function TripEditPage() {
   const { id } = useParams();
@@ -43,7 +44,7 @@ function TripEditForm({ trip, updateTrip, navigate }) {
     <form onSubmit={submit}>
       <label>Název<input value={values.title} maxLength={80} required onChange={(event) => update("title", event.target.value)} /></label>
       <label>Lokalita (volitelná)<input value={values.locationName} maxLength={120} onChange={(event) => update("locationName", event.target.value)} /></label>
-      <TripDefaultsFields values={values} onChange={update} />
+      <TripDefaultsFields values={values} onChange={update} onWaterSelect={(water,previous)=>setValues(current=>applyWaterToFishingForm(current,water,previous))} />
       <label>Začátek<input type="datetime-local" step="1" value={values.startedAt} onChange={(event) => update("startedAt", event.target.value)} required /></label>
       {trip.endedAt && <label>Konec<input type="datetime-local" step="1" value={values.endedAt} onChange={(event) => update("endedAt", event.target.value)} required /></label>}
       {error && <div className="trip-form-error" role="alert"><p>{error}</p><button type="button" onClick={() => window.location.reload()}>Načíst aktuální údaje</button></div>}

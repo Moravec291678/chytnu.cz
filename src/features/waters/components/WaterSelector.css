@@ -1,0 +1,14 @@
+.water-selector { min-width:0; width:100%; }
+.waters-selector-wrap { margin:0 var(--space-5) var(--space-4); }
+.water-selector .water-selector-primary { display:flex; align-items:center; justify-content:center; gap:var(--space-3); width:100%; min-height:56px; padding:var(--space-4); border:0; border-radius:var(--radius-md); background:var(--accent-green); color:#082519; font:inherit; font-weight:850; cursor:pointer; }
+.water-selector-primary svg { width:24px; height:24px; fill:none; stroke:currentColor; stroke-width:2; flex-shrink:0; }
+.water-selector-panel { display:grid; grid-template-columns:minmax(0,1fr); gap:var(--space-2); margin-top:var(--space-3); padding:var(--space-3); border:1px solid var(--border); background:var(--surface-1); border-radius:var(--radius-md); }
+.water-selector-panel > * { min-width:0; overflow-wrap:anywhere; }
+.water-selector-panel input { width:100%; box-sizing:border-box; min-height:48px; padding:var(--space-3); font:inherit; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--surface-2); color:var(--text-primary); }
+.water-selector-hint, .water-selector-panel small { font-size:var(--font-size-12); color:var(--text-secondary); line-height:1.45; }
+.water-selector-results { display:grid; max-height:360px; overflow-y:auto; gap:var(--space-2); }
+.water-selector .water-selector-results button { display:grid; gap:var(--space-1); text-align:left; white-space:normal; padding:var(--space-3); min-height:72px; border:1px solid var(--border); border-radius:var(--radius-sm); color:var(--text-primary); background:var(--surface-2); font:inherit; }
+.water-selector .water-selector-results button[aria-selected=true], .water-selector-results button:focus-visible { border-color:var(--accent-green); outline:2px solid var(--accent-green); outline-offset:-2px; }
+.water-selector-results span { color:var(--text-secondary); font-size:var(--font-size-12); }
+.water-selector button:disabled { opacity:.55; cursor:wait; }
+.water-selector-panel a { color:var(--accent-green); }

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import WaterSelector from "../features/waters/components/WaterSelector.jsx";
 import Layout from "../shared/layout/Layout";
 import { useDataScope } from "../features/auth/context/dataScopeContextValue.js";
 import { useCatches } from "../features/catches/context/useCatches.js";
@@ -31,6 +32,7 @@ function formatDistance(distanceMeters) {
 }
 
 function WatersPage() {
+  const navigate = useNavigate();
   const scope = useDataScope();
   const catchState = useCatches().state;
   const tripState = useTrips().state;
@@ -137,6 +139,7 @@ function WatersPage() {
         </header>
 
         <Link className="waters-catalogue-link" to="/waters/catalogue"><strong>Procházet katalog RIS →</strong><small>{risManifest.count.toLocaleString("cs-CZ")} revírů ČRS · pravidla, podrobnosti a uložení do mých revírů</small></Link>
+        <div className="waters-selector-wrap"><WaterSelector recentIds={tripState.trips.map(trip=>trip.waterId)} onSelect={water=>navigate(`/waters/${water.id}`)} /></div>
         <label className="waters-search">
           <span className="sr-only">Hledat revír</span>
           <input

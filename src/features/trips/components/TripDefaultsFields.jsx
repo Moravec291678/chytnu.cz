@@ -4,8 +4,10 @@ import { waterRepository } from "../../waters/data/waterRepository.js";
 import { DEFAULT_BAITS, DEFAULT_METHODS } from "../../../shared/constants/constants.js";
 import { formatBottomType } from "../../catches/data/catchFormatting.js";
 import { TRIP_BOTTOM_TYPES } from "../data/tripModel.js";
+import WaterSelector from "../../waters/components/WaterSelector.jsx";
+import { Link } from "react-router-dom";
 
-export default function TripDefaultsFields({ values, onChange }) {
+export default function TripDefaultsFields({ values, onChange, onWaterSelect, recentWaterIds = [] }) {
   const scope = useDataScope();
   const [stored, setStored] = useState({ scopeKey: null, waters: [] });
   useEffect(() => {
@@ -16,12 +18,21 @@ export default function TripDefaultsFields({ values, onChange }) {
   }, [scope]);
   const waters = stored.scopeKey === scope.scopeKey ? stored.waters : [];
   const keys = values.baitKeys ?? [];
+  const selectedWater = waters.find(water=>water.id === values.waterId);
+  const selectWater = water => {
+    const previous = waters.find(item=>item.id === values.waterId);
+    if(onWaterSelect)onWaterSelect(water,previous);
+    else onChange("waterId",water?.id ?? "");
+    if(water)setStored(current=>({scopeKey:scope.scopeKey,waters:[...current.waters.filter(item=>item.id!==water.id),water]}));
+  };
   return <>
-    <label>Uložený revír<select value={values.waterId ?? ""} onChange={event => onChange("waterId", event.target.value)}>
+    <WaterSelector onSelect={selectWater} recentIds={recentWaterIds} />
+    <label>Uložený revír<select value={values.waterId ?? ""} onChange={event => selectWater(waters.find(item=>item.id === event.target.value) ?? null)}>
       <option value="">Bez přiřazeného revíru</option>
       {values.waterId && !waters.some(water => water.id === values.waterId) && <option value={values.waterId}>Dříve přiřazený revír</option>}
       {waters.map(water => <option key={water.id} value={water.id}>{water.name}{water.waterNumber ? ` · ${water.waterNumber}` : ""}</option>)}
     </select></label>
+    {selectedWater?.catalogueId && <Link to={`/waters/catalogue/${selectedWater.catalogueId}`} target="_blank" rel="noopener noreferrer">Popis, pravidla a veřejné údaje vybraného revíru ČRS ↗</Link>}
     <details className="trip-defaults-fields">
     <summary>Výchozí údaje pro rychlé úlovky</summary>
     <p>Tyto údaje se automaticky použijí u nových rychlých úlovků. Kdykoliv je můžeš změnit. Dřívější úlovky si zachovají původní údaje.</p>

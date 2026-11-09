@@ -7,6 +7,8 @@ import { resolveWaterEditorView } from "../features/waters/data/waterEditorState
 import { waterRepository } from "../features/waters/data/waterRepository.js";
 import { EmptyState, ErrorState } from "../shared/components/UIStates.jsx";
 import "./WaterCreatePage.css";
+import WaterSelector from "../features/waters/components/WaterSelector.jsx";
+import { prefillWaterEditor } from "../features/waters/data/waterSelection.js";
 
 const COMMON_FISH = ["Kapr", "Štika", "Candát", "Lín", "Okoun", "Pstruh", "Sumec", "Amur"];
 
@@ -18,6 +20,7 @@ function WaterCreatePage() {
   const scope = useDataScope();
   const navigate = useNavigate();
   const pendingWaterId = useRef(crypto.randomUUID());
+  const dirtyFields = useRef(new Set());
 
   const [formData, setFormData] = useState({
     name: "",
@@ -63,6 +66,7 @@ function WaterCreatePage() {
   }, [waterId, scope]);
 
   const updateField = (key, value) => {
+    dirtyFields.current.add(key);
     setFormData((prev) => ({ ...prev, [key]: value }));
     if (errors[key]) {
       setErrors((prev) => ({ ...prev, [key]: "" }));
@@ -70,6 +74,7 @@ function WaterCreatePage() {
   };
 
   const toggleFish = (fish) => {
+    dirtyFields.current.add("targetFish");
     setFormData((prev) => {
       const exists = prev.targetFish.includes(fish);
       return {
@@ -132,11 +137,16 @@ function WaterCreatePage() {
       <div className="water-create-page">
         <header className="water-create-header">
           <h1>{waterId ? "Upravit revír" : "Přidat revír"}</h1>
-          <p>{waterId ? "Uprav údaje uloženého revíru" : "Ulož si vlastní revír do svého deníku"}</p>
+          <p>{waterId ? "Uprav údaje uloženého revíru" : "Vyber revír ČRS nebo zadej vlastní vodu."}</p>
         </header>
 
+        {!waterId && <WaterSelector disabled={saving} onSelect={water=>{
+          setExistingWater(water);setFormData(current=>prefillWaterEditor(current,water,dirtyFields.current));setErrors({});
+        }} />}
+        {existingWater?.catalogueId && <p className="water-create-note">ČRS revír je propojený s osobním záznamem. <Link to={`/waters/catalogue/${existingWater.catalogueId}`} target="_blank" rel="noopener noreferrer">Popis, pravidla, druh a veřejná poloha v katalogu RIS ↗</Link> Ruční úpravy polí zůstávají zachované.</p>}
         {loadingWater && <p className="loading-state" role="status">Načítám revír…</p>}
 
+        {!waterId && <h2>{existingWater ? "Zkontrolovat a upravit údaje" : "Nebo zadat vlastní revír ručně"}</h2>}
         <form id="water-create-form" className="water-create-form" onSubmit={handleSubmit}>
           <label>
             Název revíru *
@@ -234,7 +244,7 @@ function WaterCreatePage() {
 
         <div className="water-create-submit">
           <button type="submit" form="water-create-form" disabled={saving || loadingWater || scope.status !== "ready" || Boolean(waterId && !existingWater)}>
-            {saving ? "Ukládám…" : waterId ? "Uložit změny" : "Uložit jako čekající"}
+            {saving ? "Ukládám…" : existingWater ? "Uložit změny" : "Uložit vlastní revír"}
           </button>
         </div>
       </div>

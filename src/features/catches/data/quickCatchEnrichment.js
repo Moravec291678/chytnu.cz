@@ -83,8 +83,9 @@ export function buildQuickCatchContext({ trip, methods = [], waters = [], baits 
     values.waterId = water.id;
     provenance.waterId = "active_trip";
     if (!values.locationName && typeof water.name === "string" && water.name.trim()) { values.locationName = water.name.trim(); provenance.locationName = "saved_water"; }
-    const waterNumber = Number(water.waterNumber);
-    if (String(water.waterNumber ?? "").trim() && Number.isInteger(waterNumber) && waterNumber >= 0 && waterNumber <= 99999999) {
+    const encodedWaterNumber = String(water.waterNumber ?? "").replace(/\s/g, "");
+    const waterNumber = Number(encodedWaterNumber);
+    if (/^\d{1,8}$/.test(encodedWaterNumber) && Number.isInteger(waterNumber) && waterNumber >= 0 && waterNumber <= 99999999) {
       values.waterNumber = waterNumber; provenance.waterNumber = "saved_water";
     }
   }

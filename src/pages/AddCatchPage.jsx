@@ -21,6 +21,8 @@ import { privacyRepository } from "../features/privacy/data/privacyRepository.js
 import { readPreferences } from "../features/preferences/data/preferences.js";
 import { useDataScope } from "../features/auth/context/dataScopeContextValue.js";
 import { waterRepository } from "../features/waters/data/waterRepository.js";
+import WaterSelector from "../features/waters/components/WaterSelector.jsx";
+import { applyWaterToFishingForm } from "../features/waters/data/waterSelection.js";
 import { findNearestSavedWater } from "../features/waters/data/nearbyWaterMatch.js";
 import { fetchCatchWeather, replaceAutomaticConditions } from "../shared/data/catchWeather.js";
 import { calculateMoonPhase } from "../shared/utils/moonPhase.js";
@@ -97,6 +99,8 @@ function AddCatchPage() {
   const [draftReadyScopeKey, setDraftReadyScopeKey] = useState("");
   const [draftError, setDraftError] = useState("");
   const [availableWaters, setAvailableWaters] = useState([]);
+  const consumedWaterRequest = useRef(null);
+  const waterRequestKey = JSON.stringify([scope.scopeKey,location.key,location.state?.preselectedWaterId]);
   const [watersError, setWatersError] = useState("");
   const existingCatch = id ? state.catches.find((item) => item.id === id) : null;
   const [displayFull, setDisplayFull] = useState(() => readPreferences(globalThis.localStorage, scope.scopeKey).detailMode === "detailed");
@@ -258,17 +262,17 @@ function AddCatchPage() {
   }, [activeTrip?.id, catchData.tripId, id, location.state, tripState.loading]);
   useEffect(() => {
     if (id || scope.status !== "ready" || privacyDefaultsAppliedScopeRef.current === scope.scopeKey) return undefined;
-    privacyDefaultsAppliedScopeRef.current = scope.scopeKey;
     let active = true;
     privacyRepository.get(scope).then((defaults) => {
       if (!active) return;
+      privacyDefaultsAppliedScopeRef.current = scope.scopeKey;
       if (privacyTouchedScopeRef.current !== scope.scopeKey && draftRestoredScopeRef.current !== scope.scopeKey) {
         setCatchData((current) => ({ ...current, privacy: createCatchPrivacyFromDefaults(defaults) }));
       }
       setPrivacyDefaultsScopeKey(scope.scopeKey);
     }).catch(() => {
       // The public system default remains in place when profile preferences cannot be read.
-      if (active) setPrivacyDefaultsScopeKey(scope.scopeKey);
+      if (active) { privacyDefaultsAppliedScopeRef.current = scope.scopeKey; setPrivacyDefaultsScopeKey(scope.scopeKey); }
     });
     return () => { active = false; };
   }, [id, scope]);
@@ -319,17 +323,18 @@ function AddCatchPage() {
     return () => { active = false; };
   }, [availableWaters, catchData.coordinates, catchData.coordinates?.latitude, catchData.coordinates?.longitude, catchData.gpsSource, catchData.locationName, catchData.waterId, id, manualWaterChoice]);
   useEffect(() => {
-    if (id || !draftReady || !location.state?.preselectedWaterId || !availableWaters.length) return undefined;
+    if (id || !draftReady || !location.state?.preselectedWaterId || !availableWaters.length || consumedWaterRequest.current === waterRequestKey) return undefined;
     const selectedWater = availableWaters.find((water) => water.id === location.state.preselectedWaterId);
     if (!selectedWater) return undefined;
     let active = true;
     Promise.resolve().then(() => {
-      if (!active) return;
-      setCatchData((current) => applySelectedWaterToCatchDraft(current, selectedWater));
+      if (!active || consumedWaterRequest.current === waterRequestKey) return;
+      consumedWaterRequest.current = waterRequestKey;
+      setCatchData((current) => applyWaterToFishingForm(current, selectedWater, availableWaters.find(water=>water.id === current.waterId), {includeNumber:true}));
       setManualWaterChoice(true);
     });
     return () => { active = false; };
-  }, [availableWaters, draftReady, id, location.state]);
+  }, [availableWaters, draftReady, id, location.state, waterRequestKey]);
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
   const [gpsLoading, setGpsLoading] = useState(false);
@@ -351,6 +356,7 @@ function AddCatchPage() {
       if (!active) return;
       setDraftError("");
       if (draft?.data) {
+        consumedWaterRequest.current = draft.uiState?.consumedWaterRequest ?? null;
         draftRestoredScopeRef.current = scopeKey;
         const values = {
           ...draft.data,
@@ -412,6 +418,7 @@ function AddCatchPage() {
       gpsManuallyEdited: gpsManuallyEditedRef.current,
       dateTimeManuallyEdited: dateTimeManuallyEditedRef.current,
       waterSuggestionDismissed,
+      consumedWaterRequest: consumedWaterRequest.current,
     }, scope).then(() => setDraftError("")).catch((error) => {
       setDraftError(error.message || "Rozepsaný úlovek se nepodařilo uložit.");
     });
@@ -520,6 +527,7 @@ function AddCatchPage() {
       gpsManuallyEdited: gpsManuallyEditedRef.current,
     dateTimeManuallyEdited: dateTimeManuallyEditedRef.current,
     waterSuggestionDismissed,
+    consumedWaterRequest: consumedWaterRequest.current,
     ...uiOverrides,
   }, scope);
 
@@ -648,6 +656,15 @@ function AddCatchPage() {
     }));
   };
 
+  const selectWater = water => {
+    consumedWaterRequest.current=waterRequestKey;
+    setManualWaterChoice(true);setWaterSuggestionDismissed(true);
+    if(water)setAvailableWaters(items=>[...items.filter(item=>item.id!==water.id),water]);
+    setCatchData(current=>{
+      const selected=applyWaterToFishingForm(current,water,availableWaters.find(item=>item.id===current.waterId),{includeNumber:true});
+      return ["waterId","locationName","waterNumber"].reduce((result,key)=>selected[key] === current[key] ? result : updateCatchFormField(result,key,selected[key]),current);
+    });
+  };
   const togglePinnedSpecies = (speciesId) => {
     if (scope.status !== "ready" || !scope.scopeKey) {
       setQuickSpeciesError("Načítám profil. Zkus připnutí za okamžik znovu.");
@@ -1022,6 +1039,9 @@ function AddCatchPage() {
           {catchData.coordinates && <small>{catchData.gpsLocation || formatCoordinates(catchData.coordinates)}</small>}
         </button>}
 
+        <section className="add-catch-section"><h2>Revír</h2><WaterSelector disabled={!draftReady || saving} recentIds={tripState.trips.map(trip=>trip.waterId)} onSelect={selectWater} />
+          {selectedWater && <p>Vybraný revír: <strong>{selectedWater.name}</strong>{selectedWater.waterNumber ? ` · ${selectedWater.waterNumber}` : ""}. Ručně zadaná lokalita a GPS zůstávají zachované.</p>}
+        </section>
         {displayFull && <section className="add-catch-section">
           <h2>Místo a čas</h2>
 
@@ -1030,14 +1050,7 @@ function AddCatchPage() {
               <span>Uložený revír</span>
               <select aria-label="Vybrat uložený revír" value={catchData.waterId || ""} onChange={(event) => {
                 const water = availableWaters.find((item) => item.id === event.target.value);
-                setManualWaterChoice(true);
-                updateCatchData("waterId", water?.id || "");
-                if (water) {
-                  updateCatchData("locationName", water.name);
-                  const numericWaterNumber = String(water.waterNumber || "").replace(/\D/g, "");
-                  updateCatchData("waterNumber", numericWaterNumber || "");
-                }
-                setWaterSuggestionDismissed(true);
+                selectWater(water ?? null);
               }}>
                 <option value="">Bez uloženého revíru / vlastní lokalita</option>
                 {catchData.waterId && !availableWaters.some((item) => item.id === catchData.waterId) && <option value={catchData.waterId}>Dříve vybraný revír (nedostupný)</option>}
@@ -1047,13 +1060,13 @@ function AddCatchPage() {
               {!watersError && <span><Link to="/waters/new" onClick={handleAddWater}>＋ Přidat revír</Link></span>}
             </label>
             <label className="input-group input-group-full">
-              <span>Revír / lokalita</span>
+              <span>Lokalita / vlastní označení místa</span>
 
               <input
                 type="text"
                 placeholder="Např. Lipno - sever"
                 value={catchData.locationName}
-                onChange={(e) => { setManualWaterChoice(true); setWaterSuggestionDismissed(true); updateCatchData("locationName", e.target.value); updateCatchData("waterId", ""); }}
+                onChange={(e) => { setManualWaterChoice(true); setWaterSuggestionDismissed(true); updateCatchData("locationName", e.target.value); }}
               />
             </label>
 
