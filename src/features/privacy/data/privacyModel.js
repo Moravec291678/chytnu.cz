@@ -86,6 +86,7 @@ export function anonymizePublicCoordinates(value, precision) {
 }
 
 export function createPublicCatchProjection(record) {
+  if (record?.publicModeration?.hidden === true) return null;
   const privacy = normalizeCatchPrivacy(record?.privacy);
   if (!record || privacy.visibility !== CATCH_VISIBILITY.PUBLIC) return null;
   return {

@@ -2,15 +2,16 @@ import { useState } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import Layout from "../../shared/layout/Layout.jsx";
 import ConfirmDialog from "../../shared/components/ConfirmDialog.jsx";
+import AdminUserDetail from "./AdminUserDetail.jsx";
 import CollaboratorBadge from "./CollaboratorBadge.jsx";
-import { ADMIN_ROLE_LABELS } from "./adminPolicy.js";
+import { ADMIN_ROLE_LABELS, CO_CREATOR_DELEGATABLE, CO_CREATOR_PERMISSIONS } from "./adminPolicy.js";
 import { canOpenAdmin, hasAdminPermission } from "./adminClient.js";
 import { useAdminSession, useAdminResource } from "./useAdminSession.js";
 import "./AdminDashboard.css";
 
 const CAPABILITIES = { species: "Rozpoznávání ryb", diary: "AI rozbor deníku", recommendations: "AI doporučení", stories: "AI vyprávění" };
 const AUDIENCE_NAMES = { everyone: "Všichni", testers: "Testeři", owner: "OWNER a spolutvůrce", selected: "Vybrané účty", disabled: "Vypnuto" };
-const PERMISSIONS = { "users.read": "Čtení účtů", "users.manage": "Správa běžných účtů", tasks: "Úkoly", audit: "Audit", monitoring: "Provoz a monitoring" };
+const PERMISSIONS = { "users.read": "Čtení účtů", "users.manage": "Správa běžných účtů", tasks: "Úkoly", audit: "Audit", monitoring: "Provoz a monitoring", support: "Případy podpory a schválený soukromý přístup", moderation: "Moderace veřejného obsahu" };
 const CATEGORIES = ["Bug", "Feature", "Improvement", "Design", "Security", "Maintenance"];
 const CATEGORY_NAMES = { Bug: "Chyba", Feature: "Funkce", Improvement: "Vylepšení", Design: "Design", Security: "Bezpečnost", Maintenance: "Údržba" };
 const STATUSES = ["New", "Planned", "In Progress", "Testing", "Done", "Cancelled"];
@@ -44,7 +45,8 @@ export function AdminWorkspace({ session }) {
   const { client, access } = session;
   const location = useLocation();
   const section = location.pathname.slice("/admin".length).replace(/^\//, "");
-  const item = NAVIGATION.find(([path]) => path === section);
+  const detailUid = section.startsWith("users/") && /^[A-Za-z0-9_-]{1,128}$/.test(section.slice(6)) ? section.slice(6) : null;
+  const item = NAVIGATION.find(([path]) => path === (detailUid ? "users" : section));
   const [confirmation, setConfirmation] = useState(null), [busy, setBusy] = useState(false), [message, setMessage] = useState(""), [error, setError] = useState("");
   const mutate = async ({ action, payload, saved }) => {
     if (busy) return;
@@ -66,9 +68,10 @@ export function AdminWorkspace({ session }) {
         <NavLink key={path} to={`/admin${path ? `/${path}` : ""}`} end>{label}</NavLink>)}</div> : null;
     })}</nav>
     <div className="admin-content" role="region" aria-label={item?.[1] ?? "Administrace"}>
-    <p className="admin-note">Správa neumožňuje prohlížení soukromých úlovků, fotografií ani přesných míst rybářů.</p>
+    <p className="admin-note">Soukromé údaje jsou přístupné jen v rozsahu dočasného souhlasu uživatele pro konkrétní případ podpory. Přesné lokality se nepředávají.</p>
     {message && <p role="status" className="admin-success">{message}</p>}{error && <p role="alert" className="admin-error">{error}</p>}
     {!item || !permitted(access, item[2]) ? <p role="alert">Tato sekce není pro tvé oprávnění dostupná.</p>
+      : detailUid ? <AdminUserDetail key={detailUid} uid={detailUid} {...{ client, access, change, busy }} renderAccount={(user, refresh) => <UserForm key={`${user.uid}:${user.revision}`} {...{ user, access, busy }} save={patch => change("users.update", { uid:user.uid, patch, expectedRevision:user.revision }, refresh, "Uložit změny účtu? Soukromý deník se nemaže; změna se audituje.")} />} />
       : section === "users" ? <UsersPanel client={client} access={access} change={change} busy={busy} />
         : section === "tasks" ? <TasksPanel client={client} change={change} busy={busy} />
           : ["limits", "features", "settings"].includes(section) ? <ConfigurationPanel key={section} section={section} client={client} change={change} busy={busy} />
@@ -107,39 +110,38 @@ function CapabilityFacts({ features }) {
 }
 
 function UsersPanel({ client, access, change, busy }) {
-  const [filters, setFilters] = useState({ search: "", role: "", status: "" }), [query, setQuery] = useState({});
-  const [cursor, setCursor] = useState(null), [history, setHistory] = useState([]), [selected, setSelected] = useState(null);
+  const [filters, setFilters] = useState({ search: "", searchMode:"exact", role: "", status: "", tester:"", sort:"uid" }), [query, setQuery] = useState({});
+  const [cursor, setCursor] = useState(null), [history, setHistory] = useState([]);
   const resource = useAdminResource(client, "users.list", { ...query, ...(cursor ? { cursor } : {}) });
   const applyFilters = event => { event.preventDefault(); setQuery(Object.fromEntries(Object.entries(filters).filter(([, value]) => value))); setCursor(null); setHistory([]); };
   return <section className="admin-panel"><h2>Správa uživatelů</h2>
-    <form className="admin-filter" onSubmit={applyFilters}><label>Přesné UID nebo e-mail<input maxLength={254} value={filters.search} onChange={event => setFilters({ ...filters, search: event.target.value })} /></label>
+    <form className="admin-filter" onSubmit={applyFilters}><label>Hledání<input maxLength={254} value={filters.search} onChange={event => setFilters({ ...filters, search: event.target.value })} /></label>
+      <label>Způsob hledání<select value={filters.searchMode} onChange={event => setFilters({...filters,searchMode:event.target.value})}><option value="exact">Přesné UID / e-mail</option><option value="name">Začátek jména v indexu</option></select></label>
+      <label>Testeři<select value={filters.tester} onChange={event=>setFilters({...filters,tester:event.target.value})}><option value="">Všichni</option><option value="yes">Pouze TESTER</option><option value="no">Bez TESTER</option></select></label>
+      <label>Řazení načtené stránky<select value={filters.sort} onChange={event=>setFilters({...filters,sort:event.target.value})}><option value="uid">UID — pořadí Firebase</option><option value="name">Jméno</option><option value="created">Nejnovější registrace</option><option value="lastSignIn">Poslední přihlášení</option></select></label>
       <label>Role<select value={filters.role} onChange={event => setFilters({ ...filters, role: event.target.value })}><option value="">Všechny role</option>{["OWNER", "CO_CREATOR", "ADMIN", "TESTER", "USER"].map(value => <option key={value}>{value}</option>)}</select></label>
       <label>Stav<select value={filters.status} onChange={event => setFilters({ ...filters, status: event.target.value })}><option value="">Všechny stavy</option><option value="active">Aktivní</option><option value="suspended">Pozastavený</option></select></label><button type="submit">Vyhledat</button></form>
-    <p className="admin-note">Hledání používá přesné UID nebo e-mail. Filtry se vyhodnocují v právě načtené omezené stránce, nikoli skenováním celé databáze.</p>
+    <p className="admin-note">Přesné UID a e-mail se hledají ve Firebase. Jména se hledají podle začátku v průběžně aktualizovaném indexu; nové či přejmenované účty mohou vyžadovat aktualizaci. Filtry a řazení platí pro načtenou stránku. Levely bez veřejných souhrnů nejsou v seznamu dostupné.</p>
+    {access.role === "OWNER" && <button disabled={busy} onClick={() => change("users.index", {}, resource.refresh, "Aktualizovat jednu stránku indexu (nejvýše 50 účtů)? Další stránky se zpracují dalším klepnutím, bez neomezeného skenu.")}>Aktualizovat stránku indexu jmen</button>}
+    {resource.data?.index && <p className="admin-note">Index: {resource.data.index.complete ? "poslední průchod dokončen" : "další stránka čeká"} · {timestamp(resource.data.index.indexedAt)}. Pozdější změny vyžadují nový průchod.</p>}
     <ResourceStatus resource={resource} />
-    {resource.data && <><ul className="admin-records">{resource.data.users?.map(user => <li key={user.uid}><div><strong>{user.email || user.displayName || "Účet bez e-mailu"}</strong><CollaboratorBadge access={user} /><code>{user.uid}</code><span>{ADMIN_ROLE_LABELS[user.role] ?? user.role} · {user.suspended || user.disabled ? "Pozastavený" : "Aktivní"}</span></div><button type="button" onClick={() => setSelected(user.uid)}>Detail účtu</button></li>)}</ul>
+    {resource.data && <><ul className="admin-records">{resource.data.users?.map(user => <li key={user.uid}><div>{user.photoURL && <img className="admin-user-avatar" src={user.photoURL} alt="" referrerPolicy="no-referrer" />}<strong>{user.displayName || "Jméno není uvedené"}</strong><span>{user.email || "E-mail není uvedený"}</span><CollaboratorBadge access={user} /><span>{ADMIN_ROLE_LABELS[user.role] ?? user.role} · {user.suspended || user.disabled ? "Pozastavený" : "Aktivní"}</span></div><Link to={`/admin/users/${encodeURIComponent(user.uid)}`}>Detail účtu</Link></li>)}</ul>
       {!resource.data.users?.length && <p>Na této stránce nebyl nalezen odpovídající účet.</p>}
       <Pagination nextCursor={resource.data.nextCursor} {...{ cursor, setCursor, history, setHistory }} /></>}
-    {selected && <UserEditor key={selected} uid={selected} {...{ client, access, change, busy }} onSaved={resource.refresh} onClose={() => setSelected(null)} />}
   </section>;
 }
 
-function UserEditor({ uid, client, access, change, busy, onSaved, onClose }) {
-  const resource = useAdminResource(client, "users.get", { uid });
-  return <section className="admin-subpanel"><div className="admin-header"><h3>Detail účtu</h3><button type="button" onClick={onClose}>Zavřít detail</button></div><ResourceStatus resource={resource} />
-    {resource.data?.user && <UserForm key={`${uid}:${resource.data.user.revision}`} user={resource.data.user} {...{ access, busy }}
-      save={patch => change("users.update", { uid, patch, expectedRevision: resource.data.user.revision }, () => { resource.refresh(); onSaved(); }, `Uložit změny role, stavu nebo oprávnění účtu ${uid}? Změna se zapíše do auditu. Pozastavení nesmaže jeho rybářská data.`)} />}
-  </section>;
-}
 function UserForm({ user, access, busy, save }) {
   const [values, setValues] = useState(() => ({ role: user.role, suspended: Boolean(user.suspended || user.disabled), permissions: user.permissions ?? [],
-    limits: user.limits ?? {}, entitlements: user.entitlements ?? {}, overrideExpiresAt: datetimeInput(user.overrideExpiresAt) }));
-  const owner = access.role === "OWNER", protectedUser = ["OWNER", "CO_CREATOR"].includes(user.role) || (!owner && ["ADMIN", "CO_CREATOR"].includes(user.role));
+    limits: user.limits ?? {}, entitlements: user.entitlements ?? {}, overrideExpiresAt: datetimeInput(user.overrideExpiresAt), permissionsExpiresAt:datetimeInput(user.permissionsExpiresAt), suspensionReason:user.suspensionReason??"", suspensionExpiresAt:user.suspensionExpiresAt?.slice(0,10)??"" }));
+  const owner = access.role === "OWNER", protectedUser = user.role === "OWNER" || (!owner && ["ADMIN", "CO_CREATOR"].includes(user.role));
   const editable = !protectedUser && (owner || hasAdminPermission(access, "users.manage"));
   const set = (key, value) => setValues(previous => ({ ...previous, [key]: value }));
   const submit = event => {
     event.preventDefault();
-    const patch = owner ? { ...values, permissions: values.role === "ADMIN" ? values.permissions : [], overrideExpiresAt: values.overrideExpiresAt ? new Date(values.overrideExpiresAt).toISOString() : null } : { suspended: values.suspended };
+    const restrictions = { suspended:values.suspended, suspensionReason:values.suspensionReason, suspensionExpiresAt:values.suspended && values.suspensionExpiresAt ? new Date(values.suspensionExpiresAt+"T00:00:00Z").toISOString() : null };
+    const patch = owner ? { ...values, ...restrictions, permissions: ["ADMIN","CO_CREATOR"].includes(values.role) ? values.permissions : [], overrideExpiresAt:values.overrideExpiresAt ? new Date(values.overrideExpiresAt).toISOString() : null, permissionsExpiresAt:values.permissionsExpiresAt ? new Date(values.permissionsExpiresAt).toISOString() : null } : restrictions;
+    if(user.role === "CO_CREATOR") delete patch.role;
     save(patch);
   };
   return <form onSubmit={submit} className="admin-form"><Facts items={[["UID", user.uid], ["E-mail", user.email], ["Vytvořen", timestamp(user.createdAt)], ["Poslední přihlášení", timestamp(user.lastSignInAt)]]} />
@@ -148,7 +150,9 @@ function UserForm({ user, access, busy, save }) {
       {["OWNER", "CO_CREATOR"].includes(user.role) ? <option value={user.role}>{ADMIN_ROLE_LABELS[user.role]}</option> : ["USER", "TESTER", "ADMIN"].map(role => <option key={role}>{role}</option>)}
     </select></label>}
     <label className="admin-check"><input type="checkbox" checked={values.suspended} disabled={!editable || busy} onChange={event => set("suspended", event.target.checked)} />Pozastavit účet</label>
-    {owner && <><fieldset disabled={!editable || busy}><legend>Delegovaná oprávnění ADMIN</legend>{Object.entries(PERMISSIONS).map(([key, label]) => <label key={key} className="admin-check"><input type="checkbox" checked={values.permissions.includes(key)} onChange={event => set("permissions", event.target.checked ? [...values.permissions, key] : values.permissions.filter(value => value !== key))} />{label}</label>)}</fieldset>
+    <label>Důvod pozastavení<textarea maxLength={1000} required={values.suspended} disabled={!editable || busy} value={values.suspensionReason} onChange={event=>set("suspensionReason",event.target.value)} /></label>
+    <label>Obnovit od dne (UTC, volitelné)<input type="date" disabled={!editable || busy || !values.suspended} value={values.suspensionExpiresAt} onChange={event=>set("suspensionExpiresAt",event.target.value)} /></label><p className="admin-note">Automatické obnovení provede nejbližší úspěšná denní servisní úloha po vypršení. Ihned lze obnovit účet ručně; data se nemažou.</p>
+    {owner && <><label>Delegovaná oprávnění platí do (volitelné)<input type="datetime-local" disabled={!editable || busy} value={values.permissionsExpiresAt} onChange={event=>set("permissionsExpiresAt",event.target.value)} /></label><fieldset disabled={!editable || busy}><legend>Delegovaná oprávnění ADMIN</legend>{Object.entries(PERMISSIONS).filter(([key]) => user.role !== "CO_CREATOR" || CO_CREATOR_DELEGATABLE.includes(key)).map(([key, label]) => <label key={key} className="admin-check"><input type="checkbox" disabled={user.role === "CO_CREATOR" && CO_CREATOR_PERMISSIONS.includes(key)} checked={values.permissions.includes(key)} onChange={event => set("permissions", event.target.checked ? [...values.permissions, key] : values.permissions.filter(value => value !== key))} />{label}</label>)}</fieldset>
       <UserLimitFields values={values.limits} onChange={value => set("limits", value)} disabled={!editable || busy} />
       <fieldset disabled={!editable || busy}><legend>Individuální dostupnost AI funkcí</legend>{Object.entries(CAPABILITIES).map(([key, label]) => <label key={key}>{label}<select value={values.entitlements[key] === undefined ? "default" : values.entitlements[key] ? "yes" : "no"}
         onChange={event => { const next = { ...values.entitlements }; if (event.target.value === "default") delete next[key]; else next[key] = event.target.value === "yes"; set("entitlements", next); }}><option value="default">Podle globálního nastavení</option><option value="yes">Povolit</option><option value="no">Zakázat</option></select></label>)}</fieldset>

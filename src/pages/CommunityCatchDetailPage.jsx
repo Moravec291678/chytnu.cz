@@ -1,3 +1,4 @@
+import { useOwnModeration } from "../features/community/useOwnModeration.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import CollaboratorBadge from "../features/admin/CollaboratorBadge.jsx";
@@ -32,7 +33,8 @@ function CommunityCatchDetailPage() {
   const scope = useDataScope();
   const { state } = useCatches();
   const record = state.catches.find((item) => item.id === catchId);
-  const projection = useMemo(() => record ? createPublicCatchProjection(record) : null, [record]);
+  const moderation = useOwnModeration();
+  const projection = useMemo(() => record ? createPublicCatchProjection({...record,publicModeration:moderation.get(record.id)}) : null, [record,moderation]);
   const rarity = record && projection ? getCatchRarity(record, DEFAULT_SPECIES) : null;
   const interactionScope = useMemo(() => ({ scopeKey: scope.scopeKey, ownerId: scope.ownerId }), [scope.ownerId, scope.scopeKey]);
   const profileName = auth.user?.displayName?.trim() || (auth.user ? "Můj profil" : "Místní profil");

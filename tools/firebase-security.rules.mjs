@@ -309,7 +309,7 @@ test("starší normalizátor nesmí vymazat uložený kontext rychlého úlovku"
 
 test("administrace je pouze serverová; klient ani tvrzený OWNER nemůže měnit role, limity a audit", async () => {
   const claimedOwner = testEnv.authenticatedContext("angler-a", { role: "OWNER", admin: true }).firestore();
-  for (const path of ["adminAccounts/angler-a", "adminConfig/runtime", "adminAudit/test", "adminTasks/test", "accountSuspensions/angler-a"]) {
+  for (const path of ["adminAccounts/angler-a", "adminConfig/runtime", "adminAudit/test", "adminTasks/test", "accountSuspensions/angler-a", "adminSupportCases/test", "adminSupportNotes/test", "adminPublicModeration/test", "adminUserDirectory/angler-a", "adminDirectoryState/index", "users/angler-a/supportGrants/test", "users/angler-a/adminProgressionAdjustments/test", "users/angler-a/adminProgressionState/summary"]) {
     await testEnv.withSecurityRulesDisabled(async context => setDoc(doc(context.firestore(), path), { role: "USER", revision: 1 }));
     for (const db of [alice.firestore(), claimedOwner]) {
       await assertFails(getDoc(doc(db, path)));

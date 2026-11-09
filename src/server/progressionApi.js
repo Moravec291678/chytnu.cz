@@ -136,6 +136,7 @@ export function createAdminProgressionReconciler(db, serverTimestamp) {
       });
       transaction.set(stateRef, {
         ownerId, legacyBaselineXp: result.legacyBaselineXp,
+        serverEventXp: result.serverEventXp,
         updatedAt: serverTimestamp(),
         ...(stateSnapshot.exists ? {} : { createdAt: serverTimestamp(), schemaVersion: 1 }),
       });

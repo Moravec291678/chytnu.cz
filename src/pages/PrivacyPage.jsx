@@ -1,3 +1,4 @@
+import UserSupportPanel from "../features/admin/UserSupportPanel.jsx";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import Layout from "../shared/layout/Layout";
@@ -166,6 +167,8 @@ export default function PrivacyPage() {
               ? <ul className="privacy-place-list">{privatePlaces.map((place) => <li key={place.key}><span className="privacy-place-pin" aria-hidden="true">⌖</span><span><strong>{place.name}</strong><small>{place.detail}</small></span><span className="privacy-lock" aria-label="Soukromé">🔒</span></li>)}</ul>
               : <p className="privacy-empty">V tomto profilu zatím nejsou uložené žádné lokace.</p>}
       </section>
+
+      <UserSupportPanel />
 
       {status === "load-error" && <p className="privacy-error" role="alert">Nastavení soukromí se nepodařilo načíst.</p>}
       {status === "saving" && <p className="privacy-feedback" role="status">Ukládám nastavení…</p>}

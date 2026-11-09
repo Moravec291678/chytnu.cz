@@ -1,8 +1,9 @@
+import { createAdminSupportService } from "./adminSupportStore.js";
 import { configuredCoCreatorUid } from "./adminAccess.js";
 import { collaboratorIdentity } from "../collaboratorIdentity.js";
 import { randomUUID } from "node:crypto";
 import { Buffer } from "node:buffer";
-import { resolveAccess, hasAdminPermission, normalizeRuntimeConfig, normalizeAccountLimits, normalizeFeatureEntitlements, validAdminUid } from "../adminPolicy.js";
+import { resolveAccess, hasAdminPermission, normalizeRuntimeConfig, normalizeAccountLimits, normalizeFeatureEntitlements, validAdminUid, CO_CREATOR_DELEGATABLE } from "../adminPolicy.js";
 import { adminError } from "./adminValidation.js";
 
 const PAGE = 50, COUNT_BOUND = 1000;
@@ -21,12 +22,13 @@ function decode(value, kind) {
     const cursor = JSON.parse(Buffer.from(value, "base64url").toString("utf8"));
     if (cursor?.kind !== kind) throw new Error();
     if (kind === "auth" ? typeof cursor.token !== "string" || cursor.token.length > 2048
+      : kind === "name" ? !validAdminUid(cursor.id) || typeof cursor.createdAt !== "string" || cursor.createdAt.length > 200
       : !validAdminUid(cursor.id) || !safeDate(cursor.createdAt)) throw new Error();
     return cursor;
   } catch { throw adminError("invalid_cursor"); }
 }
 
-export function createAdminService({ db, auth, ownerUid = "", env = {}, now = () => Date.now() } = {}) {
+export function createAdminService({ db, auth, ownerUid = "", env = {}, now = () => Date.now(), photoProxy } = {}) {
   if (typeof db?.doc !== "function" || typeof db?.runTransaction !== "function" || typeof auth?.getUser !== "function") throw new TypeError("Admin service dependencies are required.");
   const trustedOwner = validAdminUid(ownerUid) ? ownerUid : "";
   const coCreatorUid = configuredCoCreatorUid(env);
@@ -64,9 +66,10 @@ export function createAdminService({ db, auth, ownerUid = "", env = {}, now = ()
     const access = resolveAccess(user.uid, account ?? {}, trustedOwner, now(), coCreatorUid);
     return { uid: user.uid, email: typeof user.email === "string" ? user.email : null,
       displayName: typeof user.displayName === "string" ? user.displayName : null,
+      photoURL: typeof user.photoURL === "string" && /^https:\/\/(?:[a-z0-9.-]+\.)?(?:googleusercontent\.com|res\.cloudinary\.com)\//i.test(user.photoURL) ? user.photoURL : null,
       role: access.role, suspended: access.suspended || user.disabled === true, disabled: user.disabled === true,
       permissions: access.permissions, limits: normalizeAccountLimits(account?.limits ?? {}), entitlements: normalizeFeatureEntitlements(account?.entitlements ?? {}),
-      overrideExpiresAt: account?.overrideExpiresAt ?? null, revision: access.revision,
+      permissionsExpiresAt: account?.permissionsExpiresAt ?? null, suspensionReason: account?.suspensionReason ?? null, suspensionExpiresAt: account?.suspensionExpiresAt ?? null, overrideExpiresAt: account?.overrideExpiresAt ?? null, revision: access.revision,
       createdAt: safeDate(user.metadata?.creationTime), lastSignInAt: safeDate(user.metadata?.lastSignInTime), authState: account?.authState ?? "applied" };
   }
   async function getUser(uid) {
@@ -75,7 +78,14 @@ export function createAdminService({ db, auth, ownerUid = "", env = {}, now = ()
   }
   async function listUsers(input) {
     let users, nextCursor = null;
-    if (input.search) {
+    if (input.search && input.searchMode === "name") {
+      const key = input.search.trim().toLocaleLowerCase("cs-CZ");
+      let query = db.collection("adminUserDirectory").orderBy("nameKey").orderBy("__name__").startAt(key).endAt(key + "\uf8ff");
+      if (input.cursor) { const cursor = decode(input.cursor, "name"); query = query.startAfter(cursor.createdAt, cursor.id); }
+      const page = await query.limit(PAGE + 1).get();
+      users = (await Promise.all(page.docs.slice(0,PAGE).map(doc => auth.getUser(doc.id).catch(error => { if(error.code === "auth/user-not-found")return null; throw error; })))).filter(Boolean);
+      if(page.docs.length > PAGE) { const last=page.docs[PAGE-1]; nextCursor=encode({kind:"name",createdAt:last.data().nameKey,id:last.id}); }
+    } else if (input.search) {
       try {
         const user = input.search.includes("@") ? await auth.getUserByEmail(input.search) : validAdminUid(input.search) ? await auth.getUser(input.search) : null;
         users = user ? [user] : [];
@@ -88,8 +98,12 @@ export function createAdminService({ db, auth, ownerUid = "", env = {}, now = ()
     }
     const documents = await Promise.all(users.map(user => ref(user.uid).get()));
     const rows = users.map((user, i) => userDto(user, dataOf(documents[i]))).filter(user => (!input.role || user.role === input.role)
-      && (!input.status || (input.status === "suspended") === user.suspended));
-    return { users: rows, nextCursor, filterScope: input.search ? "exact" : "page", pageSize: PAGE };
+      && (!input.status || (input.status === "suspended") === user.suspended)
+      && (!input.tester || (input.tester === "yes") === (user.role === "TESTER")));
+    if(input.sort === "name") rows.sort((a,b)=>(a.displayName??"").localeCompare(b.displayName??"","cs"));
+    if(input.sort === "created") rows.sort((a,b)=>(b.createdAt??"").localeCompare(a.createdAt??""));
+    if(input.sort === "lastSignIn") rows.sort((a,b)=>(b.lastSignInAt??"").localeCompare(a.lastSignInAt??""));
+    return { users: rows, nextCursor, filterScope: input.searchMode === "name" ? "indexed-prefix-page" : input.search ? "exact" : "page", pageSize: PAGE, index: dataOf(await db.doc("adminDirectoryState/index").get()) };
   }
   async function syncAuthStatus(uid) {
     // Firestore suspension is authoritative immediately. SDK work follows it and
@@ -123,17 +137,20 @@ export function createAdminService({ db, auth, ownerUid = "", env = {}, now = ()
       required(targetAccess.role !== "OWNER", "owner_protected");
       if (access.role !== "OWNER") {
         required(input.uid !== access.uid && !["ADMIN", "CO_CREATOR"].includes(targetAccess.role), "target_protected");
-        required(Object.keys(input.patch).every(key => key === "suspended"), "owner_required");
+        required(Object.keys(input.patch).every(key => ["suspended", "suspensionReason", "suspensionExpiresAt"].includes(key)), "owner_required");
       }
       required(targetAccess.role !== "CO_CREATOR" || !Object.hasOwn(input.patch, "role"), "role_protected");
+      if (targetAccess.role === "CO_CREATOR" && input.patch.permissions) required(input.patch.permissions.every(p => CO_CREATOR_DELEGATABLE.includes(p)), "forbidden");
+      if (input.patch.suspended) required((input.patch.suspensionReason ?? "").trim().length >= 3, "reason_required", 400);
+      if (input.patch.suspensionExpiresAt) required(Date.parse(input.patch.suspensionExpiresAt) > now() && Date.parse(input.patch.suspensionExpiresAt) < now()+366*86400000, "invalid_expiry", 400);
       const next = { role: "USER", suspended: targetAuth.disabled === true, permissions: [], limits: {}, entitlements: {}, overrideExpiresAt: null,
         ...current, ...input.patch, revision: revision(current) + 1, updatedAt: at(), updatedBy: identity.uid };
-      if (next.role !== "ADMIN") {
+      if (next.role !== "ADMIN" && targetAccess.role !== "CO_CREATOR") {
         required(!input.patch.permissions?.length, "invalid_permissions", 400); next.permissions = [];
       }
       if (Object.hasOwn(input.patch, "suspended")) next.authState = "pending";
       tx.set(ref(input.uid), next);
-      if (next.suspended) tx.set(db.doc(`accountSuspensions/${input.uid}`), { uid: input.uid, suspended: true, updatedAt: at(), updatedBy: identity.uid });
+      if (next.suspended) tx.set(db.doc(`accountSuspensions/${input.uid}`), { uid: input.uid, suspended: true, reason: next.suspensionReason ?? null, expiresAt: next.suspensionExpiresAt ?? null, updatedAt: at(), updatedBy: identity.uid });
       else tx.delete(db.doc(`accountSuspensions/${input.uid}`));
       audit("user.update", input.uid, Object.keys(input.patch));
     });
@@ -212,15 +229,37 @@ export function createAdminService({ db, auth, ownerUid = "", env = {}, now = ()
     return { ai, quota: currentQuota, version, provider: { configured, zeroCostConfirmed: null, model, status: configured ? "configured" : "unavailable", connection: "not_probed" },
       syncErrors: null, photoUploadFailures: null, deferredJobs: null, serviceHealth: "available" };
   }
+  const support = createAdminSupportService({db, auth, ownerUid: trustedOwner, actor, permit, transaction, now, at, recent, photoProxy});
+  async function indexUsers(identity) {
+    recent(identity, now()); const access=await actor(identity.uid); permit(access,"owner");
+    const stateRef=db.doc("adminDirectoryState/index"), state=dataOf(await stateRef.get())??{};
+    const page=await auth.listUsers(PAGE, state.nextCursor??undefined);
+    return transaction(identity,"owner",async(tx, active, audit)=>{
+      const current=dataOf(await tx.get(stateRef))??{};
+      required((current.revision??0)===(state.revision??0),"revision_conflict",409);
+      const deletionStates = await Promise.all(page.users.map(user => tx.get(db.doc(`accountDeletions/${user.uid}`))));
+      for(const [index,user] of page.users.entries()) if(!deletionStates[index].exists) tx.set(db.doc(`adminUserDirectory/${user.uid}`),{uid:user.uid,displayName:user.displayName??null,nameKey:(user.displayName??"").trim().toLocaleLowerCase("cs-CZ").slice(0,200),indexedAt:at()});
+      const result={revision:(state.revision??0)+1,nextCursor:page.pageToken??null,complete:!page.pageToken,indexedAt:at(),processed:page.users.length};
+      tx.set(stateRef,result);audit("directory.index", "directory", ["page"]);return result;
+    });
+  }
   const permissions = { overview: "admin", "users.list": "users.read", "users.get": "users.read", "users.update": "users.manage",
     "config.get": "owner", "config.update": "owner", "tasks.list": "tasks", "tasks.save": "tasks", "tasks.delete": "tasks", "audit.list": "audit", monitoring: "monitoring" };
   return { async execute(input, identity) {
     const access = await actor(identity.uid);
     if (input.action === "self") return { access, identity: collaboratorIdentity(access) };
+    if(input.action === "users.index") return indexUsers(identity);
+    const supported=await support.execute(input,identity); if(supported !== null) return supported;
     permit(access, permissions[input.action]);
     if (input.action === "overview") return overview(access);
-    if (input.action === "users.list") return listUsers(input);
-    if (input.action === "users.get") return { user: await getUser(input.uid) };
+    if (input.action === "users.list") {
+      const result = await listUsers(input);
+      return transaction(identity, "users.read", async (tx, current, audit) => { audit("users.directory.read", "directory"); return result; });
+    }
+    if (input.action === "users.get") {
+      const user = await getUser(input.uid);
+      return transaction(identity, "users.read", async (tx, current, audit) => { audit("users.account.read", input.uid); return { user }; });
+    }
     if (input.action === "users.update") return updateUser(input, identity);
     if (input.action === "config.get") return { config: await config() };
     if (input.action === "config.update") return updateConfig(input, identity);

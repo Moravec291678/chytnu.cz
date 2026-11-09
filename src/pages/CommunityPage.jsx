@@ -1,3 +1,4 @@
+import { useOwnModeration } from "../features/community/useOwnModeration.js";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../features/auth/context/authContextValue.js";
@@ -32,7 +33,8 @@ function CommunityPage() {
   const auth = useAuth();
   const { state: catchState } = useCatches();
   const [tab, setTab] = useState("friends");
-  const localFeed = useMemo(() => buildLocalCommunityFeed(catchState.catches), [catchState.catches]);
+  const moderation = useOwnModeration();
+  const localFeed = useMemo(() => buildLocalCommunityFeed(catchState.catches,moderation), [catchState.catches,moderation]);
   const profileName = auth.user?.displayName?.trim() || (auth.user ? "Můj profil" : "Místní profil");
 
   return (

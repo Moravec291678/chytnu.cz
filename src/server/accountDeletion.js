@@ -90,9 +90,24 @@ export function createAccountDeletionService({ db, auth, photoDeletion, now = ()
           await ref.update({ phase, cursor: null, status: "retry", leaseUntil: null, lastErrorCode: null, updatedAt: stamp() });
           return { ...state, phase, status: "retry", lastErrorCode: null };
         }
+        // Support/intake records live outside the diary and contain personal text.
+        // Delete a bounded page and resume; immutable security audit remains separate.
+        let administrativeRemoved = 0;
+        for (const name of ["adminSupportCases", "adminSupportNotes", "adminPublicModeration"]) {
+          const page = await db.collection(name).where("targetUid", "==", uid).limit(pageSize - administrativeRemoved).get();
+          for (const entry of page.docs) { await db.recursiveDelete(entry.ref); administrativeRemoved++; }
+          if (administrativeRemoved >= pageSize) break;
+        }
+        if (administrativeRemoved) {
+          await ref.update({ phase, cursor: null, status: "retry", leaseUntil: null, lastErrorCode: null, updatedAt: stamp() });
+          return { ...state, phase, status: "retry", lastErrorCode: null };
+        }
+        await Promise.all(["adminUserDirectory", "adminAccounts", "accountSuspensions"].map(name => db.doc(`${name}/${uid}`).delete()));
         await Promise.all([
           db.doc(`serverRateLimits/photo-cloud-${createHash("sha256").update(uid).digest("hex")}`).delete(),
           db.doc(`serverRateLimits/progression-${uid}`).delete(),
+          db.doc(`serverRateLimits/admin-photo-${uid}`).delete(),
+          db.doc(`serverRateLimits/support-${uid}`).delete(),
           db.doc(`serverRateLimits/ai-species-${createHash("sha256").update(uid).digest("hex")}`).delete(),
           db.doc(`serverRateLimits/ai-free-cloudflare-user-${createHash("sha256").update(uid).digest("hex")}`).delete(),
         ]);

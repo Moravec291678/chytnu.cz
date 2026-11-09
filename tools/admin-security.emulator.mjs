@@ -36,7 +36,7 @@ try {
   await request("co", "tasks.list");
   await request("co", "monitoring");
   for (const action of ["config.get", "users.list", "audit.list"]) await request("co", action, {}, 403);
-  await request("co", "users.update", { uid: uids.owner, patch: { suspended: true }, expectedRevision: 0 }, 403);
+  await request("co", "users.update", { uid: uids.owner, patch: { suspended: true, suspensionReason: "Synthetic suspension test" }, expectedRevision: 0 }, 403);
   await request("owner", "users.update", { uid: uids.user, patch: { role: "CO_CREATOR" }, expectedRevision: 0 }, 400);
   await request("anonymous", "overview", {}, 401);
   const founder = await request("owner", "self");
@@ -58,12 +58,12 @@ try {
   await request("admin", "tasks.delete", { id: task.id, expectedRevision: 2 });
   await request("owner", "users.update", { uid: uids.admin, patch: { role: "USER" }, expectedRevision: 1 });
   await request("admin", "tasks.list", {}, 403);
-  await request("owner", "users.update", { uid: uids.owner, patch: { suspended: true }, expectedRevision: 0 }, 403);
+  await request("owner", "users.update", { uid: uids.owner, patch: { suspended: true, suspensionReason: "Synthetic suspension test" }, expectedRevision: 0 }, 403);
   await request("owner", "users.update", { uid: uids.user, patch: { role: "OWNER" }, expectedRevision: 0 }, 400);
   const user = (await request("owner", "users.update", { uid: uids.user, expectedRevision: 0, patch: { limits: { dailyReservation: 350 }, entitlements: { species: false }, overrideExpiresAt: new Date(Date.now() + 86400000).toISOString() } })).user;
   assert.equal(user.limits.dailyReservation, 350);
   await db.doc(`users/${uids.user}/catches/private-fixture`).set({ private: true });
-  await request("owner", "users.update", { uid: uids.user, expectedRevision: 1, patch: { suspended: true } });
+  await request("owner", "users.update", { uid: uids.user, expectedRevision: 1, patch: { suspended: true, suspensionReason: "Synthetic suspension test" } });
   await request("user", "self", {}, 401);
   assert.equal((await db.doc(`users/${uids.user}/catches/private-fixture`).get()).exists, true);
   await request("owner", "users.update", { uid: uids.user, expectedRevision: 2, patch: { suspended: false } });

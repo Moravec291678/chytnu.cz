@@ -1,4 +1,5 @@
 import { validAdminUid, normalizeAdminPermissions, normalizeAccountLimits, normalizeFeatureEntitlements, normalizeRuntimeConfig } from "../adminPolicy.js";
+import { validateSupportRequest } from "./supportValidation.js";
 
 export const TASK_CATEGORIES = Object.freeze(["Bug", "Feature", "Improvement", "Design", "Security", "Maintenance"]);
 export const TASK_STATUSES = Object.freeze(["New", "Planned", "In Progress", "Testing", "Done", "Cancelled"]);
@@ -38,7 +39,7 @@ export function normalizeTask(value) {
   return { title, description, category: value.category, priority: value.priority, status: value.status, dueAt };
 }
 export function normalizeAccountPatch(value) {
-  allowedKeys(value, ["role", "permissions", "suspended", "limits", "entitlements", "overrideExpiresAt"]);
+  allowedKeys(value, ["role", "permissions", "suspended", "limits", "entitlements", "overrideExpiresAt", "permissionsExpiresAt", "suspensionReason", "suspensionExpiresAt"]);
   if (!Object.keys(value).length) throw adminError("empty_patch");
   const patch = {};
   if (value.role !== undefined) {
@@ -48,6 +49,11 @@ export function normalizeAccountPatch(value) {
   if (value.suspended !== undefined) {
     if (typeof value.suspended !== "boolean") throw adminError("invalid_status");
     patch.suspended = value.suspended;
+  }
+  if (value.suspensionReason !== undefined) patch.suspensionReason = optionalText(value.suspensionReason, 1000);
+  for (const key of ["permissionsExpiresAt", "suspensionExpiresAt"]) if (Object.hasOwn(value, key)) {
+    if (value[key] !== null && (typeof value[key] !== "string" || !Number.isFinite(Date.parse(value[key])))) throw adminError("invalid_expiry");
+    patch[key] = value[key] === null ? null : new Date(value[key]).toISOString();
   }
   try {
     if (value.permissions !== undefined) patch.permissions = normalizeAdminPermissions(value.permissions);
@@ -67,12 +73,14 @@ export function normalizeConfigPatch(value) {
   return structuredClone(value);
 }
 
-const ACTION_FIELDS = Object.freeze({ self: [], overview: [], "users.list": ["cursor", "search", "role", "status"], "users.get": ["uid"],
+const ACTION_FIELDS = Object.freeze({ self: [], overview: [], "users.list": ["cursor", "search", "searchMode", "sort", "tester", "role", "status"], "users.get": ["uid"],
   "users.update": ["uid", "patch", "expectedRevision"], "config.get": [], "config.update": ["patch", "expectedRevision"],
   "tasks.list": ["cursor", "search", "status", "category"], "tasks.save": ["id", "task", "expectedRevision"],
   "tasks.delete": ["id", "expectedRevision"], "audit.list": ["cursor"], monitoring: [] });
 export function validateAdminRequest(body) {
-  if (!object(body) || typeof body.action !== "string" || !Object.hasOwn(ACTION_FIELDS, body.action)) throw adminError("invalid_action");
+  if (!object(body) || typeof body.action !== "string") throw adminError("invalid_action");
+  const support = validateSupportRequest(body); if (support) return support;
+  if (!Object.hasOwn(ACTION_FIELDS, body.action)) throw adminError("invalid_action");
   allowedKeys(body, ["action", ...ACTION_FIELDS[body.action]]);
   const request = { ...body };
   if (request.cursor !== undefined && (typeof request.cursor !== "string" || request.cursor.length > 4096)) throw adminError("invalid_cursor");
@@ -80,6 +88,7 @@ export function validateAdminRequest(body) {
   if (request.uid !== undefined) validUid(request.uid);
   if (request.id !== undefined) validUid(request.id);
   if (body.action === "users.list") {
+    if (request.searchMode && !["exact", "name"].includes(request.searchMode) || request.sort && !["uid", "name", "created", "lastSignIn"].includes(request.sort) || request.tester && !["yes", "no"].includes(request.tester)) throw adminError("invalid_request");
     if (request.role && !["OWNER", "CO_CREATOR", "ADMIN", "TESTER", "USER"].includes(request.role)) throw adminError("invalid_role");
     if (request.status && !["active", "suspended"].includes(request.status)) throw adminError("invalid_status");
   }

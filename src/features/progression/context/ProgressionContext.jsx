@@ -1,3 +1,5 @@
+import { loadAdminAdjustment } from "../data/adminAdjustment.js";
+import { applyProgressionAdjustment } from "../data/progressionSummary.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDataScope } from "../../auth/context/dataScopeContextValue.js";
 import { useCatches } from "../../catches/context/useCatches.js";
@@ -12,21 +14,25 @@ export function ProgressionProvider({ children }) {
   const { state: tripState } = useTrips();
   const [events, setEvents] = useState([]);
   const [serverTotals, setServerTotals] = useState(null);
+  const [adjustment, setAdjustment] = useState({scopeKey:null, adjustmentXp:0});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const activeScopeKey = useRef(null);
+  const refreshGeneration = useRef(0);
 
   const refresh = useCallback(async () => {
     if (scope.status !== "ready" || catchState.loading || tripState.loading) return;
     const requestedScopeKey = scope.scopeKey;
+    const requestedGeneration = ++refreshGeneration.current;
     setLoading(true);
     try {
       const result = await progressionLedger.reconcile(scope);
-      if (activeScopeKey.current !== requestedScopeKey) return;
+      if (activeScopeKey.current !== requestedScopeKey || refreshGeneration.current !== requestedGeneration) return;
       setEvents(result.events);
+      if(scope.ownerId) void loadAdminAdjustment(scope).then(value=>{if(activeScopeKey.current===requestedScopeKey && refreshGeneration.current===requestedGeneration)setAdjustment({...value,scopeKey:requestedScopeKey});});
       if (scope.ownerId) {
         void serverProgressionReconciliationService.reconcile(scope, result.events).then((totals) => {
-          if (totals && activeScopeKey.current === requestedScopeKey) setServerTotals(totals);
+          if (totals && activeScopeKey.current === requestedScopeKey && refreshGeneration.current === requestedGeneration) setServerTotals(totals);
         });
       } else setServerTotals(null);
       setError("");
@@ -44,14 +50,17 @@ export function ProgressionProvider({ children }) {
       if (activeScopeKey.current !== scope.scopeKey) return;
       setEvents([]);
       setServerTotals(null);
+      setAdjustment({scopeKey:null,adjustmentXp:0});
       setLoading(true);
       setError("");
     });
     if (scope.status !== "ready") return undefined;
     queueMicrotask(refresh);
+    window.addEventListener("focus", refresh); window.addEventListener("online", refresh);
     window.addEventListener("chytnu:progression-changed", refresh);
     window.addEventListener("chytnu:local-data-restored", refresh);
     return () => {
+      window.removeEventListener("focus", refresh); window.removeEventListener("online", refresh);
       window.removeEventListener("chytnu:progression-changed", refresh);
       window.removeEventListener("chytnu:local-data-restored", refresh);
       if (activeScopeKey.current === scope.scopeKey) activeScopeKey.current = null;
@@ -60,14 +69,15 @@ export function ProgressionProvider({ children }) {
 
   const summary = useMemo(() => {
     const local = buildLedgerProgressionSummary(events, catchState.catches, tripState.trips);
-    if (!scope.ownerId || !serverTotals) return local;
-    return {
+    const delta = adjustment.scopeKey===scope.scopeKey ? adjustment.adjustmentXp : 0;
+    if (!scope.ownerId || !serverTotals) return applyProgressionAdjustment(local,delta);
+    return applyProgressionAdjustment({
       ...local,
       ...summaryForXp(serverTotals.serverTotalXp),
       legacyBaselineXp: serverTotals.legacyBaselineXp,
       serverConfirmedXp: serverTotals.serverEventXp,
-    };
-  }, [events, catchState.catches, tripState.trips, scope.ownerId, serverTotals]);
+    },delta);
+  }, [events, catchState.catches, tripState.trips, scope.ownerId, scope.scopeKey, serverTotals, adjustment]);
   const rewardForCatch = useCallback(
     (catchId, eventIds) => buildCatchRewardFromLedger(events, catchId, summary, eventIds),
     [events, summary],

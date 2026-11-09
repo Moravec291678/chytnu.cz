@@ -1,0 +1,12 @@
+.support-user-panel { display: grid; gap: var(--space-3); min-width: 0; }
+.support-user-panel { grid-template-columns: minmax(0, 1fr); }
+.support-user-panel > * { min-width: 0; overflow-wrap: anywhere; }
+.support-user-panel form, .support-user-panel label, .support-user-panel fieldset { display: grid; gap: var(--space-2); min-width: 0; }
+.support-user-panel form { padding-top: var(--space-3); }
+.support-user-panel details, .support-user-panel li { min-width: 0; overflow-wrap: anywhere; }
+.support-user-panel input, .support-user-panel select, .support-user-panel textarea, .support-user-panel button { max-width: 100%; min-height: 44px; padding: var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-primary); background: var(--surface-2); font: inherit; }
+.support-user-panel input[type=checkbox] { min-height: 20px; width: 20px; flex: 0 0 20px; accent-color: var(--accent-green); }
+.support-user-panel .support-user-check { display: flex; align-items: center; gap: var(--space-2); }
+.support-user-panel ul { padding-left: var(--space-4); }
+.support-user-panel li { margin-bottom: var(--space-3); }
+.support-user-panel pre { max-height: 300px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; }

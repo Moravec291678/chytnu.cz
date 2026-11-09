@@ -1,9 +1,11 @@
+import { summaryForXp } from "./progressionSummary.js";
+export { summaryForXp } from "./progressionSummary.js";
 import { openLocalDatabase, PROGRESSION_EVENT_STORE_NAME } from "../../catches/data/catchRepository.js";
 import { validateDataScope } from "../../auth/data/localDataScope.js";
 import { normalizeText } from "../../../shared/utils/helpers.js";
 import {
   ACHIEVEMENTS, MASTERY_LEVELS, calculateProgression, calculateSpeciesMastery,
-  getRankForLevel, hasWeatherConditions, MAX_LEVEL, xpForLevel,
+  hasWeatherConditions,
 } from "./progression.js";
 import { listCompletedChallengeRewards } from "./challenges.js";
 import { listCompletedSeasonalChallengeRewards } from "./seasonalChallenge.js";
@@ -49,16 +51,6 @@ function makeEvent(scope, definition, now) {
   };
 }
 
-export function summaryForXp(xp) {
-  let level = 1;
-  while (level < MAX_LEVEL && xp >= xpForLevel(level + 1)) level += 1;
-  const currentThreshold = xpForLevel(level);
-  const nextThreshold = level === MAX_LEVEL ? null : xpForLevel(level + 1);
-  return {
-    xp, level, rank: getRankForLevel(level), currentThreshold, nextThreshold,
-    progressPercent: nextThreshold === null ? 100 : Math.round(((xp - currentThreshold) / (nextThreshold - currentThreshold)) * 100),
-  };
-}
 
 const BREAKDOWN_KEYS = Object.freeze({
   "catch.created": "catchXp", "catch.photo": "catchXp", "catch.context": "catchXp", "catch.limited": "catchXp",

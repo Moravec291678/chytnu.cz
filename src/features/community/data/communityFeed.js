@@ -1,9 +1,9 @@
 import { createPublicCatchProjection } from "../../privacy/data/privacyModel.js";
 
-export function buildLocalCommunityFeed(catches = []) {
+export function buildLocalCommunityFeed(catches = [], moderation = new Map()) {
   return catches
     .map((record) => {
-      const projection = createPublicCatchProjection(record);
+      const projection = createPublicCatchProjection({ ...record, publicModeration: moderation.get(record.id) });
       return projection ? { id: `local:${record.id}`, catchId: record.id, projection } : null;
     })
     .filter(Boolean)

@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { Buffer } from "node:buffer";
 import { runProductionCloudinaryPhotoCleanup } from "../../src/server/cloudinaryApi.js";
+import { restoreProductionExpiredSuspensions } from "../../src/features/admin/server/suspensionMaintenance.js";
 
 function validCronAuthorization(header, secret) {
   if (typeof secret !== "string" || secret.length < 16 || typeof header !== "string") return false;
@@ -11,7 +12,7 @@ function validCronAuthorization(header, secret) {
 }
 
 export function createCleanupHandler({ runCleanup = runProductionCloudinaryPhotoCleanup,
-  getSecret = () => globalThis.process?.env?.CRON_SECRET } = {}) {
+  runMaintenance = null, getSecret = () => globalThis.process?.env?.CRON_SECRET } = {}) {
   return async function handler(req, res) {
     if (req.method !== "GET") {
       res.setHeader?.("Allow", "GET");
@@ -23,6 +24,7 @@ export function createCleanupHandler({ runCleanup = runProductionCloudinaryPhoto
     }
     try {
       const result = await runCleanup();
+      if (runMaintenance) result.suspensions = await runMaintenance();
       res.setHeader?.("Cache-Control", "no-store");
       return res.status(result.failed ? 207 : 200).json(result);
     } catch {
@@ -31,6 +33,6 @@ export function createCleanupHandler({ runCleanup = runProductionCloudinaryPhoto
   };
 }
 
-export default createCleanupHandler();
+export default createCleanupHandler({ runMaintenance: restoreProductionExpiredSuspensions });
 
 export { validCronAuthorization };

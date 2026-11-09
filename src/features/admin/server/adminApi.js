@@ -3,6 +3,7 @@ import { validAdminUid } from "../adminPolicy.js";
 import { createAdminService } from "./adminStore.js";
 import { configuredOwnerUid } from "./adminAccess.js";
 import { getAccountDeletionAdminContext, verifyFirebaseIdToken } from "../../../server/cloudinaryApi.js";
+import { AdminPhotoResponse, createAdminPhotoProxy } from "./adminPhotoProxy.js";
 
 export function createAdminHandler({ verifyToken, service } = {}) {
   if (typeof verifyToken !== "function" || typeof service?.execute !== "function") throw new TypeError("Admin handler dependencies are required.");
@@ -23,7 +24,13 @@ export function createAdminHandler({ verifyToken, service } = {}) {
       }
       if (JSON.stringify(body ?? null).length > 65_536) throw adminError("request_too_large", 413);
       const request = validateAdminRequest(body);
-      return res.status(200).json(await service.execute(request, identity));
+      const result = await service.execute(request, identity);
+      if (result instanceof AdminPhotoResponse) {
+        res.setHeader?.("Content-Type", "image/jpeg"); res.setHeader?.("Content-Disposition", "inline");
+        res.setHeader?.("Content-Length", String(result.bytes.length));
+        return res.status(200).end(result.bytes);
+      }
+      return res.status(200).json(result);
     } catch (error) {
       const safe = error?.status >= 400 && error.status <= 503 && /^[a-z_]{1,60}$/.test(error.code ?? "");
       return res.status(safe ? error.status : 503).json({ error: safe ? error.code : "admin_unavailable" });
@@ -36,6 +43,6 @@ export async function createProductionAdminHandler({ env = globalThis.process?.e
   return createAdminHandler({ verifyToken: async token => verifyFirebaseIdToken((await context()).auth, token),
     service: { execute: async (request, identity) => {
       const { db, auth } = await context();
-      return createAdminService({ db, auth, ownerUid: configuredOwnerUid(env), env, now }).execute(request, identity);
+      return createAdminService({ db, auth, ownerUid: configuredOwnerUid(env), env, now, photoProxy: createAdminPhotoProxy({ env }) }).execute(request, identity);
     } } });
 }

@@ -84,6 +84,7 @@ Automaticky vytvořeno příkazem `npm run product:inventory` z `src/product/con
 | challenge | Výzva | Výzva dokončena · /challenges | Typ podporovaný modelem |
 | active_trip | Aktivní vycházka | Typ modelu; text producer zatím nemá | Typ podporovaný modelem |
 | app_update | Aktualizace aplikace | Typ modelu; text producer zatím nemá | Typ podporovaný modelem |
+| support | Podpora a moderace | Typ modelu; text producer zatím nemá | Typ podporovaný modelem |
 
 Preference jsou uživatelsky nastavitelné: morningFishActivity (default ON), tomorrowGreatConditions (default OFF), friendActivity (default OFF), streaksAndChallenges (default ON), friendLegendaryCatch (default OFF).
 

@@ -34,7 +34,7 @@ test("product configuration preserves current rewards, caps, and progression ran
   assert.equal(MAX_LEVEL, 100);
   assert.equal(RANKS.length, 7);
   assert.deepEqual(MASTERY_LEVELS.map(({ catches }) => catches), [1, 5, 20, 50, 100]);
-  assert.deepEqual(NOTIFICATION_TYPES, ["sync_problem", "achievement", "challenge", "active_trip", "app_update"]);
+  assert.deepEqual(NOTIFICATION_TYPES, ["sync_problem", "achievement", "challenge", "active_trip", "app_update", "support"]);
   assert.equal(NOTIFICATION_PREFERENCES.length, 5);
   assert.ok(Object.values(FEATURES).every((enabled) => enabled === false));
 });

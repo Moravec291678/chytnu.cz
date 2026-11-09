@@ -1,6 +1,7 @@
-export const NOTIFICATION_TYPES = Object.freeze(["sync_problem", "achievement", "challenge", "active_trip", "app_update"]);
+export const NOTIFICATION_TYPES = Object.freeze(["sync_problem", "achievement", "challenge", "active_trip", "app_update", "support"]);
 
 export const NOTIFICATION_TYPE_PRESENTATION = Object.freeze({
+  support: Object.freeze({ label: "Podpora a moderace", icon: "i" }),
   sync_problem: Object.freeze({ label: "Problém se synchronizací", icon: "↻" }),
   achievement: Object.freeze({ label: "Úspěch", icon: "★" }),
   challenge: Object.freeze({ label: "Výzva", icon: "✓" }),

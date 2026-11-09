@@ -84,6 +84,19 @@ async function drain(service) {
   throw new Error("deletion did not settle");
 }
 
+test("account deletion removes support and directory data only for its owner and retains security audit", async () => {
+  const { db, service } = fixture({
+    "adminSupportCases/c1": { targetUid: "A" }, "adminSupportCases/c2": { targetUid: "B" },
+    "adminSupportNotes/n1": { targetUid: "A" }, "adminPublicModeration/m1": { targetUid: "A" },
+    "adminUserDirectory/A": {}, "adminAccounts/A": {}, "accountSuspensions/A": {},
+    "adminAudit/a1": { target: "A" },
+  });
+  await service.request("A"); await drain(service);
+  for (const key of ["adminSupportCases/c1", "adminSupportNotes/n1", "adminPublicModeration/m1", "adminUserDirectory/A", "adminAccounts/A", "accountSuspensions/A"]) assert.equal(db.rows.has(key), false, key);
+  assert.equal(db.rows.has("adminSupportCases/c2"), true);
+  assert.equal(db.rows.has("adminAudit/a1"), true);
+});
+
 test("deletes only owner A including nested data and queues owned photo before Auth removal", async () => {
   const { db, queued, deleted, service } = fixture();
   await service.request("A");

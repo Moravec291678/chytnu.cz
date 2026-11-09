@@ -1,7 +1,8 @@
 export const ADMIN_ROLES = Object.freeze(["OWNER", "CO_CREATOR", "ADMIN", "TESTER", "USER"]);
 export const CO_CREATOR_PERMISSIONS = Object.freeze(["tasks", "monitoring"]);
+export const CO_CREATOR_DELEGATABLE = Object.freeze(["tasks", "monitoring", "users.read", "support", "moderation"]);
 export const ADMIN_ROLE_LABELS = Object.freeze({ OWNER: "Zakladatel ChytnuCz", CO_CREATOR: "Spolutvůrce ChytnuCz", ADMIN: "ADMIN", TESTER: "TESTER", USER: "USER" });
-export const ADMIN_PERMISSIONS = Object.freeze(["users.read", "users.manage", "tasks", "audit", "monitoring"]);
+export const ADMIN_PERMISSIONS = Object.freeze(["users.read", "users.manage", "tasks", "audit", "monitoring", "support", "moderation"]);
 export const RUNTIME_FEATURES = Object.freeze(["species", "diary", "recommendations", "stories"]);
 export const FEATURE_AUDIENCES = Object.freeze(["everyone", "testers", "owner", "selected", "disabled"]);
 export const ADMIN_LIMIT_BOUNDS = Object.freeze({ userDailyReservation: 5000, testerDailyReservation: 5000, globalDailyReservation: 7500, textDailyReservation: 1000 });
@@ -49,7 +50,9 @@ export function resolveAccess(uid, account = {}, ownerUid = "", now = Date.now()
   const suspended = account?.suspended === true;
   const expires = account?.overrideExpiresAt;
   const overrideActive = expires == null || (typeof expires === "string" && Number.isFinite(Date.parse(expires)) && Date.parse(expires) > now);
-  return { uid, role, suspended, permissions: role === "OWNER" ? [...ADMIN_PERMISSIONS] : role === "CO_CREATOR" ? [...CO_CREATOR_PERMISSIONS] : role === "ADMIN" ? normalizeAdminPermissions(account?.permissions ?? []) : [],
+  const permissionsActive = account?.permissionsExpiresAt == null || Date.parse(account.permissionsExpiresAt) > now;
+  const delegated = permissionsActive ? normalizeAdminPermissions(account?.permissions ?? []) : [];
+  return { uid, role, suspended, permissions: role === "OWNER" ? [...ADMIN_PERMISSIONS] : role === "CO_CREATOR" ? [...new Set([...CO_CREATOR_PERMISSIONS, ...delegated.filter(permission => CO_CREATOR_DELEGATABLE.includes(permission))])] : role === "ADMIN" ? delegated : [],
     internalLimitExempt: ["OWNER", "CO_CREATOR"].includes(role), revision: Number.isSafeInteger(account?.revision) ? account.revision : 0,
     limits: overrideActive ? normalizeAccountLimits(account?.limits ?? {}) : {},
     entitlements: overrideActive ? normalizeFeatureEntitlements(account?.entitlements ?? {}) : {},
