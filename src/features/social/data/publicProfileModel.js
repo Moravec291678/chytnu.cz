@@ -3,14 +3,16 @@ export const PROFILE_SECTIONS = ["interests", "statistics", "catches", "gallery"
 const visibility = value => ["private", "friends", "public"].includes(value);
 const id = value => typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value);
 const text = (value, max) => typeof value === "string" && value.length <= max && !Array.from(value).some(c => c.charCodeAt(0) < 32);
-const keys = ["handle", "displayName", "bio", "region", "specialization", "favoriteSpecies", "visibility", "discoverable", "sections", "sharedCatchIds", "sharedPhotos"];
+const keys = ["handle", "displayName", "bio", "region", "specialization", "favoriteSpecies", "visibility", "discoverable", "directoryDiscoverable", "regionDiscoverable", "sections", "sharedCatchIds", "sharedPhotos"];
 export function validateProfileInput(input) {
   if (!input || Array.isArray(input) || Object.keys(input).some(k => !keys.includes(k))) throw new TypeError("invalid_profile");
   const result = { handle: normalizedHandle(input.handle), displayName: input.displayName, bio: input.bio ?? "", visibility: input.visibility ?? "private",
     region: input.region ?? "", specialization: input.specialization ?? "", favoriteSpecies: input.favoriteSpecies ?? "", discoverable: input.discoverable ?? false,
+    directoryDiscoverable: input.directoryDiscoverable ?? false, regionDiscoverable: input.regionDiscoverable ?? false,
     sections: Object.fromEntries(PROFILE_SECTIONS.map(k => [k, input.sections?.[k] ?? "private"])), sharedCatchIds: input.sharedCatchIds ?? [], sharedPhotos: input.sharedPhotos ?? [] };
   if (!text(result.displayName, 60) || !result.displayName.trim() || typeof result.bio !== "string" || !text(result.bio.replace(/[\r\n]/g, " "), 280) || !text(result.region, 80)
     || !text(result.specialization, 160) || !text(result.favoriteSpecies, 160) || !visibility(result.visibility) || typeof result.discoverable !== "boolean"
+    || typeof result.directoryDiscoverable !== "boolean" || typeof result.regionDiscoverable !== "boolean"
     || (input.sections !== undefined && (!input.sections || Array.isArray(input.sections) || typeof input.sections !== "object" || Object.keys(input.sections).some(k => !PROFILE_SECTIONS.includes(k))))
     || Object.values(result.sections).some(v => !visibility(v)) || !Array.isArray(result.sharedCatchIds) || result.sharedCatchIds.length > 12
     || !result.sharedCatchIds.every(id) || new Set(result.sharedCatchIds).size !== result.sharedCatchIds.length

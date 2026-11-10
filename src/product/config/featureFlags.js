@@ -1,6 +1,7 @@
 export const FEATURES = Object.freeze({
   socialNetwork: false,
   publicProfiles: true,
+  userDiscovery: true,
   seasonalChallenges: false,
   weeklyChallenges: false,
   streaks: false,

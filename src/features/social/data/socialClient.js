@@ -1,6 +1,8 @@
 import { firebaseAuth } from "../../auth/data/firebaseAuth.js";
 import { resolveApiUrl } from "../../../platform/api.js";
 const messages = {
+  invalid_search: "Zadej 2 až 40 znaků jména, zájmu nebo regionu.", invalid_cursor: "Výsledky se změnily nebo stránkování vypršelo. Vyhledej rybáře znovu.",
+  profile_required: "Před odesláním pozvání ulož veřejný rybářský profil a povol dohledání podle jména.", discovery_unavailable: "Vyhledávání nyní není dostupné. Zkus to později.",
   handle_taken: "Toto uživatelské jméno je již rezervované. Vyber jiné.", authentication_required: "Nejdřív se přihlas.",
   account_unavailable: "Účet nyní není dostupný.", invalid_profile: "Zkontroluj údaje profilu a délku textů.", invalid_request: "Zkontroluj údaje profilu.",
   invalid_shared_catch: "Vybraný úlovek už není dostupný. Obnov nabídku.", invalid_shared_photo: "Sdílet lze pouze dostupné synchronizované fotografie JPEG.",
@@ -23,5 +25,10 @@ export async function socialRequest(action, payload = {}, { signal } = {}) {
     if (firebaseAuth.currentUserId() !== uid || controller.signal.aborted) throw new Error("Aktivní účet se změnil. Načti profil znovu.");
     if (!response.ok) throw new Error(messages[data.error] ?? "Profil není dostupný. Zkus to později.");
     return data;
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    if (controller.signal.aborted) throw new Error("Načítání trvá příliš dlouho. Zkus to znovu.", { cause: error });
+    if (error instanceof TypeError || error instanceof SyntaxError) throw new Error("Připojení k veřejným profilům není dostupné. Zkus to znovu.", { cause: error });
+    throw error;
   } finally { clearTimeout(timer); signal?.removeEventListener("abort", abort); }
 }

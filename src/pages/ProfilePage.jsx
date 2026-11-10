@@ -406,7 +406,7 @@ function ProfilePage() {
       <section className="profile-identity" aria-label="Aktuální profil">
         <span className="profile-avatar" aria-hidden="true">{avatarInitial}</span>
         <div><div className="profile-name-and-badge"><strong>{profileIdentity}</strong><CollaboratorBadge access={adminAccess} /></div><span>{progression.rank.name} · {progression.rank.title}</span></div>
-        <span className="profile-status-badge">{privacyLoading ? "Načítám" : privacySettings.profileVisibility === "public" ? "Zatím nepublikován" : "Soukromý"}</span>
+        <span className="profile-status-badge">Osobní deník</span>
         <span className="profile-level-badge">Úroveň {progression.level}</span>
       </section>
       </header>
@@ -429,6 +429,7 @@ function ProfilePage() {
       <nav className="profile-quick-links" aria-label="Osobní přehledy">
         <ProfileAdminLink access={adminAccess} />
         {isFeatureEnabled("publicProfiles") && <Link className="profile-stats-link" to="/profile/social"><span><strong>Rybářský profil</strong><small>Veřejné jméno, fotografie a soukromí</small></span><b aria-hidden="true">→</b></Link>}
+        {isFeatureEnabled("userDiscovery") && <Link className="profile-stats-link" to="/community/find"><span><strong>Najít rybáře</strong><small>Veřejné profily a rybářské zájmy</small></span><b aria-hidden="true">→</b></Link>}
         <Link className="profile-stats-link profile-waters-link" to="/waters"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true" focusable="false"><path d="M20 10c0 6-8 11-8 11S4 16 4 10a8 8 0 1 1 16 0Z" /><circle cx="12" cy="10" r="2.5" /></svg><span><strong>Moje revíry</strong><small>Uložené revíry a oblíbené vody</small></span><b aria-hidden="true">→</b></Link>
         <Link className="profile-stats-link" to="/stats"><span><strong>Statistiky</strong><small>Analýza úlovků a vycházek</small></span><b aria-hidden="true">→</b></Link>
         <Link className="profile-secondary-link" to="/gallery"><span aria-hidden="true">▦ </span>Galerie <span aria-hidden="true">→</span></Link>
@@ -459,9 +460,9 @@ function ProfilePage() {
         {preferenceError && <p className="profile-error" role="alert">{preferenceError}</p>}
         <label className="privacy-checkbox-row profile-public-toggle">
           <input type="checkbox" checked={privacySettings.profileVisibility === "public"} onChange={(event) => updateProfileVisibility(event.target.checked)} disabled={privacyLoading || privacySaving || dataScope.status !== "ready"} />
-          <span>Veřejný profil</span>
+          <span>Místní předvolba veřejného profilu</span>
         </label>
-        <p className="profile-privacy-note">Tato volba se ukládá pro tento profil. Veřejné zobrazení zatím není aktivní a nic se nepublikuje.</p>
+        <p className="profile-privacy-note">Tato starší místní předvolba nemění online dohledatelnost. Veřejné zobrazení a hledání nastav v části Rybářský profil.</p>
         {privacyLoading && <p className="loading-state" role="status">Načítám soukromí profilu…</p>}
         {privacySaving && <p role="status">Ukládám viditelnost profilu…</p>}
         {privacyError && <p className="profile-error" role="alert">{privacyError}</p>}

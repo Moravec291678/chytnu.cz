@@ -12,6 +12,7 @@
   justify-content: space-between;
   gap: var(--space-3);
 }
+.community-discovery-link{display:flex;align-items:center;justify-content:space-between;min-height:48px;padding:13px 16px;margin:0 0 20px;border:1px solid var(--accent-green);border-radius:12px;background:var(--accent-green-soft);color:var(--accent-green);font-weight:700;text-decoration:none}.community-search:focus-visible,.community-discovery-link:focus-visible{outline:2px solid var(--accent-green);outline-offset:3px}
 
 .community-header h1 {
   color: var(--text-primary);

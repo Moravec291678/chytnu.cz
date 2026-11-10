@@ -6,7 +6,7 @@ import CollaboratorBadge from "../../admin/CollaboratorBadge.jsx";
 import { socialRequest } from "../data/socialClient.js";
 import "./socialProfiles.css";
 
-function SharedImage({ profile, photo, avatar = false }) {
+export function SharedImage({ profile, photo, avatar = false }) {
   const key = `${profile.uid}:${profile.avatarVersion ?? ""}:${avatar ? "avatar" : `${photo.catchId}:${photo.photoId}`}`;
   const [loaded, setLoaded] = useState(null);
   useEffect(() => {

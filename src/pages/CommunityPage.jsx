@@ -45,10 +45,11 @@ function CommunityPage() {
             <h1 id="community-title">Komunita</h1>
             <p>Soukromí má přednost před komunitním přehledem</p>
           </div>
-          <button className="community-search" type="button" disabled aria-label="Hledání zatím není dostupné">
+          <Link className="community-search" to="/community/find" aria-label="Najít rybáře">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8" /><path d="m16 16 5 5" /></svg>
-          </button>
+          </Link>
         </header>
+        <Link className="community-discovery-link" to="/community/find">Najít rybáře <span aria-hidden="true">→</span></Link>
 
         <nav className="community-tabs" role="tablist" aria-label="Filtr komunitního přehledu">
           {FEED_TABS.map((item) => (

@@ -94,6 +94,7 @@ Preference jsou uživatelsky nastavitelné: morningFishActivity (default ON), to
 |---|---|
 | socialNetwork | Ne |
 | publicProfiles | Ano |
+| userDiscovery | Ano |
 | seasonalChallenges | Ne |
 | weeklyChallenges | Ne |
 | streaks | Ne |

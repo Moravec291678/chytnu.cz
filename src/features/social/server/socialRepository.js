@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { canonicalPair, canReadSocial, normalizedHandle, socialUid, validateSocialRecord } from "../data/socialModel.js";
 import { sectionAllowed, validateProfileInput, validateStoredProfile } from "../data/publicProfileModel.js";
+import { buildDiscoveryPrefixes } from "../data/discoveryModel.js";
 
 // No public HTTP surface in stage 1. Future handlers must use this authenticated boundary.
 // Admin roles deliberately grant no diary/social privacy bypass and no quota exemption.
@@ -15,6 +16,7 @@ export function createSocialRepository({ db, auth, now = () => Date.now(), profi
     const refs = ["adminConfig/social", `accountSuspensions/${uid}`, `accountDeletions/${uid}`];
     const [config, suspension, deletion] = await Promise.all(refs.map(path => tx.get(db.doc(path))));
     if (profileOperation && config.data()?.profilesEnabled === false || config.data()?.enabled !== true && !(profileOperation && profilesEnabled)) fail("social_disabled");
+    if (profileOperation === "discovery" && config.data()?.discoveryEnabled === false) fail("social_disabled");
     if (suspension.exists || deletion.exists) fail("account_unavailable");
     if (mutation) {
       const ref = db.doc(`serverRateLimits/social-${createHash("sha256").update(uid).digest("hex")}`);
@@ -45,6 +47,27 @@ export function createSocialRepository({ db, auth, now = () => Date.now(), profi
     return data;
   }
   const repository = {
+    async searchProfiles(token, query, searchToken, project) {
+      const uid = await identity(token);
+      return db.runTransaction(async tx => {
+        await guard(tx, uid, false, "discovery");
+        const page = await tx.get(query);
+        const scanned = page.docs.slice(0, 10), users = [];
+        for (const row of scanned) {
+          let profile;
+          try { profile = validateStoredProfile(row.data(), now()); } catch { continue; }
+          if (profile.uid !== row.id || !buildDiscoveryPrefixes(profile).includes(searchToken)) continue;
+          try { await peer(tx, uid, profile.uid); } catch (error) { if (error.message === "social_unavailable") continue; throw error; }
+          const relationship = uid === profile.uid ? null : (await tx.get(db.doc(`socialRelationships/${canonicalPair(uid, profile.uid)}`))).data();
+          const status = relationship?.status === "accepted" ? "friends" : relationship?.status === "pending"
+            ? relationship.requestedBy === uid ? "outgoing" : relationship.requestedBy === profile.uid ? "incoming" : "none" : "none";
+          // Directory summaries are PUBLIC projections even for existing friends.
+          users.push({ ...await project({ tx, profile, audience: "stranger", viewerUid: uid }), relationship: { status } });
+        }
+        return { users, boundary: scanned.at(-1) ? { uid: scanned.at(-1).id, handle: scanned.at(-1).data().handle, createdAt: scanned.at(-1).data().createdAt } : null,
+          hasMore: page.size > 10 };
+      });
+    },
     async readProfileSnapshot(token, target, read, { audience: preview } = {}) {
       const uid = token ? await identity(token) : null;
       if (typeof target !== "string") fail("invalid_profile");
@@ -109,7 +132,8 @@ export function createSocialRepository({ db, auth, now = () => Date.now(), profi
         commitLimit();
         // Retain old claims: a rename can never redirect another angler's old identity.
         if (old.exists && old.data().handle !== handle) tx.set(db.doc(`publicHandles/${old.data().handle}`), { uid, retired: true, createdAt: old.data().createdAt, updatedAt: stamp });
-        tx.set(ref, profile); tx.set(claim, { uid, createdAt: reserved.data()?.createdAt ?? stamp, updatedAt: stamp });
+        tx.set(ref, { ...profile, searchPrefixes: buildDiscoveryPrefixes(profile), discoveryIndexVersion: 1 });
+        tx.set(claim, { uid, createdAt: reserved.data()?.createdAt ?? stamp, updatedAt: stamp });
         return profile;
       });
     },
@@ -120,11 +144,16 @@ export function createSocialRepository({ db, auth, now = () => Date.now(), profi
         return readProfile(tx, uid, targetUid);
       });
     },
-    async relationship(token, targetUid, action) {
+    async relationship(token, targetUid, action, { discovery = false } = {}) {
       const uid = await identity(token), pair = canonicalPair(uid, targetUid);
       if (!["request", "accept", "remove"].includes(action)) fail("invalid_action");
       return db.runTransaction(async tx => {
-        const commitLimit = await guard(tx, uid, true); await peer(tx, uid, targetUid);
+        const commitLimit = await guard(tx, uid, true, discovery ? "discovery" : false); await peer(tx, uid, targetUid);
+        if (discovery && action !== "remove") {
+          const [actor, target] = await Promise.all([tx.get(db.doc(`publicProfiles/${uid}`)), tx.get(db.doc(`publicProfiles/${targetUid}`))]);
+          if (!actor.exists || action === "request" && (actor.data().visibility !== "public" || actor.data().discoverable !== true)) fail("profile_required");
+          if (!target.exists || action === "request" && (target.data().visibility !== "public" || target.data().discoverable !== true)) fail("social_unavailable");
+        }
         if (action !== "remove" && !(await tx.get(db.doc(`publicProfiles/${targetUid}`))).exists) fail("social_unavailable");
         const ref = db.doc(`socialRelationships/${pair}`), old = (await tx.get(ref)).data();
         if (action === "accept" && (old?.status !== "pending" || old.requestedBy === uid)) fail("invalid_request");

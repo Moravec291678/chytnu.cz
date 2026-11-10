@@ -6,8 +6,9 @@ import { publicCatchProjection, sectionAllowed } from "../data/publicProfileMode
 import { createSocialRepository } from "./socialRepository.js";
 import { moderationKey } from "../../admin/server/adminSupportStore.js";
 import { createAvatarCoordinator } from "./socialAvatarCoordinator.js";
+import { createDiscoveryService } from "./discoveryService.js";
 export const profileError = (code, status = 400) => Object.assign(new Error(code), { code, status });
-export function createPublicProfileService({ db, auth, avatar, photoProxy, env = {}, now = () => Date.now() }) {
+export function createPublicProfileService({ db, auth, avatar, photoProxy, env = {}, cursorSecret, now = () => Date.now() }) {
   const repository = createSocialRepository({ db, auth, now, profilesEnabled: true });
   const avatars = createAvatarCoordinator({ db, avatar, now });
   async function identity(token) {
@@ -20,6 +21,8 @@ export function createPublicProfileService({ db, auth, avatar, photoProxy, env =
       const limits = [["social-http-day", day, 2000], ["social-http-minute", minute, 120],
         ...(uid ? [[`social-http-${createHash("sha256").update(uid).digest("hex")}`, minute, 60]] : []),
         ...(action === "avatar.set" ? [["social-avatar-day", day, 30]] : [])];
+      if (action === "search") limits.push([`social-search-${createHash("sha256").update(uid).digest("hex")}`, minute, 30],
+        [`social-search-day-${createHash("sha256").update(uid).digest("hex")}`, day, 150]);
       const rows = await Promise.all(limits.map(([key]) => tx.get(db.doc(`serverRateLimits/${key}`))));
       limits.forEach(([key, window, limit], i) => {
         const old = rows[i].data(), count = old?.window === window ? old.count : 0;
@@ -28,28 +31,32 @@ export function createPublicProfileService({ db, auth, avatar, photoProxy, env =
       });
     });
   }
-  async function projection({ tx, profile, audience }) {
+  async function projection({ tx, profile, audience }, { summaryOnly = false } = {}) {
     const result = { uid: profile.uid, handle: profile.handle, displayName: profile.displayName, bio: profile.bio,
       badgeRole: profile.uid === configuredOwnerUid(env) ? "OWNER" : profile.uid === configuredCoCreatorUid(env) ? "CO_CREATOR" : null,
       ...(profile.avatarVersion ? { avatarVersion: createHash("sha256").update(profile.avatarAssetId).digest("hex").slice(0, 16) } : {}) };
     if (sectionAllowed(profile.sections.interests, audience)) Object.assign(result, { region: profile.region, specialization: profile.specialization, favoriteSpecies: profile.favoriteSpecies });
-    const relevant = ["statistics", "catches", "trophies"].some(k => sectionAllowed(profile.sections[k], audience));
+    if (summaryOnly) {
+      delete result.bio;
+      if (!profile.regionDiscoverable) delete result.region;
+    }
+    const relevant = !summaryOnly && ["statistics", "catches", "trophies"].some(k => sectionAllowed(profile.sections[k], audience));
     const catches = relevant ? (await Promise.all(profile.sharedCatchIds.map(async id => {
       const [record, moderation] = await Promise.all([tx.get(db.doc(`users/${profile.uid}/catches/${id}`)), tx.get(db.doc(`adminPublicModeration/${moderationKey(profile.uid, id)}`))]);
       const row = record.data();
       return row?.ownerId === profile.uid && moderation.data()?.hidden !== true ? publicCatchProjection({ ...row, id }) : null;
     }))).filter(Boolean) : [];
-    if (sectionAllowed(profile.sections.catches, audience)) result.catches = catches;
-    if (sectionAllowed(profile.sections.statistics, audience)) result.statistics = { catchCount: catches.length, speciesCount: new Set(catches.map(r => r.species)).size,
+    if (!summaryOnly && sectionAllowed(profile.sections.catches, audience)) result.catches = catches;
+    if (!summaryOnly && sectionAllowed(profile.sections.statistics, audience)) result.statistics = { catchCount: catches.length, speciesCount: new Set(catches.map(r => r.species)).size,
       longestCm: Math.max(0, ...catches.map(r => r.lengthCm ?? 0)) || null };
-    if (sectionAllowed(profile.sections.trophies, audience)) result.trophies = [...catches].filter(r => r.lengthCm).sort((a,b) => b.lengthCm - a.lengthCm).slice(0, 3);
-    if (sectionAllowed(profile.sections.gallery, audience)) result.photos = (await Promise.all(profile.sharedPhotos.map(async reference => {
+    if (!summaryOnly && sectionAllowed(profile.sections.trophies, audience)) result.trophies = [...catches].filter(r => r.lengthCm).sort((a,b) => b.lengthCm - a.lengthCm).slice(0, 3);
+    if (!summaryOnly && sectionAllowed(profile.sections.gallery, audience)) result.photos = (await Promise.all(profile.sharedPhotos.map(async reference => {
       const [catchRow, photo, moderation] = await Promise.all([tx.get(db.doc(`users/${profile.uid}/catches/${reference.catchId}`)), tx.get(db.doc(`users/${profile.uid}/catches/${reference.catchId}/photos/${reference.photoId}`)), tx.get(db.doc(`adminPublicModeration/${moderationKey(profile.uid, reference.catchId)}`))]);
       const record = photo.data();
       return moderation.data()?.hidden !== true && catchRow.exists && !catchRow.data().deleted && catchRow.data().ownerId === profile.uid && record?.ownerId === profile.uid && !record.deleted && record.type === "image/jpeg" && record.cloud?.state === "synced" ? reference : null;
     }))).filter(Boolean);
     if (sectionAllowed(profile.sections.achievements, audience)) {
-      result.achievements = []; // Client/migrated achievement ledgers are not verified public awards.
+      if (!summaryOnly) result.achievements = []; // Client/migrated achievement ledgers are not verified public awards.
       const summary = (await tx.get(db.doc(`users/${profile.uid}/serverProgressionState/summary`))).data();
       if (Number.isSafeInteger(summary?.serverEventXp) && summary.serverEventXp >= 0) {
         let level = 1; while (level < MAX_LEVEL && summary.serverEventXp >= xpForLevel(level + 1)) level++;
@@ -59,11 +66,19 @@ export function createPublicProfileService({ db, auth, avatar, photoProxy, env =
     return result;
   }
   const read = (token, target, options) => repository.readProfileSnapshot(token, target, projection, options);
+  const discovery = createDiscoveryService({ db, repository, env, cursorSecret, now, project: context => projection(context, { summaryOnly: true }) });
   async function own(token, reader) { const uid = await identity(token); return repository.readProfileSnapshot(token, uid, reader); }
   return { async execute(action, payload, token) {
     const uid = token ? await identity(token) : null;
     if (!uid && !["view", "image"].includes(action)) throw profileError("authentication_required", 401);
     await limited(uid, action);
+    if (action === "search") return discovery.search(token, uid, payload);
+    if (action === "relationship") {
+      const operations = ["request", "accept", "remove"];
+      if (!operations.includes(payload.operation)) throw profileError("invalid_request");
+      const relation = await repository.relationship(token, payload.targetUid, payload.operation, { discovery: true });
+      return { relationship: { status: relation?.status === "accepted" ? "friends" : relation?.status === "pending" ? relation.requestedBy === uid ? "outgoing" : "incoming" : "none" } };
+    }
     if (action === "view") return { profile: await read(token, payload.identity) };
     if (action === "preview") return { profile: await read(token, uid, { audience: payload.audience }) };
     if (action === "self") {

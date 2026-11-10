@@ -33,6 +33,7 @@ const StatsPage = lazy(() => import("../pages/StatsPage"));
 const ProfilePage = lazy(() => import("../pages/ProfilePage"));
 const PublicFishingProfile = lazy(() => import("../features/social/components/PublicFishingProfile.jsx"));
 const SocialProfileSettings = lazy(() => import("../features/social/components/SocialProfileSettings.jsx"));
+const FisherDiscovery = lazy(() => import("../features/social/components/FisherDiscovery.jsx"));
 const AdminDashboard = lazy(() => import("../features/admin/AdminDashboard.jsx"));
 const WaterCataloguePage = lazy(() => import("../pages/WaterCataloguePage.jsx"));
 const CatalogueWaterDetail = lazy(() => import("../pages/WaterCataloguePage.jsx").then(module => ({default:module.CatalogueWaterDetail})));
@@ -186,6 +187,7 @@ function App() {
         <Route path="/waters/:waterId/chat" element={<PageSuspense><WaterChatPage /></PageSuspense>} />
         <Route path="/hotspots" element={<PageSuspense><HotspotsPage /></PageSuspense>} />
         <Route path="/community" element={<PageSuspense><CommunityPage /></PageSuspense>} />
+        {isFeatureEnabled("userDiscovery") && <Route path="/community/find" element={<PageSuspense><FisherDiscovery /></PageSuspense>} />}
         <Route path="/community/catch/:catchId" element={<PageSuspense><CommunityCatchDetailPage /></PageSuspense>} />
         <Route path="/community/:postId/report" element={<PageSuspense><CommunityReportPage /></PageSuspense>} />
         <Route path="/nearby" element={<PageSuspense><NearbyPage /></PageSuspense>} />
