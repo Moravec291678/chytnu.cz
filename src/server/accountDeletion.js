@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { deleteSocialPage } from "../features/social/server/socialDeletion.js";
 
 const RECEIPT_RETENTION_MS = 29 * 24 * 60 * 60 * 1000;
 const LEASE_MS = 15 * 60 * 1000;
@@ -74,6 +75,10 @@ export function createAccountDeletionService({ db, auth, photoDeletion, now = ()
         if (page.length < pageSize) { phase = "data"; cursor = null; }
       }
       if (phase === "data") {
+        if (await deleteSocialPage(db, uid, pageSize)) {
+          await ref.update({ phase, cursor: null, status: "retry", leaseUntil: null, lastErrorCode: null, updatedAt: stamp() });
+          return { ...state, phase, status: "retry", lastErrorCode: null };
+        }
         const userRef = db.doc(`users/${uid}`);
         const collections = await userRef.listCollections();
         let removed = 0;
@@ -108,6 +113,7 @@ export function createAccountDeletionService({ db, auth, photoDeletion, now = ()
           db.doc(`serverRateLimits/progression-${uid}`).delete(),
           db.doc(`serverRateLimits/admin-photo-${uid}`).delete(),
           db.doc(`serverRateLimits/support-${uid}`).delete(),
+          db.doc(`serverRateLimits/social-${createHash("sha256").update(uid).digest("hex")}`).delete(),
           db.doc(`serverRateLimits/ai-species-${createHash("sha256").update(uid).digest("hex")}`).delete(),
           db.doc(`serverRateLimits/ai-free-cloudflare-user-${createHash("sha256").update(uid).digest("hex")}`).delete(),
         ]);

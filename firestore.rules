@@ -587,6 +587,21 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // Stage 1 social foundation is server-only. A public projection never implies
+    // anonymous/direct SDK access. Future APIs must authenticate, check blocks,
+    // visibility and rate limits before returning their bounded projections.
+    // No role claim (including OWNER/CO_CREATOR) bypasses these boundaries.
+    match /publicProfiles/{document=**} { allow read, write: if false; }
+    match /publicHandles/{document=**} { allow read, write: if false; }
+    match /socialRelationships/{document=**} { allow read, write: if false; }
+    match /socialPosts/{document=**} { allow read, write: if false; }
+    match /socialBlocks/{document=**} { allow read, write: if false; }
+    match /nearbyPresence/{document=**} { allow read, write: if false; }
+    match /waterPresence/{document=**} { allow read, write: if false; }
+    match /waterRooms/{document=**} { allow read, write: if false; }
+    match /privateConversations/{document=**} { allow read, write: if false; }
+    match /crews/{document=**} { allow read, write: if false; }
+
     match /{document=**} {
       allow read, write: if false;
     }
