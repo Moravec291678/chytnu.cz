@@ -26,7 +26,7 @@ export default function TripDefaultsFields({ values, onChange, onWaterSelect, re
     if(water)setStored(current=>({scopeKey:scope.scopeKey,waters:[...current.waters.filter(item=>item.id!==water.id),water]}));
   };
   return <>
-    <WaterSelector onSelect={selectWater} recentIds={recentWaterIds} />
+    <WaterSelector onSelect={selectWater} contextWaterId={values.waterId} recentIds={recentWaterIds} />
     <label>Uložený revír<select value={values.waterId ?? ""} onChange={event => selectWater(waters.find(item=>item.id === event.target.value) ?? null)}>
       <option value="">Bez přiřazeného revíru</option>
       {values.waterId && !waters.some(water => water.id === values.waterId) && <option value={values.waterId}>Dříve přiřazený revír</option>}

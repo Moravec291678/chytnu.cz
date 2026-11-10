@@ -1,4 +1,5 @@
 import { normalizeText } from "../../../shared/utils/helpers.js";
+import { nearbyWaterPoints } from "./waterLocation.js";
 
 const digits = value => String(value ?? "").replace(/\s/g, "");
 const indexes = new WeakMap();
@@ -28,4 +29,40 @@ export function prefillWaterEditor(values, water, dirtyKeys = new Set()) {
   const result = { ...values };
   for(const key of ["name","waterNumber","type","area","notes","targetFish"]) if(!dirtyKeys.has(key)) result[key] = water[key] ?? (key === "targetFish" ? [] : "");
   return result;
+}
+
+export function applyActiveTripWater(values, trip, waters, {ownerId=null,manualChoice=false,now=Date.now()} = {}) {
+  if(manualChoice || values.waterId || String(values.locationName ?? "").trim() || String(values.waterNumber ?? "").trim() || !trip?.id || trip.endedAt || values.tripId !== trip.id || (trip.ownerId ?? null) !== ownerId)return values;
+  const captured=Date.parse(`${values.catchDate}T${values.catchTime}`), started=Date.parse(trip.startedAt);
+  // New form times have minute precision; allow that minute, never an older
+  // historical photograph/session or a future timestamp to inherit this trip.
+  if(!Number.isFinite(captured) || !Number.isFinite(started) || captured+59999 < started || captured > now+60000)return values;
+  const water=waters.find(item=>item.id === trip.waterId && !item.deleted && (item.ownerId ?? null) === ownerId);
+  return water ? applyWaterToFishingForm(values,water,null,{includeNumber:true}) : values;
+}
+
+export function buildWaterOptions({catalogue = [],personal = [],query = "",recentIds = [],contextWaterId = "",position = null,now = Date.now()}) {
+  const byId=new Map(catalogue.map(row=>[row.id,row])), saved=new Map(personal.filter(water=>water.catalogueId).map(water=>[water.catalogueId,water]));
+  const candidates=new Map();
+  const add=(water,kind,extra={})=>{
+    const key=kind === "personal" ? water.catalogueId || `personal:${water.id}` : water.id;
+    const own=kind === "catalogue" ? saved.get(water.id) : water;
+    const item={kind:own ? "personal" : kind,water:own || water,type:byId.get(own?.catalogueId)?.fisheryType ?? water.fisheryType ?? water.type,...extra};
+    const current=candidates.get(key);if(!current || item.distanceMeters !== undefined && (current.distanceMeters === undefined || item.distanceMeters < current.distanceMeters))candidates.set(key,item);
+  };
+  for(const water of searchWaterSuggestions(rankPersonalWaters(personal,recentIds),query))add(water,"personal");
+  for(const water of searchWaterSuggestions(catalogue,query).sort((a,b)=>a.name.localeCompare(b.name,"cs")))add(water,"catalogue");
+  let nearbyCount=0,expired=false;
+  if(position)try {
+    for(const [rows,kind,source] of [[catalogue,"catalogue","bod RIS"],[personal,"personal","osobní bod"]])for(const match of nearbyWaterPoints(rows,position,{now})) {
+      if(!searchWaterSuggestions([match.water],query).length)continue;
+      add(match.water,kind,{distanceMeters:match.distanceMeters,distanceSource:source});nearbyCount++;
+    }
+  } catch {expired=true;}
+  const recent=new Map(recentIds.map((id,index)=>[id,index]));
+  const options=[...candidates.values()].sort((a,b)=>Number(b.water.id === contextWaterId)-Number(a.water.id === contextWaterId)
+    || Number(b.distanceMeters !== undefined)-Number(a.distanceMeters !== undefined) || (a.distanceMeters ?? Infinity)-(b.distanceMeters ?? Infinity)
+    || Number(b.kind === "personal")-Number(a.kind === "personal") || Number(Boolean(b.water.isFavorite))-Number(Boolean(a.water.isFavorite))
+    || (recent.get(a.water.id) ?? Infinity)-(recent.get(b.water.id) ?? Infinity) || a.water.name.localeCompare(b.water.name,"cs"));
+  return {options:options.slice(0,32),nearbyCount,expired};
 }

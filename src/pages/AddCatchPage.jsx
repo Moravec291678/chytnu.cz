@@ -22,7 +22,8 @@ import { readPreferences } from "../features/preferences/data/preferences.js";
 import { useDataScope } from "../features/auth/context/dataScopeContextValue.js";
 import { waterRepository } from "../features/waters/data/waterRepository.js";
 import WaterSelector from "../features/waters/components/WaterSelector.jsx";
-import { applyWaterToFishingForm } from "../features/waters/data/waterSelection.js";
+import { applyWaterToFishingForm, applyActiveTripWater } from "../features/waters/data/waterSelection.js";
+import { applyDevicePositionIfEmpty } from "../features/waters/data/waterLocation.js";
 import { findNearestSavedWater } from "../features/waters/data/nearbyWaterMatch.js";
 import { fetchCatchWeather, replaceAutomaticConditions } from "../shared/data/catchWeather.js";
 import { calculateMoonPhase } from "../shared/utils/moonPhase.js";
@@ -45,7 +46,6 @@ import { MAX_PHOTOS_PER_CATCH, normalizePrimaryPhotoId } from "../features/catch
 import { preparePhotoSelection, preparePhotoForStorageAndUpload } from "../features/catches/data/photoInput.js";
 import { recordPhotoUploadTrace } from "../features/catches/data/photoUploadTrace.js";
 import { catchDraftRepository } from "../features/catches/data/catchDraftRepository.js";
-import { applySelectedWaterToCatchDraft } from "../features/catches/data/catchDraftModel.js";
 import { readPhotoCaptureMetadata } from "../features/catches/data/photoCaptureMetadata.js";
 import { evaluateCatchVerification, getCatchPhotoHash } from "../features/catches/data/catchVerification.js";
 import { applyManualMapLocation } from "../features/catches/data/manualMapLocation.js";
@@ -91,7 +91,6 @@ function AddCatchPage() {
   const privacyTouchedScopeRef = useRef(null);
   const gpsManuallyEditedRef = useRef(false);
   const dateTimeManuallyEditedRef = useRef(false);
-  const automaticLocationAttemptedScopeRef = useRef(null);
   const privacyDefaultsAppliedScopeRef = useRef(null);
   const [privacyDefaultsScopeKey, setPrivacyDefaultsScopeKey] = useState("");
   const draftRestoredScopeRef = useRef(null);
@@ -240,6 +239,12 @@ function AddCatchPage() {
   const draftReady = Boolean(id) || (scope.status === "ready" && draftReadyScopeKey === scope.scopeKey);
   const privacyDefaultsReady = Boolean(id) || (scope.status === "ready" && privacyDefaultsScopeKey === scope.scopeKey);
   const activeTrip = getActiveTrip(tripState.trips);
+  useEffect(()=>{
+    if(id || !draftReady)return undefined;
+    let live=true;
+    Promise.resolve().then(()=>{if(live)setCatchData(current=>applyActiveTripWater(current,activeTrip,availableWaters,{ownerId:scope.ownerId,manualChoice:manualWaterChoice}));});
+    return()=>{live=false;};
+  },[id,draftReady,activeTrip,availableWaters,scope.ownerId,manualWaterChoice,catchData.tripId,catchData.catchDate,catchData.catchTime]);
   useEffect(() => {
     if (id || tripState.loading || tripManuallyEditedRef.current) return;
     const nextTripId = resolveCatchTripId({
@@ -277,51 +282,6 @@ function AddCatchPage() {
     return () => { active = false; };
   }, [id, scope]);
 
-  useEffect(() => {
-    if (id || !draftReady || scope.status !== "ready" || !scope.scopeKey
-      || automaticLocationAttemptedScopeRef.current === scope.scopeKey) return undefined;
-    automaticLocationAttemptedScopeRef.current = scope.scopeKey;
-    const locationAdapter = getLocationAdapter();
-    if (!locationAdapter.supported) return undefined;
-    locationAdapter.getCurrentPosition({ enableHighAccuracy: false, timeout: 8000, maximumAge: 0 }).then((position) => {
-      const coordinates = { latitude: position.coords.latitude, longitude: position.coords.longitude };
-      if (gpsManuallyEditedRef.current) return;
-      setCatchData((previous) => {
-        if (previous.coordinates || previous.gpsLocation) return previous;
-        return {
-          ...previous,
-          coordinates,
-          gpsLocation: formatCoordinates(coordinates),
-          gpsSource: "live-gps",
-          locationEvidence: {
-            source: "live-gps",
-            capturedAt: new Date(position.timestamp || Date.now()).toISOString(),
-            accuracyMeters: position.coords.accuracy,
-            coordinates,
-          },
-        };
-      });
-    }).catch(() => {
-      // Location is an optional convenience; permission or provider failures never block Add Catch.
-    });
-    return undefined;
-  }, [draftReady, id, scope]);
-
-  useEffect(() => {
-    if ((id && catchData.gpsSource !== "photo-exif") || catchData.gpsSource === "manual-map"
-      || !catchData.coordinates || !availableWaters.length || manualWaterChoice) return;
-    const nearest = findNearestSavedWater(catchData.coordinates, availableWaters);
-    if (!nearest) return;
-    let active = true;
-    Promise.resolve().then(() => {
-      if (!active) return;
-      setCatchData((previous) => {
-        if (previous.waterId || previous.locationName || manualWaterChoice) return previous;
-        return applySelectedWaterToCatchDraft(previous, nearest.water);
-      });
-    });
-    return () => { active = false; };
-  }, [availableWaters, catchData.coordinates, catchData.coordinates?.latitude, catchData.coordinates?.longitude, catchData.gpsSource, catchData.locationName, catchData.waterId, id, manualWaterChoice]);
   useEffect(() => {
     if (id || !draftReady || !location.state?.preselectedWaterId || !availableWaters.length || consumedWaterRequest.current === waterRequestKey) return undefined;
     const selectedWater = availableWaters.find((water) => water.id === location.state.preselectedWaterId);
@@ -1039,7 +999,7 @@ function AddCatchPage() {
           {catchData.coordinates && <small>{catchData.gpsLocation || formatCoordinates(catchData.coordinates)}</small>}
         </button>}
 
-        <section className="add-catch-section"><h2>Revír</h2><WaterSelector disabled={!draftReady || saving} recentIds={tripState.trips.map(trip=>trip.waterId)} onSelect={selectWater} />
+        <section className="add-catch-section"><h2>Revír</h2><WaterSelector disabled={!draftReady || saving} contextWaterId={catchData.waterId || activeTrip?.waterId} recentIds={tripState.trips.map(trip=>trip.waterId)} onSelect={selectWater} onPosition={evidence=>setCatchData(current=>applyDevicePositionIfEmpty(current,evidence))} />
           {selectedWater && <p>Vybraný revír: <strong>{selectedWater.name}</strong>{selectedWater.waterNumber ? ` · ${selectedWater.waterNumber}` : ""}. Ručně zadaná lokalita a GPS zůstávají zachované.</p>}
         </section>
         {displayFull && <section className="add-catch-section">

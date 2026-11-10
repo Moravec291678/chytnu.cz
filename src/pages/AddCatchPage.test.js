@@ -25,18 +25,19 @@ test("new Catch applies profile visibility defaults before it can be saved and l
   assert.match(source, /const values = catchToForm\(existingCatch\)/);
 });
 
-test("Add Catch attempts optional GPS autofill, selects a nearby saved water, and fills conditions in Quick Add too", async () => {
+test("Add Catch requests GPS through user actions, confirms water suggestions, and fills conditions in Quick Add too", async () => {
   const [source, weather] = await Promise.all([
     readFile(new URL("./AddCatchPage.jsx", import.meta.url), "utf8"),
     readFile(new URL("../shared/data/catchWeather.js", import.meta.url), "utf8"),
   ]);
   assert.match(source, /locationAdapter\.getCurrentPosition\(/);
   assert.match(source, /getLocationAdapter\(\)/);
-  assert.match(source, /gpsManuallyEditedRef\.current\) return/);
+  assert.match(source, /const useCurrentLocation = \(\) =>/);
+  assert.doesNotMatch(source, /automaticLocationAttemptedScopeRef/);
   assert.match(source, /gpsManuallyEdited: gpsManuallyEditedRef\.current/);
   assert.match(source, /tripManuallyEdited: tripManuallyEditedRef\.current/);
   assert.match(source, /tripState\.loading \|\| tripManuallyEditedRef\.current/);
-  assert.match(source, /setCatchData\(\(previous\) => \{\s*if \(previous\.coordinates \|\| previous\.gpsLocation\) return previous/s);
+  assert.match(source, /onPosition=\{evidence=>setCatchData\(current=>applyDevicePositionIfEmpty\(current,evidence\)\)\}/);
   assert.match(source, /findNearestSavedWater\(catchData\.coordinates, availableWaters\)/);
   assert.match(source, /calculateMoonPhase\(catchData\.catchDate, catchData\.catchTime\)/);
   assert.match(source, /fetchCatchWeather\(coordinates\.latitude, coordinates\.longitude, catchData\.catchDate, catchData\.catchTime/);

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import Layout from "../shared/layout/Layout";
 import { useDataScope } from "../features/auth/context/dataScopeContextValue.js";
@@ -10,6 +10,7 @@ import { waterRepository } from "../features/waters/data/waterRepository.js";
 import CatchCard from "../features/catches/components/CatchCard.jsx";
 import ConfirmDialog from "../shared/components/ConfirmDialog.jsx";
 import "./WaterDetailPage.css";
+const CatalogueWaterMap=lazy(()=>import("../features/waters/components/CatalogueWaterMap.jsx"));
 
 function WaterDetailPage() {
   const { waterId } = useParams();
@@ -188,6 +189,7 @@ function WaterDetailPage() {
         </div>
       </section>
 
+      {water.catalogueId && <Suspense fallback={<p role="status">Načítám mapu revíru…</p>}><CatalogueWaterMap catalogueId={water.catalogueId} /></Suspense>}
       {activityError && <p role="status" className="water-detail-data-warning">{activityError}</p>}
 
       <section className="water-detail-stats-grid" aria-label="Statistiky revíru">

@@ -4,17 +4,19 @@ import { useDataScope } from "../../auth/context/dataScopeContextValue.js";
 import { catchRepository } from "../../catches/data/catchRepository.js";
 import { waterRepository } from "../data/waterRepository.js";
 import { risCatalogue } from "../data/risCatalogue.js";
-import { rankPersonalWaters, searchWaterSuggestions } from "../data/waterSelection.js";
+import { buildWaterOptions } from "../data/waterSelection.js";
+import { useWaterPosition } from "./useWaterPosition.js";
 import "./WaterSelector.css";
 
 export default function WaterSelector(props) {
   const scope=useDataScope();
   return <ScopedWaterSelector key={scope.scopeKey} {...props} scope={scope} />;
 }
-function ScopedWaterSelector({ scope, onSelect, recentIds = [], disabled = false }) {
+function ScopedWaterSelector({ scope, onSelect, recentIds = [], contextWaterId = "", onPosition, disabled = false }) {
   const id = useId(), input = useRef(null), trigger = useRef(null), busyRef = useRef(false), activeScope = useRef(null), wasOpen = useRef(false), optionRefs = useRef([]);
   const [open,setOpen] = useState(false),[query,setQuery] = useState(""),[active,setActive] = useState(-1),[busy,setBusy] = useState(false),[version,setVersion] = useState(0);
   const [stored,setStored] = useState(null),[error,setError] = useState("");
+  const position=useWaterPosition();
   useEffect(()=>{ activeScope.current=scope.scopeKey; return ()=>{activeScope.current=null;}; },[scope.scopeKey]);
   useEffect(()=>{if(open)input.current?.focus();else if(wasOpen.current && !busy)trigger.current?.focus();wasOpen.current=open;},[open,busy]);
   useEffect(()=>{optionRefs.current[active]?.scrollIntoView({block:"nearest"});},[active]);
@@ -27,13 +29,8 @@ function ScopedWaterSelector({ scope, onSelect, recentIds = [], disabled = false
     return ()=>{live=false;};
   },[open,scope,version]);
   const current=stored?.scopeKey === scope.scopeKey && stored.version === version ? stored : null;
-  const options=useMemo(()=>{
-    const personal=searchWaterSuggestions(rankPersonalWaters(current?.waters ?? [],recentIds),query).slice(0,12);
-    const saved=new Set(personal.map(water=>water.catalogueId).filter(Boolean));
-    const catalogue=searchWaterSuggestions(current?.rows ?? [],query).filter(row=>!saved.has(row.id)).sort((a,b)=>a.name.localeCompare(b.name,"cs")).slice(0,20);
-    const byId=new Map((current?.rows ?? []).map(row=>[row.id,row]));
-    return [...personal.map(water=>({kind:"personal",water,type:byId.get(water.catalogueId)?.fisheryType ?? water.type})),...catalogue.map(water=>({kind:"catalogue",water,type:water.fisheryType}))];
-  },[current,query,recentIds]);
+  const suggestions=useMemo(()=>buildWaterOptions({catalogue:current?.rows,personal:current?.waters,query,recentIds,contextWaterId,position:position.evidence}),[current,query,recentIds,contextWaterId,position.evidence]);
+  const {options}=suggestions;
   const close=()=>{setOpen(false);trigger.current?.focus();};
   const choose=async option=>{
     if(busyRef.current || disabled || scope.status !== "ready")return;
@@ -56,11 +53,14 @@ function ScopedWaterSelector({ scope, onSelect, recentIds = [], disabled = false
   return <div className="water-selector"><button type="button" ref={trigger} className="water-selector-primary" disabled={disabled || scope.status !== "ready" || busy} aria-expanded={open} aria-controls={`${id}-panel`} onClick={()=>{setOpen(value=>!value);setActive(-1);}}>
     <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 6 6M5 20c2-2 4 2 6 0"/></svg>Vybrat revír z ČRS</button>
     {open && <section id={`${id}-panel`} className="water-selector-panel" aria-label="Výběr revíru z ČRS a osobních vod">
+      <button className="water-selector-nearby" type="button" disabled={position.status === "loading" || busy} onClick={async()=>{const evidence=await position.request();if(evidence && activeScope.current === scope.scopeKey){onPosition?.(evidence);setActive(-1);}}}>{position.status === "loading" ? "Zjišťuji polohu…" : "Navrhnout revíry podle GPS"}</button>
+      <p className="water-selector-hint">Jednorázová poloha se porovná s body v zařízení. Bod není hranice revíru. Výběr vždy potvrdíš; GPS se na pozadí nesleduje.</p>
+      {position.error && <p role="alert">{position.error}</p>}{position.evidence && <p role="status">Přesnost GPS ±{Math.round(position.evidence.accuracyMeters)} m{position.evidence.accuracyMeters > 150 ? " — hrubá poloha, pořadí bodů může být nejisté." : "."} {suggestions.expired ? "Poloha zestárla, pro nové návrhy ji obnov." : suggestions.nearbyCount ? "Nejbližší body jsou jen návrhy; zkontroluj správný revír a potvrď jej." : "Do přibližně 5 km nejsou odpovídající uložené body. Revír může být blíž svou hranicí; zkus hledání názvem."}</p>}
       <label htmlFor={`${id}-search`}>Název nebo číslo revíru</label><input ref={input} id={`${id}-search`} role="combobox" aria-autocomplete="list" aria-expanded="true" aria-controls={`${id}-list`} aria-activedescendant={active >= 0 && options[active] ? `${id}-option-${active}` : undefined} autoComplete="off" type="search" placeholder="Např. 471 nebo Morava" value={query} onChange={event=>{setQuery(event.target.value);setActive(-1);}} onKeyDown={keyDown} disabled={busy} />
       <p className="water-selector-hint">Oblíbené a použité vody jsou první. Šipky vybírají, Enter potvrdí, Escape zavře. Ruční lokalita a GPS se nepřepisují.</p>
       {(!current || current.catalogueLoading) && <p role="status">Načítám katalog; uložené osobní vody můžeš vybrat hned.</p>}{(error || current?.error) && <p role="alert">{error || current.error} <button type="button" onClick={()=>{setVersion(v=>v+1);setError("");}}>Zkusit znovu</button></p>}
       <div id={`${id}-list`} role="listbox" aria-label="Nalezené revíry" aria-busy={busy} className="water-selector-results">{options.map((option,index)=><button key={`${option.kind}-${option.water.id}`} ref={element=>{optionRefs.current[index]=element;}} type="button" role="option" aria-selected={index === active} id={`${id}-option-${index}`} disabled={busy} onClick={()=>void choose(option)}>
-        <strong>{option.water.name}</strong><span>{option.water.number ?? option.water.waterNumber ?? "Bez čísla"} · {option.type}</span><small>{option.kind === "personal" ? option.water.isFavorite ? "★ Oblíbený osobní revír" : "Můj revír" : `ČRS · ${option.water.union ?? "RIS"}`}</small></button>)}</div>
+        <strong>{option.water.name}</strong><span>{option.water.number ?? option.water.waterNumber ?? "Bez čísla"} · {option.type}</span><small>{option.water.id === contextWaterId ? "Aktuálně zvolený revír · " : ""}{option.distanceMeters !== undefined ? `≈ ${option.distanceMeters.toLocaleString("cs-CZ")} m k bodu · ${option.distanceSource} · ` : ""}{option.kind === "personal" ? option.water.isFavorite ? "★ Oblíbený osobní revír" : "Můj revír" : `ČRS · ${option.water.union ?? "RIS"}`}</small></button>)}</div>
       {current && !current.catalogueLoading && !options.length && <p role="status">Žádný revír neodpovídá hledání. Zkus část názvu nebo čísla; vlastní vodu můžeš zadat ručně.</p>}
       {!!options.length && <p role="status">{options.length} návrhů. Pro zpřesnění pokračuj v psaní.</p>}{busy && <p role="status">Vybírám revír…</p>}
       <button type="button" disabled={busy} onClick={close}>Zavřít výběr</button><Link to="/waters/catalogue">Prohlédnout celý katalog a pravidla</Link>

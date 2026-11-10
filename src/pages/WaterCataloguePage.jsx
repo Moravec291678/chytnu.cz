@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import Layout from "../shared/layout/Layout.jsx";
 import { useDataScope } from "../features/auth/context/dataScopeContextValue.js";
@@ -10,6 +10,7 @@ import "./WaterCataloguePage.css";
 
 const date = value => new Date(value).toLocaleDateString("cs-CZ");
 const amount = value => value == null ? "Neuvedeno ve zdroji" : value.toLocaleString("cs-CZ");
+const CatalogueWaterMap=lazy(()=>import("../features/waters/components/CatalogueWaterMap.jsx"));
 function useCatalogueResource(loader, key) {
   const [stored,setStored] = useState(null), [version,setVersion] = useState(0);
   useEffect(() => { let active = true; loader().then(data => { if(active)setStored({key,version,data}); }).catch(error => { if(active)setStored({key,version,error:error.message}); }); return () => { active = false; }; },[loader,key,version]);
@@ -62,6 +63,7 @@ export function CatalogueWaterDetail() {
       <button className="catalogue-save" onClick={select} disabled={busy || scope.status !== "ready"}>{busy ? "Ukládám…" : "Uložit do mých revírů"}</button><p>Uloží soukromý revír pro úlovky a vycházky. Opakovaná volba otevře existující záznam a zachová vlastní poznámky i úpravy.</p>{error && <p role="alert">{error}</p>}
       {!row.numberUnique && <p>Zdroj uvádí stejné číslo u více odlišných revírů. Tyto záznamy se neslučují.</p>}
       <dl className="catalogue-facts"><div><dt>Rozloha (ha)</dt><dd>{amount(detail.areaHa)}</dd></div><div><dt>Délka toku (km)</dt><dd>{amount(detail.lengthKm)}</dd></div><div><dt>Souřadnice bodu RIS</dt><dd>{detail.coordinates ? `${detail.coordinates.latitude}, ${detail.coordinates.longitude}` : "Neuvedeny ve zdroji"}</dd></div><div><dt>Detail získán</dt><dd>{date(detail.retrievedAt)}</dd></div></dl>
+      <Suspense fallback={<p role="status">Načítám mapu revíru…</p>}><CatalogueWaterMap row={row} /></Suspense>
       <section><h2>Popis revíru</h2><p className="catalogue-text">{row.description || "Samostatný popis nebyl ve zdroji rozpoznán. Úplný text je dostupný níže."}</p></section>
       <section><h2>Podmínky a další údaje ze zdroje</h2><p>Údaje níže zachovávají znění exportu včetně jeho označení „Dnes“. Nejde o dnešní ověření pravidel.</p><details><summary>Úplný text detailu RIS</summary><div className="catalogue-text">{detail.pageText}</div></details>
       {detail.tables.map((table,index)=><details key={index}><summary>Tabulka ze zdroje {index+1} · snímek {date(detail.retrievedAt)}</summary><div className="catalogue-table"><table><caption>Údaje zachycené v exportu RIS</caption><thead><tr>{table.headers.map((header,i)=><th key={i} scope="col">{header}</th>)}</tr></thead><tbody>{table.rows.map((cells,i)=><tr key={i}>{cells.map((cell,j)=><td key={j}>{cell}</td>)}</tr>)}</tbody></table></div></details>)}
