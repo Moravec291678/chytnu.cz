@@ -7,6 +7,7 @@
     { "path": "/api/cloudinary/cleanup", "schedule": "0 0 * * *" }
   ],
   "rewrites": [
+    { "source": "/api/social", "destination": "/api/account/delete?social=1" },
     { "source": "/api/admin", "destination": "/api/account/delete?admin=1" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],

@@ -601,6 +601,8 @@ service cloud.firestore {
     match /waterRooms/{document=**} { allow read, write: if false; }
     match /privateConversations/{document=**} { allow read, write: if false; }
     match /crews/{document=**} { allow read, write: if false; }
+    match /socialReports/{document=**} { allow read, write: if false; }
+    match /socialAvatarJobs/{document=**} { allow read, write: if false; }
 
     match /{document=**} {
       allow read, write: if false;

@@ -1,5 +1,9 @@
 # Social network — stage 1
 
+Stage 1 design snapshot. Ready profile operations and stricter retained handle
+claims are extended in [stage 2](SOCIAL_PUBLIC_PROFILES.md); its rollout and API
+description supersede the stage 1 "no HTTP route" restriction for profiles only.
+
 The existing Firebase UID remains the identity. There is no social login, client
 role system, migration or automatic publication. Existing local Community, Crew,
 Nearby and Water Chat remain unchanged. `FEATURES.socialNetwork` is false.

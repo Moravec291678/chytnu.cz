@@ -10,6 +10,7 @@ test("Vercel config builds Vite into dist and preserves SPA routes", async () =>
   assert.equal(config.buildCommand, "npm run build");
   assert.equal(config.outputDirectory, "dist");
   assert.deepEqual(config.rewrites, [
+    { source: "/api/social", destination: "/api/account/delete?social=1" },
     { source: "/api/admin", destination: "/api/account/delete?admin=1" },
     { source: "/(.*)", destination: "/index.html" },
   ]);

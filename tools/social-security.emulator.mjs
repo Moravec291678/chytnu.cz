@@ -15,6 +15,7 @@ const paths = [
   `socialBlocks/${a}/blocked/${b}`, "nearbyPresence/fixture-session", "waterPresence/fixture-session",
   "waterRooms/ris-aaaaaaaaaaaaaaaaaaaaaaaa", "waterRooms/ris-aaaaaaaaaaaaaaaaaaaaaaaa/messages/fixture-message",
   "privateConversations/fixture-conversation", "crews/fixture-crew",
+  "socialReports/fixture-report", "socialAvatarJobs/fixture-avatar-job",
 ];
 let checks = 0;
 async function denied(promise) { await assertFails(promise); checks++; }

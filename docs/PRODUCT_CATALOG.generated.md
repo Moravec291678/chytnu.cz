@@ -93,6 +93,7 @@ Preference jsou uživatelsky nastavitelné: morningFishActivity (default ON), to
 | ID | Enabled |
 |---|---|
 | socialNetwork | Ne |
+| publicProfiles | Ano |
 | seasonalChallenges | Ne |
 | weeklyChallenges | Ne |
 | streaks | Ne |

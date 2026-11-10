@@ -1,19 +1,20 @@
 import { createHash } from "node:crypto";
 import { canonicalPair, canReadSocial, normalizedHandle, socialUid, validateSocialRecord } from "../data/socialModel.js";
+import { sectionAllowed, validateProfileInput, validateStoredProfile } from "../data/publicProfileModel.js";
 
 // No public HTTP surface in stage 1. Future handlers must use this authenticated boundary.
 // Admin roles deliberately grant no diary/social privacy bypass and no quota exemption.
-export function createSocialRepository({ db, auth, now = () => Date.now() }) {
+export function createSocialRepository({ db, auth, now = () => Date.now(), profilesEnabled = false }) {
   const fail = code => { throw new Error(code); };
   async function identity(token) {
     if (typeof token !== "string" || !token) return fail("unauthenticated");
     const decoded = await auth.verifyIdToken(token, true);
     return socialUid(decoded.uid);
   }
-  async function guard(tx, uid, mutation) {
+  async function guard(tx, uid, mutation, profileOperation = false) {
     const refs = ["adminConfig/social", `accountSuspensions/${uid}`, `accountDeletions/${uid}`];
     const [config, suspension, deletion] = await Promise.all(refs.map(path => tx.get(db.doc(path))));
-    if (config.data()?.enabled !== true) fail("social_disabled");
+    if (profileOperation && config.data()?.profilesEnabled === false || config.data()?.enabled !== true && !(profileOperation && profilesEnabled)) fail("social_disabled");
     if (suspension.exists || deletion.exists) fail("account_unavailable");
     if (mutation) {
       const ref = db.doc(`serverRateLimits/social-${createHash("sha256").update(uid).digest("hex")}`);
@@ -39,11 +40,41 @@ export function createSocialRepository({ db, auth, now = () => Date.now() }) {
       uid === targetUid ? null : tx.get(db.doc(`socialRelationships/${canonicalPair(uid, targetUid)}`))]);
     if (!profile.exists || !canReadSocial({ viewerUid: uid, ownerUid: targetUid, visibility: profile.data().visibility,
       friends: relation?.data()?.status === "accepted" })) return null;
-    const data = validateSocialRecord("profile", profile.data(), { now: now() });
+    const data = validateStoredProfile(profile.data(), now());
     if (data.uid !== targetUid) fail("invalid_profile_identity");
     return data;
   }
   const repository = {
+    async readProfileSnapshot(token, target, read, { audience: preview } = {}) {
+      const uid = token ? await identity(token) : null;
+      if (typeof target !== "string") fail("invalid_profile");
+      return db.runTransaction(async tx => {
+        // Anonymous readers never mutate and receive PUBLIC sections only.
+        if (uid) await guard(tx, uid, false, true);
+        else {
+          const config = (await tx.get(db.doc("adminConfig/social"))).data();
+          if (config?.profilesEnabled === false || !profilesEnabled && config?.enabled !== true) fail("social_disabled");
+        }
+        const handle = target.startsWith("@") ? normalizedHandle(target.slice(1)) : null;
+        const targetUid = handle ? (await tx.get(db.doc(`publicHandles/${handle}`))).data()?.uid : socialUid(target);
+        if (!targetUid) return null;
+        if (uid) await peer(tx, uid, targetUid);
+        else if ((await Promise.all(["accountSuspensions", "accountDeletions"].map(name => tx.get(db.doc(`${name}/${targetUid}`))))).some(row => row.exists)) return null;
+        const snapshot = await tx.get(db.doc(`publicProfiles/${targetUid}`));
+        if (!snapshot.exists) return null;
+        const profile = validateStoredProfile(snapshot.data(), now());
+        if (profile.uid !== targetUid || handle && profile.handle !== handle) return null;
+        if (handle && !profile.discoverable && uid !== targetUid) return null;
+        const relation = uid && uid !== targetUid ? (await tx.get(db.doc(`socialRelationships/${canonicalPair(uid, targetUid)}`))).data() : null;
+        let audience = uid === targetUid ? "owner" : relation?.status === "accepted" ? "friend" : "stranger";
+        if (preview !== undefined) {
+          if (uid !== targetUid || !["stranger", "friend"].includes(preview)) fail("forbidden");
+          audience = preview;
+        }
+        if (!sectionAllowed(profile.visibility, audience)) return null;
+        return read({ tx, profile, audience, viewerUid: uid });
+      });
+    },
     async findByHandle(token, handle) {
       const uid = await identity(token), normalized = normalizedHandle(handle);
       return db.runTransaction(async tx => {
@@ -51,23 +82,33 @@ export function createSocialRepository({ db, auth, now = () => Date.now() }) {
         const targetUid = (await tx.get(db.doc(`publicHandles/${normalized}`))).data()?.uid;
         if (!targetUid) return null;
         const profile = await readProfile(tx, uid, targetUid);
-        return profile?.handle === normalized ? profile : null;
+        return profile?.handle === normalized && (profile.discoverable || uid === targetUid) ? profile : null;
       });
     },
     async saveProfile(token, input) {
       const uid = await identity(token);
-      if (!input || Object.keys(input).some(k => !["handle", "displayName", "bio", "visibility"].includes(k))) fail("invalid_profile");
-      const handle = normalizedHandle(input.handle);
+      const editable = validateProfileInput(input), handle = editable.handle;
       return db.runTransaction(async tx => {
-        const commitLimit = await guard(tx, uid, true);
+        const commitLimit = await guard(tx, uid, true, true);
         const ref = db.doc(`publicProfiles/${uid}`), claim = db.doc(`publicHandles/${handle}`);
         const [old, reserved] = await Promise.all([tx.get(ref), tx.get(claim)]);
         if (reserved.exists && reserved.data().uid !== uid) fail("handle_taken");
         const stamp = now();
-        const profile = validateSocialRecord("profile", { uid, handle, displayName: input.displayName, bio: input.bio ?? "",
-          visibility: input.visibility ?? "private", createdAt: old.data()?.createdAt ?? stamp, updatedAt: stamp }, { now: stamp });
+        for (const catchId of new Set([...editable.sharedCatchIds, ...editable.sharedPhotos.map(p => p.catchId)])) {
+          const record = (await tx.get(db.doc(`users/${uid}/catches/${catchId}`))).data();
+          if (!record || record.deleted || record.ownerId !== uid) fail("invalid_shared_catch");
+        }
+        for (const photo of editable.sharedPhotos) {
+          const record = (await tx.get(db.doc(`users/${uid}/catches/${photo.catchId}/photos/${photo.photoId}`))).data();
+          if (!record || record.deleted || record.ownerId !== uid || record.type !== "image/jpeg" || record.cloud?.state !== "synced") fail("invalid_shared_photo");
+        }
+        const internal = old.exists ? validateStoredProfile(old.data(), stamp) : {};
+        const profile = validateStoredProfile({ ...editable, uid, avatarRevision: internal.avatarRevision ?? 0,
+          ...(internal.avatarVersion ? { avatarVersion: internal.avatarVersion, avatarAssetId: internal.avatarAssetId } : {}),
+          createdAt: old.data()?.createdAt ?? stamp, updatedAt: stamp }, stamp);
         commitLimit();
-        if (old.exists && old.data().handle !== handle) tx.delete(db.doc(`publicHandles/${old.data().handle}`));
+        // Retain old claims: a rename can never redirect another angler's old identity.
+        if (old.exists && old.data().handle !== handle) tx.set(db.doc(`publicHandles/${old.data().handle}`), { uid, retired: true, createdAt: old.data().createdAt, updatedAt: stamp });
         tx.set(ref, profile); tx.set(claim, { uid, createdAt: reserved.data()?.createdAt ?? stamp, updatedAt: stamp });
         return profile;
       });
@@ -75,7 +116,7 @@ export function createSocialRepository({ db, auth, now = () => Date.now() }) {
     async getProfile(token, targetUid) {
       const uid = await identity(token); socialUid(targetUid);
       return db.runTransaction(async tx => {
-        await guard(tx, uid, false);
+        await guard(tx, uid, false, true);
         return readProfile(tx, uid, targetUid);
       });
     },
@@ -100,7 +141,7 @@ export function createSocialRepository({ db, auth, now = () => Date.now() }) {
       const uid = await identity(token), pair = canonicalPair(uid, targetUid);
       if (typeof blocked !== "boolean") fail("invalid_block");
       return db.runTransaction(async tx => {
-        const commitLimit = await guard(tx, uid, true), stamp = now();
+        const commitLimit = await guard(tx, uid, true, true), stamp = now();
         const ref = db.doc(`socialBlocks/${uid}/blocked/${targetUid}`);
         const record = validateSocialRecord("block", { ownerUid: uid, targetUid, createdAt: stamp, updatedAt: stamp }, { now: stamp });
         commitLimit(); if (blocked) { tx.set(ref, record); tx.delete(db.doc(`socialRelationships/${pair}`)); } else tx.delete(ref);

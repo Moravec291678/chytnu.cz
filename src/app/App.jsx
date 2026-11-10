@@ -31,6 +31,8 @@ const SpeciesDetailPage = lazy(() => import("../pages/SpeciesDetailPage"));
 const SpeciesAlbumPage = lazy(() => import("../pages/SpeciesAlbumPage"));
 const StatsPage = lazy(() => import("../pages/StatsPage"));
 const ProfilePage = lazy(() => import("../pages/ProfilePage"));
+const PublicFishingProfile = lazy(() => import("../features/social/components/PublicFishingProfile.jsx"));
+const SocialProfileSettings = lazy(() => import("../features/social/components/SocialProfileSettings.jsx"));
 const AdminDashboard = lazy(() => import("../features/admin/AdminDashboard.jsx"));
 const WaterCataloguePage = lazy(() => import("../pages/WaterCataloguePage.jsx"));
 const CatalogueWaterDetail = lazy(() => import("../pages/WaterCataloguePage.jsx").then(module => ({default:module.CatalogueWaterDetail})));
@@ -159,6 +161,8 @@ function App() {
         <Route path="/gallery" element={<PageSuspense><GalleryPage /></PageSuspense>} />
         <Route path="/stats" element={<PageSuspense><StatsPage /></PageSuspense>} />
         <Route path="/profile" element={<PageSuspense><ProfilePage /></PageSuspense>} />
+        {isFeatureEnabled("publicProfiles") && <Route path="/profile/social" element={<PageSuspense><SocialProfileSettings /></PageSuspense>} />}
+        {isFeatureEnabled("publicProfiles") && <Route path="/u/:identity" element={<PageSuspense><PublicFishingProfile /></PageSuspense>} />}
         <Route path="/privacy" element={<PageSuspense><PrivacyPage /></PageSuspense>} />
         <Route path="/privacy-policy" element={<PageSuspense><PrivacyPolicyPage /></PageSuspense>} />
         <Route path="/terms" element={<PageSuspense><TermsPage /></PageSuspense>} />

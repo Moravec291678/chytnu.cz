@@ -3,7 +3,8 @@ export function canAccessProtectedRoute({ user, guestActive }) {
 }
 
 export function isPublicRoute(pathname) {
-  return pathname === "/" || pathname === "/login" || pathname === "/privacy-policy" || pathname === "/terms";
+  return pathname === "/" || pathname === "/login" || pathname === "/privacy-policy" || pathname === "/terms"
+    || /^\/u\/[^/]+\/?$/.test(pathname);
 }
 
 export function resolveAuthenticatedRedirect({ status, user }) {

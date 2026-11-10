@@ -2,7 +2,7 @@
 export const SOCIAL_VISIBILITY = Object.freeze({ PUBLIC: "public", FRIENDS: "friends", PRIVATE: "private" });
 export const SOCIAL_PATHS = Object.freeze({ profiles: "publicProfiles", handles: "publicHandles", relationships: "socialRelationships",
   posts: "socialPosts", blocks: "socialBlocks", nearby: "nearbyPresence", presence: "waterPresence", rooms: "waterRooms",
-  conversations: "privateConversations", crews: "crews", notifications: uid => `users/${socialUid(uid)}/notifications` });
+  conversations: "privateConversations", crews: "crews", reports: "socialReports", avatarJobs: "socialAvatarJobs", notifications: uid => `users/${socialUid(uid)}/notifications` });
 export function socialUid(value) {
   if (typeof value !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(value)) throw new TypeError("Invalid social UID");
   return value;

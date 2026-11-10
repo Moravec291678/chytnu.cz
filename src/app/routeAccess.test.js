@@ -20,3 +20,11 @@ test("legal information pages are public while privacy settings remain protected
   assert.equal(isPublicRoute("/privacy"), false);
   assert.equal(isPublicRoute("/settings"), false);
 });
+
+test("public fishing profile routes allow anonymous access without opening profile settings", () => {
+  assert.equal(isPublicRoute("/u/firebase-uid"), true);
+  assert.equal(isPublicRoute("/u/@rybar_1"), true);
+  assert.equal(isPublicRoute("/u/firebase-uid/"), true);
+  assert.equal(isPublicRoute("/u/firebase-uid/settings"), false);
+  assert.equal(isPublicRoute("/profile/social"), false);
+});

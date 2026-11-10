@@ -23,7 +23,7 @@ try {
     equal(response.status, 200); tokens[role] = (await response.json()).idToken;
   }
   await rejected(() => repo.saveProfile("", {}), "unauthenticated");
-  const pa = { handle: `a_${suffix}`, displayName: "Synthetic angler A" }, pb = { handle: `b_${suffix}`, displayName: "Synthetic angler B", visibility: "public" };
+  const pa = { handle: `a_${suffix}`, displayName: "Synthetic angler A" }, pb = { handle: `b_${suffix}`, displayName: "Synthetic angler B", visibility: "public", discoverable: true };
   await db.doc("adminConfig/social").delete();
   await rejected(() => repo.saveProfile(tokens.a, pa), "social_disabled");
   await db.doc("adminConfig/social").set({ enabled: true }); // Emulator fixture only; no production activation.
@@ -62,7 +62,7 @@ try {
   const race = await Promise.allSettled(["b", "c"].map(role => repo.saveProfile(tokens[role], { handle: `race_${suffix}`, displayName: role })));
   equal(race.filter(r => r.status === "fulfilled").length, 1);
   equal((await repo.saveProfile(tokens.owner, { handle: `owner_${suffix}`, displayName: "Owner fixture" })).uid, ids.owner);
-  await repo.saveProfile(tokens.a, { ...pa, handle: `renamed_${suffix}`, visibility: "public" });
+  await repo.saveProfile(tokens.a, { ...pa, handle: `renamed_${suffix}`, visibility: "public", discoverable: true });
   equal(await repo.findByHandle(tokens.c, pa.handle), null);
   equal((await repo.findByHandle(tokens.c, `renamed_${suffix}`)).uid, ids.a);
   await db.doc(`crews/fixture-${suffix}`).set({ ownerUid: ids.a, memberUids: [ids.a, ids.b], name: "Fixture crew", visibility: "private", createdAt: time, updatedAt: time });

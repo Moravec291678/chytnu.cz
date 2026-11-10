@@ -1,6 +1,6 @@
 export const PRIVACY_POLICY = Object.freeze({
   title: "Zásady ochrany osobních údajů",
-  lastUpdated: "8. listopadu 2026",
+  lastUpdated: "10. listopadu 2026",
   sections: [
     {
       heading: "1. Správce osobních údajů",
@@ -33,6 +33,12 @@ export const PRIVACY_POLICY = Object.freeze({
         "U volitelných funkcí, jako je poloha, fotografie nebo oznámení, rozhoduješ prostřednictvím oprávnění zařízení nebo nastavení. Některé technické údaje mohou být zpracovávány na základě oprávněného zájmu na zabezpečení a spolehlivém provozu.",
         "Externí AI zpracování fotografie, souhrnů deníku nebo vybraných poznámek je dobrovolné a vychází ze samostatného souhlasu. Souhlas můžeš v nastavení Umělá inteligence změnit nebo odvolat; odvolání neovlivňuje zákonnost dřívějšího zpracování. Uložení úlovku, běžný deník i místní přehledy fungují bez tohoto souhlasu.",
       ],
+    },
+    {
+      heading: "4a. Volitelný veřejný rybářský profil",
+      paragraphs: ["Rybářský profil je zpočátku soukromý. Zvlášť volíš jeho viditelnost, dohledatelnost podle uživatelského jména a viditelnost jednotlivých sekcí. Veřejné sekce mohou číst i návštěvníci bez přihlášení; blokování konkrétního účtu neomezuje anonymní přístup k veřejnému obsahu. Pro užší okruh zvol přátele nebo soukromý profil.",
+        "Sdílí se pouze výslovně vybrané úlovky a fotografie. Statistiky a trofeje vycházejí ze sdíleného výběru. Přesné souřadnice, soukromé názvy míst, poznámky, e-mail a zdrojové adresy soukromých fotografií se do veřejné projekce nepřenášejí. Z doručovaných JPEG odstraňujeme vložená metadata; samotný obraz může ukazovat rozpoznatelné místo nebo osoby.",
+        "Změna viditelnosti nebo odebrání výběru se projeví při dalším načtení. Již zobrazený nebo návštěvníkem uložený obsah nelze vzít zpět. Staré uživatelské jméno zůstává při přejmenování rezervované stejnému účtu. Smazání účtu zahrnuje profil, rezervace jmen, avatar a související hlášení; technický úklid může pokračovat ve frontě."],
     },
     {
       heading: "5. Kde jsou údaje uloženy",

@@ -655,7 +655,11 @@ export async function runProductionCloudinaryPhotoCleanup({ env = globalThis.pro
   const { auth, db, Timestamp: FirestoreTimestamp } = await getAdminContext(env);
   const photoDeletion = createCloudinaryPhotoDeletionService({ db, Timestamp: FirestoreTimestamp,
     getCloudinary: () => getCloudinarySdk(env), derivePublicId: cloudinaryPublicId, now });
-  const accounts = createAccountDeletionService({ db, auth, photoDeletion, now });
+  const { createSocialAvatarService } = await import("../features/social/server/socialAvatar.js");
+  const { createAvatarCoordinator } = await import("../features/social/server/socialAvatarCoordinator.js");
+  const avatars = createAvatarCoordinator({ db, avatar: createSocialAvatarService({ env }), now });
+  try { await avatars.cleanupPending(); } catch { /* Durable avatar jobs retry next protected cron run. */ }
+  const accounts = createAccountDeletionService({ db, auth, photoDeletion, now, deleteSocialAvatar: (uid, pageSize) => avatars.cleanup(uid, pageSize) });
   try { await accounts.processPending(); } catch { /* Photo cleanup must continue if account reconciliation is unavailable. */ }
   const cleanup = createCloudinaryPhotoCleanup({ db, now, deletionService: photoDeletion });
   const result = await cleanup();

@@ -45,6 +45,10 @@ export async function createProductionAccountDeletionHandler({ env = globalThis.
   const photoDeletion = createCloudinaryPhotoDeletionService({ db, Timestamp,
     getCloudinary: async () => { throw new Error("Cloudinary access is reserved for the cleanup worker."); },
     derivePublicId: cloudinaryPublicId, now });
-  const service = createAccountDeletionService({ db, auth, photoDeletion, now });
+  const service = createAccountDeletionService({ db, auth, photoDeletion, now, deleteSocialAvatar: async (uid, pageSize) => {
+    const { createSocialAvatarService } = await import("../features/social/server/socialAvatar.js");
+    const { createAvatarCoordinator } = await import("../features/social/server/socialAvatarCoordinator.js");
+    return createAvatarCoordinator({ db, avatar: createSocialAvatarService({ env }), now }).cleanup(uid, pageSize);
+  } });
   return createAccountDeletionHandler({ verifyToken: (token) => verifyFirebaseIdToken(auth, token), service, protectedOwnerUid: configuredOwnerUid(env), now });
 }

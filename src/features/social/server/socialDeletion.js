@@ -1,6 +1,6 @@
 // Executed before the existing private-data phase removes users/{uid}.
 // Nested future content must register its canonical path in the private manifest.
-export async function deleteSocialPage(db, uid, pageSize = 50) {
+export async function deleteSocialPage(db, uid, pageSize = 50, deleteAvatar) {
   const manifest = await db.collection(`users/${uid}/socialReferences`).limit(pageSize).get();
   for (const entry of manifest.docs) {
     const path = entry.data().path;
@@ -12,6 +12,7 @@ export async function deleteSocialPage(db, uid, pageSize = 50) {
   }
   if (manifest.size) return true;
   for (const [collection, field, op] of [["publicHandles", "uid", "=="], ["socialRelationships", "memberUids", "array-contains"],
+    ["socialReports", "reporterUid", "=="], ["socialReports", "targetUid", "=="],
     ["socialPosts", "ownerUid", "=="], ["nearbyPresence", "ownerUid", "=="], ["waterPresence", "ownerUid", "=="],
     ["privateConversations", "memberUids", "array-contains"], ["crews", "ownerUid", "=="]]) {
     const page = await db.collection(collection).where(field, op, uid).limit(pageSize).get();
@@ -25,6 +26,9 @@ export async function deleteSocialPage(db, uid, pageSize = 50) {
     if (current.exists) tx.update(entry.ref, { memberUids: current.data().memberUids.filter(member => member !== uid) });
   });
   if (memberships.size) return true;
+  const profile = await db.doc(`publicProfiles/${uid}`).get();
+  if (deleteAvatar && await deleteAvatar(uid, pageSize)) return true;
+  if (profile.data()?.avatarVersion && !deleteAvatar) throw new Error("social_avatar_cleanup_unavailable");
   // Incoming blocks are retained as minimal anti-abuse tombstones until their
   // authors unblock/delete; they contain no profile, handle, GPS or content.
   await db.recursiveDelete(db.doc(`socialBlocks/${uid}`));

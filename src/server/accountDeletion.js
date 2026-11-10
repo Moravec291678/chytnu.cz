@@ -5,7 +5,7 @@ const RECEIPT_RETENTION_MS = 29 * 24 * 60 * 60 * 1000;
 const LEASE_MS = 15 * 60 * 1000;
 const PHOTO_ID = /^[A-Za-z0-9_-]{1,128}$/;
 
-export function createAccountDeletionService({ db, auth, photoDeletion, now = () => Date.now(), pageSize = 50 } = {}) {
+export function createAccountDeletionService({ db, auth, photoDeletion, deleteSocialAvatar, now = () => Date.now(), pageSize = 50 } = {}) {
   if (!db || !auth || !photoDeletion?.enqueue) throw new TypeError("Account deletion dependencies are required.");
   const receipt = (uid) => db.doc(`accountDeletions/${uid}`);
   const stamp = () => new Date(now()).toISOString();
@@ -75,7 +75,7 @@ export function createAccountDeletionService({ db, auth, photoDeletion, now = ()
         if (page.length < pageSize) { phase = "data"; cursor = null; }
       }
       if (phase === "data") {
-        if (await deleteSocialPage(db, uid, pageSize)) {
+        if (await deleteSocialPage(db, uid, pageSize, deleteSocialAvatar)) {
           await ref.update({ phase, cursor: null, status: "retry", leaseUntil: null, lastErrorCode: null, updatedAt: stamp() });
           return { ...state, phase, status: "retry", lastErrorCode: null };
         }
@@ -114,6 +114,7 @@ export function createAccountDeletionService({ db, auth, photoDeletion, now = ()
           db.doc(`serverRateLimits/admin-photo-${uid}`).delete(),
           db.doc(`serverRateLimits/support-${uid}`).delete(),
           db.doc(`serverRateLimits/social-${createHash("sha256").update(uid).digest("hex")}`).delete(),
+          db.doc(`serverRateLimits/social-http-${createHash("sha256").update(uid).digest("hex")}`).delete(),
           db.doc(`serverRateLimits/ai-species-${createHash("sha256").update(uid).digest("hex")}`).delete(),
           db.doc(`serverRateLimits/ai-free-cloudflare-user-${createHash("sha256").update(uid).digest("hex")}`).delete(),
         ]);
