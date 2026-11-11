@@ -32,9 +32,9 @@ try {
   handler = createSocialHandler({ service: createPublicProfileService({ db, auth, avatar, env: { CHYTNU_OWNER_UID: ids.owner, CHYTNU_CO_CREATOR_UID: ids.co }, now: () => time,
     socialPhoto: { prepare: async (_identity, photo) => ({ version: "123", sha256: photo.cloud.sha256, transformationVersion: 1, width: 100, height: 80 }),
       delivery: async () => { photoDeliveries++; return new Uint8Array([255,216,255,217]); } } }) });
-  const original = { ownerId: ids.a, id: "catch", species: "Kapr", caughtAt: new Date(time).toISOString(), lengthCm: 53, notes: "SECRET-NOTE", waterName: "SECRET-SPOT", coordinates: { latitude: 50.123456, longitude: 14.654321 }, deleted: false };
+  const original = { ownerId: ids.a, id: "catch", species: "Kapr", caughtAt: new Date(time).toISOString(), lengthCm: 53, notes: "SECRET-NOTE", waterName: "SECRET-SPOT", coordinates: { latitude: 50.123456, longitude: 14.654321 }, deleted: false, photoRefs: { photo: true } };
   await db.doc(`users/${ids.a}/catches/catch`).set(original);
-  await db.doc(`users/${ids.a}/catches/catch/photos/photo`).set({ ownerId: ids.a, type: "image/jpeg", deleted: false, cloud: { state: "synced", provider: "cloudinary", objectKey: "SECRET-KEY", sha256: "a".repeat(64) } });
+  await db.doc(`users/${ids.a}/catches/catch/photos/photo`).set({ id: "photo", type: "image/jpeg", deleted: false, cloud: { state: "synced", provider: "cloudinary", objectKey: `users/${ids.a}/catches/catch/photos/photo/original`, sha256: "a".repeat(64) } });
   await db.doc(`users/${ids.b}/catches/other`).set({ ...original, ownerId: ids.b, id: "other" });
   await call("anonymous", "self", {}, 401); await call("anonymous", "save", { profile: {} }, 401);
   const a = { handle: `a_${suffix}`, displayName: "Fixture A", bio: "Fishing\nDiary", region: "Jižní Morava", specialization: "Feeder", favoriteSpecies: "Kapr" };

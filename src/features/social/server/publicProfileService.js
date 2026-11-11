@@ -13,6 +13,7 @@ import { createPublicationService } from "./publicationService.js";
 import { createSocialPhotoCoordinator } from "./socialPhotoCoordinator.js";
 import { createSocialCursor } from "./socialCursor.js";
 import { legacyShareApproval } from "./legacyShareApproval.js";
+import { activeSocialPhoto } from "./socialAccess.js";
 export const profileError = (code, status = 400) => Object.assign(new Error(code), { code, status });
 export function createPublicProfileService({ db, auth, avatar, socialPhoto, env = {}, cursorSecret, now = () => Date.now() }) {
   const repository = createSocialRepository({ db, auth, now, profilesEnabled: true });
@@ -61,7 +62,7 @@ export function createPublicProfileService({ db, auth, avatar, socialPhoto, env 
     if (!summaryOnly && sectionAllowed(profile.sections.gallery, audience)) result.photos = (await Promise.all(profile.sharedPhotos.map(async reference => {
       const [catchRow, photo, moderation] = await Promise.all([tx.get(db.doc(`users/${profile.uid}/catches/${reference.catchId}`)), tx.get(db.doc(`users/${profile.uid}/catches/${reference.catchId}/photos/${reference.photoId}`)), tx.get(db.doc(`adminPublicModeration/${moderationKey(profile.uid, reference.catchId)}`))]);
       const record = photo.data();
-      return moderation.data()?.hidden !== true && catchRow.exists && !catchRow.data().deleted && catchRow.data().ownerId === profile.uid && record?.ownerId === profile.uid && !record.deleted && record.type === "image/jpeg" && record.cloud?.state === "synced"
+      return moderation.data()?.hidden !== true && activeSocialPhoto(catchRow.data(),record,profile.uid,reference.photoId) && record.type === "image/jpeg" && record.cloud?.state === "synced"
         && profile.shareApprovals[`${reference.catchId}/${reference.photoId}`] === legacyShareApproval(catchRow.data(),record) ? reference : null;
     }))).filter(Boolean);
     if (sectionAllowed(profile.sections.achievements, audience)) {
@@ -116,7 +117,7 @@ export function createPublicProfileService({ db, auth, avatar, socialPhoto, env 
         for (const reference of (profile?.sharedPhotos ?? []).filter(p => p.catchId === row.id)) {
           if (!choices.has(reference.photoId)) choices.set(reference.photoId, await row.ref.collection("photos").doc(reference.photoId).get());
         }
-        return { ...item, photos: [...choices.values()].filter(p => p.exists && p.data().ownerId === uid && !p.data().deleted && p.data().type === "image/jpeg" && p.data().cloud?.state === "synced").map(p => ({ photoId: p.id })) };
+        return { ...item, photos: [...choices.values()].filter(p => activeSocialPhoto(row.data(),p.data(),uid,p.id) && p.data().type === "image/jpeg" && p.data().cloud?.state === "synced").map(p => ({ photoId: p.id })) };
       }))).filter(Boolean);
       return { uid, profile, candidateCatches, blockedAccounts: blocked.docs.map(row => ({ uid: row.id })) };
     }
@@ -143,7 +144,7 @@ export function createPublicProfileService({ db, auth, avatar, socialPhoto, env 
         if (payload.kind === "avatar" && profile.avatarVersion) return {avatar:true,uid:profile.uid,assetId:profile.avatarAssetId};
         if (payload.kind !== "catch" || !sectionAllowed(profile.sections.gallery, audience) || !profile.sharedPhotos.some(p => p.catchId === payload.catchId && p.photoId === payload.photoId)) throw profileError("profile_unavailable", 404);
         const [parent, photo, moderation] = await Promise.all([tx.get(db.doc(`users/${profile.uid}/catches/${payload.catchId}`)), tx.get(db.doc(`users/${profile.uid}/catches/${payload.catchId}/photos/${payload.photoId}`)), tx.get(db.doc(`adminPublicModeration/${moderationKey(profile.uid, payload.catchId)}`))]);
-        if (moderation.data()?.hidden === true || !parent.exists || parent.data().ownerId !== profile.uid || parent.data().deleted || !photo.exists || photo.data().ownerId !== profile.uid || photo.data().deleted) throw profileError("profile_unavailable", 404);
+        if (moderation.data()?.hidden === true || !activeSocialPhoto(parent.data(),photo.data(),profile.uid,payload.photoId)) throw profileError("profile_unavailable", 404);
         if (profile.shareApprovals[`${payload.catchId}/${payload.photoId}`] !== legacyShareApproval(parent.data(),photo.data())) throw profileError("profile_unavailable",404);
         return {uid:profile.uid,photo:photo.data()};
       });

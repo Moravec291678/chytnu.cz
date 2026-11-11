@@ -3,7 +3,7 @@ import { canonicalPair, canReadSocial, normalizedHandle, socialUid, validateSoci
 import { sectionAllowed, validateProfileInput, validateStoredProfile } from "../data/publicProfileModel.js";
 import { buildDiscoveryPrefixes } from "../data/discoveryModel.js";
 import { relationshipView, transitionRelationship } from "../data/relationshipModel.js";
-import { assertSocialInteraction } from "./socialAccess.js";
+import { assertSocialInteraction, activeSocialPhoto } from "./socialAccess.js";
 import { createNotificationRecord } from "../../notifications/data/notificationModel.js";
 import { legacyShareApproval } from "./legacyShareApproval.js";
 
@@ -163,7 +163,7 @@ export function createSocialRepository({ db, auth, now = () => Date.now(), profi
         }
         for (const photo of editable.sharedPhotos) {
           const record = (await tx.get(db.doc(`users/${uid}/catches/${photo.catchId}/photos/${photo.photoId}`))).data();
-          if (!record || record.deleted || record.ownerId !== uid || record.type !== "image/jpeg" || record.cloud?.state !== "synced") fail("invalid_shared_photo");
+          if (!activeSocialPhoto(sources.get(photo.catchId),record,uid,photo.photoId) || record.type !== "image/jpeg" || record.cloud?.state !== "synced") fail("invalid_shared_photo");
           shareApprovals[`${photo.catchId}/${photo.photoId}`]=legacyShareApproval(sources.get(photo.catchId),record);
         }
         const internal = old.exists ? validateStoredProfile(old.data(), stamp) : {};

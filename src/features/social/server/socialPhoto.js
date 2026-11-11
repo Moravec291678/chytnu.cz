@@ -16,7 +16,10 @@ const dimensionsValid = item => Number.isSafeInteger(item?.width) && Number.isSa
 function sourceIdentity({ uid, catchId, photoId }, photo) {
   socialUid(uid); socialUid(catchId); socialUid(photoId);
   const publicId = cloudinaryPublicId(uid, catchId, photoId);
-  if (photo?.ownerId !== uid || photo.deleted || photo.id !== undefined && photo.id !== photoId
+  // Current sync metadata has no ownerId: ownership is the authenticated parent
+  // path plus its owner, and the exact owner-bound Cloudinary object key below.
+  // Keep rejecting contradictory legacy metadata instead of trusting that field.
+  if (!photo || photo.ownerId !== undefined && photo.ownerId !== uid || photo.deleted || photo.id !== undefined && photo.id !== photoId
     || photo.type !== "image/jpeg" || !Number.isSafeInteger(photo.size) || photo.size < 1
     || photo.cloud?.provider !== "cloudinary" || photo.cloud.state !== "synced"
     || photo.cloud.objectKey !== `users/${uid}/catches/${catchId}/photos/${photoId}/original`

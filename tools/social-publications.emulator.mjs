@@ -4,6 +4,10 @@ import { randomUUID } from "node:crypto";
 import { initializeApp, deleteApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
+import { initializeApp as initializeClientApp, deleteApp as deleteClientApp } from "firebase/app";
+import { initializeAuth, inMemoryPersistence, connectAuthEmulator, signInWithEmailAndPassword } from "firebase/auth";
+import { getFirestore as getClientFirestore, connectFirestoreEmulator, terminate } from "firebase/firestore";
+import { createFirestoreSyncAdapter } from "../src/features/sync/data/firestoreSyncAdapter.js";
 import { createPublicProfileService } from "../src/features/social/server/publicProfileService.js";
 import { createSocialHandler } from "../src/features/social/server/socialApi.js";
 import { createSocialPhotoCoordinator } from "../src/features/social/server/socialPhotoCoordinator.js";
@@ -16,14 +20,17 @@ import catalogue from "../public/data/ris/be90ad549cf77679/index.json" with { ty
 if (process.env.FIRESTORE_EMULATOR_HOST !== "127.0.0.1:8080" || process.env.FIREBASE_AUTH_EMULATOR_HOST !== "127.0.0.1:9099") throw new Error("Local Auth/Firestore emulators required");
 const app = initializeApp({ projectId: "demo-chytnucz-local" }, `publications-${randomUUID()}`), db = getFirestore(app), auth = getAuth(app);
 const suffix = randomUUID().replaceAll("-", "").slice(0, 8), ids = {}, tokens = {};
+const clientApp = initializeClientApp({ apiKey: "demo-key", projectId: "demo-chytnucz-local", authDomain: "localhost" }, `publication-client-${suffix}`);
+const clientAuth = initializeAuth(clientApp, { persistence: inMemoryPersistence }), clientDb = getClientFirestore(clientApp);
+connectAuthEmulator(clientAuth, "http://127.0.0.1:9099", { disableWarnings: true }); connectFirestoreEmulator(clientDb, "127.0.0.1", 8080);
 let checks = 0, time = Date.now(), requests = 0, preparations = 0, deliveries = 0, duringDelivery, lastHeaders;
 const env = {}, socialPhoto = {
   async prepare(identity, photo) {
-    assert.equal(identity.uid, photo.ownerId); checks++; preparations++;
+    assert.equal(photo.cloud.objectKey, `users/${identity.uid}/catches/${identity.catchId}/photos/${identity.photoId}/original`); checks++; preparations++;
     return { version: "123", sha256: photo.cloud.sha256, transformationVersion: 1, width: 100, height: 80 };
   },
   async delivery(identity, photo, receipt) {
-    assert.equal(identity.uid, photo.ownerId); assert.equal(receipt.sha256, photo.cloud.sha256); checks += 2; deliveries++;
+    assert.equal(photo.cloud.objectKey, `users/${identity.uid}/catches/${identity.catchId}/photos/${identity.photoId}/original`); assert.equal(receipt.sha256, photo.cloud.sha256); checks += 2; deliveries++;
     if (duringDelivery) await duringDelivery();
     return new Uint8Array([255, 216, 255, 217]);
   },
@@ -64,12 +71,19 @@ try {
     await call(role, "save", { profile: { handle: `${role}_${suffix}`, displayName: `Synthetic ${role}`, visibility: "public", sections: { gallery: "public", catches: "public" } } });
   }
   env.CHYTNU_OWNER_UID = ids.owner; env.CHYTNU_CO_CREATOR_UID = ids.co; handler = makeHandler();
-  const original = { id: "catch", ownerId: ids.a, species: "Kapr", lengthCm: 53, weightKg: 3.2, weightSource: "measured", privacy: "private",
-    caughtAt: new Date(time).toISOString(), method: { label: "Feeder" }, waterId: "personal-water", waterName: "SECRET-SPOT",
+  const original = { id: "catch", ownerId: ids.a, species: "Kapr", lengthCm: 53, weightKg: 3.2, weightSource: "manual",
+    privacy: { visibility: "private", photoVisibility: "private", locationPrecision: "none", privateSpot: true, nearbyEligible: false, heatmapEligible: false }, photoRefs: { photo: true },
+    caughtAt: new Date(time).toISOString(), method: { key: "feeder", label: "Feeder", isCustom: false }, waterId: "personal-water", waterName: "SECRET-SPOT",
     coordinates: { latitude: 50.123456, longitude: 14.654321 }, notes: "SECRET-NOTE", deleted: false };
-  const originalPhoto = { id: "photo", ownerId: ids.a, type: "image/jpeg", size: 5000, deleted: false,
+  const originalPhoto = { id: "photo", name: "synthetic.jpg", type: "image/jpeg", size: 5000, deleted: false, deletedAt: null, focalX: 0.5, focalY: 0.5, zoom: 1, sortIndex: 0,
     cloud: { provider: "cloudinary", state: "synced", objectKey: `users/${ids.a}/catches/catch/photos/photo/original`, sha256: "a".repeat(64) } };
-  await ref("a").set(original); await photoRef("a").set(originalPhoto);
+  // Real client adapter + Rules, not an Admin-only fixture shape. Photo metadata
+  // deliberately has no ownerId; ownership is its private path and parent catch.
+  await signInWithEmailAndPassword(clientAuth, `${ids.a}@example.test`, `Synthetic-${suffix}-9!`);
+  const adapter = createFirestoreSyncAdapter({ db: clientDb, getCurrentUserId: () => clientAuth.currentUser?.uid ?? null });
+  await adapter.write({ ownerId: ids.a, entityType: "catch", entityId: "catch", record: { ...original, photos: [originalPhoto] }, expectedRevision: null, operationId: randomUUID(), localRevision: 1 });
+  equal(Object.hasOwn((await photoRef("a").get()).data(), "ownerId"), false);
+  equal((await photoRef("a").get()).data(), originalPhoto);
   await db.doc(`users/${ids.a}/waters/personal-water`).set({ ownerId: ids.a, catalogueId: catalogue[0].id, name: "SECRET-CUSTOM-NAME" });
   const privateXp = { totalXp: 9999, notes: "SECRET-LEDGER" };
   await db.doc(`users/${ids.a}/progression/state`).set(privateXp);
@@ -106,6 +120,12 @@ try {
   for (const id of pageIds) await db.doc(`socialPosts/${id}`).delete();
   const image = await call("anonymous", "posts.image", { postId }); equal(typeof image.jpegBase64, "string"); safe(image); equal(deliveries, 1);
   equal(lastHeaders["cache-control"], "private, no-store, max-age=0"); equal(lastHeaders["x-content-type-options"], "nosniff");
+  await ref("a").update({ photoRefs: {} }); equal((await list("anonymous")).length, 0);
+  await call("anonymous", "posts.image", { postId }, 404);
+  await ref("a").update({ photoRefs: { photo: true } });
+  await photoRef("a").set({ ...originalPhoto, ownerId: ids.b }); equal((await list("anonymous")).length, 0);
+  await call("anonymous", "posts.image", { postId }, 404);
+  await photoRef("a").set(originalPhoto);
   handler = makeHandler(); // Independent backend instance/device uses the same receipt.
   await call("a", "posts.save", { ...basic, expectedRevision: 0 }, 409);
   equal((await db.collection("socialPosts").where("ownerUid", "==", ids.a).get()).size, 1);
@@ -126,7 +146,7 @@ try {
   equal((await call("a", "posts.own", { catchId: "catch" })).post.content.lengthCm, 53);
   saved = (await call("a", "posts.save", { ...approved, expectedRevision: saved.revision })).post;
   equal((await list("anonymous"))[0].content.lengthCm, 54);
-  await ref("a").update({ privacy: "friends" }); equal((await list("anonymous")).length, 0);
+  await ref("a").update({ privacy: { ...original.privacy, visibility: "public" } }); equal((await list("anonymous")).length, 0);
   saved = (await call("a", "posts.save", { ...approved, visibility: "friends", expectedRevision: saved.revision })).post;
   equal((await list("anonymous")).length, 0); equal((await list("c")).length, 0);
   for (const role of ["owner", "co"]) {
@@ -179,7 +199,7 @@ try {
   saved = (await call("a", "posts.save", { ...approved, expectedRevision: saved.revision + 1 })).post;
   // Two server instances cannot both consume a transformation for the same asset.
   const concurrentIdentity = { uid: ids.b, catchId: "concurrent", photoId: "photo" };
-  const concurrentPhoto = { ...originalPhoto, ownerId: ids.b,
+  const concurrentPhoto = { ...originalPhoto,
     cloud: { ...originalPhoto.cloud, objectKey: `users/${ids.b}/catches/concurrent/photos/photo/original` } };
   await db.doc(`users/${ids.b}/catches/concurrent`).set({ ...original, ownerId: ids.b, id: "concurrent" });
   await db.doc(`users/${ids.b}/catches/concurrent/photos/photo`).set(concurrentPhoto);
@@ -203,7 +223,7 @@ try {
   equal((await db.collection(`users/${ids.b}/socialMediaReceipts`).get()).size, 1);
   // A delayed provider result cannot recreate receipts after account cleanup.
   const deletingIdentity = { uid: ids.c, catchId: "deleting", photoId: "photo" };
-  const deletingPhoto = { ...originalPhoto, ownerId: ids.c,
+  const deletingPhoto = { ...originalPhoto,
     cloud: { ...originalPhoto.cloud, objectKey: `users/${ids.c}/catches/deleting/photos/photo/original` } };
   await db.doc(`users/${ids.c}/catches/deleting`).set({ ...original, ownerId: ids.c, id: "deleting" });
   await db.doc(`users/${ids.c}/catches/deleting/photos/photo`).set(deletingPhoto);
@@ -232,4 +252,4 @@ try {
   await call("anonymous", "posts.image", { postId }, 404);
   equal((await db.doc(`publicProfiles/${ids.b}`).get()).exists, true);
   console.log(`Social publications: ${checks} real Auth/Firestore ownership, privacy, revocation, derivative caching and deletion checks PASS; 5 accounts`);
-} finally { await deleteApp(app); }
+} finally { await terminate(clientDb); await deleteClientApp(clientApp); await deleteApp(app); }

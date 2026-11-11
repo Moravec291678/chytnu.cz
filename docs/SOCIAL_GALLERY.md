@@ -5,6 +5,12 @@ stable post per catch prevents duplicate publication. Source IDs, fingerprints,
 photo receipts and field selections are returned only to the owner; public DTOs
 contain an explicit content/author allowlist. No publication awards XP.
 
+Production photo metadata is owned by its Firestore path and parent catch; it
+does not store `ownerId`. The parent must own the UID and actively reference
+the selected photo. Contradictory legacy ownership fields and orphan metadata
+are denied. Integration fixtures exercise the actual authenticated sync adapter
+and Firestore Rules rather than adding nonexistent ownership fields.
+
 `posts.save`, `posts.own`, `posts.list`, `posts.image`, `posts.delete` reuse the
 authenticated social API. Anonymous reads receive only approved public content.
 All mutations require the caller UID; updates require the current revision.

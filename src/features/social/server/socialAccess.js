@@ -1,4 +1,13 @@
 import { canonicalPair, socialUid } from "../data/socialModel.js";
+// Photo ownership is encoded in its trusted Firestore path and owned parent.
+// Production photo documents intentionally have no client-editable ownerId.
+export function activeSocialPhoto(parent, photo, uid, photoId) {
+  const attached=parent?.photoRefs && typeof parent.photoRefs === "object" ? parent.photoRefs[photoId] === true
+    : Array.isArray(parent?.photoIds) ? parent.photoIds.includes(photoId)
+    : Array.isArray(parent?.photos) && parent.photos.some(p=>p?.id === photoId);
+  return !!(parent?.ownerId === uid && !parent.deleted && attached && photo && !photo.deleted
+    && (photo.id === undefined || photo.id === photoId) && (photo.ownerId === undefined || photo.ownerId === uid));
+}
 // One server boundary for future messages, friends feeds and existing profiles.
 export async function assertSocialInteraction({ tx, db, uid, targetUid, requireFriend = false }) {
   socialUid(uid); socialUid(targetUid);

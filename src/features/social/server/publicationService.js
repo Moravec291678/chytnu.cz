@@ -6,7 +6,7 @@ import { sectionAllowed } from "../data/publicProfileModel.js";
 import { publicationId, publicationInput, publicationContent, contentFingerprint } from "../data/publicationModel.js";
 import { configuredOwnerUid, configuredCoCreatorUid } from "../../admin/server/adminAccess.js";
 import { moderationKey } from "../../admin/server/adminSupportStore.js";
-import { assertSocialInteraction } from "./socialAccess.js";
+import { assertSocialInteraction, activeSocialPhoto } from "./socialAccess.js";
 const waters = new Map(catalogue.map(w => [w.id,w]));
 const fail = (code = "post_unavailable") => { throw new Error(code); };
 export function createPublicationService({ db, media, cursors, env = {}, now = () => Date.now() }) {
@@ -26,7 +26,7 @@ export function createPublicationService({ db, media, cursors, env = {}, now = (
     let photo = null;
     if (photoId) {
       photo = (await tx.get(db.doc(`users/${uid}/catches/${catchId}/photos/${socialUid(photoId)}`))).data();
-      if (photo?.ownerId !== uid || photo.deleted || photo.type !== "image/jpeg" || photo.cloud?.state !== "synced") fail();
+      if (!activeSocialPhoto(parent,photo,uid,photoId) || photo.type !== "image/jpeg" || photo.cloud?.state !== "synced") fail();
     }
     return { parent, water, photo };
   }

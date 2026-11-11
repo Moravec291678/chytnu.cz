@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { activeSocialPhoto } from "./socialAccess.js";
 export function createSocialPhotoCoordinator({ db, photo, now = () => Date.now() }) {
   return { async prepare(identity, source) {
     const key = createHash("sha256").update(JSON.stringify([identity.uid,identity.catchId,identity.photoId,source.cloud?.sha256])).digest("hex");
@@ -7,8 +8,8 @@ export function createSocialPhotoCoordinator({ db, photo, now = () => Date.now()
       const row = (await tx.get(ref)).data();
       const [deleting,suspended,parent,current]=await Promise.all([`accountDeletions/${identity.uid}`,`accountSuspensions/${identity.uid}`,
         `users/${identity.uid}/catches/${identity.catchId}`,`users/${identity.uid}/catches/${identity.catchId}/photos/${identity.photoId}`].map(p=>tx.get(db.doc(p))));
-      if (deleting.exists || suspended.exists || parent.data()?.ownerId !== identity.uid || parent.data()?.deleted
-        || current.data()?.ownerId !== identity.uid || current.data()?.deleted || current.data()?.cloud?.sha256 !== source.cloud?.sha256) throw new Error("post_unavailable");
+      if (deleting.exists || suspended.exists || !activeSocialPhoto(parent.data(),current.data(),identity.uid,identity.photoId)
+        || current.data()?.cloud?.sha256 !== source.cloud?.sha256) throw new Error("post_unavailable");
       if (row?.receipt) return row.receipt;
       if (row?.retryAfter > now() || row?.leaseUntil > now()) throw new Error("photo_preparing");
       const day=Math.floor(now()/86400000),limits=[["social-media-day",30],[`social-media-${createHash("sha256").update(identity.uid).digest("hex")}`,10]];

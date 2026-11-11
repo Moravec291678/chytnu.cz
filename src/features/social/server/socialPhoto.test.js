@@ -49,6 +49,15 @@ test("shared photo preparation verifies immutable owner-bound original before on
   assert.equal(cloudinary.utils.build_eager(eager.eager), "c_limit,fl_strip_profile,h_1280,q_80,w_1280/jpg");
 });
 
+test("current sync photo metadata derives ownership from parent path and cloud key without an ownerId field", async () => {
+  const { ownerId: _ownerId, ...currentSyncPhoto } = photo;
+  assert.equal(_ownerId, identity.uid);
+  const { service } = fixture();
+  assert.deepEqual(await service.prepare(identity, currentSyncPhoto), receipt);
+  assert.ok(await service.delivery(identity, currentSyncPhoto, receipt) instanceof Uint8Array);
+  await assert.rejects(service.prepare({ ...identity, uid: "other" }, currentSyncPhoto), /invalid_shared_photo/);
+});
+
 test("shared photo validates ownership, IDs, MIME, source key and SHA before any provider access", async () => {
   const { service, calls } = fixture();
   for (const bad of [{ ...photo, ownerId: "other" }, { ...photo, deleted: true }, { ...photo, id: "other" },
