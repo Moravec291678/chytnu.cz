@@ -9,10 +9,16 @@ import { createAvatarCoordinator } from "./socialAvatarCoordinator.js";
 import { createDiscoveryService } from "./discoveryService.js";
 import { createFriendsService } from "./friendsService.js";
 import { relationshipView } from "../data/relationshipModel.js";
+import { createPublicationService } from "./publicationService.js";
+import { createSocialPhotoCoordinator } from "./socialPhotoCoordinator.js";
+import { createSocialCursor } from "./socialCursor.js";
+import { legacyShareApproval } from "./legacyShareApproval.js";
 export const profileError = (code, status = 400) => Object.assign(new Error(code), { code, status });
-export function createPublicProfileService({ db, auth, avatar, photoProxy, env = {}, cursorSecret, now = () => Date.now() }) {
+export function createPublicProfileService({ db, auth, avatar, socialPhoto, env = {}, cursorSecret, now = () => Date.now() }) {
   const repository = createSocialRepository({ db, auth, now, profilesEnabled: true });
   const avatars = createAvatarCoordinator({ db, avatar, now });
+  const media = socialPhoto ? createSocialPhotoCoordinator({db,photo:socialPhoto,now}) : null;
+  const publications = createPublicationService({db,media,cursors:createSocialCursor({env,secret:cursorSecret,now}),env,now});
   async function identity(token) {
     if (!token) throw profileError("authentication_required", 401);
     try { return (await auth.verifyIdToken(token, true)).uid; } catch { throw profileError("authentication_required", 401); }
@@ -46,7 +52,7 @@ export function createPublicProfileService({ db, auth, avatar, photoProxy, env =
     const catches = relevant ? (await Promise.all(profile.sharedCatchIds.map(async id => {
       const [record, moderation] = await Promise.all([tx.get(db.doc(`users/${profile.uid}/catches/${id}`)), tx.get(db.doc(`adminPublicModeration/${moderationKey(profile.uid, id)}`))]);
       const row = record.data();
-      return row?.ownerId === profile.uid && moderation.data()?.hidden !== true ? publicCatchProjection({ ...row, id }) : null;
+      return row?.ownerId === profile.uid && moderation.data()?.hidden !== true && profile.shareApprovals[id] === legacyShareApproval(row) ? publicCatchProjection({ ...row, id }) : null;
     }))).filter(Boolean) : [];
     if (!summaryOnly && sectionAllowed(profile.sections.catches, audience)) result.catches = catches;
     if (!summaryOnly && sectionAllowed(profile.sections.statistics, audience)) result.statistics = { catchCount: catches.length, speciesCount: new Set(catches.map(r => r.species)).size,
@@ -55,7 +61,8 @@ export function createPublicProfileService({ db, auth, avatar, photoProxy, env =
     if (!summaryOnly && sectionAllowed(profile.sections.gallery, audience)) result.photos = (await Promise.all(profile.sharedPhotos.map(async reference => {
       const [catchRow, photo, moderation] = await Promise.all([tx.get(db.doc(`users/${profile.uid}/catches/${reference.catchId}`)), tx.get(db.doc(`users/${profile.uid}/catches/${reference.catchId}/photos/${reference.photoId}`)), tx.get(db.doc(`adminPublicModeration/${moderationKey(profile.uid, reference.catchId)}`))]);
       const record = photo.data();
-      return moderation.data()?.hidden !== true && catchRow.exists && !catchRow.data().deleted && catchRow.data().ownerId === profile.uid && record?.ownerId === profile.uid && !record.deleted && record.type === "image/jpeg" && record.cloud?.state === "synced" ? reference : null;
+      return moderation.data()?.hidden !== true && catchRow.exists && !catchRow.data().deleted && catchRow.data().ownerId === profile.uid && record?.ownerId === profile.uid && !record.deleted && record.type === "image/jpeg" && record.cloud?.state === "synced"
+        && profile.shareApprovals[`${reference.catchId}/${reference.photoId}`] === legacyShareApproval(catchRow.data(),record) ? reference : null;
     }))).filter(Boolean);
     if (sectionAllowed(profile.sections.achievements, audience)) {
       if (!summaryOnly) result.achievements = []; // Client/migrated achievement ledgers are not verified public awards.
@@ -73,8 +80,13 @@ export function createPublicProfileService({ db, auth, avatar, photoProxy, env =
   async function own(token, reader) { const uid = await identity(token); return repository.readProfileSnapshot(token, uid, reader); }
   return { async execute(action, payload, token) {
     const uid = token ? await identity(token) : null;
-    if (!uid && !["view", "image"].includes(action)) throw profileError("authentication_required", 401);
+    if (!uid && !["view", "image", "posts.list", "posts.image"].includes(action)) throw profileError("authentication_required", 401);
     await limited(uid, action);
+    if (action === "posts.save") return publications.save(uid,payload);
+    if (action === "posts.own") return publications.own(uid,payload);
+    if (action === "posts.list") return publications.list(uid,payload);
+    if (action === "posts.delete") return publications.remove(uid,payload);
+    if (action === "posts.image") return publications.image(uid,payload);
     if (action === "search") return discovery.search(token, uid, payload);
     if (action === "friends") return friends.list(token, uid, payload);
     if (action === "friends.status") return { relationship: await repository.friendStatus(token, payload.targetUid) };
@@ -126,15 +138,26 @@ export function createPublicProfileService({ db, auth, avatar, photoProxy, env =
       return { avatar: action === "avatar.set" };
     }
     if (action === "image") {
-      const bytes = await repository.readProfileSnapshot(token, payload.identity, async context => {
+      const authorized = () => repository.readProfileSnapshot(token, payload.identity, async context => {
         const { profile, tx, audience } = context;
-        if (payload.kind === "avatar" && profile.avatarVersion) return avatar.delivery(profile.uid, profile.avatarAssetId);
+        if (payload.kind === "avatar" && profile.avatarVersion) return {avatar:true,uid:profile.uid,assetId:profile.avatarAssetId};
         if (payload.kind !== "catch" || !sectionAllowed(profile.sections.gallery, audience) || !profile.sharedPhotos.some(p => p.catchId === payload.catchId && p.photoId === payload.photoId)) throw profileError("profile_unavailable", 404);
         const [parent, photo, moderation] = await Promise.all([tx.get(db.doc(`users/${profile.uid}/catches/${payload.catchId}`)), tx.get(db.doc(`users/${profile.uid}/catches/${payload.catchId}/photos/${payload.photoId}`)), tx.get(db.doc(`adminPublicModeration/${moderationKey(profile.uid, payload.catchId)}`))]);
         if (moderation.data()?.hidden === true || !parent.exists || parent.data().ownerId !== profile.uid || parent.data().deleted || !photo.exists || photo.data().ownerId !== profile.uid || photo.data().deleted) throw profileError("profile_unavailable", 404);
-        return (await photoProxy({ uid: profile.uid, catchId: payload.catchId, photoId: payload.photoId }, photo.data())).bytes;
+        if (profile.shareApprovals[`${payload.catchId}/${payload.photoId}`] !== legacyShareApproval(parent.data(),photo.data())) throw profileError("profile_unavailable",404);
+        return {uid:profile.uid,photo:photo.data()};
       });
-      if (!bytes) throw profileError("profile_unavailable", 404);
+      const initial=await authorized(); if (!initial) throw profileError("profile_unavailable",404);
+      let bytes;
+      if (initial.avatar) bytes=await avatar.delivery(initial.uid,initial.assetId);
+      else {
+        if (!media) throw profileError("photo_unavailable",503);
+        const identity={uid:initial.uid,catchId:payload.catchId,photoId:payload.photoId};
+        const receipt=await media.prepare(identity,initial.photo);
+        bytes=await media.delivery(identity,initial.photo,receipt);
+      }
+      const final=await authorized();
+      if (!final || final.uid !== initial.uid || final.assetId !== initial.assetId || final.photo?.cloud?.sha256 !== initial.photo?.cloud?.sha256) throw profileError("profile_unavailable",404);
       return { jpegBase64: Buffer.from(bytes).toString("base64") };
     }
     throw profileError("invalid_request");

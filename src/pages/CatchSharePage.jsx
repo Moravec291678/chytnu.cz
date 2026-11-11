@@ -10,6 +10,8 @@ import { waterRepository } from "../features/waters/data/waterRepository.js";
 import { progressionLedger } from "../features/progression/data/progressionLedger.js";
 import { getPrimaryAvailablePhoto } from "../features/catches/data/catchPhotos.js";
 import { getPhotoBlobForDisplay } from "../features/catches/data/photoCloudService.js";
+import CatchPublication from "../features/social/components/CatchPublication.jsx";
+import { FEATURES } from "../product/config/featureFlags.js";
 import "./ProgressionPages.css";
 
 function formatDate(value) {
@@ -46,6 +48,7 @@ export default function CatchSharePage() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [socialOpen, setSocialOpen] = useState(false);
   const [photoState, setPhotoState] = useState({ scopeKey: null, source: null, blob: null, url: "", status: "idle" });
   const [waterState, setWaterState] = useState({ scopeKey: null, catchId: null, water: null, status: "idle" });
   const record = state.catches.find((item) => item.id === id);
@@ -202,5 +205,6 @@ export default function CatchSharePage() {
     <div className="catch-share-actions">
       <button type="button" disabled={busy || photoLoading || waterLoading} onClick={shareImage}>{busy ? "Připravuji…" : "Sdílet jako příběh"}</button>
     </div>
+    {FEATURES.publicSharing && <section className="catch-publication"><button type="button" aria-expanded={socialOpen} onClick={() => setSocialOpen(value => !value)}>{socialOpen ? "Zavřít sdílení na profilu" : "Sdílet údaje na rybářském profilu"}</button>{socialOpen && <CatchPublication key={`${scope.scopeKey}:${record.id}`} record={record} />}</section>}
   </main>;
 }

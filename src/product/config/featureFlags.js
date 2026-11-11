@@ -17,5 +17,5 @@ export const FEATURES = Object.freeze({
   aiInsights: false,
   dailyTips: false,
   seasonStory: false,
-  publicSharing: false,
+  publicSharing: true,
 });

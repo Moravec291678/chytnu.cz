@@ -5,6 +5,7 @@ import { buildDiscoveryPrefixes } from "../data/discoveryModel.js";
 import { relationshipView, transitionRelationship } from "../data/relationshipModel.js";
 import { assertSocialInteraction } from "./socialAccess.js";
 import { createNotificationRecord } from "../../notifications/data/notificationModel.js";
+import { legacyShareApproval } from "./legacyShareApproval.js";
 
 // No public HTTP surface in stage 1. Future handlers must use this authenticated boundary.
 // Admin roles deliberately grant no diary/social privacy bypass and no quota exemption.
@@ -154,16 +155,19 @@ export function createSocialRepository({ db, auth, now = () => Date.now(), profi
         const [old, reserved] = await Promise.all([tx.get(ref), tx.get(claim)]);
         if (reserved.exists && reserved.data().uid !== uid) fail("handle_taken");
         const stamp = now();
+        const shareApprovals={},sources=new Map();
         for (const catchId of new Set([...editable.sharedCatchIds, ...editable.sharedPhotos.map(p => p.catchId)])) {
           const record = (await tx.get(db.doc(`users/${uid}/catches/${catchId}`))).data();
           if (!record || record.deleted || record.ownerId !== uid) fail("invalid_shared_catch");
+          sources.set(catchId,record); shareApprovals[catchId]=legacyShareApproval(record);
         }
         for (const photo of editable.sharedPhotos) {
           const record = (await tx.get(db.doc(`users/${uid}/catches/${photo.catchId}/photos/${photo.photoId}`))).data();
           if (!record || record.deleted || record.ownerId !== uid || record.type !== "image/jpeg" || record.cloud?.state !== "synced") fail("invalid_shared_photo");
+          shareApprovals[`${photo.catchId}/${photo.photoId}`]=legacyShareApproval(sources.get(photo.catchId),record);
         }
         const internal = old.exists ? validateStoredProfile(old.data(), stamp) : {};
-        const profile = validateStoredProfile({ ...editable, uid, avatarRevision: internal.avatarRevision ?? 0,
+        const profile = validateStoredProfile({ ...editable, uid, shareApprovals, avatarRevision: internal.avatarRevision ?? 0,
           ...(internal.avatarVersion ? { avatarVersion: internal.avatarVersion, avatarAssetId: internal.avatarAssetId } : {}),
           createdAt: old.data()?.createdAt ?? stamp, updatedAt: stamp }, stamp);
         commitLimit();

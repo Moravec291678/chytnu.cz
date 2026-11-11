@@ -111,7 +111,7 @@ Preference jsou uživatelsky nastavitelné: morningFishActivity (default ON), to
 | aiInsights | Ne |
 | dailyTips | Ne |
 | seasonStory | Ne |
-| publicSharing | Ne |
+| publicSharing | Ano |
 
 ## Limity
 

@@ -26,6 +26,8 @@ export function validateStoredProfile(data, now = Date.now()) {
   validateSocialRecord("profile", base, { now });
   const editable = Object.fromEntries(keys.filter(k => data[k] !== undefined).map(k => [k, data[k]]));
   return { ...validateProfileInput(editable), uid: data.uid, createdAt: data.createdAt, updatedAt: data.updatedAt,
+    shareApprovals: data.shareApprovals && typeof data.shareApprovals === "object" && !Array.isArray(data.shareApprovals)
+      ? Object.fromEntries(Object.entries(data.shareApprovals).filter(([key,value])=>/^[A-Za-z0-9_-]{1,128}(\/[A-Za-z0-9_-]{1,128})?$/.test(key) && /^[a-f0-9]{64}$/.test(value)).slice(0,18)) : {},
     ...(typeof data.avatarVersion === "string" && /^[0-9]{1,20}$/.test(data.avatarVersion) && /^[a-f0-9]{32}$/.test(data.avatarAssetId ?? "") ? { avatarVersion: data.avatarVersion, avatarAssetId: data.avatarAssetId } : {}),
     avatarRevision: Number.isSafeInteger(data.avatarRevision) && data.avatarRevision >= 0 ? data.avatarRevision : 0 };
 }

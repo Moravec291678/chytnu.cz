@@ -30,7 +30,8 @@ try {
     assert.equal(res.status, 200); tokens[role] = (await res.json()).idToken;
   }
   handler = createSocialHandler({ service: createPublicProfileService({ db, auth, avatar, env: { CHYTNU_OWNER_UID: ids.owner, CHYTNU_CO_CREATOR_UID: ids.co }, now: () => time,
-    photoProxy: async () => { photoDeliveries++; return { bytes: new Uint8Array([255,216,255,217]) }; } }) });
+    socialPhoto: { prepare: async (_identity, photo) => ({ version: "123", sha256: photo.cloud.sha256, transformationVersion: 1, width: 100, height: 80 }),
+      delivery: async () => { photoDeliveries++; return new Uint8Array([255,216,255,217]); } } }) });
   const original = { ownerId: ids.a, id: "catch", species: "Kapr", caughtAt: new Date(time).toISOString(), lengthCm: 53, notes: "SECRET-NOTE", waterName: "SECRET-SPOT", coordinates: { latitude: 50.123456, longitude: 14.654321 }, deleted: false };
   await db.doc(`users/${ids.a}/catches/catch`).set(original);
   await db.doc(`users/${ids.a}/catches/catch/photos/photo`).set({ ownerId: ids.a, type: "image/jpeg", deleted: false, cloud: { state: "synced", provider: "cloudinary", objectKey: "SECRET-KEY", sha256: "a".repeat(64) } });
@@ -56,6 +57,15 @@ try {
   equal((await call("b", "view", { identity: ids.a })).profile.region, "Jižní Morava");
   equal((await call("c", "view", { identity: ids.a })).profile.region, undefined);
   await call("anonymous", "image", { identity: ids.a, kind: "catch", catchId: "catch", photoId: "photo" }); equal(photoDeliveries, 1);
+  // Legacy selected photos obey the same approval/revocation boundary as posts.
+  await db.doc(`users/${ids.a}/catches/catch`).update({privacy:"public"});
+  equal((await call("anonymous","view",{identity:ids.a})).profile.photos.length,0);
+  equal((await call("anonymous","view",{identity:ids.a})).profile.catches.length,0);
+  await call("anonymous","image",{identity:ids.a,kind:"catch",catchId:"catch",photoId:"photo"},404);
+  await db.doc(`users/${ids.a}/catches/catch`).set(original);
+  await db.doc(`users/${ids.a}/catches/catch`).update({lengthCm:54});
+  equal((await call("anonymous","view",{identity:ids.a})).profile.photos.length,0);
+  await db.doc(`users/${ids.a}/catches/catch`).set(original);
   await call("anonymous", "image", { identity: ids.a, kind: "catch", catchId: "catch", photoId: "unselected" }, 404);
   await db.doc(`adminPublicModeration/${moderationKey(ids.a, "catch")}`).set({ targetUid: ids.a, hidden: true });
   const hidden = (await call("anonymous", "view", { identity: ids.a })).profile;

@@ -1,6 +1,10 @@
 import { firebaseAuth } from "../../auth/data/firebaseAuth.js";
 import { resolveApiUrl } from "../../../platform/api.js";
 const messages = {
+  invalid_publication: "Zkontroluj obsah příspěvku a vybrané údaje.", post_unavailable: "Příspěvek byl odstraněn nebo pro tebe není dostupný.",
+  post_conflict: "Příspěvek se mezitím změnil na jiném zařízení. Zavři sdílení a načti ho znovu.",
+  photo_unavailable: "Fotografii nyní nelze bezpečně sdílet. Zkontroluj synchronizaci a zkus to později.",
+  photo_preparing: "Bezpečná kopie fotografie se připravuje nebo její opakování dočasně čeká. Zkus to později.",
   relationship_conflict: "Propojení se mezitím změnilo nebo je další pozvání dočasně omezené. Obnov stav.",
   invalid_search: "Zadej 2 až 40 znaků jména, zájmu nebo regionu.", invalid_cursor: "Výsledky se změnily nebo stránkování vypršelo. Vyhledej rybáře znovu.",
   profile_required: "Před odesláním pozvání ulož veřejný rybářský profil a povol dohledání podle jména.", discovery_unavailable: "Vyhledávání nyní není dostupné. Zkus to později.",
