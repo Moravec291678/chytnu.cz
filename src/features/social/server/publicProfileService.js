@@ -1,7 +1,6 @@
 import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 import { configuredOwnerUid, configuredCoCreatorUid } from "../../admin/server/adminAccess.js";
-import { getRankForLevel, xpForLevel, MAX_LEVEL } from "../../progression/data/progression.js";
 import { publicCatchProjection, sectionAllowed } from "../data/publicProfileModel.js";
 import { createSocialRepository } from "./socialRepository.js";
 import { moderationKey } from "../../admin/server/adminSupportStore.js";
@@ -14,6 +13,9 @@ import { createSocialPhotoCoordinator } from "./socialPhotoCoordinator.js";
 import { createSocialCursor } from "./socialCursor.js";
 import { legacyShareApproval } from "./legacyShareApproval.js";
 import { activeSocialPhoto } from "./socialAccess.js";
+import { publicFishingStats } from "../data/publicFishingStats.js";
+import { publicAchievementChoices } from "../data/publicProgressionModel.js";
+import { projectPublicProgression } from "./publicProgressionService.js";
 export const profileError = (code, status = 400) => Object.assign(new Error(code), { code, status });
 export function createPublicProfileService({ db, auth, avatar, socialPhoto, env = {}, cursorSecret, now = () => Date.now() }) {
   const repository = createSocialRepository({ db, auth, now, profilesEnabled: true });
@@ -32,6 +34,7 @@ export function createPublicProfileService({ db, auth, avatar, socialPhoto, env 
         ...(action === "avatar.set" ? [["social-avatar-day", day, 30]] : [])];
       if (action === "search") limits.push([`social-search-${createHash("sha256").update(uid).digest("hex")}`, minute, 30],
         [`social-search-day-${createHash("sha256").update(uid).digest("hex")}`, day, 150]);
+      if (action === "progression.compare") limits.push([`social-comparison-${createHash("sha256").update(uid).digest("hex")}`,minute,5]);
       const rows = await Promise.all(limits.map(([key]) => tx.get(db.doc(`serverRateLimits/${key}`))));
       limits.forEach(([key, window, limit], i) => {
         const old = rows[i].data(), count = old?.window === window ? old.count : 0;
@@ -56,23 +59,19 @@ export function createPublicProfileService({ db, auth, avatar, socialPhoto, env 
       return row?.ownerId === profile.uid && moderation.data()?.hidden !== true && profile.shareApprovals[id] === legacyShareApproval(row) ? publicCatchProjection({ ...row, id }) : null;
     }))).filter(Boolean) : [];
     if (!summaryOnly && sectionAllowed(profile.sections.catches, audience)) result.catches = catches;
-    if (!summaryOnly && sectionAllowed(profile.sections.statistics, audience)) result.statistics = { catchCount: catches.length, speciesCount: new Set(catches.map(r => r.species)).size,
-      longestCm: Math.max(0, ...catches.map(r => r.lengthCm ?? 0)) || null };
-    if (!summaryOnly && sectionAllowed(profile.sections.trophies, audience)) result.trophies = [...catches].filter(r => r.lengthCm).sort((a,b) => b.lengthCm - a.lengthCm).slice(0, 3);
+    if (!summaryOnly && ["statistics","trophies"].some(k=>sectionAllowed(profile.sections[k],audience))) {
+      const posts=await publications.profileSummary(tx,profile,audience);
+      const shared=publicFishingStats(catches,posts.records,{partial:posts.partial});
+      if (sectionAllowed(profile.sections.statistics,audience)) result.statistics=shared.statistics;
+      if (sectionAllowed(profile.sections.trophies,audience)) result.trophies=shared.trophies;
+    }
     if (!summaryOnly && sectionAllowed(profile.sections.gallery, audience)) result.photos = (await Promise.all(profile.sharedPhotos.map(async reference => {
       const [catchRow, photo, moderation] = await Promise.all([tx.get(db.doc(`users/${profile.uid}/catches/${reference.catchId}`)), tx.get(db.doc(`users/${profile.uid}/catches/${reference.catchId}/photos/${reference.photoId}`)), tx.get(db.doc(`adminPublicModeration/${moderationKey(profile.uid, reference.catchId)}`))]);
       const record = photo.data();
       return moderation.data()?.hidden !== true && activeSocialPhoto(catchRow.data(),record,profile.uid,reference.photoId) && record.type === "image/jpeg" && record.cloud?.state === "synced"
         && profile.shareApprovals[`${reference.catchId}/${reference.photoId}`] === legacyShareApproval(catchRow.data(),record) ? reference : null;
     }))).filter(Boolean);
-    if (sectionAllowed(profile.sections.achievements, audience)) {
-      if (!summaryOnly) result.achievements = []; // Client/migrated achievement ledgers are not verified public awards.
-      const summary = (await tx.get(db.doc(`users/${profile.uid}/serverProgressionState/summary`))).data();
-      if (Number.isSafeInteger(summary?.serverEventXp) && summary.serverEventXp >= 0) {
-        let level = 1; while (level < MAX_LEVEL && summary.serverEventXp >= xpForLevel(level + 1)) level++;
-        result.progression = { level, rank: getRankForLevel(level).name, source: "server" };
-      }
-    }
+    Object.assign(result,await projectPublicProgression({tx,db,profile,audience,summaryOnly}));
     return result;
   }
   const read = (token, target, options) => repository.readProfileSnapshot(token, target, projection, options);
@@ -83,6 +82,7 @@ export function createPublicProfileService({ db, auth, avatar, socialPhoto, env 
     const uid = token ? await identity(token) : null;
     if (!uid && !["view", "image", "posts.list", "posts.image"].includes(action)) throw profileError("authentication_required", 401);
     await limited(uid, action);
+    if (action === "progression.compare") return repository.compareProfiles(token,payload.targetUid,projection);
     if (action === "posts.save") return publications.save(uid,payload);
     if (action === "posts.own") return publications.own(uid,payload);
     if (action === "posts.list") return publications.list(uid,payload);
@@ -119,7 +119,7 @@ export function createPublicProfileService({ db, auth, avatar, socialPhoto, env 
         }
         return { ...item, photos: [...choices.values()].filter(p => activeSocialPhoto(row.data(),p.data(),uid,p.id) && p.data().type === "image/jpeg" && p.data().cloud?.state === "synced").map(p => ({ photoId: p.id })) };
       }))).filter(Boolean);
-      return { uid, profile, candidateCatches, blockedAccounts: blocked.docs.map(row => ({ uid: row.id })) };
+      return { uid, profile, candidateCatches,achievementChoices:publicAchievementChoices(), blockedAccounts: blocked.docs.map(row => ({ uid: row.id })) };
     }
     if (action === "save") return { profile: await repository.saveProfile(token, payload.profile) };
     if (action === "block") { await repository.block(token, payload.targetUid, payload.blocked); return { blocked: payload.blocked }; }

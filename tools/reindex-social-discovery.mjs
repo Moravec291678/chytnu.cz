@@ -14,7 +14,10 @@ const db = new Firestore({ projectId: "chutnucz", credentials: { type: "authoriz
 try {
   if (args.has("--verify-gallery")) {
     await db.collection("socialPosts").where("ownerUid","==","operator-unused-no-account").orderBy(FieldPath.documentId()).limit(1).get();
-    console.log(JSON.stringify({project:"chutnucz",galleryIndexesVerified:1}));
+    await db.collection("socialPosts").where("ownerUid","==","operator-unused-no-account").orderBy("createdAt","desc").orderBy(FieldPath.documentId(),"desc").limit(1).get();
+    await db.collection("socialPosts").where("ownerUid","==","operator-unused-no-account").where("visibility","==","public").orderBy("createdAt","desc").orderBy(FieldPath.documentId(),"desc").limit(1).get();
+    await db.collection("socialPosts").where("ownerUid","==","operator-unused-no-account").where("visibility","in",["public","friends"]).orderBy("createdAt","desc").orderBy(FieldPath.documentId(),"desc").limit(1).get();
+    console.log(JSON.stringify({project:"chutnucz",galleryIndexesVerified:4}));
   } else if (args.has("--verify-friends")) {
     for (const status of ["accepted", "pending"]) await db.collection("socialRelationships").where("memberUids", "array-contains", "operator-unused-no-account").where("status", "==", status).orderBy(FieldPath.documentId()).limit(1).get();
     console.log(JSON.stringify({ project: "chutnucz", friendsIndexesVerified: 2 }));
@@ -41,6 +44,6 @@ try {
     if (!totals.completed) process.exitCode = 2;
   }
 } catch (error) {
-  console.error(JSON.stringify({ error: "discovery_maintenance_failed", code: typeof error.code === "number" ? error.code : "unavailable" }));
+  console.error(JSON.stringify({ error: "discovery_maintenance_failed", code: typeof error.code === "number" ? error.code : "unavailable",indexBuilding:/currently building/i.test(error.message??"") }));
   process.exitCode = 1;
 } finally { await db.terminate(); }

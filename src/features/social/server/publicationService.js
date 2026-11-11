@@ -65,6 +65,28 @@ export function createPublicationService({ db, media, cursors, env = {}, now = (
     ...(audience === "owner" ? { sourceCatchId:row.sourceCatchId,sourcePhotoId:row.sourcePhotoId,fields:row.fields } : {}) };
   }
   return {
+    async profileSummary(tx,profile,audience) {
+      const config=(await tx.get(db.doc("adminConfig/social"))).data();
+      if (config?.postsEnabled === false) return {records:[],partial:false};
+      let query=db.collection("socialPosts").where("ownerUid","==",profile.uid);
+      if (audience === "stranger") query=query.where("visibility","==","public");
+      else if (audience === "friend") query=query.where("visibility","in",["public","friends"]);
+      const page=await tx.get(query.orderBy("createdAt","desc").orderBy(FieldPath.documentId(),"desc").limit(20));
+      const records=[];
+      for (const snapshot of page.docs.slice(0,20)) {
+        const row=snapshot.data();
+        if (row.ownerUid !== profile.uid || row.deleted || row.moderationState !== "visible" || !sectionAllowed(row.visibility,audience)
+          || !sectionAllowed(profile.sections?.[row.sourcePhotoId?"gallery":"catches"] ?? "private",audience)) continue;
+        const moderation=await tx.get(db.doc(`adminPublicModeration/${moderationKey(row.ownerUid,row.sourceCatchId)}`));
+        if (moderation.data()?.hidden === true) continue;
+        let src; try {src=await source(tx,row.ownerUid,row.sourceCatchId,row.sourcePhotoId);} catch {continue;}
+        if (fingerprint(src,row) !== row.sourceFingerprint) continue;
+        records.push({sourceId:row.sourceCatchId,id:row.id,...row.content});
+      }
+      // Always label the bounded selection; never reveal counts of hidden rows
+      // through a has-more/partial signal derived from private documents.
+      return {records,partial:true};
+    },
     async save(uid,payload) {
       const input = publicationInput(payload), id = publicationId(uid,input.catchId), ref = db.doc(`socialPosts/${id}`);
       const initial = await db.runTransaction(async tx => {

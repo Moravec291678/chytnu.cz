@@ -1,15 +1,16 @@
 import { normalizedHandle, validateSocialRecord } from "./socialModel.js";
+import { validSharedAchievementIds } from "./publicProgressionModel.js";
 export const PROFILE_SECTIONS = ["interests", "statistics", "catches", "gallery", "achievements", "trophies"];
 const visibility = value => ["private", "friends", "public"].includes(value);
 const id = value => typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value);
 const text = (value, max) => typeof value === "string" && value.length <= max && !Array.from(value).some(c => c.charCodeAt(0) < 32);
-const keys = ["handle", "displayName", "bio", "region", "specialization", "favoriteSpecies", "visibility", "discoverable", "directoryDiscoverable", "regionDiscoverable", "sections", "sharedCatchIds", "sharedPhotos"];
+const keys = ["handle", "displayName", "bio", "region", "specialization", "favoriteSpecies", "visibility", "discoverable", "directoryDiscoverable", "regionDiscoverable", "sections", "sharedCatchIds", "sharedPhotos", "sharedAchievementIds"];
 export function validateProfileInput(input) {
   if (!input || Array.isArray(input) || Object.keys(input).some(k => !keys.includes(k))) throw new TypeError("invalid_profile");
   const result = { handle: normalizedHandle(input.handle), displayName: input.displayName, bio: input.bio ?? "", visibility: input.visibility ?? "private",
     region: input.region ?? "", specialization: input.specialization ?? "", favoriteSpecies: input.favoriteSpecies ?? "", discoverable: input.discoverable ?? false,
     directoryDiscoverable: input.directoryDiscoverable ?? false, regionDiscoverable: input.regionDiscoverable ?? false,
-    sections: Object.fromEntries(PROFILE_SECTIONS.map(k => [k, input.sections?.[k] ?? "private"])), sharedCatchIds: input.sharedCatchIds ?? [], sharedPhotos: input.sharedPhotos ?? [] };
+    sections: Object.fromEntries(PROFILE_SECTIONS.map(k => [k, input.sections?.[k] ?? "private"])), sharedCatchIds: input.sharedCatchIds ?? [], sharedPhotos: input.sharedPhotos ?? [],sharedAchievementIds:input.sharedAchievementIds ?? [] };
   if (!text(result.displayName, 60) || !result.displayName.trim() || typeof result.bio !== "string" || !text(result.bio.replace(/[\r\n]/g, " "), 280) || !text(result.region, 80)
     || !text(result.specialization, 160) || !text(result.favoriteSpecies, 160) || !visibility(result.visibility) || typeof result.discoverable !== "boolean"
     || typeof result.directoryDiscoverable !== "boolean" || typeof result.regionDiscoverable !== "boolean"
@@ -17,7 +18,7 @@ export function validateProfileInput(input) {
     || Object.values(result.sections).some(v => !visibility(v)) || !Array.isArray(result.sharedCatchIds) || result.sharedCatchIds.length > 12
     || !result.sharedCatchIds.every(id) || new Set(result.sharedCatchIds).size !== result.sharedCatchIds.length
     || !Array.isArray(result.sharedPhotos) || result.sharedPhotos.length > 6 || result.sharedPhotos.some(p => !p || Object.keys(p).some(k => !["catchId", "photoId"].includes(k)) || !id(p.catchId) || !id(p.photoId))
-    || new Set(result.sharedPhotos.map(p => `${p.catchId}/${p.photoId}`)).size !== result.sharedPhotos.length) throw new TypeError("invalid_profile");
+    || new Set(result.sharedPhotos.map(p => `${p.catchId}/${p.photoId}`)).size !== result.sharedPhotos.length || !validSharedAchievementIds(result.sharedAchievementIds)) throw new TypeError("invalid_profile");
   return structuredClone(result);
 }
 export function validateStoredProfile(data, now = Date.now()) {

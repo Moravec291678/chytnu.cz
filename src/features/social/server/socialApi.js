@@ -4,6 +4,7 @@ import { createSocialPhotoService } from "./socialPhoto.js";
 import { getAccountDeletionAdminContext } from "../../../server/cloudinaryApi.js";
 const actions = { friends: ["tab", "cursor"], "friends.status": ["targetUid"], search: ["query", "field", "mode", "cursor"], relationship: ["targetUid", "operation", "operationId", "expectedRevision"], self: [], save: ["profile"], view: ["identity"], preview: ["audience"], block: ["targetUid", "blocked"], report: ["targetUid", "reason"],
   "posts.save": ["catchId","photoId","visibility","fields","description","expectedRevision"], "posts.own": ["catchId"], "posts.list": ["identity","cursor","previewAudience"], "posts.image": ["postId","previewAudience"], "posts.delete": ["postId","expectedRevision"],
+  "progression.compare": ["targetUid"],
   "avatar.set": ["jpegBase64"], "avatar.remove": [], image: ["identity", "kind", "catchId", "photoId"] };
 const errors = { unauthenticated: 401, authentication_required: 401, account_unavailable: 403, forbidden: 403,
   invalid_publication:400,post_unavailable:404,post_conflict:409,photo_preparing:409,photo_unavailable:503,

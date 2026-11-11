@@ -48,6 +48,23 @@ export function createSocialRepository({ db, auth, now = () => Date.now(), profi
     return data;
   }
   const repository = {
+    async compareProfiles(token,targetUid,project) {
+      const uid=await identity(token); socialUid(targetUid);
+      if (uid === targetUid) fail("social_unavailable");
+      return db.runTransaction(async tx=>{
+        await guard(tx,uid,false,"friends");
+        await assertSocialInteraction({tx,db,uid,targetUid,requireFriend:true});
+        const rows=await Promise.all([uid,targetUid].map(id=>tx.get(db.doc(`publicProfiles/${id}`))));
+        const profiles=[];
+        for (let i=0;i<rows.length;i++) {
+          if (!rows[i].exists) fail("profile_unavailable");
+          const profile=validateStoredProfile(rows[i].data(),now());
+          if (profile.uid !== [uid,targetUid][i] || !sectionAllowed(profile.visibility,"friend")) fail("profile_unavailable");
+          profiles.push(await project({tx,profile,audience:"friend",viewerUid:uid}));
+        }
+        return {profiles};
+      });
+    },
     async friendStatus(token, targetUid) {
       const uid = await identity(token), pair = canonicalPair(uid, targetUid);
       return db.runTransaction(async tx => {

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { socialRequest } from "../data/socialClient.js";
 import FriendshipActions from "./FriendshipActions.jsx";
 import { useSocialConnection } from "./useSocialConnection.js";
+import { FriendProgressionComparison } from "./PublicProgression.jsx";
 
 export default function ProfileFriendship({ viewerUid, targetUid, profileAvailable, refreshKey = 0, onChanged }) {
   const online = useSocialConnection();
@@ -42,6 +43,7 @@ export default function ProfileFriendship({ viewerUid, targetUid, profileAvailab
     {!online && <p role="status">Stav přátelství nelze bez připojení ověřit.</p>}{online && !current && <p role="status">Načítám propojení…</p>}{current?.error && profileAvailable && <p className="social-error" role="alert">{current.error}</p>}
     {relation && <FriendshipActions relationship={relation} busy={busy} onAction={perform} />}
     {relation?.status === "blocked" && <button disabled={busy || !online} onClick={() => perform("unblock")}>Zrušit blokování</button>}
+    {online && profileAvailable && relation?.status === "friends" && <FriendProgressionComparison viewerUid={viewerUid} targetUid={targetUid} refreshKey={`${refreshKey}:${relation.revision}`} />}
     {action?.key === key && action.message && <p role="status" className="social-success">{action.message}</p>}{action?.key === key && action.error && <p role="alert" className="social-error">{action.error}</p>}
   </section>;
 }

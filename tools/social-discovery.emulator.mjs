@@ -51,9 +51,9 @@ try {
   }
   handler = createSocialHandler({ service: createPublicProfileService({ db, auth, avatar: {}, now: () => time,
     env: { CHYTNU_OWNER_UID: ids.u00, CHYTNU_CO_CREATOR_UID: ids.u01 }, cursorSecret: "synthetic-emulator-cursor-secret-32-plus-characters" }) });
-  const privateCatch = { ownerId: ids.u00, species: "Kapr", lengthCm: 55, caughtAt: new Date(time).toISOString(), notes: "PRIVATE-CATCH", coordinates: { latitude: 50.123456, longitude: 14.654321 } };
+  const privateCatch = { ownerId: ids.u00, species: "Kapr", lengthCm: 55,photoRefs:{photo:true}, caughtAt: new Date(time).toISOString(), notes: "PRIVATE-CATCH", coordinates: { latitude: 50.123456, longitude: 14.654321 } };
   await db.doc(`users/${ids.u00}/catches/fixture`).set(privateCatch);
-  await db.doc(`users/${ids.u00}/catches/fixture/photos/photo`).set({ ownerId: ids.u00, type: "image/jpeg", cloud: { state: "synced" } });
+  await db.doc(`users/${ids.u00}/catches/fixture/photos/photo`).set({ id:"photo",type:"image/jpeg",size:1000,deleted:false,cloud:{state:"synced",provider:"cloudinary",sha256:"a".repeat(64),objectKey:`users/${ids.u00}/catches/fixture/photos/photo/original`} });
   Object.assign(profiles.u00, { sharedCatchIds: ["fixture"], sharedPhotos: [{ catchId: "fixture", photoId: "photo" }] });
   Object.assign(profiles.u00.sections, { catches: "public", gallery: "public", statistics: "public" });
   await repo.saveProfile(tokens.u00, profiles.u00);

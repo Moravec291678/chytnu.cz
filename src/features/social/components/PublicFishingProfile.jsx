@@ -6,6 +6,7 @@ import CollaboratorBadge from "../../admin/CollaboratorBadge.jsx";
 import { socialRequest } from "../data/socialClient.js";
 import ProfileFriendship from "./ProfileFriendship.jsx";
 import SocialGallery from "./SocialGallery.jsx";
+import { PublicAchievements, PublicStatistics, PublicTrophies } from "./PublicProgression.jsx";
 import { FEATURES } from "../../../product/config/featureFlags.js";
 import "./socialProfiles.css";
 
@@ -40,14 +41,14 @@ export function FishingProfileView({ profile, preview = false, previewAudience }
       {interests.length > 0 && <div className="social-interests">{interests.map((value, index) => <span key={`${index}:${value}`}>{value}</span>)}</div>}
       {profile.progression?.level != null && <p className="social-level" title="Úroveň z událostí potvrzených serverem; může se lišit od místního deníku.">Úroveň {profile.progression.level}{profile.progression.rank ? ` · ${profile.progression.rank}` : ""}<small> · potvrzené události</small></p>}
     </header>
-    {stats && <><p className="social-help">Ze sdílených úlovků</p><section className="social-stat-grid" aria-label="Sdílené statistiky"><div><strong>{stats.catchCount ?? "—"}</strong><span>Úlovků</span></div><div><strong>{stats.speciesCount ?? "—"}</strong><span>Druhů</span></div><div><strong>{stats.longestCm != null ? `${stats.longestCm} cm` : "—"}</strong><span>Nejdelší úlovek</span></div></section></>}
+    <PublicStatistics statistics={stats} />
     <nav className="social-tabs" aria-label="Obsah rybářského profilu">{[["catches", "Úlovky"], ["gallery", "Fotografie"], ["achievements", "Úspěchy"], ["trophies", "Trofeje"]].map(([id, label]) => <button key={id} type="button" aria-pressed={tab === id} onClick={() => setTab(id)}>{label}</button>)}</nav>
     <section className="social-panel" aria-live="polite">
       {tab === "catches" && <><h2>Sdílené úlovky</h2>{catches.length ? <div className="social-catch-list">{catches.map(catchRecord => <article key={catchRecord.id}><span aria-hidden="true">🎣</span><div><h3>{catchRecord.species || "Úlovek"}</h3><p>{catchRecord.lengthCm > 0 ? `${catchRecord.lengthCm} cm · ` : ""}{catchRecord.caughtAt && Number.isFinite(Date.parse(catchRecord.caughtAt)) ? new Date(catchRecord.caughtAt).toLocaleDateString("cs-CZ") : ""}</p></div></article>)}</div> : !FEATURES.publicSharing ? <p className="social-empty">Tento rybář zatím nesdílí žádné úlovky pro tento okruh návštěvníků.</p> : null}</>}
       {tab === "gallery" && <><h2>Fotografie od vody</h2>{FEATURES.publicSharing && <SocialGallery identity={profile.uid} photosOnly previewAudience={previewAudience} />}{photos.length ? <><h3>Výběr na profilu</h3><div className="social-gallery">{photos.map(photo => <figure key={`${photo.catchId}:${photo.photoId}`}><SharedImage profile={profile} photo={photo} /></figure>)}</div></> : !FEATURES.publicSharing ? <p className="social-empty">Žádné zveřejněné fotografie. Soukromá galerie zůstává v osobním deníku.</p> : null}</>}
       {tab === "catches" && FEATURES.publicSharing && <SocialGallery identity={profile.uid} previewAudience={previewAudience} />}
-      {tab === "achievements" && <><h2>Rybářské úspěchy</h2>{profile.achievements?.length ? <ul className="social-highlights">{profile.achievements.map(item => <li key={item.id}>{item.label || item.name}</li>)}</ul> : <p className="social-empty">Zatím žádné sdílené ověřené úspěchy.</p>}</>}
-      {tab === "trophies" && <><h2>Trofejní vitrína</h2>{profile.trophies?.length ? <ul className="social-highlights">{profile.trophies.map(item => <li key={item.id}>{item.label || item.species}{item.lengthCm > 0 ? ` · ${item.lengthCm} cm` : ""}</li>)}</ul> : <p className="social-empty">Trofejní vitrína zatím není veřejně naplněná.</p>}</>}
+      {tab === "achievements" && <PublicAchievements achievements={profile.achievements} progression={profile.progression} />}
+      {tab === "trophies" && <PublicTrophies trophies={profile.trophies} />}
     </section>
   </>;
 }
