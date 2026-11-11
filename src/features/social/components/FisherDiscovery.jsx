@@ -5,13 +5,15 @@ import { useAuth } from "../../auth/context/authContextValue.js";
 import CollaboratorBadge from "../../admin/CollaboratorBadge.jsx";
 import { socialRequest } from "../data/socialClient.js";
 import { SharedImage } from "./PublicFishingProfile.jsx";
+import FriendshipActions from "./FriendshipActions.jsx";
+import { useSocialConnection } from "./useSocialConnection.js";
 import "./socialProfiles.css";
 
-const relationText = { none: "", friends: "Přátelé", incoming: "Příchozí pozvání", outgoing: "Pozvání odesláno" };
 const uniqueUsers = users => [...new Map(users.map(user => [user.uid, user])).values()];
 
 export default function FisherDiscovery() {
   const { user } = useAuth(), uid = user?.uid;
+  const online = useSocialConnection();
   const [query, setQuery] = useState("");
   const [field, setField] = useState("all");
   const [mode, setMode] = useState("search");
@@ -19,10 +21,10 @@ export default function FisherDiscovery() {
   const [retry, setRetry] = useState(0);
   const [paging, setPaging] = useState(null);
   const [action, setAction] = useState(null);
-  const pageController = useRef(null), mutationController = useRef(null), sequence = useRef(0);
+  const pageController = useRef(null), mutationController = useRef(null), sequence = useRef(0), attempts = useRef(new Map());
   const text = query.trim();
-  const key = JSON.stringify([uid ?? null, mode, field, text]);
-  const searchable = Boolean(uid && (mode === "new" || text.length >= 2));
+  const key = JSON.stringify([uid ?? null, mode, field, text, online]);
+  const searchable = Boolean(uid && online && (mode === "new" || text.length >= 2));
   const current = result?.key === key ? result : null;
   const loading = searchable && !current;
   const busy = action?.key === key && action.busy;
@@ -37,6 +39,12 @@ export default function FisherDiscovery() {
     return () => { clearTimeout(timer); controller.abort(); pageController.current?.abort(); mutationController.current?.abort(); };
   }, [key, searchable, field, mode, text, retry]);
 
+  useEffect(() => {
+    const refresh = () => { if (searchable && !busy && document.visibilityState === "visible" && navigator.onLine !== false) setRetry(value => value + 1); };
+    const timer = setInterval(refresh, 45_000); window.addEventListener("focus", refresh); document.addEventListener("visibilitychange", refresh);
+    return () => { clearInterval(timer); window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", refresh); };
+  }, [searchable, busy]);
+
   async function loadMore() {
     if (!current?.nextCursor || paging?.key === key) return;
     const controller = new AbortController(), id = ++sequence.current;
@@ -48,16 +56,20 @@ export default function FisherDiscovery() {
     finally { setPaging(active => active?.id === id ? null : active); }
   }
   async function relationship(targetUid, operation) {
-    if (busy) return;
+    if (busy || !online) return;
     const controller = new AbortController(), id = ++sequence.current; mutationController.current = controller;
+    const revision = current?.users.find(item => item.uid === targetUid)?.relationship?.revision;
+    const attempt = `${key}:${targetUid}:${operation}:${revision ?? ""}`;
+    if (!attempts.current.has(attempt)) attempts.current.set(attempt, crypto.randomUUID());
     setAction({ key, uid: targetUid, busy: true, id });
     try {
-      const value = await socialRequest("relationship", { targetUid, operation }, { signal: controller.signal });
+      const value = await socialRequest("relationship", { targetUid, operation, operationId: attempts.current.get(attempt), ...(Number.isSafeInteger(revision) ? { expectedRevision: revision } : {}) }, { signal: controller.signal });
       if (!controller.signal.aborted) {
+        attempts.current.delete(attempt);
         setResult(old => old?.key === key ? { ...old, users: old.users.map(item => item.uid === targetUid ? { ...item, relationship: value.relationship } : item) } : old);
         setAction({ key, busy: false, message: operation === "request" ? "Pozvání bylo odesláno." : operation === "accept" ? "Pozvání bylo přijato." : "Propojení bylo zrušeno." });
       }
-    } catch (error) { if (!controller.signal.aborted) setAction({ key, busy: false, error: error.message }); }
+    } catch (error) { if (!controller.signal.aborted) { setAction({ key, busy: false, error: error.message }); setRetry(value => value + 1); } }
     finally { setAction(active => active?.id === id ? { ...active, busy: false } : active); }
   }
   function changeSearch(value) { setQuery(value); setMode("search"); }
@@ -75,24 +87,19 @@ export default function FisherDiscovery() {
       {action?.key === key && action.message && <p role="status" className="social-success">{action.message}</p>}
       {action?.key === key && action.error && <p role="alert" className="social-error">{action.error}</p>}
       {loading && <p role="status" className="social-panel">Hledám rybáře…</p>}
-      {!searchable && <p className="social-panel social-empty">Zkus jméno, společný rybářský zájem nebo dobrovolně sdílený region. Přehled nových členů načteš tlačítkem nahoře.</p>}
+      {!online && <p className="social-panel social-empty" role="status">Hledání a přátelství vyžadují připojení. Soukromý deník funguje dál offline.</p>}
+      {online && !searchable && <p className="social-panel social-empty">Zkus jméno, společný rybářský zájem nebo dobrovolně sdílený region. Přehled nových členů načteš tlačítkem nahoře.</p>}
       {current?.error && <section className="social-panel"><p role="alert" className="social-error">{current.error}</p><button type="button" onClick={() => setRetry(value => value + 1)}>Zkusit znovu</button></section>}
       {current && !current.error && <section aria-label={mode === "new" ? "Noví veřejní rybáři" : "Výsledky vyhledávání"} aria-live="polite">
         {!current.users.length && <div className="social-panel"><h2>Žádné dostupné profily</h2><p className="social-empty">Zkus jiné jméno nebo začátek slova. Soukromé, skryté a blokované účty do výsledků nezařazujeme.</p></div>}
         <ul className="fisher-results">{current.users.map(profile => {
-          const status = profile.relationship?.status ?? "none";
-          return <li key={profile.uid} className="fisher-result">
+                    return <li key={profile.uid} className="fisher-result">
             <Link to={`/u/${profile.uid}`} className="fisher-result-avatar" aria-label={`Otevřít profil ${profile.displayName}`}>{profile.avatarVersion ? <SharedImage profile={profile} avatar /> : <span>{profile.displayName?.charAt(0) || "🎣"}</span>}</Link>
             <div className="fisher-result-body"><Link className="fisher-result-name" to={`/u/${profile.uid}`}>{profile.displayName}</Link><p className="social-handle">@{profile.handle}</p><CollaboratorBadge access={profile.badgeRole ? { role: profile.badgeRole } : null} />
               {profile.progression?.level != null && <p className="fisher-result-level">Úroveň {profile.progression.level}{profile.progression.rank ? ` · ${profile.progression.rank}` : ""}</p>}
               {[profile.region, profile.specialization, profile.favoriteSpecies].filter(Boolean).length > 0 && <p className="fisher-result-interests">{[profile.region, profile.specialization, profile.favoriteSpecies].filter(Boolean).join(" · ")}</p>}
-              {relationText[status] && <p className="fisher-relationship-status">{relationText[status]}</p>}
             </div>
-            {profile.uid !== uid && <div className="fisher-result-actions">
-              {status === "none" && <button className="social-primary" disabled={busy} onClick={() => relationship(profile.uid, "request")}>Pozvat do přátel</button>}
-              {status === "incoming" && <button className="social-primary" disabled={busy} onClick={() => relationship(profile.uid, "accept")}>Přijmout pozvání</button>}
-              {status !== "none" && <button disabled={busy} onClick={() => relationship(profile.uid, "remove")}>{status === "friends" ? "Zrušit přátelství" : status === "incoming" ? "Odmítnout" : "Zrušit pozvání"}</button>}
-            </div>}
+            {profile.uid !== uid && <div className="fisher-result-actions"><FriendshipActions relationship={profile.relationship} busy={busy} onAction={operation => relationship(profile.uid, operation)} /></div>}
           </li>;
         })}</ul>
         {current.pageError && <><p role="alert" className="social-error">{current.pageError}</p><button type="button" onClick={() => setRetry(value => value + 1)}>Obnovit výsledky</button></>}

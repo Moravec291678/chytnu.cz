@@ -36,7 +36,11 @@ const members = v => Array.isArray(v) && v.length >= 1 && v.length <= 20 && new 
 const schema = {
   profile: { uid, handle: v => { try { return normalizedHandle(v) === v; } catch { return false; } }, displayName: text(60), bio: v => v === "" || text(280)(v), visibility },
   handle: { uid },
-  relationship: { memberUids: v => members(v) && v.length === 2, requestedBy: uid, status: oneOf(["pending", "accepted"]) },
+  relationship: { memberUids: v => members(v) && v.length === 2, requestedBy: uid, status: oneOf(["pending", "accepted", "rejected", "cancelled", "unfriended", "blocked"]),
+    revision: v => Number.isSafeInteger(v) && v >= 0, lastActorUid: uid,
+    rejectedUntil: v => Number.isSafeInteger(v) && v >= 0,
+    notificationTimes: v => v && typeof v === "object" && !Array.isArray(v) && Object.entries(v).every(([k,n]) => ["requested","accepted"].includes(k) && Number.isSafeInteger(n) && n >= 0),
+    identitySnapshots: v => v && typeof v === "object" && !Array.isArray(v) && Object.keys(v).length <= 2 && Object.entries(v).every(([key,p]) => uid(key) && p && Object.keys(p).every(k => ["handle","displayName"].includes(k)) && text(24)(p.handle) && text(60)(p.displayName)) },
   post: { ownerUid: uid, visibility, text: text(2000), waterId: water },
   comment: { ownerUid: uid, text: text(1000) },
   reaction: { ownerUid: uid, kind: oneOf(["like", "congratulations"]) },
@@ -48,7 +52,7 @@ const schema = {
   conversation: { memberUids: v => members(v) && v.length === 2 },
   crew: { ownerUid: uid, memberUids: members, name: text(60), visibility },
 };
-const optional = { profile: ["bio"], post: ["waterId"] };
+const optional = { profile: ["bio"], relationship: ["revision", "lastActorUid", "identitySnapshots", "notificationTimes", "rejectedUntil"], post: ["waterId"] };
 export function validateSocialRecord(kind, input, { now = Date.now() } = {}) {
   const fields = schema[kind];
   if (!fields || !input || typeof input !== "object" || Array.isArray(input)) throw new TypeError("Invalid social record");
@@ -57,6 +61,8 @@ export function validateSocialRecord(kind, input, { now = Date.now() } = {}) {
     !(optional[kind]?.includes(k) && input[k] === undefined) && !check(input[k]))) throw new TypeError("Invalid social fields");
   if (input.createdAt > now || input.updatedAt > now || input.createdAt < 0 || input.updatedAt < input.createdAt) throw new TypeError("Invalid social timestamp");
   if (kind === "relationship" && !input.memberUids.includes(input.requestedBy)) throw new TypeError("Invalid requester");
+  if (kind === "relationship" && (input.lastActorUid !== undefined && !input.memberUids.includes(input.lastActorUid)
+    || Object.keys(input.identitySnapshots ?? {}).some(key => !input.memberUids.includes(key)))) throw new TypeError("Invalid relationship identity");
   if (kind === "block" && input.ownerUid === input.targetUid) throw new TypeError("Self block");
   if (kind === "crew" && !input.memberUids.includes(input.ownerUid)) throw new TypeError("Invalid crew owner");
   if (["nearby", "presence"].includes(kind) && (input.expiresAt <= now || input.expiresAt > now + 30 * 60_000)) throw new TypeError("Invalid presence expiry");

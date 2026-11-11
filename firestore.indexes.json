@@ -1,5 +1,8 @@
 {
   "indexes": [
+    { "collectionGroup": "socialRelationships", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "memberUids", "arrayConfig": "CONTAINS" }, { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "__name__", "order": "ASCENDING" }
+    ] },
     {
       "collectionGroup": "publicProfiles", "queryScope": "COLLECTION",
       "fields": [

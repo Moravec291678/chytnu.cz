@@ -97,7 +97,7 @@ try {
   equal((await call("viewer", "search", { query: profiles.u00.handle })).users[0].relationship.status, "friends");
   await call("viewer", "relationship", { targetUid: ids.u09, operation: "request" }, 404);
   await call("viewer", "relationship", { targetUid: ids.u05, operation: "request" }, 404);
-  await call("stranger", "relationship", { targetUid: ids.u00, operation: "accept" }, 409);
+  await call("stranger", "relationship", { targetUid: ids.u00, operation: "accept" }, 400);
   const originalHandle = profiles.u00.handle;
   profiles.u00.handle = `renamed_${suffix}`; await repo.saveProfile(tokens.u00, profiles.u00);
   equal((await call("viewer", "search", { query: originalHandle })).users.length, 0);

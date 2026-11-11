@@ -7,6 +7,8 @@ import { createSocialRepository } from "./socialRepository.js";
 import { moderationKey } from "../../admin/server/adminSupportStore.js";
 import { createAvatarCoordinator } from "./socialAvatarCoordinator.js";
 import { createDiscoveryService } from "./discoveryService.js";
+import { createFriendsService } from "./friendsService.js";
+import { relationshipView } from "../data/relationshipModel.js";
 export const profileError = (code, status = 400) => Object.assign(new Error(code), { code, status });
 export function createPublicProfileService({ db, auth, avatar, photoProxy, env = {}, cursorSecret, now = () => Date.now() }) {
   const repository = createSocialRepository({ db, auth, now, profilesEnabled: true });
@@ -67,17 +69,20 @@ export function createPublicProfileService({ db, auth, avatar, photoProxy, env =
   }
   const read = (token, target, options) => repository.readProfileSnapshot(token, target, projection, options);
   const discovery = createDiscoveryService({ db, repository, env, cursorSecret, now, project: context => projection(context, { summaryOnly: true }) });
+  const friends = createFriendsService({ db, repository, env, cursorSecret, now, project: context => projection(context, { summaryOnly: true }) });
   async function own(token, reader) { const uid = await identity(token); return repository.readProfileSnapshot(token, uid, reader); }
   return { async execute(action, payload, token) {
     const uid = token ? await identity(token) : null;
     if (!uid && !["view", "image"].includes(action)) throw profileError("authentication_required", 401);
     await limited(uid, action);
     if (action === "search") return discovery.search(token, uid, payload);
+    if (action === "friends") return friends.list(token, uid, payload);
+    if (action === "friends.status") return { relationship: await repository.friendStatus(token, payload.targetUid) };
     if (action === "relationship") {
-      const operations = ["request", "accept", "remove"];
+      const operations = ["request", "accept", "reject", "cancel", "unfriend", "remove"];
       if (!operations.includes(payload.operation)) throw profileError("invalid_request");
-      const relation = await repository.relationship(token, payload.targetUid, payload.operation, { discovery: true });
-      return { relationship: { status: relation?.status === "accepted" ? "friends" : relation?.status === "pending" ? relation.requestedBy === uid ? "outgoing" : "incoming" : "none" } };
+      const relation = await repository.relationship(token, payload.targetUid, payload.operation, { friendships: true, operationId: payload.operationId, expectedRevision: payload.expectedRevision });
+      return { relationship: relationshipView(relation, uid, { canRequest: false }) };
     }
     if (action === "view") return { profile: await read(token, payload.identity) };
     if (action === "preview") return { profile: await read(token, uid, { audience: payload.audience }) };

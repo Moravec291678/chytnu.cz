@@ -4,6 +4,7 @@ import Layout from "../../../shared/layout/Layout.jsx";
 import { useAuth } from "../../auth/context/authContextValue.js";
 import CollaboratorBadge from "../../admin/CollaboratorBadge.jsx";
 import { socialRequest } from "../data/socialClient.js";
+import ProfileFriendship from "./ProfileFriendship.jsx";
 import "./socialProfiles.css";
 
 export function SharedImage({ profile, photo, avatar = false }) {
@@ -75,6 +76,7 @@ export default function PublicFishingProfile() {
   const current = result?.key === key ? result : null;
   const profile = current?.profile;
   const busy = action.key === key && action.busy;
+  const friendshipTarget = profile?.uid ?? (/^[A-Za-z0-9_-]{1,128}$/.test(identity ?? "") ? identity : null);
   async function perform(name, payload) {
     if (busy) return;
     const controller = new AbortController(); actionController.current = controller;
@@ -92,6 +94,7 @@ export default function PublicFishingProfile() {
     {!current && <p role="status" className="social-panel">Načítám rybářský profil…</p>}
     {current?.error && <p role="alert" className="social-error">{current.error}</p>}
     {current && !current.error && !profile && <section className="social-panel"><h1>Profil není dostupný</h1><p className="social-empty">Rybář ho nezveřejnil, omezil viditelnost nebo není pro tento účet dostupný.</p></section>}
+    {uid && friendshipTarget && uid !== friendshipTarget && <ProfileFriendship viewerUid={uid} targetUid={friendshipTarget} profileAvailable={Boolean(profile)} refreshKey={refresh} onChanged={() => setRefresh(value => value + 1)} />}
     {profile && <><FishingProfileView key={key} profile={profile} />
       {uid === profile.uid && <Link className="social-primary" to="/profile/social">Upravit rybářský profil</Link>}
       {uid && uid !== profile.uid && <section className="social-actions" aria-label="Bezpečnost profilu"><details><summary>Nahlásit nebo blokovat</summary><p>Blokování přeruší sociální propojení s tímto účtem.</p><button disabled={busy} onClick={() => perform("block", { targetUid: profile.uid, blocked: true })}>Zablokovat účet</button><button disabled={busy} onClick={() => { setReportOpen(reportOpen === key ? null : key); setReason(""); }}>Nahlásit profil</button></details>

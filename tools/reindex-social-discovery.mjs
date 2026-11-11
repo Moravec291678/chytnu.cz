@@ -5,14 +5,17 @@ import { Firestore, FieldPath } from "@google-cloud/firestore";
 import { reindexDiscoveryPage } from "../src/features/social/server/discoveryBackfill.js";
 const require = createRequire(import.meta.url);
 const args = new Set(process.argv.slice(2));
-if ([...args].some(arg => !["--apply", "--verify-indexes"].includes(arg)) || process.env.FIRESTORE_EMULATOR_HOST) throw new Error("Explicit production operator command only");
+if ([...args].some(arg => !["--apply", "--verify-indexes", "--verify-friends"].includes(arg)) || process.env.FIRESTORE_EMULATOR_HOST) throw new Error("Explicit production operator command only");
 const { configstore } = require("firebase-tools/lib/configstore.js");
 const { clientId, clientSecret } = require("firebase-tools/lib/api.js");
 const refresh = configstore.get("tokens")?.refresh_token;
 if (!refresh) throw new Error("Firebase CLI login required; run firebase login");
 const db = new Firestore({ projectId: "chutnucz", credentials: { type: "authorized_user", client_id: clientId(), client_secret: clientSecret(), refresh_token: refresh } });
 try {
-  if (args.has("--verify-indexes")) {
+  if (args.has("--verify-friends")) {
+    for (const status of ["accepted", "pending"]) await db.collection("socialRelationships").where("memberUids", "array-contains", "operator-unused-no-account").where("status", "==", status).orderBy(FieldPath.documentId()).limit(1).get();
+    console.log(JSON.stringify({ project: "chutnucz", friendsIndexesVerified: 2 }));
+  } else if (args.has("--verify-indexes")) {
     const base = () => db.collection("publicProfiles").where("visibility", "==", "public").where("discoverable", "==", true);
     await base().where("searchPrefixes", "array-contains", "all:operator_unused_search_fixture").orderBy("handle").orderBy(FieldPath.documentId()).limit(1).get();
     await base().where("searchPrefixes", "array-contains", "directory:new").orderBy("createdAt", "desc").orderBy(FieldPath.documentId()).limit(1).get();

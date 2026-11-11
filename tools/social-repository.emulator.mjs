@@ -46,7 +46,7 @@ try {
   equal((await repo.getProfile(tokens.b, ids.a)).uid, ids.a);
   equal(await repo.getProfile(tokens.c, ids.a), null);
   await repo.block(tokens.b, ids.a);
-  equal((await db.doc(`socialRelationships/${canonicalPair(ids.a, ids.b)}`).get()).exists, false);
+  equal((await db.doc(`socialRelationships/${canonicalPair(ids.a, ids.b)}`).get()).data().status, "blocked");
   await rejected(() => repo.getProfile(tokens.a, ids.b), "social_unavailable");
   await rejected(() => repo.relationship(tokens.a, ids.b, "request"), "social_unavailable");
   await repo.block(tokens.b, ids.a, false);

@@ -49,6 +49,7 @@ function CommunityPage() {
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8" /><path d="m16 16 5 5" /></svg>
           </Link>
         </header>
+        <Link className="community-discovery-link" to="/friends">Přátelé a pozvání <span aria-hidden="true">→</span></Link>
         <Link className="community-discovery-link" to="/community/find">Najít rybáře <span aria-hidden="true">→</span></Link>
 
         <nav className="community-tabs" role="tablist" aria-label="Filtr komunitního přehledu">

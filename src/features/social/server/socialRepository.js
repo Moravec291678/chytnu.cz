@@ -2,6 +2,9 @@ import { createHash } from "node:crypto";
 import { canonicalPair, canReadSocial, normalizedHandle, socialUid, validateSocialRecord } from "../data/socialModel.js";
 import { sectionAllowed, validateProfileInput, validateStoredProfile } from "../data/publicProfileModel.js";
 import { buildDiscoveryPrefixes } from "../data/discoveryModel.js";
+import { relationshipView, transitionRelationship } from "../data/relationshipModel.js";
+import { assertSocialInteraction } from "./socialAccess.js";
+import { createNotificationRecord } from "../../notifications/data/notificationModel.js";
 
 // No public HTTP surface in stage 1. Future handlers must use this authenticated boundary.
 // Admin roles deliberately grant no diary/social privacy bypass and no quota exemption.
@@ -17,6 +20,7 @@ export function createSocialRepository({ db, auth, now = () => Date.now(), profi
     const [config, suspension, deletion] = await Promise.all(refs.map(path => tx.get(db.doc(path))));
     if (profileOperation && config.data()?.profilesEnabled === false || config.data()?.enabled !== true && !(profileOperation && profilesEnabled)) fail("social_disabled");
     if (profileOperation === "discovery" && config.data()?.discoveryEnabled === false) fail("social_disabled");
+    if (profileOperation === "friends" && config.data()?.friendshipsEnabled === false) fail("social_disabled");
     if (suspension.exists || deletion.exists) fail("account_unavailable");
     if (mutation) {
       const ref = db.doc(`serverRateLimits/social-${createHash("sha256").update(uid).digest("hex")}`);
@@ -30,11 +34,7 @@ export function createSocialRepository({ db, auth, now = () => Date.now(), profi
     return () => {};
   }
   async function peer(tx, uid, targetUid) {
-    socialUid(targetUid);
-    const paths = [`socialBlocks/${uid}/blocked/${targetUid}`, `socialBlocks/${targetUid}/blocked/${uid}`,
-      `accountSuspensions/${targetUid}`, `accountDeletions/${targetUid}`];
-    const rows = await Promise.all(paths.map(path => tx.get(db.doc(path))));
-    if (rows.some(row => row.exists)) fail("social_unavailable");
+    await assertSocialInteraction({ tx, db, uid, targetUid });
   }
   async function readProfile(tx, uid, targetUid) {
     await peer(tx, uid, targetUid);
@@ -47,6 +47,45 @@ export function createSocialRepository({ db, auth, now = () => Date.now(), profi
     return data;
   }
   const repository = {
+    async friendStatus(token, targetUid) {
+      const uid = await identity(token), pair = canonicalPair(uid, targetUid);
+      return db.runTransaction(async tx => {
+        await guard(tx, uid, false, "friends");
+        const [ownBlock, otherBlock, relation, actor, target, suspended, deleting] = await Promise.all([
+          `socialBlocks/${uid}/blocked/${targetUid}`, `socialBlocks/${targetUid}/blocked/${uid}`, `socialRelationships/${pair}`,
+          `publicProfiles/${uid}`, `publicProfiles/${targetUid}`, `accountSuspensions/${targetUid}`, `accountDeletions/${targetUid}`].map(p => tx.get(db.doc(p))));
+        if (ownBlock.exists) return relationshipView(relation.data(), uid, { blocked: true });
+        if (otherBlock.exists || suspended.exists || deleting.exists || !target.exists) return { status: "none", revision: 0, canRequest: false };
+        const canRequest = actor.data()?.visibility === "public" && actor.data()?.discoverable === true && target.data()?.visibility === "public" && target.data()?.discoverable === true;
+        const r = relation.data();
+        return relationshipView(r, uid, { canRequest: canRequest && !(r?.rejectedUntil > now() || r?.status === "rejected" && now() - r.updatedAt < 24*60*60_000) });
+      });
+    },
+    async friendsPage(token, query, tab, project) {
+      const uid = await identity(token);
+      return db.runTransaction(async tx => {
+        await guard(tx, uid, false, "friends");
+        const page = await tx.get(query), scanned = page.docs.slice(0,10), users = [];
+        for (const row of scanned) {
+          const relation = row.data(), targetUid = relation.memberUids?.find(member => member !== uid);
+          if (!targetUid || row.id !== canonicalPair(uid, targetUid)) continue;
+          const view = relationshipView(relation, uid);
+          if (view.status !== (tab === "friends" ? "friends" : tab)) continue;
+          try { await peer(tx, uid, targetUid); } catch (error) { if (error.message === "social_unavailable") continue; throw error; }
+          const data = (await tx.get(db.doc(`publicProfiles/${targetUid}`))).data();
+          let profile; try { if (data?.uid === targetUid) profile = validateStoredProfile(data, now()); } catch { /* Invalid identity is not projected. */ }
+          if (!profile) continue;
+          const audience = view.status === "friends" ? "friend" : "stranger";
+          const visible = sectionAllowed(profile.visibility, audience);
+          const snapshot = relation.identitySnapshots?.[targetUid];
+          const summary = visible ? await project({ tx, profile, audience, viewerUid: uid }) : {
+            uid: targetUid, handle: typeof snapshot?.handle === "string" ? snapshot.handle : "",
+            displayName: typeof snapshot?.displayName === "string" ? snapshot.displayName : "Nedostupný profil" };
+          users.push({ ...summary, relationship: view });
+        }
+        return { users, boundary: scanned.at(-1)?.id ?? null, hasMore: page.size > 10 };
+      });
+    },
     async searchProfiles(token, query, searchToken, project) {
       const uid = await identity(token);
       return db.runTransaction(async tx => {
@@ -59,10 +98,8 @@ export function createSocialRepository({ db, auth, now = () => Date.now(), profi
           if (profile.uid !== row.id || !buildDiscoveryPrefixes(profile).includes(searchToken)) continue;
           try { await peer(tx, uid, profile.uid); } catch (error) { if (error.message === "social_unavailable") continue; throw error; }
           const relationship = uid === profile.uid ? null : (await tx.get(db.doc(`socialRelationships/${canonicalPair(uid, profile.uid)}`))).data();
-          const status = relationship?.status === "accepted" ? "friends" : relationship?.status === "pending"
-            ? relationship.requestedBy === uid ? "outgoing" : relationship.requestedBy === profile.uid ? "incoming" : "none" : "none";
           // Directory summaries are PUBLIC projections even for existing friends.
-          users.push({ ...await project({ tx, profile, audience: "stranger", viewerUid: uid }), relationship: { status } });
+          users.push({ ...await project({ tx, profile, audience: "stranger", viewerUid: uid }), relationship: relationshipView(relationship, uid, { canRequest: uid !== profile.uid && !(relationship?.rejectedUntil > now() || relationship?.status === "rejected" && now() - relationship.updatedAt < 24*60*60_000) }) });
         }
         return { users, boundary: scanned.at(-1) ? { uid: scanned.at(-1).id, handle: scanned.at(-1).data().handle, createdAt: scanned.at(-1).data().createdAt } : null,
           hasMore: page.size > 10 };
@@ -144,25 +181,49 @@ export function createSocialRepository({ db, auth, now = () => Date.now(), profi
         return readProfile(tx, uid, targetUid);
       });
     },
-    async relationship(token, targetUid, action, { discovery = false } = {}) {
+    async relationship(token, targetUid, action, { discovery = false, friendships = false, operationId, expectedRevision } = {}) {
       const uid = await identity(token), pair = canonicalPair(uid, targetUid);
-      if (!["request", "accept", "remove"].includes(action)) fail("invalid_action");
       return db.runTransaction(async tx => {
-        const commitLimit = await guard(tx, uid, true, discovery ? "discovery" : false); await peer(tx, uid, targetUid);
-        if (discovery && action !== "remove") {
-          const [actor, target] = await Promise.all([tx.get(db.doc(`publicProfiles/${uid}`)), tx.get(db.doc(`publicProfiles/${targetUid}`))]);
-          if (!actor.exists || action === "request" && (actor.data().visibility !== "public" || actor.data().discoverable !== true)) fail("profile_required");
-          if (!target.exists || action === "request" && (target.data().visibility !== "public" || target.data().discoverable !== true)) fail("social_unavailable");
-        }
-        if (action !== "remove" && !(await tx.get(db.doc(`publicProfiles/${targetUid}`))).exists) fail("social_unavailable");
+        const commitLimit = await guard(tx, uid, true, friendships ? "friends" : discovery ? "discovery" : false); await peer(tx, uid, targetUid);
         const ref = db.doc(`socialRelationships/${pair}`), old = (await tx.get(ref)).data();
-        if (action === "accept" && (old?.status !== "pending" || old.requestedBy === uid)) fail("invalid_request");
-        if (action === "request" && old) return old; // Idempotent; reversed requests never auto-accept.
+        if (operationId !== undefined && (typeof operationId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(operationId))) fail("invalid_request");
+        const receipt = operationId ? db.doc(`users/${uid}/socialMutations/${operationId}`) : null;
+        const previous = receipt ? (await tx.get(receipt)).data() : null;
+        if (previous) { if (previous.pair !== pair || previous.operation !== action) fail("relationship_conflict"); return old ?? null; }
+        const [actor, target] = await Promise.all([tx.get(db.doc(`publicProfiles/${uid}`)), tx.get(db.doc(`publicProfiles/${targetUid}`))]);
+        if ((friendships || discovery) && action === "request") {
+          if (!actor.exists || actor.data().visibility !== "public" || actor.data().discoverable !== true) fail("profile_required");
+          if (target.data()?.visibility !== "public" || target.data()?.discoverable !== true) fail("social_unavailable");
+        }
+        if (["request", "accept"].includes(action) && !target.exists) fail("social_unavailable");
         const stamp = now();
-        const record = action === "remove" ? null : validateSocialRecord("relationship", { memberUids: [uid, targetUid].sort(),
-          requestedBy: old?.requestedBy ?? uid, status: action === "accept" ? "accepted" : "pending",
-          createdAt: old?.createdAt ?? stamp, updatedAt: stamp }, { now: stamp });
-        commitLimit(); if (record) tx.set(ref, record); else tx.delete(ref);
+        const rejectedUntil = old?.rejectedUntil ?? (old?.status === "rejected" ? old.updatedAt + 24*60*60_000 : 0);
+        if (action === "request" && rejectedUntil > stamp) fail("relationship_conflict");
+        const transition = transitionRelationship({ record: old, uid, targetUid, operation: action, now: stamp, operationId, expectedRevision });
+        if (!transition.changed) {
+          if (receipt) { commitLimit(); tx.create(receipt, { pair, operation: action, createdAt: stamp }); }
+          return transition.record;
+        }
+        const snapshots = action === "request" ? Object.fromEntries([[uid, actor.data()], [targetUid, target.data()]].filter(([,p]) => p)
+          .map(([id,p]) => [id, { handle: p.handle, displayName: p.displayName }])) : old?.identitySnapshots;
+        const notificationTimes = { ...old?.notificationTimes };
+        const notify = transition.eventType && transition.eventType !== "removed"
+          && (!Number.isSafeInteger(notificationTimes[transition.eventType]) || stamp - notificationTimes[transition.eventType] >= 10 * 60_000);
+        if (notify) notificationTimes[transition.eventType] = stamp;
+        const record = { ...transition.record, rejectedUntil: transition.record.status === "rejected" ? stamp + 24*60*60_000 : rejectedUntil, notificationTimes, ...(snapshots ? { identitySnapshots: snapshots } : {}) };
+        commitLimit(); tx.set(ref, record);
+        if (receipt) tx.create(receipt, { pair, operation: action, createdAt: stamp });
+        if (transition.eventType) {
+          tx.set(ref.collection("events").doc(`latest${transition.eventType}`), { type: transition.eventType, revision: record.revision, actorUid: uid, targetUid, createdAt: stamp });
+          if (notify) {
+            const recipient = transition.eventType === "requested" ? targetUid : record.requestedBy;
+            const id = `friend_${createHash("sha256").update(pair).digest("hex").slice(0,32)}_${record.revision}_${transition.eventType}`;
+            const notification = createNotificationRecord({ id, type: "social", title: transition.eventType === "requested" ? "Nová žádost o přátelství" : "Pozvání bylo přijato",
+              body: "Aktuální propojení s rybáři najdeš v přehledu Přátelé.", deepLink: "/friends" }, { ownerId: recipient, scopeKey: `account:${recipient}` }, { now: new Date(stamp) });
+            const stored = { ...notification }; delete stored.scopeKey;
+            tx.set(db.doc(`users/${recipient}/notifications/${id}`), stored);
+          }
+        }
         return record;
       });
     },
@@ -172,8 +233,15 @@ export function createSocialRepository({ db, auth, now = () => Date.now(), profi
       return db.runTransaction(async tx => {
         const commitLimit = await guard(tx, uid, true, true), stamp = now();
         const ref = db.doc(`socialBlocks/${uid}/blocked/${targetUid}`);
+        const pairRef = db.doc(`socialRelationships/${pair}`);
+        const [own, other, existing] = await Promise.all([tx.get(ref), tx.get(db.doc(`socialBlocks/${targetUid}/blocked/${uid}`)), tx.get(pairRef)]);
+        if (own.exists === blocked) return;
         const record = validateSocialRecord("block", { ownerUid: uid, targetUid, createdAt: stamp, updatedAt: stamp }, { now: stamp });
-        commitLimit(); if (blocked) { tx.set(ref, record); tx.delete(db.doc(`socialRelationships/${pair}`)); } else tx.delete(ref);
+        const old = existing.data(), revision = (old?.revision ?? 0) + 1;
+        commitLimit(); if (blocked) tx.set(ref, record); else tx.delete(ref);
+        tx.set(pairRef, { memberUids: [uid,targetUid].sort(), requestedBy: old?.requestedBy ?? uid,
+          status: blocked || other.exists ? "blocked" : "unfriended", revision, rejectedUntil: old?.rejectedUntil ?? (old?.status === "rejected" ? old.updatedAt + 24*60*60_000 : 0), notificationTimes: old?.notificationTimes ?? {}, createdAt: old?.createdAt ?? stamp, updatedAt: stamp, lastActorUid: uid });
+        tx.set(pairRef.collection("events").doc("latestremoved"), { type: "revoked", revision, actorUid: uid, targetUid, createdAt: stamp });
       });
     },
   };

@@ -21,7 +21,7 @@ service cloud.firestore {
         && data.keys().hasOnly(['id', 'ownerId', 'type', 'title', 'body', 'createdAt', 'readAt', 'deepLink'])
         && data.id == notificationId
         && data.ownerId == userId
-        && data.type in ['sync_problem', 'achievement', 'challenge', 'active_trip', 'app_update', 'support']
+        && data.type in ['sync_problem', 'achievement', 'challenge', 'active_trip', 'app_update', 'support', 'social']
         && data.title is string && data.title.size() > 0 && data.title.size() <= 120
         && data.body is string && data.body.size() > 0 && data.body.size() <= 500
         && data.createdAt is string && data.createdAt.size() <= 40
@@ -331,6 +331,7 @@ service cloud.firestore {
       allow get, list: if signedInAs(userId);
       allow create: if signedInAs(userId)
         && validNotification(request.resource.data, userId, notificationId)
+        && request.resource.data.type != 'social'
         && request.resource.data.readAt == null;
       allow update: if signedInAs(userId)
         && resource.data.ownerId == userId
