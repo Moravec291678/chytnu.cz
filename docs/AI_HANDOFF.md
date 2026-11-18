@@ -9,8 +9,9 @@
 
 - Branch: `codex/ui-terminology-length-priority`
 - Base before this safe-stop checkpoint: `4efa902`
-- The latest branch `HEAD` is the handoff commit; retrieve its exact SHA with `git log -1 --format=%H`.
-- Push target: `origin/codex/ui-terminology-length-priority`; verify it with `git ls-remote --heads origin codex/ui-terminology-length-priority`.
+- Safe-stop WIP commit: `61f9e2c46fe122a4c96194e919c6a13c6617fb3a`.
+- Push: verified on `origin/codex/ui-terminology-length-priority`; the remote ref matches the safe-stop commit. This document update is also pushed as a follow-up.
+- Retrieve the latest branch `HEAD` with `git log -1 --format=%H`.
 
 ## Completed in this checkpoint
 
@@ -51,7 +52,7 @@
 - `npm run test:photos` — passed.
 - `npm run product` — passed; generated inventory was unchanged.
 - `npm audit --omit=dev` — 0 vulnerabilities; full `npm audit` — 14 moderate development-tool advisories, 0 high/critical.
-- `git diff --check` — passed before documentation edits; rerun before commit.
+- `git diff --check` — passed after documentation edits and before commits.
 
 Firebase emulator runs emitted non-fatal metadata lookup warnings (`ETIMEDOUT`/`ENOTFOUND`); the emulator suites completed successfully. The production build still reports existing mixed-import and large-chunk warnings.
 

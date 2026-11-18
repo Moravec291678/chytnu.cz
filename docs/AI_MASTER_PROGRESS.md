@@ -7,7 +7,8 @@ Updated for the safe-stop checkpoint on `codex/ui-terminology-length-priority`.
 - Stage 8/18 implementation: **PASS**.
 - Overall application audit: **PARTIAL**.
 - No Stage 9 work has started.
-- Work is preserved on the development branch; use `git log -1 --format=%H` to identify the saved checkpoint.
+- Safe-stop WIP commit `61f9e2c46fe122a4c96194e919c6a13c6617fb3a` is pushed to the development branch; the follow-up documentation update is pushed as well.
+- Use `git log -1 --format=%H` to identify the current branch head before resuming.
 
 ## Completed
 

@@ -4,6 +4,12 @@
 
 **PARTIAL — the application-wide audit is not complete.** This checkpoint records verified findings and changes only. Stage 8/18 remains **PASS**; no Stage 9 work has started.
 
+## Git checkpoint
+
+- Safe-stop WIP commit: `61f9e2c46fe122a4c96194e919c6a13c6617fb3a`.
+- The commit and follow-up documentation update are pushed to `origin/codex/ui-terminology-length-priority`.
+- The current branch head is discoverable with `git log -1 --format=%H`.
+
 ## Verified and fixed
 
 - Guest access to `/community` could dereference an absent action state. The busy flag now requires an authenticated UID, with an SSR regression test.
@@ -30,7 +36,7 @@
 - `npm run test:sync`: passed.
 - `npm run test:photos`: passed.
 - `npm run product`: passed.
-- `git diff --check`: passed before this documentation update; rerun at commit time.
+- `git diff --check`: passed after documentation edits and before commits.
 
 Firebase emulators emitted non-fatal metadata lookup warnings (`ETIMEDOUT`/`ENOTFOUND`); all listed emulator commands exited successfully.
 
