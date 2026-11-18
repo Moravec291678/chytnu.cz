@@ -30,7 +30,7 @@ export default function CommunityEntryComposer({ onPublished, initialPost, onOpe
     return () => controller.abort();
   }, [open, uid, online, retry]);
   const current = options?.uid === uid ? options : null;
-  const busy = action?.uid === uid && action.busy;
+  const busy = Boolean(uid && action?.uid === uid && action.busy);
   async function submit(event) {
     event.preventDefault();
     if (busy || !online || !uid) return;

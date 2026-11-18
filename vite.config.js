@@ -72,5 +72,8 @@ self.addEventListener('notificationclick', (event) => {
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), offlineShell()],
+  resolve: {
+    alias: [{ find: /^react-router-dom$/, replacement: 'react-router' }],
+  },
   define: { __APP_BUILD_ID__: JSON.stringify(appBuildId()) },
 })

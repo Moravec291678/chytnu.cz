@@ -162,17 +162,24 @@ test("gallery has a separate longest sort based on catch length", () => {
   assert.equal(sorted[0].catchId, "long-light");
 });
 
-test("gallery route and primary Profile entry are connected without changing bottom navigation", async () => {
+test("gallery route is grouped with profile reports without changing bottom navigation", async () => {
   const [app, profile, layout] = await Promise.all([
     readFile(new URL("../../../app/App.jsx", import.meta.url), "utf8"),
     readFile(new URL("../../../pages/ProfilePage.jsx", import.meta.url), "utf8"),
     readFile(new URL("../../../shared/layout/Layout.jsx", import.meta.url), "utf8"),
   ]);
   assert.match(app, /path="\/gallery"/);
-  assert.match(profile, /to="\/gallery"[^>]*>.*Galerie/s);
+  assert.match(profile, /id="profile-reports"[\s\S]*?to="\/gallery" title="Galerie"/);
   assert.match(layout, /aria-label="Hlavní navigace"/);
   assert.match(layout, /nav-label">Domů[\s\S]*nav-label">Deník[\s\S]*nav-label">Vycházky[\s\S]*nav-label">Profil/);
   assert.doesNotMatch(layout, /to="\/gallery"/);
+});
+
+test("profile groups progression items and settings instead of listing them separately", async () => {
+  const profile = await readFile(new URL("../../../pages/ProfilePage.jsx", import.meta.url), "utf8");
+  assert.match(profile, /id="profile-goals"[\s\S]*?to="\/levels"[\s\S]*?to="\/achievements"[\s\S]*?to="\/challenges"[\s\S]*?to="\/streak"/);
+  assert.match(profile, /id="profile-settings"[\s\S]*?to="\/settings"[\s\S]*?to="\/privacy"[\s\S]*?to="\/notifications"/);
+  assert.doesNotMatch(profile, /className="profile-preferences"|className="profile-progress"/);
 });
 
 test("viewer supports filtered-list navigation, keyboard, swipe, Catch detail, and URL cleanup", async () => {

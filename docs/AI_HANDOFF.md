@@ -1,77 +1,64 @@
-# AI handoff — Social network Stage 8
+# AI handoff — safe stop and audit checkpoint
 
 ## Status
 
-**PASS — implementation and required local validation complete.** Production deployment, merge, and push have not been performed.
+- **Stage 8/18: PASS.** The Stage 8 implementation remains complete; the real Auth/Firestore emulator suite passed again, including repository cleanup and six-account interactions.
+- **Overall application audit: PARTIAL.** No Stage 9 work was started. This checkpoint does not authorize production deployment, merge, or changes to `main`.
 
-Stage 8 covers authenticated reactions, comments, reports, moderation, rate limits, authoritative counters, privacy checks, and account-deletion cleanup. No later roadmap stage was started.
-
-## Git
+## Git checkpoint
 
 - Branch: `codex/ui-terminology-length-priority`
-- Base before this work: `06bfc4c4b8ab725712c7b291891b750234fca768`
-- Implementation commit: `91fb60d7a01199283cb0bd67df702a8a6d35a8d4`
-- A follow-up documentation-only commit records this SHA in the handoff.
-- Only Stage 8 files are included in the worktree changes.
+- Base before this safe-stop checkpoint: `4efa902`
+- The latest branch `HEAD` is the handoff commit; retrieve its exact SHA with `git log -1 --format=%H`.
+- Push target: `origin/codex/ui-terminology-length-priority`; verify it with `git ls-remote --heads origin codex/ui-terminology-length-priority`.
 
-## Implemented and reviewed
+## Completed in this checkpoint
 
-- Added server-authoritative reactions, edits/removal, comments, reports, rate limits, duplicate-operation receipts, pagination, and derived counters.
-- Integrated interactions into the social feed and added report review/resolution to Admin Dashboard with moderation permission checks, audit events, and the required Firestore index.
-- Enforced visibility, block, suspension, account-deletion, ownership, and moderator boundaries at the server/API layer; Firestore client reads of protected social and private documents remain denied.
-- Kept comment text as React-rendered text; validated the 500-character limit and safe rendering.
-- Made cleanup remove the deleted account's own reactions/comments and associated rate-limit state. Deleting a publication removes its parent document while retaining other users' child interactions as inaccessible orphan documents; the interaction API rejects access without the parent, and Firestore rules deny direct client reads. An interaction's owner can still remove it through their own account cleanup.
-- Fixed the `social-repository.emulator.mjs:79` failure. The cleanup path validator rejected safe legacy IDs because it assumed publication IDs always used the newer 64-hex format. This was a Stage 8 cleanup regression, not an emulator timing/async problem or a bad fixture; the incomplete cleanup left a public profile behind, so the failure represented a real deletion/privacy issue. The validator now accepts safe single-segment IDs. The line-79 assertion was not weakened.
-- Counter reads now treat only missing legacy values as zero and reject corrupt stored counts. Interaction listing skips only the expected unavailable-user case and propagates unexpected failures.
-- Reviewed owner/co-creator/moderator authorization, transaction idempotency, rate limits, pagination/index use, deletion retries, XP boundaries, and privacy of GPS, diary, and private photos.
+- Consolidated the profile page into clearer sections while preserving the previous profile work.
+- Fixed the guest community composer null dereference and added a regression test.
+- Fixed Cloudinary photo API authorization so both account deletion and suspension markers deny access with HTTP 403 before photo access is read.
+- Updated React Router to patched v7.18.6; added the Vite alias and adjusted SSR tests to use a consistent Router module.
+- Updated Firebase Admin to 14.5.1 and its compatible Firestore client to 9.4.1.
+- Confirmed `npm audit --omit=dev` reports zero production advisories. The full audit still reports 14 moderate advisories in the Firebase CLI/development dependency tree; the suggested forced downgrade to `firebase-tools@13.11.2` was not applied.
 
 ## Changed files
 
-- `docs/AI_HANDOFF.md`
-- `firestore.indexes.json`
 - `package.json`
-- `src/features/admin/AdminDashboard.jsx`
-- `src/features/admin/server/adminSupportStore.js`
-- `src/features/admin/server/supportValidation.js`
-- `src/features/social/components/SocialFeed.jsx`
+- `package-lock.json`
+- `vite.config.js`
+- `src/features/admin/AdminDashboard.test.js`
+- `src/features/catches/data/catchGallery.test.js`
+- `src/features/home/components/HomeInsightCard.test.js`
+- `src/features/social/components/CommunityEntryComposer.jsx`
 - `src/features/social/components/SocialFeed.test.js`
-- `src/features/social/components/SocialInteractions.jsx`
-- `src/features/social/components/socialInteractions.css`
-- `src/features/social/data/socialClient.js`
-- `src/features/social/data/socialInteractionModel.js`
-- `src/features/social/data/socialInteractionModel.test.js`
-- `src/features/social/server/publicProfileService.js`
-- `src/features/social/server/socialApi.js`
-- `src/features/social/server/socialDeletion.js`
-- `src/features/social/server/socialInteractionCounters.js`
-- `src/features/social/server/socialInteractionService.js`
-- `src/server/accountDeletion.js`
-- `tools/social-interactions.emulator.mjs`
+- `src/features/trips/components/TripCatchMap.test.js`
+- `src/pages/ProfilePage.jsx`
+- `src/pages/ProfilePage.css`
+- `src/server/cloudinaryApi.js`
+- `src/server/cloudinaryApi.test.js`
+- `docs/AI_MASTER_PROGRESS.md`
+- `docs/AI_FULL_AUDIT.md`
+- `docs/AI_HANDOFF.md`
 
 ## Validation
 
-All commands below passed on the final implementation:
+- `npm test` — 1,161 passed, 0 failed.
+- `npm run lint` — passed.
+- `npm run build` — passed; Cloudinary client-secret scan passed for 160 client assets.
+- `npm run test:rules` — passed, including 44 repository checks and 131 social interaction checks with real emulator accounts.
+- `npm run test:auth` — passed.
+- `npm run test:sync` — passed.
+- `npm run test:photos` — passed.
+- `npm run product` — passed; generated inventory was unchanged.
+- `npm audit --omit=dev` — 0 vulnerabilities; full `npm audit` — 14 moderate development-tool advisories, 0 high/critical.
+- `git diff --check` — passed before documentation edits; rerun before commit.
 
-- `npm test` — 1,158 passed, 0 failed.
-- `npm run lint`
-- `npm run build` — passed; Cloudinary client-secret scan checked 159 assets.
-- `npm run test:rules` — complete Auth/Firestore emulator suite passed, including the 44-check repository deletion scenario and the six-account Stage 8 interaction suite (131 checks).
-- `npm run test:auth`
-- `npm run test:sync`
-- `npm run test:photos`
-- `npm run product`
-- `git diff --check`
+Firebase emulator runs emitted non-fatal metadata lookup warnings (`ETIMEDOUT`/`ENOTFOUND`); the emulator suites completed successfully. The production build still reports existing mixed-import and large-chunk warnings.
 
-The emulator runs produced a non-fatal metadata lookup warning (`ETIMEDOUT`/`ENOTFOUND`); the demo-project Auth/Firestore tests still completed successfully. Vite also reports non-fatal mixed static/dynamic import and large-chunk warnings.
+## Next session
 
-## Security and release status
-
-Local emulator tests verified reaction concurrency/deduplication and counts; comment ownership and length; public/friends/private visibility; block and friendship revocation; deleted posts; post/comment reports; moderation grants and denials; direct Firestore access denial; private photo, GPS, and diary isolation; account deletion; and retention of another user's inaccessible interaction. The deletion workflow remains retryable and idempotent, and unrelated owners' private records were verified unchanged.
-
-No production Firebase index/rules deployment, app deployment, push, or merge was performed. Before release, Codex should verify the final commit, confirm the production Firebase index rollout plan, and deploy only with explicit approval.
-
-## Instructions for Codex
-
-1. Verify the recorded implementation commit and the follow-up handoff update.
-2. Do a final read-only review of the Stage 8 diff and its test results; do not restart or implement another stage.
-3. Coordinate Firebase index/rules rollout and production release only after approval.
+1. Read this file, `docs/AI_MASTER_PROGRESS.md`, and `docs/AI_FULL_AUDIT.md`; confirm branch and latest commit before editing.
+2. Continue the application audit as **PARTIAL**; do not begin Stage 9.
+3. Review the 14 development-tool advisories and identify a compatible Firebase CLI dependency path; do not force-downgrade Firebase CLI.
+4. Perform browser smoke checks after the Router v7 upgrade and continue the uncompleted route/module audit.
+5. Keep production deployment, merge, and any push to `main` off-limits without explicit approval.

@@ -9,7 +9,7 @@ test("Trip map renders four owner-scoped catch links before optional tiles load,
   try {
     const { default: Map } = await server.ssrLoadModule("/src/features/trips/components/TripCatchMap.jsx");
     const { DataScopeContext } = await server.ssrLoadModule("/src/features/auth/context/dataScopeContextValue.js");
-    const { StaticRouter } = await server.ssrLoadModule("react-router-dom/server");
+    const { StaticRouter } = await server.ssrLoadModule("react-router");
     const scope = { ownerId: "map-owner", scopeKey: "account:map-owner" };
     const trip = { ...scope, id: "trip" };
     const catches = Array.from({ length: 4 }, (_, i) => ({ ...scope, id: `catch-${i}`, tripId: trip.id,

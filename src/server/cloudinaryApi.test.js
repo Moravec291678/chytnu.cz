@@ -3,7 +3,7 @@ import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 import { Writable } from "node:stream";
 import test from "node:test";
-import { classifyFirebaseAuthFailure, cloudinaryPublicId, createCloudinaryApi, createEnabledTestEnvironment, initializeFirebaseAdminContext, MAX_PHOTO_BYTES, readFirebaseServiceAccount, verifyFirebaseIdToken } from "./cloudinaryApi.js";
+import { classifyFirebaseAuthFailure, cloudinaryPublicId, createCloudinaryApi, createEnabledTestEnvironment, ensurePhotoAccountActive, initializeFirebaseAdminContext, MAX_PHOTO_BYTES, readFirebaseServiceAccount, verifyFirebaseIdToken } from "./cloudinaryApi.js";
 
 const ownerId = "owner-a";
 const otherOwnerId = "owner-b";
@@ -120,6 +120,30 @@ test("photo API distinguishes missing auth, malformed bearer headers, and expire
   assert.equal(expiredResponse.statusCode, 401);
   assert.equal(expiredResponse.body.error, "firebase_token_expired");
   assert.doesNotMatch(JSON.stringify(expiredResponse.body), /private verifier detail/);
+});
+
+test("photo endpoints deny valid tokens for accounts being deleted or suspended", async () => {
+  for (const blockedPath of [`accountDeletions/${ownerId}`, `accountSuspensions/${ownerId}`]) {
+    const checkedPaths = [];
+    const db = { doc(path) {
+      checkedPaths.push(path);
+      return { get: async () => ({ exists: path === blockedPath }) };
+    } };
+    let photoReads = 0;
+    const api = createCloudinaryApi({
+      env: createEnabledTestEnvironment(),
+      verifyToken: async () => {
+        await ensurePhotoAccountActive(db, ownerId);
+        return { uid: ownerId };
+      },
+      getPhotoAccess: async () => { photoReads += 1; return makePhotoAccess(); },
+    });
+    const response = await request(api.signUpload, { body: { catchId, photoId, size: 1024, contentType: "image/jpeg", sha256 } });
+    assert.equal(response.statusCode, 403);
+    assert.equal(response.body.error, "account_unavailable");
+    assert.deepEqual(checkedPaths, [`accountDeletions/${ownerId}`, `accountSuspensions/${ownerId}`]);
+    assert.equal(photoReads, 0);
+  }
 });
 
 test("Firebase auth diagnostics log only a safe route, class, step, and HTTP status", async () => {

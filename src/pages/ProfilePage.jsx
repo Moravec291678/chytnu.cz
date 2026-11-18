@@ -32,9 +32,6 @@ import CatchCard from "../features/catches/components/CatchCard";
 import { buildSpeciesAlbum } from "../features/species/data/speciesAlbum";
 import { DEFAULT_SPECIES } from "../shared/constants/constants";
 import { readTrophySelection, saveTrophySelection } from "../features/species/data/trophySelection.js";
-import { readPreferences, savePreferences } from "../features/preferences/data/preferences.js";
-import { DEFAULT_PRIVACY_SETTINGS } from "../features/privacy/data/privacyModel.js";
-import { privacyRepository } from "../features/privacy/data/privacyRepository.js";
 import { waterRepository } from "../features/waters/data/waterRepository.js";
 import { runManualSync } from "../shared/layout/syncStatusView.js";
 import { isFeatureEnabled } from "../shared/config/featureFlags.js";
@@ -48,6 +45,25 @@ function formatCount(count, one, few, many) {
   if (count === 1) return `${count} ${one}`;
   if (count >= 2 && count <= 4) return `${count} ${few}`;
   return `${count} ${many}`;
+}
+
+function ProfileSectionGroup({ id, icon, title, description, children }) {
+  const panelId = `${id}-links`;
+  return <details className="profile-section-group" id={id}>
+    <summary aria-controls={panelId}>
+      <span className="profile-section-icon" aria-hidden="true">{icon}</span>
+      <span className="profile-section-copy"><strong>{title}</strong><small>{description}</small></span>
+      <span className="profile-section-chevron" aria-hidden="true">⌄</span>
+    </summary>
+    <div className="profile-section-links" id={panelId}>{children}</div>
+  </details>;
+}
+
+function ProfileSectionLink({ to, title, description }) {
+  return <Link className="profile-section-link" to={to}>
+    <span><strong>{title}</strong><small>{description}</small></span>
+    <span className="profile-section-link-arrow" aria-hidden="true">→</span>
+  </Link>;
 }
 
 function ProfilePage() {
@@ -79,10 +95,6 @@ function ProfilePage() {
   const [trophySelection, setTrophySelection] = useState({ scopeKey: null, ids: [] });
   const [trophyError, setTrophyError] = useState("");
   const [waters, setWaters] = useState({ scopeKey: null, records: [] });
-  const [privacyData, setPrivacyData] = useState({ scopeKey: null, settings: DEFAULT_PRIVACY_SETTINGS, loading: true, error: "" });
-  const [privacySaving, setPrivacySaving] = useState(false);
-  const [preferenceOverride, setPreferenceOverride] = useState({ scopeKey: null, value: null });
-  const [preferenceError, setPreferenceError] = useState("");
   const [pendingConflict, setPendingConflict] = useState(null);
   const authActionRef = useRef(false);
   const dataActionRef = useRef(false);
@@ -94,12 +106,6 @@ function ProfilePage() {
   const { state: tripState } = useTrips();
   const { summary: progression } = useProgression();
   const { status: scopeStatus, scopeKey, ownerId } = dataScope;
-  const privacyLoading = dataScope.status !== "ready" || privacyData.scopeKey !== dataScope.scopeKey || privacyData.loading;
-  const privacySettings = privacyData.scopeKey === dataScope.scopeKey ? privacyData.settings : DEFAULT_PRIVACY_SETTINGS;
-  const privacyError = privacyData.scopeKey === dataScope.scopeKey ? privacyData.error : "";
-  const preferences = preferenceOverride.value && preferenceOverride.scopeKey === dataScope.scopeKey
-    ? preferenceOverride.value
-    : readPreferences(globalThis.localStorage, dataScope.scopeKey);
   const recordCatch = getBiggestCatch(catchState.catches);
   const bestWater = getBestWater(catchState.catches, waters.scopeKey === dataScope.scopeKey ? waters.records : []);
   const trophyCatches = useMemo(
@@ -139,18 +145,6 @@ function ProfilePage() {
     let active = true;
     if (scopeStatus !== "ready") return () => { active = false; };
     const scope = { scopeKey, ownerId };
-    privacyRepository.get(scope).then((settings) => {
-      if (active) setPrivacyData({ scopeKey: scope.scopeKey, settings, loading: false, error: "" });
-    }).catch((loadError) => {
-      if (active) setPrivacyData({ scopeKey: scope.scopeKey, settings: DEFAULT_PRIVACY_SETTINGS, loading: false, error: loadError?.message || "Nastavení soukromí se nepodařilo načíst." });
-    });
-    return () => { active = false; };
-  }, [scopeStatus, scopeKey, ownerId]);
-
-  useEffect(() => {
-    let active = true;
-    if (scopeStatus !== "ready") return () => { active = false; };
-    const scope = { scopeKey, ownerId };
     waterRepository.list(scope).then((records) => {
       if (active) setWaters({ scopeKey: scope.scopeKey, records });
     }).catch(() => {
@@ -158,36 +152,6 @@ function ProfilePage() {
     });
     return () => { active = false; };
   }, [scopeStatus, scopeKey, ownerId]);
-
-  const updateProfileVisibility = async (isPublic) => {
-    if (dataScope.status !== "ready" || privacySaving) return;
-    setPrivacySaving(true);
-    setPrivacyData((current) => ({ ...current, error: "" }));
-    try {
-      const saved = await privacyRepository.put({
-        ...privacySettings,
-        profileVisibility: isPublic ? "public" : "private",
-      }, dataScope);
-      setPrivacyData({ scopeKey: dataScope.scopeKey, settings: saved, loading: false, error: "" });
-    } catch (saveError) {
-      setPrivacyData((current) => ({ ...current, error: saveError?.message || "Viditelnost profilu se nepodařilo uložit." }));
-    } finally {
-      setPrivacySaving(false);
-    }
-  };
-
-  const updateDetailMode = (detailMode) => {
-    if (dataScope.status !== "ready") return;
-    try {
-      setPreferenceOverride({
-        scopeKey: dataScope.scopeKey,
-        value: savePreferences({ detailMode }, globalThis.localStorage, dataScope.scopeKey),
-      });
-      setPreferenceError("");
-    } catch (saveError) {
-      setPreferenceError(saveError?.message || "Režim zápisu se nepodařilo uložit.");
-    }
-  };
 
   const refreshAccountData = useCallback(async () => {
     try {
@@ -426,52 +390,48 @@ function ProfilePage() {
           : <div><strong>{bestWater?.name || "—"}</strong><span>NEJLEPŠÍ REVÍR{bestWater ? ` · ${bestWater.catchCount} ÚLOVKŮ` : ""}</span></div>}
       </section>
 
-      <nav className="profile-quick-links" aria-label="Osobní přehledy">
-        <ProfileAdminLink access={adminAccess} />
-        {isFeatureEnabled("publicProfiles") && <Link className="profile-stats-link" to="/profile/social"><span><strong>Rybářský profil</strong><small>Veřejné jméno, fotografie a soukromí</small></span><b aria-hidden="true">→</b></Link>}
-        <Link className="profile-stats-link" to="/friends"><span><strong>Přátelé</strong><small>Moji přátelé a pozvání mezi účty</small></span><b aria-hidden="true">→</b></Link>
-        {isFeatureEnabled("userDiscovery") && <Link className="profile-stats-link" to="/community/find"><span><strong>Najít rybáře</strong><small>Veřejné profily a rybářské zájmy</small></span><b aria-hidden="true">→</b></Link>}
-        {isFeatureEnabled("community") && <Link className="profile-stats-link" to="/community"><span><strong>Komunita</strong><small>Sdílené úlovky a příspěvky přátel</small></span><b aria-hidden="true">→</b></Link>}
-        <Link className="profile-stats-link profile-waters-link" to="/waters"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true" focusable="false"><path d="M20 10c0 6-8 11-8 11S4 16 4 10a8 8 0 1 1 16 0Z" /><circle cx="12" cy="10" r="2.5" /></svg><span><strong>Moje revíry</strong><small>Uložené revíry a oblíbené vody</small></span><b aria-hidden="true">→</b></Link>
-        <Link className="profile-stats-link" to="/stats"><span><strong>Statistiky</strong><small>Analýza úlovků a vycházek</small></span><b aria-hidden="true">→</b></Link>
-        <Link className="profile-secondary-link" to="/gallery"><span aria-hidden="true">▦ </span>Galerie <span aria-hidden="true">→</span></Link>
-        <Link className="profile-secondary-link" to="/insights">Osobní přehledy <span aria-hidden="true">→</span></Link>
-        <Link className="profile-secondary-link" to="/season-story">Příběh sezóny <span aria-hidden="true">→</span></Link>
-        <Link className="profile-secondary-link" to="/year-summary">Roční souhrn <span aria-hidden="true">→</span></Link>
-        <Link className="profile-secondary-link" to="/settings">Nastavení <span aria-hidden="true">→</span></Link>
-        <Link className="profile-secondary-link" to="/notifications">Oznámení <span aria-hidden="true">→</span></Link>
-        <Link className="profile-secondary-link" to="/album">Druhové album <span aria-hidden="true">→</span></Link>
-        <Link className="profile-secondary-link" to="/map">Soukromá mapa <span aria-hidden="true">→</span></Link>
-        <Link className="profile-secondary-link" to="/privacy">Soukromí <span aria-hidden="true">→</span></Link>
-        <Link className="profile-secondary-link" to="/levels">Úrovně a XP <span aria-hidden="true">→</span></Link>
-        <Link className="profile-secondary-link" to="/achievements">Achievementy <span aria-hidden="true">→</span></Link>
-        <Link className="profile-secondary-link" to="/challenges">Osobní výzvy <span aria-hidden="true">→</span></Link>
-        <Link className="profile-secondary-link" to="/streak">Týdenní série <span aria-hidden="true">→</span></Link>
-        {isFeatureEnabled("supporter") && <Link className="profile-secondary-link" to="/supporter">Supporter <span aria-hidden="true">→</span></Link>}
+      <nav className="profile-sections" aria-label="Osobní sekce">
+        <ProfileSectionGroup id="profile-goals" icon="🏆" title="Postup a cíle" description="Úrovně, úspěchy, výzvy a série">
+          <ProfileSectionLink to="/levels" title="Úrovně a XP" description="Hodnosti a pravidla postupu" />
+          <ProfileSectionLink to="/achievements" title="Úspěchy" description="Odemčené i další milníky" />
+          <ProfileSectionLink to="/challenges" title="Úkoly a výzvy" description="Denní, týdenní a sezónní cíle" />
+          <ProfileSectionLink to="/streak" title="Týdenní série" description="Aktivita, odměny a zmrazení série" />
+        </ProfileSectionGroup>
+
+        <ProfileSectionGroup id="profile-reports" icon="📊" title="Přehledy a revíry" description="Statistiky, sezóna, mapa a uložené vody">
+          <ProfileSectionLink to="/stats" title="Statistiky" description="Souhrn úlovků a vycházek" />
+          <ProfileSectionLink to="/gallery" title="Galerie" description="Fotografie uložených úlovků" />
+          <ProfileSectionLink to="/insights" title="Osobní přehledy" description="Vzorce a doporučení z deníku" />
+          <ProfileSectionLink to="/season-story" title="Příběh sezóny" description="Nejzajímavější okamžiky sezóny" />
+          <ProfileSectionLink to="/year-summary" title="Roční souhrn" description="Rok v úlovcích a vycházkách" />
+          <ProfileSectionLink to="/waters" title="Moje revíry" description="Uložené revíry a oblíbené vody" />
+          <ProfileSectionLink to="/map" title="Soukromá mapa" description="Místa z tvého soukromého deníku" />
+        </ProfileSectionGroup>
+
+        <ProfileSectionGroup id="profile-community" icon="👥" title="Komunita" description="Přátelé, sdílení a rybářský profil">
+          <ProfileSectionLink to="/friends" title="Přátelé" description="Přátelé a pozvání mezi účty" />
+          {isFeatureEnabled("userDiscovery") && <ProfileSectionLink to="/community/find" title="Najít rybáře" description="Veřejné profily a rybářské zájmy" />}
+          {isFeatureEnabled("community") && <ProfileSectionLink to="/community" title="Komunita" description="Sdílené úlovky a příspěvky přátel" />}
+          {isFeatureEnabled("supporter") && <ProfileSectionLink to="/supporter" title="Supporter" description="Podpora projektu a výhody" />}
+        </ProfileSectionGroup>
+
+        <ProfileSectionGroup id="profile-settings" icon="⚙️" title="Nastavení" description="Předvolby, soukromí, oznámení a data">
+          <ProfileSectionLink to="/settings" title="Nastavení aplikace" description="Zobrazení, místní funkce, export a účet" />
+          <ProfileSectionLink to="/privacy" title="Soukromí a viditelnost" description="GPS, deník, sdílení a osobní údaje" />
+          {isFeatureEnabled("publicProfiles") && <ProfileSectionLink to="/profile/social" title="Veřejný rybářský profil" description="Jméno, fotografie a dohledatelnost" />}
+          <ProfileSectionLink to="/notifications" title="Oznámení" description="Přehled upozornění a jejich nastavení" />
+        </ProfileSectionGroup>
       </nav>
 
-      <section className="profile-panel profile-preferences" aria-labelledby="profile-preferences-title">
-        <h2 id="profile-preferences-title">Předvolby profilu</h2>
-        <label className="profile-restore-mode">Výchozí režim zápisu
-          <select value={preferences.detailMode} onChange={(event) => updateDetailMode(event.target.value)}>
-            <option value="simple">Rychlý zápis</option>
-            <option value="detailed">Podrobný zápis</option>
-          </select>
-        </label>
-        <p>Volba se uloží a použije jako výchozí při přidávání úlovku.</p>
-        {preferenceError && <p className="profile-error" role="alert">{preferenceError}</p>}
-        <label className="privacy-checkbox-row profile-public-toggle">
-          <input type="checkbox" checked={privacySettings.profileVisibility === "public"} onChange={(event) => updateProfileVisibility(event.target.checked)} disabled={privacyLoading || privacySaving || dataScope.status !== "ready"} />
-          <span>Místní předvolba veřejného profilu</span>
-        </label>
-        <p className="profile-privacy-note">Tato starší místní předvolba nemění online dohledatelnost. Veřejné zobrazení a hledání nastav v části Rybářský profil.</p>
-        {privacyLoading && <p className="loading-state" role="status">Načítám soukromí profilu…</p>}
-        {privacySaving && <p role="status">Ukládám viditelnost profilu…</p>}
-        {privacyError && <p className="profile-error" role="alert">{privacyError}</p>}
-        <Link className="profile-secondary-link" to="/privacy">Další nastavení soukromí <span aria-hidden="true">→</span></Link>
-      </section>
+      <ProfileAdminLink access={adminAccess} />
 
-      <section className="profile-trophy" aria-labelledby="profile-trophy-title">
+      <section className="profile-showcase" aria-labelledby="profile-showcase-title">
+        <div className="profile-showcase-heading">
+          <h2 id="profile-showcase-title">Moje vitrína</h2>
+          <p>Trofejní úlovky a objevené druhy na jednom místě.</p>
+        </div>
+        <div className="profile-showcase-grid">
+        <section className="profile-trophy" aria-labelledby="profile-trophy-title">
         <div className="profile-trophy-heading">
           <h2 id="profile-trophy-title">Trofejní úlovky</h2>
           <Link to="/journal">Deník →</Link>
@@ -494,14 +454,23 @@ function ProfilePage() {
               {trophyError && <p role="alert">{trophyError}</p>}
             </>
             : <p className="profile-trophy-empty">Trofejní úlovky se zobrazí po uložení prvního záznamu.</p>}
-      </section>
+        </section>
 
-      <section className="profile-album-preview" aria-labelledby="profile-album-title">
-        <div className="profile-trophy-heading"><h2 id="profile-album-title">Objevené druhy</h2><Link to="/album">{progression.speciesCount} druhů →</Link></div>
+        <section className="profile-album-preview" aria-labelledby="profile-album-title">
+        <div className="profile-trophy-heading"><h2 id="profile-album-title">Druhové album</h2><Link to="/album">{progression.speciesCount} druhů →</Link></div>
         {speciesPreview.length ? <div className="profile-album-grid">{speciesPreview.map((species) => <Link to={`/species/${species.key}`} key={species.key}><span aria-hidden="true">🐟</span><strong>{species.label}</strong></Link>)}</div>
           : <p className="profile-trophy-empty">Album se začne plnit po zapsání prvního úlovku.</p>}
+        </section>
+        </div>
       </section>
 
+      <details className="profile-data-tools">
+        <summary>
+          <span className="profile-section-icon" aria-hidden="true">💾</span>
+          <span className="profile-section-copy"><strong>Účet a místní data</strong><small>Přihlášení, synchronizace, záloha a obnova</small></span>
+          <span className="profile-section-chevron" aria-hidden="true">⌄</span>
+        </summary>
+        <div className="profile-data-tools-content">
       <section className="profile-panel" aria-labelledby="local-backup-title">
         <h2 id="local-backup-title">Místní data</h2>
         <p>Úlovky, vycházky a jejich fotografie jsou uložené v tomto prohlížeči. Export vytvoří kopii pro bezpečné uložení nebo budoucí obnovu.</p>
@@ -545,14 +514,6 @@ function ProfilePage() {
         </div>
         {message && <p className="profile-feedback" role="status">{message}</p>}
         {error && <p className="profile-error" role="alert">{error}</p>}
-      </section>
-
-      <section className="profile-panel profile-progress" aria-labelledby="progress-title">
-        <div className="profile-progress-heading"><div><h2 id="progress-title">Rybářský postup</h2><p>Vychází z trvale uložených odměn v deníku.</p></div><strong>Úroveň {progression.level}</strong></div>
-        <div className="profile-progress-bar" role="progressbar" aria-label="Postup do další úrovně" aria-valuemin="0" aria-valuemax="100" aria-valuenow={progression.progressPercent}><span style={{ width: `${progression.progressPercent}%` }} /></div>
-        <p>{progression.xp} XP{progression.nextThreshold ? ` · další úroveň při ${progression.nextThreshold} XP` : " · dosažena nejvyšší úroveň"}</p>
-        <h3>Milníky · {progression.completedAchievementCount}/{progression.achievements.length}</h3>
-        <ul className="profile-achievements">{progression.achievements.map((achievement) => <li className={achievement.isCompleted ? "is-complete" : ""} key={achievement.id}><span aria-hidden="true">{achievement.isCompleted ? "✓" : "○"}</span><div><strong>{achievement.name}</strong><small>{achievement.description}</small></div></li>)}</ul>
       </section>
 
       <section className="profile-panel profile-account" aria-labelledby="account-title">
@@ -652,6 +613,8 @@ function ProfilePage() {
         </div>}
         <p className="profile-privacy-note">Odhlášení místní data nemaže. Starší deník bez účtu se přenese jen po výslovném potvrzení výše.</p>
       </section>
+        </div>
+      </details>
       {confirmingReplace && <ConfirmDialog titleId="replace-backup-title" descriptionId="replace-backup-description" title="Nahradit místní deník?" description="Všechny místní úlovky a vycházky budou nahrazeny obsahem vybrané zálohy. Tuto akci nelze vrátit." busy={restoring} confirmLabel="Nahradit deník" busyLabel="Obnovuji…" confirmClassName="catch-delete-confirm" onCancel={() => setConfirmingReplace(false)} onConfirm={performRestoreBackup} />}
       {confirmingLink && <ConfirmDialog titleId="link-journal-title" descriptionId="link-journal-description" title="Propojit místní deník s účtem?" description={`Do synchronizační fronty se připraví ${ownerless.catches} úlovků, ${ownerless.trips} vycházek a ${ownerless.photos} fotografií. Místní kopie zůstanou v tomto zařízení.`} busy={dataActionBusy} confirmLabel="Propojit deník" busyLabel="Propojuji…" confirmClassName="profile-account-secondary" onCancel={() => setConfirmingLink(false)} onConfirm={performLinkLocalJournal} />}
       {pendingConflict && <ConfirmDialog titleId="resolve-conflict-title" descriptionId="resolve-conflict-description" title="Vyřešit konflikt synchronizace?" description={`Použije se ${pendingConflict.choice === "local" ? "místní" : "vzdálená"} verze. Druhá verze zůstane zachovaná, dokud se tato akce úspěšně nedokončí.`} busy={dataActionBusy} confirmLabel={`Použít ${pendingConflict.choice === "local" ? "místní" : "vzdálenou"} verzi`} busyLabel="Ukládám…" confirmClassName="profile-account-secondary" onCancel={() => setPendingConflict(null)} onConfirm={performResolveConflict} />}

@@ -9,7 +9,7 @@ test("Home analysis first render is safe before async cache loading for guests a
   try {
     const { default: Card } = await server.ssrLoadModule("/src/features/home/components/HomeInsightCard.jsx");
     const { DataScopeContext } = await server.ssrLoadModule("/src/features/auth/context/dataScopeContextValue.js");
-    const { StaticRouter } = await server.ssrLoadModule("react-router-dom/server");
+    const { StaticRouter } = await server.ssrLoadModule("react-router");
     const { default: Boundary } = await server.ssrLoadModule("/src/features/home/components/HomeInsightBoundary.jsx");
     const fixtures = [[], [{ id: "legacy", caughtAt: "2026-10-01T10:00:00Z", speciesKey: "commonCarp", lengthCm: 50 }],
       [{ id: "quick", caughtAt: "2026-10-01T10:00:00Z", captureMode: "quick", aiRecognition: { status: "waiting_internet" } }]];

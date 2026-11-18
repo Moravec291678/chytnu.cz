@@ -10,7 +10,7 @@ test("admin route, Profile link and delegated navigation render safely without t
     const { default: Page, AdminWorkspace } = await server.ssrLoadModule("/src/features/admin/AdminDashboard.jsx");
     const { default: ProfileLink } = await server.ssrLoadModule("/src/features/admin/ProfileAdminLink.jsx");
     const { AuthContext } = await server.ssrLoadModule("/src/features/auth/context/authContextValue.js");
-    const { StaticRouter } = await server.ssrLoadModule("react-router-dom/server");
+    const { StaticRouter } = await server.ssrLoadModule("react-router");
     const render = (component, location = "/admin", user = null) => renderToString(React.createElement(StaticRouter, { location }, React.createElement(AuthContext.Provider, { value: { user } }, component)));
     const denied = render(React.createElement(Page));
     assert.match(denied, /přihlas pověřeným účtem/); assert.doesNotMatch(denied, /Sekce administrace/);

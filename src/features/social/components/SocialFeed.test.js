@@ -2,7 +2,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { StaticRouter } from "react-router-dom/server.js";
 import { createServer } from "vite";
 
 test("online feed presents only approved fields and honest states", async t => {
@@ -10,8 +9,17 @@ test("online feed presents only approved fields and honest states", async t => {
   try {
     const { SocialPostCard, SocialFeedState } = await server.ssrLoadModule("/src/features/social/components/SocialFeed.jsx");
     const { SocialInteractionsPanel } = await server.ssrLoadModule("/src/features/social/components/SocialInteractions.jsx");
+    const { default: CommunityEntryComposer } = await server.ssrLoadModule("/src/features/social/components/CommunityEntryComposer.jsx");
+    const { AuthContext } = await server.ssrLoadModule("/src/features/auth/context/authContextValue.js");
+    const { StaticRouter } = await server.ssrLoadModule("react-router");
     const render = (component, props) => renderToStaticMarkup(React.createElement(StaticRouter, { location: "/community" }, React.createElement(component, props)));
     const post = { id: "public-1", author: { uid: "angler-1", displayName: "Petr", handle: "petr", badgeRole: "OWNER" }, content: { species: "Kapr", lengthCm: 53, weightKg: null, caughtAt: "2026-11", description: "<script>alert(1)</script>", privateGps: "SECRET-GPS" }, visibility: "friends", revision: 1, hasPhoto: false, sourceCatchId: "SECRET-CATCH", reactions: 88 };
+    await t.test("unauthenticated community composer renders without reading action state", () => {
+      const html = renderToStaticMarkup(React.createElement(StaticRouter, { location: "/community" },
+        React.createElement(AuthContext.Provider, { value: { user: null } },
+          React.createElement(CommunityEntryComposer, { onPublished() {} }))));
+      assert.equal(html, "");
+    });
     await t.test("safe text, approved measurements, public routing and trusted badge", () => {
       const html = render(SocialPostCard, { post });
       assert.match(html, /53 cm/); assert.match(html, /Pro přátele/); assert.match(html, /2026-11/);

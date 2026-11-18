@@ -105,6 +105,7 @@ const AUTH_ROUTES = Object.freeze({
 const TOKEN_REJECTION_CODES = new Set([
   "auth/id-token-expired", "auth/id-token-revoked", "auth/argument-error", "auth/invalid-id-token",
 ]);
+const ACCOUNT_ACCESS_REJECTION_CODES = new Set(["account_deletion_started", "account_suspended"]);
 const ADMIN_ERROR_CODES = new Set([
   "firebase_admin_env_missing", "firebase_admin_json_parse_error", "firebase_admin_service_account_invalid",
   "firebase_project_mismatch", "firebase_admin_import_app_error", "firebase_admin_import_auth_error",
@@ -207,6 +208,10 @@ export function createCloudinaryApi({
     }
     let identity;
     try { identity = await verifyToken(bearer[1], action, serviceAccount); } catch (error) {
+      if (ACCOUNT_ACCESS_REJECTION_CODES.has(error?.code)) {
+        send(res, 403, { error: "account_unavailable", message: "Photo access is not allowed." });
+        return null;
+      }
       const rejectedToken = TOKEN_REJECTION_CODES.has(error?.code);
       const status = rejectedToken ? 401 : 503;
       const errorClass = classifyFirebaseAuthFailure(error);
@@ -560,6 +565,15 @@ export async function verifyFirebaseIdToken(auth, token) {
   }
 }
 
+export async function ensurePhotoAccountActive(db, uid) {
+  const [deletion, suspension] = await Promise.all([
+    db.doc(`accountDeletions/${uid}`).get(),
+    db.doc(`accountSuspensions/${uid}`).get(),
+  ]);
+  if (deletion.exists) throw Object.assign(new Error("Account access is unavailable."), { code: "account_deletion_started" });
+  if (suspension.exists) throw Object.assign(new Error("Account access is unavailable."), { code: "account_suspended" });
+}
+
 export async function getCloudinarySdk(env) {
   const { v2 } = await import("cloudinary");
   v2.config({ cloud_name: env.CLOUDINARY_CLOUD_NAME, api_key: env.CLOUDINARY_API_KEY, api_secret: env.CLOUDINARY_API_SECRET, secure: true });
@@ -601,7 +615,7 @@ export function createProductionCloudinaryApi({ env = globalThis.process?.env ??
     verifyToken: async (token, _action, serviceAccount) => {
       const { auth, db } = await getAdminContext(env, serviceAccount);
       const identity = await verifyFirebaseIdToken(auth, token);
-      if ((await db.doc(`accountDeletions/${identity.uid}`).get()).exists) throw new Error("account_deletion_started");
+      await ensurePhotoAccountActive(db, identity.uid);
       return identity;
     },
     getPhotoAccess: (uid, catchId, photoId) => getPhotoAccess(env, uid, catchId, photoId),
