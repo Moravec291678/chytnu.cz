@@ -10,7 +10,8 @@ Stage 8 covers authenticated reactions, comments, reports, moderation, rate limi
 
 - Branch: `codex/ui-terminology-length-priority`
 - Base before this work: `06bfc4c4b8ab725712c7b291891b750234fca768`
-- Commit: pending at handoff preparation; record the resulting SHA after the related changes are committed.
+- Implementation commit: `91fb60d7a01199283cb0bd67df702a8a6d35a8d4`
+- A follow-up documentation-only commit records this SHA in the handoff.
 - Only Stage 8 files are included in the worktree changes.
 
 ## Implemented and reviewed
@@ -71,6 +72,6 @@ No production Firebase index/rules deployment, app deployment, push, or merge wa
 
 ## Instructions for Codex
 
-1. Verify the commit SHA recorded after commit and confirm this handoff is in that commit.
+1. Verify the recorded implementation commit and the follow-up handoff update.
 2. Do a final read-only review of the Stage 8 diff and its test results; do not restart or implement another stage.
 3. Coordinate Firebase index/rules rollout and production release only after approval.
