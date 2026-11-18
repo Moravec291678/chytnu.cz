@@ -17,6 +17,7 @@ import { publicFishingStats } from "../data/publicFishingStats.js";
 import { publicAchievementChoices,selectedPublicAchievements } from "../data/publicProgressionModel.js";
 import { projectPublicProgression,publicProgressionFromSummary } from "./publicProgressionService.js";
 import { createSocialFeedService } from "./socialFeedService.js";
+import { createSocialInteractionService } from "./socialInteractionService.js";
 export const profileError = (code, status = 400) => Object.assign(new Error(code), { code, status });
 export function createPublicProfileService({ db, auth, avatar, socialPhoto, env = {}, cursorSecret, now = () => Date.now() }) {
   const repository = createSocialRepository({ db, auth, now, profilesEnabled: true });
@@ -24,6 +25,7 @@ export function createPublicProfileService({ db, auth, avatar, socialPhoto, env 
   const media = socialPhoto ? createSocialPhotoCoordinator({db,photo:socialPhoto,now}) : null;
   const publications = createPublicationService({db,media,cursors:createSocialCursor({env,secret:cursorSecret,now}),env,now});
   const feed=createSocialFeedService({db,publications,cursors:createSocialCursor({env,secret:cursorSecret,now})});
+  const interactions=createSocialInteractionService({db,publications,cursors:createSocialCursor({env,secret:cursorSecret,now}),env,now});
   async function identity(token) {
     if (!token) throw profileError("authentication_required", 401);
     try { return (await auth.verifyIdToken(token, true)).uid; } catch { throw profileError("authentication_required", 401); }
@@ -86,6 +88,11 @@ export function createPublicProfileService({ db, auth, avatar, socialPhoto, env 
     if (!uid && !["view", "image", "posts.list", "posts.image","posts.view"].includes(action)) throw profileError("authentication_required", 401);
     await limited(uid, action);
     if (action === "feed.list") return feed.list(uid,payload);
+    if (action === "interactions.list") return interactions.list(uid,payload);
+    if (action === "reactions.set") return interactions.setReaction(uid,payload);
+    if (action === "comments.save") return interactions.saveComment(uid,payload);
+    if (action === "comments.delete") return interactions.deleteComment(uid,payload);
+    if (action === "reports.create") return interactions.createReport(uid,payload);
     if (action === "entries.save") return publications.saveEntry(uid,payload);
     if (action === "progression.compare") return repository.compareProfiles(token,payload.targetUid,projection);
     if (action === "posts.save") return publications.save(uid,payload);

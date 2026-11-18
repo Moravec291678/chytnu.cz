@@ -114,6 +114,8 @@ export function createAccountDeletionService({ db, auth, photoDeletion, deleteSo
           db.doc(`serverRateLimits/admin-photo-${uid}`).delete(),
           db.doc(`serverRateLimits/support-${uid}`).delete(),
           db.doc(`serverRateLimits/social-${createHash("sha256").update(uid).digest("hex")}`).delete(),
+          ...["reaction-minute", "reaction-day", "comment-minute", "comment-day", "report"].map(kind =>
+            db.doc(`serverRateLimits/social-${kind}-${createHash("sha256").update(uid).digest("hex")}`).delete()),
           db.doc(`serverRateLimits/social-http-${createHash("sha256").update(uid).digest("hex")}`).delete(),
           db.doc(`serverRateLimits/social-media-${createHash("sha256").update(uid).digest("hex")}`).delete(),
           db.doc(`serverRateLimits/social-comparison-${createHash("sha256").update(uid).digest("hex")}`).delete(),

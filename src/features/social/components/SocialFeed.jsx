@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import CollaboratorBadge from "../../admin/CollaboratorBadge.jsx";
 import { SharedImage } from "./PublicFishingProfile.jsx";
 import SocialEntryDetails from "./SocialEntryDetails.jsx";
+import SocialInteractions from "./SocialInteractions.jsx";
 import { PostImage } from "./SocialGallery.jsx";
 import { useSocialFeed } from "./useSocialFeed.js";
 import "./socialFeed.css";
@@ -33,6 +34,7 @@ export function SocialPostCard({ post, refreshKey, compact = false, detail = fal
       {!compact && <>{content.description && <p className="online-post-description">{content.description}</p>}{(content.method || content.waterName) && <p className="online-post-context">{[content.method, content.waterName].filter(Boolean).join(" · ")}</p>}</>}
       {!detail && !compact && <Link className="online-post-detail" to={path}>Detail příspěvku <span aria-hidden="true">→</span></Link>}
     </div>
+    {detail && <SocialInteractions post={post} />}
     {detail && <footer className="online-post-footer"><Link to={`/u/${encodeURIComponent(author.uid)}`}>Profil a sdílená galerie rybáře →</Link></footer>}
   </article>;
 }

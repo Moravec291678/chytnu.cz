@@ -6,6 +6,9 @@
     { "collectionGroup":"socialPosts","queryScope":"COLLECTION","fields":[
       {"fieldPath":"ownerUid","order":"ASCENDING"},{"fieldPath":"createdAt","order":"DESCENDING"},{"fieldPath":"__name__","order":"DESCENDING"}
     ] },
+    { "collectionGroup":"socialReports","queryScope":"COLLECTION","fields":[
+      {"fieldPath":"status","order":"ASCENDING"},{"fieldPath":"createdAt","order":"DESCENDING"},{"fieldPath":"__name__","order":"DESCENDING"}
+    ] },
     { "collectionGroup": "socialRelationships", "queryScope": "COLLECTION", "fields": [
       { "fieldPath": "memberUids", "arrayConfig": "CONTAINS" }, { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "__name__", "order": "ASCENDING" }
     ] },

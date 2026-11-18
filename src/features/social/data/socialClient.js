@@ -14,6 +14,9 @@ const messages = {
   request_limit: "Byl dosažen bezpečnostní limit. Zkus to později.", social_rate_limit: "Příliš mnoho změn. Zkus to za minutu.",
   invalid_avatar: "Avatar musí být JPEG do 200 kB a 512 × 512 bodů.", avatar_unavailable: "Avatar nyní nelze uložit nebo načíst.",
   save_profile_first: "Nejdříve ulož svůj rybářský profil.", offline: "Veřejný profil vyžaduje připojení. Soukromý deník funguje dál i offline.",
+  invalid_interaction: "Údaje reakce nebo komentáře nejsou platné.", interaction_conflict: "Reakce se mezitím změnila. Načti příspěvek znovu.",
+  comment_unavailable: "Komentář již není dostupný nebo ho nemůžeš upravit.", comment_conflict: "Komentář se mezitím změnil. Načti jej znovu.",
+  comment_duplicate: "Tento komentář byl nedávno odeslán. Počkej před dalším pokusem.",
 };
 export async function socialRequest(action, payload = {}, { signal } = {}) {
   if (globalThis.navigator?.onLine === false) throw new Error(messages.offline);

@@ -13,6 +13,7 @@ export function validateSupportRequest(body) {
     "support.content": ["uid", "caseId", "grantId", "category", "cursor"], "support.photo": ["uid", "caseId", "grantId", "catchId", "photoId"],
     "users.public": ["uid", "cursor"], "users.history": ["uid", "cursor"], "users.index": [],
     "moderation.set": ["uid", "catchId", "hidden", "reason", "expectedRevision"],
+    "social.reports.list": ["cursor"], "social.report.resolve": ["reportId", "status", "reason", "hide"],
     "progression.preview": ["uid", "caseId", "grantId", "delta"], "progression.adjust": ["uid", "caseId", "grantId", "delta", "reason", "operationId", "expectedRevision", "expectedBaseXp"], "progression.self": [],
   };
   if (!Object.hasOwn(fields, body.action)) return null;
@@ -46,6 +47,14 @@ export function validateSupportRequest(body) {
   if (value.action === "progression.adjust") {
     validUid(value.operationId); value.reason = text(value.reason, 1000); value.expectedRevision = validRevision(value.expectedRevision);
     if (!Number.isSafeInteger(value.expectedBaseXp) || value.expectedBaseXp < 0 || value.expectedBaseXp > 1000000000) throw adminError("invalid_adjustment");
+  }
+  if (value.action === "social.reports.list" && value.cursor !== undefined) {
+    if (typeof value.cursor !== "string" || !/^.{1,4096}$/.test(value.cursor)) throw adminError("invalid_cursor");
+  }
+  if (value.action === "social.report.resolve") {
+    if (typeof value.reportId !== "string" || !/^[a-f0-9]{64}$/.test(value.reportId)) throw adminError("invalid_request");
+    if (!["resolved", "dismissed"].includes(value.status) || typeof value.hide !== "boolean") throw adminError("invalid_status");
+    value.reason = text(value.reason, 1000);
   }
   return value;
 }

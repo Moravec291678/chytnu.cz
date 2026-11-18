@@ -9,6 +9,7 @@ test("online feed presents only approved fields and honest states", async t => {
   const server = await createServer({ server: { middlewareMode: true }, appType: "custom", optimizeDeps: { noDiscovery: true, include: [], entries: [] } });
   try {
     const { SocialPostCard, SocialFeedState } = await server.ssrLoadModule("/src/features/social/components/SocialFeed.jsx");
+    const { SocialInteractionsPanel } = await server.ssrLoadModule("/src/features/social/components/SocialInteractions.jsx");
     const render = (component, props) => renderToStaticMarkup(React.createElement(StaticRouter, { location: "/community" }, React.createElement(component, props)));
     const post = { id: "public-1", author: { uid: "angler-1", displayName: "Petr", handle: "petr", badgeRole: "OWNER" }, content: { species: "Kapr", lengthCm: 53, weightKg: null, caughtAt: "2026-11", description: "<script>alert(1)</script>", privateGps: "SECRET-GPS" }, visibility: "friends", revision: 1, hasPhoto: false, sourceCatchId: "SECRET-CATCH", reactions: 88 };
     await t.test("safe text, approved measurements, public routing and trusted badge", () => {
@@ -16,6 +17,16 @@ test("online feed presents only approved fields and honest states", async t => {
       assert.match(html, /53 cm/); assert.match(html, /Pro přátele/); assert.match(html, /2026-11/);
       assert.match(html, /href="\/community\/post\/public-1"/); assert.match(html, /href="\/u\/angler-1"/);
       assert.match(html, /&lt;script&gt;/); assert.doesNotMatch(html, /<script>|SECRET|88|0 kg|NaN|1\. 11\./);
+    });
+    await t.test("comment content is rendered as escaped text", () => {
+      const html = render(SocialInteractionsPanel, {
+        data: { counts: {}, myReaction: null, commentCount: 1, comments: [{ id: "comment-1", author: { uid: "angler-1", displayName: "Petr" }, text: '<script>alert("x")</script>', createdAt: Date.now(), revision: 1 }] },
+        uid: "angler-2", online: true, commentsOpen: true,
+        onCommentsToggle() {}, onReaction() {}, onText() {}, onSave() {}, onEdit() {}, onCancelEdit() {},
+        onDelete() {}, onMore() {}, onReload() {}, onReport() {}, onReportChange() {}, onReportSubmit() {}, onReportClose() {},
+      });
+      assert.match(html, /&lt;script&gt;alert\(&quot;x&quot;\)&lt;\/script&gt;/);
+      assert.doesNotMatch(html, /<script>/);
     });
     await t.test("offline and auth states do not expose previously loaded posts", () => {
       const child = React.createElement("span", {}, "SECRET-STALE");

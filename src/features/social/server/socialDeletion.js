@@ -1,3 +1,5 @@
+import { cleanupInteractionReference } from "./socialInteractionCounters.js";
+
 // Executed before the existing private-data phase removes users/{uid}.
 // Nested future content must register its canonical path in the private manifest.
 export async function deleteSocialPage(db, uid, pageSize = 50, deleteAvatar) {
@@ -8,7 +10,7 @@ export async function deleteSocialPage(db, uid, pageSize = 50, deleteAvatar) {
     if (typeof path !== "string" || !/^(socialPosts\/[^/]+\/(comments|reactions)\/[^/]+|waterRooms\/ris-[a-f0-9]{24}\/messages\/[^/]+)$/.test(path)) throw new Error("invalid_social_cleanup_reference");
     const ref = db.doc(path), record = await ref.get();
     if (record.exists && record.data().ownerUid !== uid) throw new Error("invalid_social_cleanup_owner");
-    await db.recursiveDelete(ref); await entry.ref.delete();
+    await cleanupInteractionReference({ db, path, uid, manifestRef: entry.ref });
   }
   if (manifest.size) return true;
   for (const [collection, field, op] of [["publicHandles", "uid", "=="], ["socialRelationships", "memberUids", "array-contains"],
@@ -16,7 +18,14 @@ export async function deleteSocialPage(db, uid, pageSize = 50, deleteAvatar) {
     ["socialPosts", "ownerUid", "=="], ["nearbyPresence", "ownerUid", "=="], ["waterPresence", "ownerUid", "=="],
     ["privateConversations", "memberUids", "array-contains"], ["crews", "ownerUid", "=="]]) {
     const page = await db.collection(collection).where(field, op, uid).limit(pageSize).get();
-    for (const entry of page.docs) await db.recursiveDelete(entry.ref);
+    for (const entry of page.docs) {
+      if (collection === "socialPosts") {
+        // Child interactions belong to their authors and stay inaccessible without a parent post.
+        await entry.ref.delete();
+      } else {
+        await db.recursiveDelete(entry.ref);
+      }
+    }
     if (page.size) return true;
   }
   // A former member must not remain discoverable in another user's crew.

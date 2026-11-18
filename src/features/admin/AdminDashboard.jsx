@@ -18,10 +18,11 @@ const STATUSES = ["New", "Planned", "In Progress", "Testing", "Done", "Cancelled
 const STATUS_NAMES = { New: "Nový", Planned: "Plánovaný", "In Progress": "Rozpracovaný", Testing: "Testování", Done: "Hotový", Cancelled: "Zrušený" };
 const PRIORITIES = { low: "Nízká", normal: "Běžná", high: "Vysoká", critical: "Kritická" };
 const NAVIGATION = [["", "Přehled", null], ["users", "Uživatelé", "users.read"], ["limits", "Limity", "owner"],
+  ["reports", "Hlášení komunity", "moderation"],
   ["features", "Funkce", "owner"], ["ai", "AI", "monitoring"], ["tasks", "Úkoly a vývoj", "tasks"],
   ["monitoring", "Provoz", "monitoring"], ["audit", "Audit", "audit"], ["settings", "Nastavení", "owner"]];
 const NAVIGATION_GROUPS = [["Přehled", [""]], ["Uživatelé", ["users"]], ["Produkt a vývoj", ["tasks"]],
-  ["AI a funkce", ["ai", "features", "limits"]], ["Monitoring", ["monitoring"]], ["Audit a nastavení", ["audit", "settings"]]];
+  ["Moderace", ["reports"]], ["AI a funkce", ["ai", "features", "limits"]], ["Monitoring", ["monitoring"]], ["Audit a nastavení", ["audit", "settings"]]];
 const timestamp = value => value && Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString("cs-CZ") : "Nedostupné";
 const metric = value => typeof value === "number" && Number.isFinite(value) ? value.toLocaleString("cs-CZ") : "Nedostupné";
 const datetimeInput = value => {
@@ -73,6 +74,7 @@ export function AdminWorkspace({ session }) {
     {!item || !permitted(access, item[2]) ? <p role="alert">Tato sekce není pro tvé oprávnění dostupná.</p>
       : detailUid ? <AdminUserDetail key={detailUid} uid={detailUid} {...{ client, access, change, busy }} renderAccount={(user, refresh) => <UserForm key={`${user.uid}:${user.revision}`} {...{ user, access, busy }} save={patch => change("users.update", { uid:user.uid, patch, expectedRevision:user.revision }, refresh, "Uložit změny účtu? Soukromý deník se nemaže; změna se audituje.")} />} />
       : section === "users" ? <UsersPanel client={client} access={access} change={change} busy={busy} />
+        : section === "reports" ? <SocialReportsPanel client={client} access={access} change={change} busy={busy} />
         : section === "tasks" ? <TasksPanel client={client} change={change} busy={busy} />
           : ["limits", "features", "settings"].includes(section) ? <ConfigurationPanel key={section} section={section} client={client} change={change} busy={busy} />
             : section === "audit" ? <AuditPanel client={client} />
@@ -88,6 +90,19 @@ export function AdminWorkspace({ session }) {
 function ResourceStatus({ resource }) {
   if (resource.loading) return <p role="status">Načítám údaje ze serveru…</p>;
   return resource.error ? <div role="alert" className="admin-error"><p>{resource.error}</p><button type="button" onClick={resource.refresh}>Zkusit znovu</button></div> : null;
+}
+function SocialReportsPanel({ client, change, busy }) {
+  const [cursor, setCursor] = useState(null), [history, setHistory] = useState([]);
+  const resource = useAdminResource(client, "social.reports.list", cursor ? { cursor } : {});
+  const reports = resource.data?.reports ?? [];
+  return <section className="admin-panel"><h2>Hlášení komunity</h2><p className="admin-note">Hlášení jsou viditelná pouze oprávněným moderátorům. Identity autora ani reportujícího se veřejně nezobrazuje.</p><ResourceStatus resource={resource} />
+    {reports.length === 0 ? <p>Nová hlášení momentálně nejsou k dispozici.</p> : <ul className="admin-records">{reports.filter(report => report.status === "new").map(report => <li key={report.id}>
+      <div><strong>{report.reason}</strong><span>{report.commentId ? "Komentář" : "Příspěvek"} · {timestamp(report.createdAt)}</span>{report.details && <p>{report.details}</p>}</div>
+      <div className="admin-actions"><button type="button" disabled={busy} onClick={() => change("social.report.resolve", { reportId: report.id, status: "resolved", reason: "Obsah skryt po moderaci hlášení.", hide: true }, resource.refresh, "Skrýt nahlášený příspěvek nebo komentář a uzavřít hlášení?")}>Skrýt a uzavřít</button><button type="button" disabled={busy} onClick={() => change("social.report.resolve", { reportId: report.id, status: "dismissed", reason: "Hlášení po posouzení nezakládá moderaci.", hide: false }, resource.refresh, "Uzavřít hlášení jako neoprávněné bez změny obsahu?")}>Zamítnout hlášení</button></div>
+    </li>)}</ul>}
+    <div className="admin-actions"><button type="button" disabled={!history.length} onClick={() => { setCursor(history.at(-1)); setHistory(history.slice(0, -1)); }}>Předchozí hlášení</button>
+      <button type="button" disabled={!resource.data?.nextCursor} onClick={() => { setHistory([...history, cursor]); setCursor(resource.data.nextCursor); }}>Další hlášení</button></div>
+  </section>;
 }
 function Facts({ items }) { return <dl className="admin-facts">{items.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value ?? "Nedostupné"}</dd></div>)}</dl>; }
 function Pagination({ nextCursor, cursor, setCursor, history, setHistory }) {

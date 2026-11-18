@@ -1,8 +1,10 @@
 import { randomUUID, createHash } from "node:crypto";
+import { Buffer } from "node:buffer";
 import { activeSupportGrant, safeSupportCatch, safeSupportTrip } from "../supportPolicy.js";
 import { adminError } from "./adminValidation.js";
 import { summaryForXp } from "../../progression/data/progressionSummary.js";
 import { createNotificationRecord } from "../../notifications/data/notificationModel.js";
+import { changeInteractionCounts } from "../../social/server/socialInteractionCounters.js";
 
 const check = (valid, code = "support_access_required", status = 403) => { if (!valid) throw adminError(code, status); };
 const row = doc => doc.exists ? doc.data() : null;
@@ -189,6 +191,7 @@ export function createAdminSupportService({ db, auth, ownerUid, actor, permit, t
   }
   async function moderate(input, identity) {
     return transaction(identity, "moderation", async (tx, access, audit) => {
+      void access;
       const [record, current] = await Promise.all([tx.get(db.doc(`users/${input.uid}/catches/${input.catchId}`)), tx.get(moderationRef(input.uid, input.catchId))]);
       check(record.exists && !record.data().deleted && record.data().privacy?.visibility === "public", "public_content_required", 400);
       const previous = row(current); check(rev(previous) === input.expectedRevision, "revision_conflict", 409);
@@ -199,6 +202,53 @@ export function createAdminSupportService({ db, auth, ownerUid, actor, permit, t
     });
   }
   return { async execute(input, identity) {
+    if (input.action === "social.reports.list") {
+      return transaction(identity, "moderation", async (tx, access, audit) => {
+        let query = db.collection("socialReports").where("status", "==", "new").orderBy("createdAt", "desc").orderBy("__name__", "desc");
+        if (input.cursor) {
+          let cursor;
+          try { cursor = JSON.parse(Buffer.from(input.cursor, "base64url").toString("utf8")); } catch { throw adminError("invalid_cursor"); }
+          if (!Number.isSafeInteger(cursor?.createdAt) || typeof cursor?.id !== "string" || !/^[a-f0-9]{64}$/.test(cursor.id)) throw adminError("invalid_cursor");
+          query = query.startAfter(cursor.createdAt, cursor.id);
+        }
+        const page = await tx.get(query.limit(51));
+        audit("moderation.reports.read", "socialReports");
+        const reports = page.docs.slice(0, 50).map(doc => ({ id: doc.id, ...doc.data() }));
+        const last = page.docs[49];
+        const nextCursor = page.docs.length > 50 && last
+          ? Buffer.from(JSON.stringify({ createdAt: last.data().createdAt, id: last.id })).toString("base64url")
+          : null;
+        return { reports, nextCursor };
+      });
+    }
+    if (input.action === "social.report.resolve") {
+      return transaction(identity, "moderation", async (tx, access, audit) => {
+        const ref = db.doc(`socialReports/${input.reportId}`), reportDoc = await tx.get(ref);
+        check(reportDoc.exists, "report_unavailable", 404);
+        const report = reportDoc.data();
+        if (input.hide) {
+          if (report.commentId) {
+            const commentRef = db.doc(`socialPosts/${report.postId}/comments/${report.commentId}`);
+            const comment = await tx.get(commentRef);
+            check(comment.exists && comment.data().deleted !== true, "comment_unavailable", 404);
+            if (comment.data().moderationState === "visible") {
+              const postRef = db.doc(`socialPosts/${report.postId}`);
+              const post = await tx.get(postRef);
+              tx.update(commentRef, { moderationState: "hidden", updatedAt: at(), revision: rev(comment.data()) + 1 });
+              tx.update(postRef, changeInteractionCounts(post.data(), { comments: -1 }));
+            }
+          } else {
+            const postRef = db.doc(`socialPosts/${report.postId}`);
+            const post = await tx.get(postRef);
+            check(post.exists && post.data().deleted !== true, "post_unavailable", 404);
+            tx.update(postRef, { moderationState: "hidden", updatedAt: at(), revision: rev(post.data()) + 1 });
+          }
+        }
+        tx.update(ref, { status: input.status, resolutionReason: input.reason, resolvedAt: at(), resolvedByUid: identity.uid });
+        audit(input.hide ? "moderation.social.hide" : "moderation.report.resolve", report.targetUid, [input.reportId]);
+        return { resolved: true };
+      });
+    }
     if (input.action === "support.own") return ownList(identity);
     if (input.action === "moderation.own") {
       const docs = await db.collection("adminPublicModeration").where("targetUid", "==", identity.uid).limit(200).get();
