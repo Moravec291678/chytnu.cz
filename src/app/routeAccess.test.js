@@ -28,3 +28,10 @@ test("public fishing profile routes allow anonymous access without opening profi
   assert.equal(isPublicRoute("/u/firebase-uid/settings"), false);
   assert.equal(isPublicRoute("/profile/social"), false);
 });
+
+test("public post permalink does not open community settings or private catch routes",()=>{
+  assert.equal(isPublicRoute(`/community/post/${"a".repeat(64)}`),true);
+  assert.equal(isPublicRoute("/community"),false);
+  assert.equal(isPublicRoute(`/community/post/${"a".repeat(64)}/edit`),false);
+  assert.equal(isPublicRoute("/community/catch/private-catch"),false);
+});

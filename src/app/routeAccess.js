@@ -4,7 +4,7 @@ export function canAccessProtectedRoute({ user, guestActive }) {
 
 export function isPublicRoute(pathname) {
   return pathname === "/" || pathname === "/login" || pathname === "/privacy-policy" || pathname === "/terms"
-    || /^\/u\/[^/]+\/?$/.test(pathname);
+    || /^\/u\/[^/]+\/?$/.test(pathname) || /^\/community\/post\/[a-f0-9]{64}\/?$/.test(pathname);
 }
 
 export function resolveAuthenticatedRedirect({ status, user }) {

@@ -8,7 +8,7 @@ export const FEATURES = Object.freeze({
   rarity: false,
   speciesMastery: false,
   waters: false,
-  community: false,
+  community: true,
   friends: true,
   nearby: false,
   crew: false,

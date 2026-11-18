@@ -102,7 +102,7 @@ Preference jsou uživatelsky nastavitelné: morningFishActivity (default ON), to
 | rarity | Ne |
 | speciesMastery | Ne |
 | waters | Ne |
-| community | Ne |
+| community | Ano |
 | friends | Ano |
 | nearby | Ne |
 | crew | Ne |

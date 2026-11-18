@@ -56,6 +56,7 @@ const WaterDetailPage = lazy(() => import("../pages/WaterDetailPage"));
 const WaterCreatePage = lazy(() => import("../pages/WaterCreatePage"));
 const HotspotsPage = lazy(() => import("../pages/HotspotsPage"));
 const WaterChatPage = lazy(() => import("../pages/WaterChatPage"));
+const CommunityPostPage = lazy(() => import("../pages/CommunityPostPage.jsx"));
 const CommunityPage = lazy(() => import("../pages/CommunityPage"));
 const CommunityCatchDetailPage = lazy(() => import("../pages/CommunityCatchDetailPage"));
 const CommunityReportPage = lazy(() => import("../pages/CommunityReportPage"));
@@ -188,6 +189,7 @@ function App() {
         <Route path="/waters/:waterId/chat" element={<PageSuspense><WaterChatPage /></PageSuspense>} />
         <Route path="/hotspots" element={<PageSuspense><HotspotsPage /></PageSuspense>} />
         <Route path="/friends" element={<PageSuspense><FriendsPage /></PageSuspense>} />
+        <Route path="/community/post/:postId" element={<PageSuspense><CommunityPostPage /></PageSuspense>} />
         <Route path="/community" element={<PageSuspense><CommunityPage /></PageSuspense>} />
         {isFeatureEnabled("userDiscovery") && <Route path="/community/find" element={<PageSuspense><FisherDiscovery /></PageSuspense>} />}
         <Route path="/community/catch/:catchId" element={<PageSuspense><CommunityCatchDetailPage /></PageSuspense>} />

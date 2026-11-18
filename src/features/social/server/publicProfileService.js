@@ -14,14 +14,16 @@ import { createSocialCursor } from "./socialCursor.js";
 import { legacyShareApproval } from "./legacyShareApproval.js";
 import { activeSocialPhoto } from "./socialAccess.js";
 import { publicFishingStats } from "../data/publicFishingStats.js";
-import { publicAchievementChoices } from "../data/publicProgressionModel.js";
-import { projectPublicProgression } from "./publicProgressionService.js";
+import { publicAchievementChoices,selectedPublicAchievements } from "../data/publicProgressionModel.js";
+import { projectPublicProgression,publicProgressionFromSummary } from "./publicProgressionService.js";
+import { createSocialFeedService } from "./socialFeedService.js";
 export const profileError = (code, status = 400) => Object.assign(new Error(code), { code, status });
 export function createPublicProfileService({ db, auth, avatar, socialPhoto, env = {}, cursorSecret, now = () => Date.now() }) {
   const repository = createSocialRepository({ db, auth, now, profilesEnabled: true });
   const avatars = createAvatarCoordinator({ db, avatar, now });
   const media = socialPhoto ? createSocialPhotoCoordinator({db,photo:socialPhoto,now}) : null;
   const publications = createPublicationService({db,media,cursors:createSocialCursor({env,secret:cursorSecret,now}),env,now});
+  const feed=createSocialFeedService({db,publications,cursors:createSocialCursor({env,secret:cursorSecret,now})});
   async function identity(token) {
     if (!token) throw profileError("authentication_required", 401);
     try { return (await auth.verifyIdToken(token, true)).uid; } catch { throw profileError("authentication_required", 401); }
@@ -35,6 +37,7 @@ export function createPublicProfileService({ db, auth, avatar, socialPhoto, env 
       if (action === "search") limits.push([`social-search-${createHash("sha256").update(uid).digest("hex")}`, minute, 30],
         [`social-search-day-${createHash("sha256").update(uid).digest("hex")}`, day, 150]);
       if (action === "progression.compare") limits.push([`social-comparison-${createHash("sha256").update(uid).digest("hex")}`,minute,5]);
+      if (action === "entries.save") limits.push([`social-entry-minute-${createHash("sha256").update(uid).digest("hex")}`,minute,5],[`social-entry-day-${createHash("sha256").update(uid).digest("hex")}`,day,20]);
       const rows = await Promise.all(limits.map(([key]) => tx.get(db.doc(`serverRateLimits/${key}`))));
       limits.forEach(([key, window, limit], i) => {
         const old = rows[i].data(), count = old?.window === window ? old.count : 0;
@@ -80,14 +83,17 @@ export function createPublicProfileService({ db, auth, avatar, socialPhoto, env 
   async function own(token, reader) { const uid = await identity(token); return repository.readProfileSnapshot(token, uid, reader); }
   return { async execute(action, payload, token) {
     const uid = token ? await identity(token) : null;
-    if (!uid && !["view", "image", "posts.list", "posts.image"].includes(action)) throw profileError("authentication_required", 401);
+    if (!uid && !["view", "image", "posts.list", "posts.image","posts.view"].includes(action)) throw profileError("authentication_required", 401);
     await limited(uid, action);
+    if (action === "feed.list") return feed.list(uid,payload);
+    if (action === "entries.save") return publications.saveEntry(uid,payload);
     if (action === "progression.compare") return repository.compareProfiles(token,payload.targetUid,projection);
     if (action === "posts.save") return publications.save(uid,payload);
     if (action === "posts.own") return publications.own(uid,payload);
     if (action === "posts.list") return publications.list(uid,payload);
     if (action === "posts.delete") return publications.remove(uid,payload);
     if (action === "posts.image") return publications.image(uid,payload);
+    if (action === "posts.view") return publications.view(uid,payload);
     if (action === "search") return discovery.search(token, uid, payload);
     if (action === "friends") return friends.list(token, uid, payload);
     if (action === "friends.status") return { relationship: await repository.friendStatus(token, payload.targetUid) };
@@ -119,7 +125,8 @@ export function createPublicProfileService({ db, auth, avatar, socialPhoto, env 
         }
         return { ...item, photos: [...choices.values()].filter(p => activeSocialPhoto(row.data(),p.data(),uid,p.id) && p.data().type === "image/jpeg" && p.data().cloud?.state === "synced").map(p => ({ photoId: p.id })) };
       }))).filter(Boolean);
-      return { uid, profile, candidateCatches,achievementChoices:publicAchievementChoices(), blockedAccounts: blocked.docs.map(row => ({ uid: row.id })) };
+      const summary=(await db.doc(`users/${uid}/serverProgressionState/summary`).get()).data();
+      return { uid, profile, candidateCatches,achievementChoices:publicAchievementChoices(),entryOptions:{achievements:selectedPublicAchievements(profile?.sharedAchievementIds),progression:publicProgressionFromSummary(summary,uid)}, blockedAccounts: blocked.docs.map(row => ({ uid: row.id })) };
     }
     if (action === "save") return { profile: await repository.saveProfile(token, payload.profile) };
     if (action === "block") { await repository.block(token, payload.targetUid, payload.blocked); return { blocked: payload.blocked }; }

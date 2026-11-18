@@ -1,5 +1,6 @@
 import { FieldPath } from "firebase-admin/firestore";
 import { Buffer } from "node:buffer";
+import { createHash } from "node:crypto";
 import catalogue from "../../../../public/data/ris/be90ad549cf77679/index.json" with { type: "json" };
 import { canonicalPair, socialUid } from "../data/socialModel.js";
 import { sectionAllowed } from "../data/publicProfileModel.js";
@@ -7,12 +8,13 @@ import { publicationId, publicationInput, publicationContent, contentFingerprint
 import { configuredOwnerUid, configuredCoCreatorUid } from "../../admin/server/adminAccess.js";
 import { moderationKey } from "../../admin/server/adminSupportStore.js";
 import { assertSocialInteraction, activeSocialPhoto } from "./socialAccess.js";
+import { createSocialEntryService } from "./socialEntryService.js";
 const waters = new Map(catalogue.map(w => [w.id,w]));
 const fail = (code = "post_unavailable") => { throw new Error(code); };
 export function createPublicationService({ db, media, cursors, env = {}, now = () => Date.now() }) {
-  async function guard(tx, uid) {
+  async function guard(tx, uid, purpose) {
     const [config,suspended,deleting] = await Promise.all(["adminConfig/social",`accountSuspensions/${uid}`,`accountDeletions/${uid}`].map(p => tx.get(db.doc(p))));
-    if (config.data()?.profilesEnabled === false || config.data()?.postsEnabled === false) fail("social_disabled");
+    if (config.data()?.profilesEnabled === false || config.data()?.postsEnabled === false || purpose === "feed" && config.data()?.feedsEnabled === false) fail("social_disabled");
     if (suspended.exists || deleting.exists) fail("account_unavailable");
   }
   async function source(tx, uid, catchId, photoId) {
@@ -31,8 +33,11 @@ export function createPublicationService({ db, media, cursors, env = {}, now = (
     return { parent, water, photo };
   }
   const fingerprint = (src,input) => contentFingerprint({ content: publicationContent(src.parent,input,src.water), privacy: src.parent.privacy ?? "private", photoSha: src.photo?.cloud?.sha256 ?? null });
+  const entries=createSocialEntryService({db,now,guard});
+  const section=row=>["achievement","milestone"].includes(row.kind)?"achievements":row.sourcePhotoId?"gallery":"catches";
   async function permitted(tx, uid, row, { ownerOnly = false, previewAudience } = {}) {
     if (!row || row.deleted || row.moderationState !== "visible") return null;
+    if (row.kind !== undefined && !["catch","experience","achievement","milestone"].includes(row.kind)) return null;
     await guard(tx, uid ?? row.ownerUid);
     const profile = (await tx.get(db.doc(`publicProfiles/${row.ownerUid}`))).data();
     if (!profile || profile.uid !== row.ownerUid) return null;
@@ -48,8 +53,9 @@ export function createPublicationService({ db, media, cursors, env = {}, now = (
         if (relationship?.status === "accepted") audience = "friend";
       }
       if (!sectionAllowed(profile.visibility,audience) || !sectionAllowed(row.visibility,audience)
-        || !sectionAllowed(profile.sections?.[row.sourcePhotoId ? "gallery" : "catches"] ?? "private",audience)) return null;
+        || !sectionAllowed(profile.sections?.[section(row)] ?? "private",audience)) return null;
     }
+    if (row.kind && row.kind !== "catch") return await entries.approved({tx,profile,row}) ? {row,profile,audience} : null;
     const moderation = await tx.get(db.doc(`adminPublicModeration/${moderationKey(row.ownerUid,row.sourceCatchId)}`));
     if (moderation.data()?.hidden === true) return null;
     let src;
@@ -59,12 +65,30 @@ export function createPublicationService({ db, media, cursors, env = {}, now = (
     return { row,src,profile,audience };
   }
   function dto({ row,profile,audience }) {
-    return { id:row.id,author:{uid:row.ownerUid,handle:profile.handle,displayName:profile.displayName,
-      badgeRole:row.ownerUid === configuredOwnerUid(env) ? "OWNER" : row.ownerUid === configuredCoCreatorUid(env) ? "CO_CREATOR" : null},
+    return { id:row.id,kind:row.kind??"catch",author:{uid:row.ownerUid,handle:profile.handle,displayName:profile.displayName,
+      badgeRole:row.ownerUid === configuredOwnerUid(env) ? "OWNER" : row.ownerUid === configuredCoCreatorUid(env) ? "CO_CREATOR" : null,
+      ...(profile.avatarVersion && profile.avatarAssetId ? {avatarVersion:createHash("sha256").update(profile.avatarAssetId).digest("hex").slice(0,16)} : {})},
     visibility:row.visibility,revision:row.revision,createdAt:row.createdAt,updatedAt:row.updatedAt,content:row.content,hasPhoto:!!row.sourcePhotoId,deleted:row.deleted,
-    ...(audience === "owner" ? { sourceCatchId:row.sourceCatchId,sourcePhotoId:row.sourcePhotoId,fields:row.fields } : {}) };
+    ...(audience === "owner" ? { ...(row.sourceEntryId?{sourceEntryId:row.sourceEntryId}:{}),sourceCatchId:row.sourceCatchId,sourcePhotoId:row.sourcePhotoId,fields:row.fields } : {}) };
   }
   return {
+    async saveEntry(uid,payload) { return {post:dto(await entries.save(uid,payload))}; },
+    async view(uid,{postId}) {
+      if (!/^[a-f0-9]{64}$/.test(postId??"")) fail();
+      return db.runTransaction(async tx=>{
+        const row=(await tx.get(db.doc(`socialPosts/${postId}`))).data();
+        // Authors can repair/unpublish their own text draft or withdrawn
+        // highlight. This never grants media or another account access.
+        if (uid && row?.ownerUid === uid && !row.deleted && ["experience","achievement","milestone"].includes(row.kind)) {
+          await guard(tx,uid);
+          const profile=(await tx.get(db.doc(`publicProfiles/${uid}`))).data();
+          if (profile?.uid !== uid) fail();
+          return {post:{...dto({row,profile,audience:"owner"}),sourceAvailable:await entries.approved({tx,profile,row}),moderationState:row.moderationState}};
+        }
+        const allowed=await permitted(tx,uid,row);
+        if (!allowed) fail(); return {post:dto(allowed)};
+      });
+    },
     async profileSummary(tx,profile,audience) {
       const config=(await tx.get(db.doc("adminConfig/social"))).data();
       if (config?.postsEnabled === false) return {records:[],partial:false};
@@ -75,6 +99,7 @@ export function createPublicationService({ db, media, cursors, env = {}, now = (
       const records=[];
       for (const snapshot of page.docs.slice(0,20)) {
         const row=snapshot.data();
+        if (row.kind && row.kind !== "catch") continue;
         if (row.ownerUid !== profile.uid || row.deleted || row.moderationState !== "visible" || !sectionAllowed(row.visibility,audience)
           || !sectionAllowed(profile.sections?.[row.sourcePhotoId?"gallery":"catches"] ?? "private",audience)) continue;
         const moderation=await tx.get(db.doc(`adminPublicModeration/${moderationKey(row.ownerUid,row.sourceCatchId)}`));
@@ -152,6 +177,6 @@ export function createPublicationService({ db, media, cursors, env = {}, now = (
       const final = await read(); if (!final || final.row.revision !== row.revision) fail();
       return {jpegBase64:Buffer.from(bytes).toString("base64")};
     },
-    permitted,dto,
+    permitted,dto,guard,section,
   };
 }

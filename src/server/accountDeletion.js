@@ -117,6 +117,8 @@ export function createAccountDeletionService({ db, auth, photoDeletion, deleteSo
           db.doc(`serverRateLimits/social-http-${createHash("sha256").update(uid).digest("hex")}`).delete(),
           db.doc(`serverRateLimits/social-media-${createHash("sha256").update(uid).digest("hex")}`).delete(),
           db.doc(`serverRateLimits/social-comparison-${createHash("sha256").update(uid).digest("hex")}`).delete(),
+          db.doc(`serverRateLimits/social-entry-minute-${createHash("sha256").update(uid).digest("hex")}`).delete(),
+          db.doc(`serverRateLimits/social-entry-day-${createHash("sha256").update(uid).digest("hex")}`).delete(),
           db.doc(`serverRateLimits/social-search-${createHash("sha256").update(uid).digest("hex")}`).delete(),
           db.doc(`serverRateLimits/social-search-day-${createHash("sha256").update(uid).digest("hex")}`).delete(),
           db.doc(`serverRateLimits/ai-species-${createHash("sha256").update(uid).digest("hex")}`).delete(),

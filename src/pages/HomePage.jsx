@@ -18,6 +18,9 @@ import { useProgression } from "../features/progression/context/progressionConte
 import { useNotifications } from "../features/notifications/context/notificationContextValue.js";
 import "./HomePage.css";
 import QuickCatchButton from "../features/catches/components/QuickCatchButton.jsx";
+import SocialFeed from "../features/social/components/SocialFeed.jsx";
+import { FEATURES } from "../product/config/featureFlags.js";
+import { useAuth } from "../features/auth/context/authContextValue.js";
 import { QUICK_CATCH_FEATURES } from "../product/config/quickCatchFlags.js";
 
 const SEASONS = [
@@ -149,6 +152,7 @@ function WeeklyProgressCard({ tasks, streak }) {
 
 function HomePage() {
   const scope = useDataScope();
+  const { user } = useAuth();
   const { unreadCount } = useNotifications();
   const { state: catchState, refresh: refreshCatches } = useCatches();
   const { state: tripState, refresh: refreshTrips } = useTrips();
@@ -280,6 +284,7 @@ function HomePage() {
             />
           ))}
         </section>
+        {FEATURES.community && user?.uid && <SocialFeed key={user.uid} mode="friends" compact />}
         {!catchState.loading && !catchState.error && <HomeInsightBoundary key={scope.scopeKey}><HomeInsightCard catches={catches} trips={tripState.trips} contextReady={!tripState.loading && !tripState.error} /></HomeInsightBoundary>}
       </div>
     </Layout>

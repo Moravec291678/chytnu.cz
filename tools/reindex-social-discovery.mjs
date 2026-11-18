@@ -5,14 +5,17 @@ import { Firestore, FieldPath } from "@google-cloud/firestore";
 import { reindexDiscoveryPage } from "../src/features/social/server/discoveryBackfill.js";
 const require = createRequire(import.meta.url);
 const args = new Set(process.argv.slice(2));
-if ([...args].some(arg => !["--apply", "--verify-indexes", "--verify-friends", "--verify-gallery"].includes(arg)) || process.env.FIRESTORE_EMULATOR_HOST) throw new Error("Explicit production operator command only");
+if ([...args].some(arg => !["--apply", "--verify-indexes", "--verify-friends", "--verify-gallery","--verify-feed"].includes(arg)) || process.env.FIRESTORE_EMULATOR_HOST) throw new Error("Explicit production operator command only");
 const { configstore } = require("firebase-tools/lib/configstore.js");
 const { clientId, clientSecret } = require("firebase-tools/lib/api.js");
 const refresh = configstore.get("tokens")?.refresh_token;
 if (!refresh) throw new Error("Firebase CLI login required; run firebase login");
 const db = new Firestore({ projectId: "chutnucz", credentials: { type: "authorized_user", client_id: clientId(), client_secret: clientSecret(), refresh_token: refresh } });
 try {
-  if (args.has("--verify-gallery")) {
+  if (args.has("--verify-feed")) {
+    for (const visibility of ["public",["public","friends"]]) await db.collection("socialPosts").where("visibility",Array.isArray(visibility)?"in":"==",visibility).orderBy("createdAt","desc").orderBy(FieldPath.documentId(),"desc").limit(1).get();
+    console.log(JSON.stringify({project:"chutnucz",feedIndexesVerified:2}));
+  } else if (args.has("--verify-gallery")) {
     await db.collection("socialPosts").where("ownerUid","==","operator-unused-no-account").orderBy(FieldPath.documentId()).limit(1).get();
     await db.collection("socialPosts").where("ownerUid","==","operator-unused-no-account").orderBy("createdAt","desc").orderBy(FieldPath.documentId(),"desc").limit(1).get();
     await db.collection("socialPosts").where("ownerUid","==","operator-unused-no-account").where("visibility","==","public").orderBy("createdAt","desc").orderBy(FieldPath.documentId(),"desc").limit(1).get();
