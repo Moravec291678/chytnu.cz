@@ -75,3 +75,4 @@ Browser evidence: the community post composer stayed disabled until public conse
 - Cross-account Auth/Firestore: friendships 129 checks PASS; social interactions 136 checks PASS; admin moderation 50 checks PASS. These cover deduplication, preferences, recipient privacy and forged cross-account writes.
 - Unit tests cover preference defaults/normalization, cross-device notification updates, read-state merge and unsubscribe cleanup.
 - Production Firestore rules deployment not performed because only the local demo project is configured. Physical device and authenticated browser multi-account acceptance remain unverified.
+- Follow-up release: `firestore.rules` was deployed to the verified ChytnuCZ Firebase project `chutnucz`; Vercel production is READY for code SHA `1a83e11fbdb2cd9d513af119fec8ecd0582c8cd4`, live home HTTP 200, production notification UI bundle verified.

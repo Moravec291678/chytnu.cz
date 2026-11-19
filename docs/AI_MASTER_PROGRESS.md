@@ -86,5 +86,7 @@ Release gate and production result are recorded in the final release checkpoint.
 - Social events are committed with their authorized relationship/post mutation; stable IDs, generic private-safe copy, block checks, server-read preferences, and idempotency prevent spoofing and notification storms.
 - Inbox updates across devices through a bounded Firestore subscription (latest 250). Social notification preferences are stored per account and restricted by Firestore Rules. Browser push delivery for social events remains unconnected and is not claimed as active.
 - Verification: full unit suite 1,162/1,162; lint/build/product/photo/diff checks PASS. Auth emulator PASS; sync emulator PASS; full rules/social emulator suite PASS. Focused evidence: rules 22 tests; admin support 50 checks; friendships 129 checks; interactions 136 checks.
-- Production Firebase rules were not deployed: `.firebaserc` names only the demo emulator project. Do not deploy to a guessed project. Vercel deployment is pending.
+- Firebase production Rules deployed to confirmed project `chutnucz` using only `firestore.rules`; no index deployment or other Firebase service changes.
+- Code commit `1a83e11fbdb2cd9d513af119fec8ecd0582c8cd4` is on `main`; Vercel production reached READY for that SHA. Live homepage returned HTTP 200 and the deployed notification bundle contains the new social preference UI and honest push status.
+- Optional browser push sending remains inactive. Physical mobile and authenticated live browser validation remain unverified.
 - Next: Stage 10 Nearby privacy and presence. Do not start later stages before review and verification.
