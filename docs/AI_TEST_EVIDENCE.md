@@ -59,3 +59,11 @@ Browser evidence: the community post composer stayed disabled until public conse
 - Local harness guard/cleanup 5/5 PASS; real Vite restart integration 7/7 PASS (three restarts, valid authentication preserved, invalid/anonymous denied).
 - Generated service worker executed in VM: current shell wins over retained previous cache; bad HTTP/non-HTML responses cannot poison shell; cache-write failures do not break navigation.
 - A shared-emulator full rerun failed a feed pagination assumption because browser fixtures were still present. Assertions were preserved; only our demo servers were stopped, and the normal npm rules command was restarted with clean emulators. Other-worktree Vite port 5173 was untouched.
+
+## Final release verification — 2026-11-19
+
+- `npm run lint`, `npm test` (1,154/1,154), `npm run build`, `npm run test:rules`, `npm run test:auth`, `npm run test:sync`, `npm run test:photos`, `npm run product`, and `git diff --check`: PASS.
+- Clean full rules run: feed 209, base Firestore 21, admin 39, support 49, social foundation 264, repository 47, profiles 95, discovery 84, friendships 127, publications 284, progression 203, interactions 131; all passed. Firebase Rules were unchanged, so no deployment was required.
+- Production deployed from GitHub `main`; Vercel reported READY for commit `1a85e3216be512d969bd7d13f12a2f3e8779b880`. Production homepage returned HTTP 200 with the ChytnuCz shell. Anonymous POST to `/api/ai/journal` was rejected with HTTP 401; no inference or customer data was used.
+- Authenticated emulator/browser work used synthetic accounts. AI provider inference and live Cloudinary media delivery were not tested. Full offline PWA reopen produced an inconclusive blank browser view and remains **MANUAL TEST REQUIRED**; no local storage or photo queue was cleared. Physical iOS/Android validation is also **MANUAL TEST REQUIRED**.
+- The broader application audit remains PARTIAL. No Firebase Rules deploy, paid-service activation, or Stage 9 work occurred.

@@ -233,3 +233,10 @@ Owner explicitly authorized safe main push and Vercel deployment; earlier prohib
 Consent is private server-owned users/{uid}/socialPreferences/publication, with version/mode/epoch/acceptedAt. All new UI profile saves carry expectedEpoch. Cached clients without an epoch are rejected after any revocation. Manual image preparation binds initial and final consent epochs; automatic publication additionally requires source privacy and creation/catch timestamps after the current public epoch. Deleted or previously published IDs are never automatically restored. Cursor and receipt writes remain behind deletion fences.
 
 Browser A/B/C used emulator-only synthetic data. No production customer data, service-account download or provider inference was used. Test logs/export artifacts are in the system TEMP directory, excluded from Git. Physical-device and independent PWA/offline startup acceptance remain required; never clear IndexedDB or unsynced photo queues.
+
+### Final release result — 2026-11-19
+
+- Release commit `1a85e3216be512d969bd7d13f12a2f3e8779b880` and the nine linear predecessor commits were pushed to `origin/main`; HEAD equaled `origin/main` and the worktree was clean at verification.
+- Full requested quality gate passed, including 1,154 unit tests and clean Auth, Sync, Photos, Product and full rules emulator checks. Detailed results are in `docs/AI_TEST_EVIDENCE.md`.
+- Vercel production deployment for that SHA reached READY and `https://chytnu-cz.vercel.app/` returned HTTP 200. Anonymous AI API access was rejected with 401.
+- Offline installed-PWA reopen, live Cloudinary delivery, physical devices and real model inference remain unverified. Keep the overall application audit PARTIAL until required manual checks are complete.
