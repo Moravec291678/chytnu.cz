@@ -50,6 +50,11 @@ Status: PARTIAL
 - The existing two-step onboarding now states that records save locally first and sync after sign-in, public sharing requires the user's confirmation, and GPS is optional with precise location not automatically public. No new mandatory step or permission prompt was added.
 - Copy is covered by `src/pages/OnboardingPage.test.js`. Small-screen visual fit still needs a viewport check.
 
+## 2026-11-20 — deep route active sections
+
+- Revíry entered through Profile now retain the Profile active indicator, water-room chat maps to Community, and diary insight/story routes map to Deník. The four destinations do not overlap for the chat/profile distinction by source rule.
+- Navigation, onboarding, and Home structural checks: 22/22 PASS. Full unit suite: 1,170/1,170; lint, build/secret scan, and diff check PASS. This is structural coverage, not a viewport-based visual check.
+
 ## Authenticated takeover browser QA — 2026-11-19
 
 Real localhost handlers and Auth/Firestore emulators: A chose public profile with all public presets and explicit checkbox; A created an actual experience post, visible in feed and detail (ID 63076cc37d7fd4e32b951ae63f049bcfddfda76b01296c0d68732684c76ade7d). B logged in, created its own profile, reacted and commented; server confirmed both. B invited A; A accepted and saw B as a friend. A saved a manual carp catch (42 cm, estimated weight marked as estimated, no new XP). A changed to private; C logged in and was denied the original post, and username search returned no available profile.

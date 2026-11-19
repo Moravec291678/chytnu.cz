@@ -189,6 +189,9 @@ test("gallery route is grouped with profile reports without changing bottom navi
   assert.match(layout, /nav-label">Domů[\s\S]*nav-label">Deník[\s\S]*nav-label">Komunita[\s\S]*nav-label">Profil/);
   assert.match(layout, /to="\/community" className=\{itemClass\(communityActive\)\}/);
   assert.match(layout, /pathname === "\/trips" \|\| pathname\.startsWith\("\/trips\/"\)/);
+  assert.match(layout, /pathname === "\/insights"/);
+  assert.match(layout, /watersProfileActive/);
+  assert.match(layout, /const watersProfileActive = .*\.test\(pathname\)/);
   assert.match(layout, /pathname === "\/profile" \|\| pathname === "\/profile\/social" \|\| pathname === "\/settings"/);
   assert.match(layout, /pathname\.startsWith\("\/u\/"\)/);
   const [journal, journalCss] = await Promise.all([

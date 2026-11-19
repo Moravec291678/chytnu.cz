@@ -44,9 +44,10 @@ function Layout({ children }) {
   }, []);
   const itemClass = (active) => active ? "nav-item nav-item-active" : "nav-item";
   const homeActive = pathname === "/";
-  const journalActive = pathname.startsWith("/journal") || pathname.startsWith("/catch/") || pathname.startsWith("/species/") || pathname === "/gallery" || pathname === "/album" || pathname === "/map" || pathname === "/stats" || pathname === "/trips" || pathname.startsWith("/trips/");
+  const journalActive = pathname.startsWith("/journal") || pathname.startsWith("/catch/") || pathname.startsWith("/species/") || pathname === "/gallery" || pathname === "/album" || pathname === "/map" || pathname === "/stats" || pathname === "/insights" || pathname === "/season-story" || pathname === "/year-summary" || pathname === "/trips" || pathname.startsWith("/trips/");
   const communityActive = pathname === "/community" || pathname.startsWith("/community/") || pathname.startsWith("/u/") || pathname === "/friends" || pathname === "/nearby" || pathname === "/crew" || /^\/waters\/[^/]+\/chat$/.test(pathname);
-  const profileActive = pathname === "/profile" || pathname === "/profile/social" || pathname === "/settings" || pathname === "/privacy" || pathname === "/notifications" || pathname === "/achievements" || pathname === "/levels" || pathname === "/challenges" || pathname === "/streak" || pathname === "/supporter";
+  const watersProfileActive = (pathname === "/waters" || pathname.startsWith("/waters/")) && !/^\/waters\/[^/]+\/chat$/.test(pathname);
+  const profileActive = pathname === "/profile" || pathname === "/profile/social" || pathname === "/settings" || pathname === "/privacy" || pathname === "/notifications" || pathname === "/achievements" || pathname === "/levels" || pathname === "/challenges" || pathname === "/streak" || pathname === "/supporter" || watersProfileActive;
   return (
         <div className={adminRoute ? "layout layout-admin" : pathname === "/gallery" ? "layout layout-gallery" : "layout"}>
       <SyncStatus sync={sync} isOnline={isOnline} compact={sync?.status === "syncing" && sync?.showSyncStatus && compactSyncId === syncPresentationId} />
