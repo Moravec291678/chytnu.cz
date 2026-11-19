@@ -42,7 +42,13 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (request.method !== 'GET' || url.origin !== self.location.origin) return;
   if (request.mode === 'navigate') {
-    event.respondWith(fetch(request).then((response) => { const copy = response.clone(); caches.open(CACHE).then((cache) => cache.put('/index.html', copy)); return response; }).catch(() => caches.match('/index.html')));
+    event.respondWith(fetch(request).then((response) => {
+      if (response.ok && response.headers.get('content-type')?.split(';')[0].trim().toLowerCase() === 'text/html') {
+        const copy = response.clone();
+        event.waitUntil(caches.open(CACHE).then((cache) => cache.put('/index.html', copy)).catch(() => {}));
+      }
+      return response;
+    }).catch(() => caches.open(CACHE).then((cache) => cache.match('/index.html'))));
     return;
   }
   if (url.pathname.startsWith('/assets/') || ['/favicon.svg', '/icons.svg', '/icon-192.png', '/icon-512.png', '/manifest.webmanifest'].includes(url.pathname)) {

@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { createServer } from "vite";
 
 test("public progression renders provenance, private gaps and safe approved projections", async t => {
-  const server = await createServer({ server: { middlewareMode: true }, appType: "custom", optimizeDeps: { noDiscovery: true, include: [], entries: [] } });
+  const server = await createServer({ server: { middlewareMode: true, hmr: false, watch: null }, appType: "custom", optimizeDeps: { noDiscovery: true, include: [], entries: [] } });
   try {
     const { PublicAchievements, PublicProgressionSummary, PublicStatistics, PublicTrophies } = await server.ssrLoadModule("/src/features/social/components/PublicProgression.jsx");
     const render = (component, props) => renderToStaticMarkup(React.createElement(component, props));

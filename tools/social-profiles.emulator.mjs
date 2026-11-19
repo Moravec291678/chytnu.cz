@@ -1,3 +1,4 @@
+import { publicProfileFixturePayload } from "./social-publication-fixture.mjs";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { initializeApp, deleteApp } from "firebase-admin/app";
@@ -18,7 +19,7 @@ const avatar = { save: async (uid, bytes, assetId) => { assets.add(`${uid}/${ass
 let handler;
 async function call(role, action, payload = {}, expected = 200) {
   const res = { statusCode: 200, setHeader() {}, status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } };
-  await handler({ method: "POST", headers: tokens[role] ? { authorization: `Bearer ${tokens[role]}` } : {}, body: { action, ...payload } }, res);
+  await handler({ method: "POST", headers: tokens[role] ? { authorization: `Bearer ${tokens[role]}` } : {}, body: { action, ...await publicProfileFixturePayload(action, payload, db, ids[role]) } }, res);
   assert.equal(res.statusCode, expected, `${action}: ${JSON.stringify(res.body)}`); checks++; return res.body;
 }
 function equal(a,b) { assert.deepEqual(a,b); checks++; }

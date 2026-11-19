@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 
 // Cloudflare Gemma 4: 9091 neurons / M input, 27273 / M output tokens.
-// Input includes vision tokens. Never estimate from JPEG bytes or refund an
-// unsuccessful/unknown request. Keep the 2500 worst-context reservation in flight.
+// Use authenticated provider token usage. Never refund an unsuccessful or
+// unknown request; its existing reservation remains in flight.
 export function measuredNeurons(usage) {
   const input = usage?.prompt_tokens, output = usage?.completion_tokens;
   if (!Number.isSafeInteger(input) || input < 1 || input > 256000 || !Number.isSafeInteger(output) || output < 0 || output > 512

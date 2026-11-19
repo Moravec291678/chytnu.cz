@@ -50,3 +50,12 @@ Status: PARTIAL
 | Stage 8 social emulator suite | NOT RUN in this checkpoint | Prior documented 131-check result remains historical |
 
 Browser evidence: the community post composer stayed disabled until public consent was checked, enabled after consent and disabled again when consent was removed. No post was submitted. `/community` and `/profile/social` had no horizontal overflow at measured widths 320, 360, 375, 390, 430, 768, 1023/1025, 1280, 1440 and 1920 px; the integrated browser quantized 1024 px to a neighboring width. A synthetic profile was viewed but not changed. Local Vite `/api/progression/reconcile` returned 404 and a later profile API request returned 401 while the browser showed a logged-out state; the cause is unverified and neither result is evidence of production behavior.
+
+## Takeover verification — 2026-11-19
+
+- Final unit suite: 1,154/1,154 PASS, zero failures/skips. Removed obsolete AI tests explain the lower count.
+- Lint, production build, 162-asset client-secret scan, local photo check, product inventory and diff check PASS. Auth and Sync standard npm emulator scripts PASS.
+- Initial full rules run: 1,520 checks PASS; targeted final publication suite: 284 checks PASS (six real emulator accounts, consent CAS, media revocation race, pagination, tombstones and no duplicate XP). Final clean full rules rerun recorded below when complete.
+- Local harness guard/cleanup 5/5 PASS; real Vite restart integration 7/7 PASS (three restarts, valid authentication preserved, invalid/anonymous denied).
+- Generated service worker executed in VM: current shell wins over retained previous cache; bad HTTP/non-HTML responses cannot poison shell; cache-write failures do not break navigation.
+- A shared-emulator full rerun failed a feed pagination assumption because browser fixtures were still present. Assertions were preserved; only our demo servers were stopped, and the normal npm rules command was restarted with clean emulators. Other-worktree Vite port 5173 was untouched.

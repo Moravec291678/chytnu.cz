@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { createServer } from "vite";
 
 test("Trip preparation keeps advanced defaults optional and renders editable known values including zero", async () => {
-  const server = await createServer({ server: { middlewareMode: true }, appType: "custom" });
+  const server = await createServer({ server: { middlewareMode: true, hmr: false, watch: null }, appType: "custom" });
   try {
     const { default: Fields } = await server.ssrLoadModule("/src/features/trips/components/TripDefaultsFields.jsx");
     const { DataScopeContext } = await server.ssrLoadModule("/src/features/auth/context/dataScopeContextValue.js");

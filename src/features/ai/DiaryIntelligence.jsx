@@ -8,7 +8,7 @@ import { useDataScope } from "../auth/context/dataScopeContextValue.js";
 export default function DiaryIntelligence({ catches, trips, waters, analysisEnabled = true, recommendationsEnabled = true }) {
   const scope = useDataScope();
   const [expanded, setExpanded] = useState(false);
-  const externalEnabled = AI_FEATURES.diary || AI_FEATURES.recommendations;
+  const externalEnabled = AI_FEATURES.recommendations;
   const report = useMemo(() => expanded && (analysisEnabled || recommendationsEnabled || externalEnabled) ? buildDiaryInsights(catches, { trips, waters }) : null,
     [expanded, catches, trips, waters, analysisEnabled, recommendationsEnabled, externalEnabled]);
   if (!analysisEnabled && !recommendationsEnabled && !externalEnabled) return <section className="insights-section">

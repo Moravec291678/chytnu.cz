@@ -2,18 +2,18 @@ import { createHash } from "node:crypto";
 import { AI_CONSENT_VERSION, AI_FEATURES, hasAiConsent } from "../aiPolicy.js";
 import { analyzeDiary } from "../diaryAnalysis.js";
 import { createStoryDraft } from "../storyDraft.js";
-import { validateSpeciesSuggestion } from "../speciesSuggestion.js";
 import { getAccountDeletionAdminContext } from "../../../server/cloudinaryApi.js";
 import { AiServiceError, safeAiDiagnostic } from "./aiServiceError.js";
 import { effectiveUserReservation, isRuntimeFeatureEnabled, normalizeRuntimeConfig, resolveAccess } from "../../admin/adminPolicy.js";
 import { configuredOwnerUid, configuredCoCreatorUid } from "../../admin/server/adminAccess.js";
-import { quickCatchMetadataFromRemote } from "../../catches/data/quickCatchMetadata.js";
 
 const ID = /^[A-Za-z0-9_-]{1,128}$/;
 const SHA = /^[a-f0-9]{64}$/;
+// Keep the stored consent schema readable across app versions; removed capabilities
+// are forced false and have no request action or provider implementation.
 const CAPABILITIES = ["species", "stories", "diary", "recommendations"];
 const TASKS = ["summarize", "improve", "clarity", "title"];
-const ACTIONS = ["consent.get", "consent.update", "consent.revoke", "species", "species.auto", "species.status", "story", "diary", "recommendations"];
+const ACTIONS = ["consent.get", "consent.update", "consent.revoke", "story", "recommendations"];
 const EVIDENCE_KEYS = ["count", "species", "hours", "months", "methods", "baits", "measuredLengthCount", "meanLengthCm", "longestCm", "missing", "period", "limitations"];
 const encode = new TextEncoder();
 const hash = (value) => createHash("sha256").update(typeof value === "string" ? value : JSON.stringify(value)).digest("hex");
@@ -43,12 +43,10 @@ function parseRequest(req) {
   if (!raw || encode.encode(raw).length > 2048) throw failure("invalid_request", 400);
   const body = JSON.parse(raw);
   if (!body || typeof body !== "object" || Array.isArray(body) || !ACTIONS.includes(body.action)) throw failure("invalid_request", 400);
-  const speciesAction = body.action.startsWith("species");
   const allowed = body.action === "consent.update" ? ["action", "version", "expectedRevision", "capabilities", ...(Object.hasOwn(body, "automaticSpecies") ? ["automaticSpecies"] : [])]
-    : speciesAction ? ["action", "catchId", "photoId"] : body.action === "story" ? ["action", "catchId", "task"] : ["action"];
+    : body.action === "story" ? ["action", "catchId", "task"] : ["action"];
   if (Object.keys(body).length !== allowed.length || Object.keys(body).some((key) => !allowed.includes(key))) throw failure("invalid_request", 400);
-  if ((speciesAction || body.action === "story") && (typeof body.catchId !== "string" || !ID.test(body.catchId))) throw failure("invalid_request", 400);
-  if (speciesAction && (typeof body.photoId !== "string" || !ID.test(body.photoId))) throw failure("invalid_request", 400);
+  if ((body.action === "story") && (typeof body.catchId !== "string" || !ID.test(body.catchId))) throw failure("invalid_request", 400);
   if (body.action === "story" && !TASKS.includes(body.task)) throw failure("invalid_request", 400);
   if (body.action === "consent.update" && (body.version !== AI_CONSENT_VERSION || !validCapabilities(body.capabilities)
     || !Number.isSafeInteger(body.expectedRevision) || body.expectedRevision < 0
@@ -84,9 +82,9 @@ function boundedSummary(summary) {
 // All provider functions are injected. Production must pass reviewed source flags
 // and the already verified zero-cost provider configuration; nothing activates here.
 export function createAiApplicationApi({ enabled = false, features = AI_FEATURES, providerName = "cloudflare", modelId,
-  verifyToken, getConsent, setConsent, getOwnedPhoto, getOwnedCatch, listOwnedCatches,
-  getCachedResult, saveResult, consumeRateLimit, speciesProvider, textProvider, analysisProvider,
-  getOwnedPhotoIdentity, claimRequest, finishRequest,
+  verifyToken, getConsent, setConsent, getOwnedCatch, listOwnedCatches,
+  getCachedResult, saveResult, consumeRateLimit, textProvider, analysisProvider,
+  claimRequest, finishRequest,
   authorizeRuntime, recordInference, settleRateLimit, getQuotaPolicy,
   diagnostic = safeAiDiagnostic, now = () => Date.now() } = {}) {
   const observeInference = async outcome => { try { await recordInference?.(outcome); } catch { /* Best-effort operational aggregate only. */ } };
@@ -120,26 +118,13 @@ export function createAiApplicationApi({ enabled = false, features = AI_FEATURES
             ...(Object.hasOwn(body, "automaticSpecies") ? { automaticSpecies: body.automaticSpecies } : {}) });
         return send(res, 200, { consent: consentView(value), ...(value.cleanupPending ? { cleanupPending: true } : {}) });
       }
-      const capability = body.action.startsWith("species") ? "species" : body.action === "story" ? "stories" : body.action;
-      const provider = capability === "species" ? speciesProvider : capability === "stories" ? textProvider : analysisProvider;
+      const capability = body.action === "story" ? "stories" : body.action;
+      const provider = capability === "stories" ? textProvider : analysisProvider;
       if (features[capability] !== true || typeof provider !== "function"
         || ![consumeRateLimit, getCachedResult, saveResult].every((fn) => typeof fn === "function")) throw failure("ai_disabled", 503);
       const consent = await checkConsent(uid, capability);
-      let result, sourceHash, source, photo;
-      if (capability === "species") {
-        if (typeof getOwnedPhoto !== "function") throw failure("ai_disabled", 503);
-        photo = await (getOwnedPhotoIdentity ?? getOwnedPhoto)(uid, body.catchId, body.photoId);
-        if (photo?.ownerId !== uid || photo.catchId !== body.catchId || photo.photoId !== body.photoId || photo.deleted) throw failure("photo_not_found", 404);
-        if ((!getOwnedPhotoIdentity && (!(photo.bytes instanceof Uint8Array) || !photo.bytes.length || photo.bytes.length > 2 * 1024 * 1024
-          || photo.metadataStripped !== true)) || !["image/jpeg", "image/png", "image/webp"].includes(photo.mimeType)
-          || !SHA.test(photo.sourceSha256 ?? "")) throw failure("unsupported_photo", 422);
-        if (body.action === "species.auto") {
-          if (!consent.automaticSpecies || !Number.isFinite(Date.parse(consent.automaticSpeciesFrom))) throw failure("consent_required", 403);
-          if (photo.confirmed || photo.captureMode !== "quick" || Date.parse(photo.createdAt) < Date.parse(consent.automaticSpeciesFrom)
-            || !Number.isFinite(Date.parse(photo.createdAt))) return send(res, 200, { status: "ineligible" });
-        }
-        sourceHash = hash([body.catchId, body.photoId, photo.sourceSha256]);
-      } else if (capability === "stories") {
+      let result, sourceHash, source;
+      if (capability === "stories") {
         if (typeof getOwnedCatch !== "function") throw failure("ai_disabled", 503);
         source = await getOwnedCatch(uid, body.catchId);
         if (!own(source, uid, body.catchId)) throw failure("catch_not_found", 404);
@@ -157,12 +142,10 @@ export function createAiApplicationApi({ enabled = false, features = AI_FEATURES
         sourceHash = hash([analysis.providerSummary, analysis.evidenceIds, source.truncated]);
       }
       const key = hash(["ai-v1", capability, modelId, sourceHash]);
-      if (body.action === "species.status" && photo.confirmed) return send(res, 200, { status: "confirmed", sourceSha256: photo.sourceSha256 });
       const cached = await getCachedResult(uid, key);
-      if (cached?.ownerId === uid && cached.type === (capability === "species" ? "species" : body.action) && cached.provider === providerName
+      if (cached?.ownerId === uid && cached.type === body.action && cached.provider === providerName
         && cached.modelId === modelId && cached.sourceHash === sourceHash && cached.consentRevision === consent.revision) {
         await checkConsent(uid, capability, consent.revision);
-        if (capability === "species") return send(res, 200, { ...validateSpeciesSuggestion(cached.result), sourceSha256: photo.sourceSha256 });
         if (capability === "stories") {
           createStoryDraft(source.notes, cached.result?.text, body.task);
           return send(res, 200, { ...cached.result, originalNotes: source.notes, sourceNotes: source.notes,
@@ -171,7 +154,6 @@ export function createAiApplicationApi({ enabled = false, features = AI_FEATURES
         const validated = validateAnalysisOutput({ text: cached.result?.text, evidenceKeys: cached.result?.evidenceKeys });
         return send(res, 200, { ...cached.result, ...validated });
       }
-      if (body.action === "species.status") return send(res, 200, { status: photo.confirmed ? "confirmed" : "pending", sourceSha256: photo.sourceSha256 });
       // Consent and source authority are checked before quota consumption. Cache
       // hits never consume another inference reservation.
       await checkConsent(uid, capability, consent.revision);
@@ -180,24 +162,13 @@ export function createAiApplicationApi({ enabled = false, features = AI_FEATURES
         leaseTicket = await claimRequest(uid, key, { consentRevision: consent.revision,
           ...(getQuotaPolicy ? { policyVersion: await getQuotaPolicy(uid) } : {}) });
       }
-      let speciesPayload = null;
-      if (capability === "species") {
-        try { speciesPayload = getOwnedPhotoIdentity ? await getOwnedPhoto(uid, body.catchId, body.photoId) : photo; }
-        catch { throw failure("photo_unavailable", 503); }
-        if (!speciesPayload || speciesPayload.sourceSha256 !== photo.sourceSha256) throw failure("source_changed", 409);
-        if (!(speciesPayload.bytes instanceof Uint8Array) || !speciesPayload.bytes.length || speciesPayload.bytes.length > 2 * 1024 * 1024
-          || speciesPayload.metadataStripped !== true) throw failure("unsupported_photo", 422);
-        await checkConsent(uid, capability, consent.revision);
-      }
       const quota = await consumeRateLimit(uid, { capability });
       if (quota !== true && quota?.allowed !== true) throw new AiServiceError(quota?.code ?? "quota_unavailable", { retryAt: quota?.retryAt });
       await checkConsent(uid, capability, consent.revision);
       let measuredUsage = null;
       const onUsage = value => { measuredUsage = value; };
       inferenceCapability = capability;
-      if (capability === "species") {
-        result = validateSpeciesSuggestion(await provider({ bytes: speciesPayload.bytes, mimeType: speciesPayload.mimeType, onUsage }));
-      } else if (capability === "stories") {
+      if (capability === "stories") {
         const output = await provider({ notes: source.notes, action: body.task, onUsage });
         result = { ...createStoryDraft(source.notes, output?.text, body.task), task: body.task, catchId: body.catchId,
           sourceNotes: source.notes, baseRevision: source.serverRevision ?? null };
@@ -213,16 +184,16 @@ export function createAiApplicationApi({ enabled = false, features = AI_FEATURES
       await observeInference({ capability, status: "success" });
       inferenceRecorded = true;
       await checkConsent(uid, capability, consent.revision);
-      const stored = await saveResult(uid, key, { ownerId: uid, type: capability === "species" ? "species" : body.action, provider: providerName, modelId, sourceHash,
-        ...(body.catchId ? { catchId: body.catchId } : {}), ...(body.photoId ? { photoId: body.photoId, photoSha256: photo.sourceSha256 } : {}), result },
-      { capability, consentRevision: consent.revision, automaticSpecies: body.action === "species.auto",
+      const stored = await saveResult(uid, key, { ownerId: uid, type: body.action, provider: providerName, modelId, sourceHash,
+        ...(body.catchId ? { catchId: body.catchId } : {}), result },
+      { capability, consentRevision: consent.revision,
         ...(source?.notes !== undefined ? { expectedNotes: source.notes } : {}) });
       if (!stored) throw failure("source_changed", 409);
       if (quota?.reservationId && measuredUsage && settleRateLimit) {
         try { await settleRateLimit(uid, quota.reservationId, measuredUsage); } catch { /* Keep the full reservation on uncertainty. */ }
       }
       if (leaseTicket) await finishRequest?.(uid, leaseKey, leaseTicket).catch(() => {});
-      return send(res, 200, capability === "species" ? { ...result, sourceSha256: photo.sourceSha256 } : result);
+      return send(res, 200, result);
     } catch (caught) {
       const error = caught instanceof TypeError ? new AiServiceError("invalid_ai_response") : caught;
       if (inferenceCapability && !inferenceRecorded) await observeInference({ capability: inferenceCapability, status: "error", code: error?.aiCode });
@@ -230,7 +201,7 @@ export function createAiApplicationApi({ enabled = false, features = AI_FEATURES
         retryAt: error.retryAt ?? new Date(now() + 5 * 60_000).toISOString() }).catch(() => {});
       diagnostic(error);
       if (error instanceof AiServiceError) return send(res, error.aiStatus, { error: error.aiCode, ...(error.retryAt ? { retryAt: error.retryAt } : {}) });
-      const known = ["invalid_request", "consent_conflict", "consent_required", "ai_disabled", "photo_not_found", "photo_unavailable", "unsupported_photo",
+      const known = ["invalid_request", "consent_conflict", "consent_required", "ai_disabled",
         "catch_not_found", "unsupported_notes", "journal_unavailable", "insufficient_data", "rate_limited", "invalid_ai_response", "source_changed", "account_unavailable"];
       return send(res, known.includes(error?.aiCode) ? error.aiStatus : 503,
         { error: known.includes(error?.aiCode) ? error.aiCode : "ai_unavailable" });
@@ -315,9 +286,9 @@ export function createFirebaseAiApplicationDependencies({ env, admin = () => get
       const result = snapshot.exists ? snapshot.data() : null;
       return result?.ownerId === uid ? result : null;
     },
-    saveResult: async (uid, key, entry, { capability, consentRevision, expectedNotes, automaticSpecies = false } = {}) => {
+    saveResult: async (uid, key, entry, { capability, consentRevision, expectedNotes } = {}) => {
       requireIdentity(uid);
-      if (!SHA.test(key) || entry.ownerId !== uid || !CAPABILITIES.includes(capability)) return false;
+      if (!SHA.test(key) || entry.ownerId !== uid || !AI_FEATURES[capability]) return false;
       const { db } = await admin();
       return db.runTransaction(async (transaction) => {
         const [deleted, consentSnapshot, account, config, suspended] = await Promise.all([transaction.get(db.doc(`accountDeletions/${uid}`)),
@@ -333,15 +304,6 @@ export function createFirebaseAiApplicationDependencies({ env, admin = () => get
           const snapshot = await transaction.get(db.doc(`users/${uid}/catches/${entry.catchId}`));
           const record = snapshot.exists ? snapshot.data() : null;
           if (!own(record, uid, entry.catchId) || (expectedNotes !== undefined && record.notes !== expectedNotes)) return false;
-          const quickMetadata = typeof record.quickCatch === "string" ? quickCatchMetadataFromRemote(record.quickCatch) : record.quickCatch;
-          if (automaticSpecies && (record.speciesKey || quickMetadata?.provenance?.speciesKey === "manual")) return false;
-          if (entry.photoId) {
-            if (!ID.test(entry.photoId) || record.photoRefs?.[entry.photoId] !== true) return false;
-            const photoSnapshot = await transaction.get(db.doc(`users/${uid}/catches/${entry.catchId}/photos/${entry.photoId}`));
-            const photo = photoSnapshot.exists ? photoSnapshot.data() : null;
-            if (!photo || photo.deleted || photo.id !== entry.photoId || photo.cloud?.state !== "synced"
-              || photo.cloud.sha256 !== entry.photoSha256) return false;
-          }
         }
         transaction.set(db.doc(`users/${uid}/aiResults/${key}`), { ...entry, consentRevision, createdAt: new Date(now()).toISOString() });
         return true;

@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { createServer } from "vite";
 
 test("online feed presents only approved fields and honest states", async t => {
-  const server = await createServer({ server: { middlewareMode: true }, appType: "custom", optimizeDeps: { noDiscovery: true, include: [], entries: [] } });
+  const server = await createServer({ server: { middlewareMode: true, hmr: false, watch: null }, appType: "custom", optimizeDeps: { noDiscovery: true, include: [], entries: [] } });
   try {
     const { SocialPostCard, SocialFeedState } = await server.ssrLoadModule("/src/features/social/components/SocialFeed.jsx");
     const { SocialInteractionsPanel } = await server.ssrLoadModule("/src/features/social/components/SocialInteractions.jsx");

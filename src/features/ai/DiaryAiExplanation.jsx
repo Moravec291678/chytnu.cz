@@ -19,7 +19,7 @@ export default function DiaryAiExplanation({ report }) {
   const latestFingerprint = useRef(fingerprint);
   useEffect(() => { latestFingerprint.current = fingerprint; }, [fingerprint]);
   useEffect(() => {
-    if ((!AI_FEATURES.diary && !AI_FEATURES.recommendations) || !scope.ownerId) return undefined;
+    if (!AI_FEATURES.recommendations || !scope.ownerId) return undefined;
     const controller = new AbortController();
     const load = (event) => {
       const currentConsentSequence = ++consentSequence.current;
@@ -36,7 +36,7 @@ export default function DiaryAiExplanation({ report }) {
     window.addEventListener(AI_CONSENT_CHANGED_EVENT, load);
     return () => { controller.abort(); window.removeEventListener(AI_CONSENT_CHANGED_EVENT, load); cancelRequests(); };
   }, [client, scope.ownerId, cancelRequests]);
-  if (!AI_FEATURES.diary && !AI_FEATURES.recommendations) return null;
+  if (!AI_FEATURES.recommendations) return null;
   if (!scope.ownerId) return <div><h3>Volitelný tip AI z deníku</h3><p>Pro AI se <Link to="/login">přihlas</Link>. Místní rozbor funguje i bez ní.</p></div>;
   const consent = consentState.ownerId === scope.ownerId ? consentState.consent : null;
   const run = async (capability) => {
@@ -59,7 +59,7 @@ export default function DiaryAiExplanation({ report }) {
       if (currentSequence === sequence.current) setState((previous) => ({ ...previous, busy: "", error: error.message }));
     } finally { requestBusy.current = false; }
   };
-  const capabilities = [["diary", "Vysvětlit souhrny pomocí AI"], ["recommendations", "Vytvořit tip pro další vycházku"]]
+  const capabilities = [["recommendations", "Vytvořit tip pro další vycházku"]]
     .filter(([key]) => AI_FEATURES[key]);
   return <div className="insights-ai-explanation">
     <h3>Volitelný tip AI z deníku</h3>
@@ -73,7 +73,7 @@ export default function DiaryAiExplanation({ report }) {
         <button className="insights-analysis-button" type="button" disabled={Boolean(state.busy) || !allowed || !report?.evidenceIds?.length} onClick={() => void run(key)}>{label}</button>
         {!allowed && <p>Pro tuto funkci nejdřív uděl souhlas v nastavení.</p>}
         {resultAuthorized && result.fingerprint === fingerprint && <div>
-          <h4>{key === "diary" ? "Komentář AI — k ověření" : "Návrhy AI — hypotézy"}</h4>
+          <h4>Návrhy AI — hypotézy</h4>
           <p style={{ whiteSpace: "pre-wrap" }}>{result.text}</p>
           <p>Serverový výpočet použil {result.summary.count} synchronizovaných záznamů. Místní a synchronizovaný přehled se mohou lišit.</p>
           {result.truncated && <p>Zahrnuto je nejvýše 500 posledních synchronizovaných úlovků.</p>}
@@ -85,7 +85,7 @@ export default function DiaryAiExplanation({ report }) {
         {resultAuthorized && result.fingerprint !== fingerprint && <p>Deník se od tohoto návrhu změnil. Pro nové podklady spusť AI znovu.</p>}
       </div>;
     })}
-    {state.busy && <p role="status">AI připravuje vysvětlení…</p>}
+    {state.busy && <p role="status">AI připravuje deníkový tip…</p>}
     {state.error && <p role="alert">{state.error}</p>}
     {consentState.ownerId === scope.ownerId && consentState.error && <p role="alert">{consentState.error}</p>}
   </div>;

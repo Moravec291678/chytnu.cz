@@ -18,6 +18,7 @@ import { publicAchievementChoices,selectedPublicAchievements } from "../data/pub
 import { projectPublicProgression,publicProgressionFromSummary } from "./publicProgressionService.js";
 import { createSocialFeedService } from "./socialFeedService.js";
 import { createSocialInteractionService } from "./socialInteractionService.js";
+import { publicationConsentPath } from "./publicationConsent.js";
 export const profileError = (code, status = 400) => Object.assign(new Error(code), { code, status });
 export function createPublicProfileService({ db, auth, avatar, socialPhoto, env = {}, cursorSecret, now = () => Date.now() }) {
   const repository = createSocialRepository({ db, auth, now, profilesEnabled: true });
@@ -96,6 +97,7 @@ export function createPublicProfileService({ db, auth, avatar, socialPhoto, env 
     if (action === "entries.save") return publications.saveEntry(uid,payload);
     if (action === "progression.compare") return repository.compareProfiles(token,payload.targetUid,projection);
     if (action === "posts.save") return publications.save(uid,payload);
+    if (action === "posts.publishNew") return publications.publishNew(uid);
     if (action === "posts.own") return publications.own(uid,payload);
     if (action === "posts.list") return publications.list(uid,payload);
     if (action === "posts.delete") return publications.remove(uid,payload);
@@ -133,9 +135,12 @@ export function createPublicProfileService({ db, auth, avatar, socialPhoto, env 
         return { ...item, photos: [...choices.values()].filter(p => activeSocialPhoto(row.data(),p.data(),uid,p.id) && p.data().type === "image/jpeg" && p.data().cloud?.state === "synced").map(p => ({ photoId: p.id })) };
       }))).filter(Boolean);
       const summary=(await db.doc(`users/${uid}/serverProgressionState/summary`).get()).data();
-      return { uid, profile, candidateCatches,achievementChoices:publicAchievementChoices(),entryOptions:{achievements:selectedPublicAchievements(profile?.sharedAchievementIds),progression:publicProgressionFromSummary(summary,uid)}, blockedAccounts: blocked.docs.map(row => ({ uid: row.id })) };
+      return { uid, profile, publicationConsent: (await db.doc(publicationConsentPath(uid)).get()).data() ?? null, candidateCatches,achievementChoices:publicAchievementChoices(),entryOptions:{achievements:selectedPublicAchievements(profile?.sharedAchievementIds),progression:publicProgressionFromSummary(summary,uid)}, blockedAccounts: blocked.docs.map(row => ({ uid: row.id })) };
     }
-    if (action === "save") return { profile: await repository.saveProfile(token, payload.profile) };
+    if (action === "save") {
+      const profile = await repository.saveProfile(token, payload.profile, payload.publicationConsent);
+      return { profile, publicationConsent: (await db.doc(publicationConsentPath(uid)).get()).data() ?? null };
+    }
     if (action === "block") { await repository.block(token, payload.targetUid, payload.blocked); return { blocked: payload.blocked }; }
     if (action === "report") {
       const profile = await read(token, payload.targetUid);

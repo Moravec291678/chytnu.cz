@@ -91,11 +91,11 @@ test("diary recommendations send no raw records and validate bounded evidence", 
       requests.push(JSON.parse(init.body));
       return response({ status: "generated", text: "Opatrný tip.", summary: { count: 1 }, evidenceIds: ["c"] });
     } });
-  assert.equal((await client.run("diary", { records: "PRIVATE" }, { consent })).text, "Opatrný tip.");
+  assert.equal((await client.run("recommendations", { records: "PRIVATE" }, { consent })).text, "Opatrný tip.");
   await client.run("recommendations", { records: "PRIVATE" }, { consent });
-  assert.deepEqual(requests, [{ action: "diary" }, { action: "recommendations" }]);
+  assert.deepEqual(requests, [{ action: "recommendations" }, { action: "recommendations" }]);
   const bad = makeClient({ flags: { ...flags, diary: true }, fetchImpl: async () => response({ text: { html: "bad" } }) });
-  await assert.rejects(bad.client.run("diary", {}, { consent }), { code: "invalid_response" });
+  await assert.rejects(bad.client.run("recommendations", {}, { consent }), { code: "invalid_response" });
 });
 
 test("token errors never expose authentication diagnostics or private server details", async () => {

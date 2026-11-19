@@ -1,3 +1,4 @@
+import { publicProfileFixtureConsent, publicProfileFixturePayload } from "./social-publication-fixture.mjs";
 // Synthetic accounts only. Never point this acceptance suite at production.
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -22,7 +23,7 @@ let handler;
 function equal(a, b) { assert.deepEqual(a, b); checks++; }
 async function call(role, action, payload = {}, expected = 200) {
   const response = { statusCode: 200, setHeader() {}, status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } };
-  await handler({ method: "POST", headers: tokens[role] ? { authorization: `Bearer ${tokens[role]}` } : {}, body: { action, ...payload } }, response);
+  await handler({ method: "POST", headers: tokens[role] ? { authorization: `Bearer ${tokens[role]}` } : {}, body: { action, ...await publicProfileFixturePayload(action, payload, db, ids[role]) } }, response);
   assert.equal(response.statusCode, expected, `${role}/${action}: ${JSON.stringify(response.body)}`); checks++;
   return response.body;
 }
@@ -51,7 +52,7 @@ try {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: `${uid}@example.test`, password: `Synthetic-${suffix}-9!`, returnSecureToken: true }),
     });
     equal(response.status, 200); tokens[role] = (await response.json()).idToken;
-    await repo.saveProfile(tokens[role], { handle: `${role}_${suffix}`, displayName: `Synthetic friend ${role.toUpperCase()}`, visibility: "public", discoverable: true });
+    await repo.saveProfile(tokens[role], { handle: `${role}_${suffix}`, displayName: `Synthetic friend ${role.toUpperCase()}`, visibility: "public", discoverable: true }, await publicProfileFixtureConsent({ visibility: "public" }, db, ids[role]));
   }
   env.CHYTNU_OWNER_UID = ids.owner; env.CHYTNU_CO_CREATOR_UID = ids.co; handler = makeHandler();
   const pair = canonicalPair(ids.a, ids.b), pairRef = db.doc(`socialRelationships/${pair}`);

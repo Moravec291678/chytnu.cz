@@ -5,7 +5,7 @@ import { renderToString } from "react-dom/server";
 import { createServer } from "vite";
 
 test("admin route, Profile link and delegated navigation render safely without trusting frontend roles", async () => {
-  const server = await createServer({ server: { middlewareMode: true }, appType: "custom" });
+  const server = await createServer({ server: { middlewareMode: true, hmr: false, watch: null }, appType: "custom" });
   try {
     const { default: Page, AdminWorkspace } = await server.ssrLoadModule("/src/features/admin/AdminDashboard.jsx");
     const { default: ProfileLink } = await server.ssrLoadModule("/src/features/admin/ProfileAdminLink.jsx");

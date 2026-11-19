@@ -1,8 +1,75 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { runInNewContext } from "node:vm";
 
 const projectUrl = new URL("../", import.meta.url);
+
+async function generatedWorker(fetchImpl) {
+  const { default: config } = await import("../vite.config.js");
+  const plugin = config.plugins.find(item => item.name === "chytnucz-offline-shell");
+  let source;
+  plugin.generateBundle.call({ emitFile: asset => { source = asset.source; } }, {}, {
+    app: { fileName: "assets/app-new.js" }, html: { fileName: "index.html" },
+  });
+  const current = JSON.parse(/^const CACHE = (.+);$/m.exec(source)[1]);
+  const rows = new Map([
+    ["chytnucz-shell-previous", new Map([["/index.html", new Response("OLD")], ["/assets/app-old.js", new Response("OLD-CHUNK")]])],
+    [current, new Map([["/index.html", new Response("CURRENT")]])],
+    ["unrelated-cache", new Map([["other", new Response("KEEP")]])],
+  ]);
+  const handlers = new Map();
+  const caches = {
+    async open(key) {
+      if (!rows.has(key)) rows.set(key, new Map());
+      return { match: async path => rows.get(key).get(typeof path === "string" ? path : path.url)?.clone(),
+        put: async (path, response) => { rows.get(key).set(path, response); } };
+    },
+    async match(request) {
+      const path = typeof request === "string" ? request : new URL(request.url).pathname;
+      for (const cache of rows.values()) if (cache.has(path)) return cache.get(path).clone();
+    },
+    keys: async () => [...rows.keys()], delete: async key => rows.delete(key),
+  };
+  runInNewContext(source, { self: { location: { origin: "https://chytnu.test" },
+    addEventListener: (type, handler) => handlers.set(type, handler), clients: { claim: async () => {} } },
+  URL, caches, fetch: fetchImpl });
+  return { rows, current, handlers, async navigate(path = "/journal") {
+    let response; const pending = [];
+    handlers.get("fetch")({ request: { method: "GET", mode: "navigate", url: `https://chytnu.test${path}` },
+      respondWith: value => { response = value; }, waitUntil: value => pending.push(value) });
+    const result = await response;
+    await Promise.all(pending);
+    return result;
+  } };
+}
+
+test("generated worker uses the current offline shell while retaining old lazy assets and unrelated storage", async () => {
+  const worker = await generatedWorker(async () => { throw new Error("offline"); });
+  let activation;
+  worker.handlers.get("activate")({ waitUntil: value => { activation = value; } });
+  await activation;
+  assert.equal(await (await worker.navigate()).text(), "CURRENT");
+  assert.equal(worker.rows.has("chytnucz-shell-previous"), true);
+  assert.equal(worker.rows.has("unrelated-cache"), true);
+  let response;
+  worker.handlers.get("fetch")({ request: { method: "GET", mode: "cors", url: "https://chytnu.test/assets/app-old.js" },
+    respondWith: value => { response = value; } });
+  assert.equal(await (await response).text(), "OLD-CHUNK");
+});
+
+test("generated worker caches successful HTML only; errors, other content and cache write failures preserve navigation", async () => {
+  for (const [status, contentType] of [[503, "text/html"], [404, "text/html"], [200, "application/json"]]) {
+    const worker = await generatedWorker(async () => new Response("UNSUITABLE", { status, headers: { "content-type": contentType } }));
+    assert.equal((await worker.navigate()).status, status);
+    assert.equal(await worker.rows.get(worker.current).get("/index.html").clone().text(), "CURRENT");
+  }
+  const worker = await generatedWorker(async () => new Response("FRESH", { headers: { "content-type": "text/html; charset=utf-8" } }));
+  assert.equal(await (await worker.navigate()).text(), "FRESH");
+  assert.equal(await worker.rows.get(worker.current).get("/index.html").clone().text(), "FRESH");
+  worker.rows.get(worker.current).set = () => { throw new Error("cache full"); };
+  assert.equal(await (await worker.navigate()).text(), "FRESH");
+});
 
 test("Vercel config builds Vite into dist and preserves SPA routes", async () => {
   const config = JSON.parse(await readFile(new URL("vercel.json", projectUrl), "utf8"));

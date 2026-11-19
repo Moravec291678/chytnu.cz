@@ -9,6 +9,7 @@ import { configuredOwnerUid, configuredCoCreatorUid } from "../../admin/server/a
 import { moderationKey } from "../../admin/server/adminSupportStore.js";
 import { assertSocialInteraction, activeSocialPhoto } from "./socialAccess.js";
 import { createSocialEntryService } from "./socialEntryService.js";
+import { publicationConsentPath, assertPublicationConsent, consentAllowsPost, automaticCatchEligible } from "./publicationConsent.js";
 const waters = new Map(catalogue.map(w => [w.id,w]));
 const fail = (code = "post_unavailable") => { throw new Error(code); };
 export function createPublicationService({ db, media, cursors, env = {}, now = () => Date.now() }) {
@@ -46,6 +47,7 @@ export function createPublicationService({ db, media, cursors, env = {}, now = (
     if (uid === row.ownerUid && !previewAudience) audience = "owner";
     else {
       if (ownerOnly) return null;
+      if (!consentAllowsPost((await tx.get(db.doc(publicationConsentPath(row.ownerUid)))).data(), row)) return null;
       if (previewAudience) audience=previewAudience;
       else if (uid) {
         try { await assertSocialInteraction({ tx,db,uid,targetUid:row.ownerUid }); } catch { return null; }
@@ -96,9 +98,11 @@ export function createPublicationService({ db, media, cursors, env = {}, now = (
       if (audience === "stranger") query=query.where("visibility","==","public");
       else if (audience === "friend") query=query.where("visibility","in",["public","friends"]);
       const page=await tx.get(query.orderBy("createdAt","desc").orderBy(FieldPath.documentId(),"desc").limit(20));
+      const consent = audience === "owner" ? null : (await tx.get(db.doc(publicationConsentPath(profile.uid)))).data();
       const records=[];
       for (const snapshot of page.docs.slice(0,20)) {
         const row=snapshot.data();
+        if (audience !== "owner" && !consentAllowsPost(consent, row)) continue;
         if (row.kind && row.kind !== "catch") continue;
         if (row.ownerUid !== profile.uid || row.deleted || row.moderationState !== "visible" || !sectionAllowed(row.visibility,audience)
           || !sectionAllowed(profile.sections?.[row.sourcePhotoId?"gallery":"catches"] ?? "private",audience)) continue;
@@ -112,14 +116,18 @@ export function createPublicationService({ db, media, cursors, env = {}, now = (
       // through a has-more/partial signal derived from private documents.
       return {records,partial:true};
     },
-    async save(uid,payload) {
+    async save(uid,payload,{automaticEpoch} = {}) {
       const input = publicationInput(payload), id = publicationId(uid,input.catchId), ref = db.doc(`socialPosts/${id}`);
       const initial = await db.runTransaction(async tx => {
         await guard(tx,uid);
+        const consent = (await tx.get(db.doc(publicationConsentPath(uid)))).data();
+        assertPublicationConsent(consent, input.visibility);
         if (!(await tx.get(db.doc(`publicProfiles/${uid}`))).exists) fail("save_profile_first");
         const old = (await tx.get(ref)).data(), src = await source(tx,uid,input.catchId,input.photoId);
+        if (automaticEpoch !== undefined && (old || consent?.epoch !== automaticEpoch || !automaticCatchEligible(src.parent,consent)
+          || input.photoId && src.parent.privacy?.photoVisibility !== "public")) fail("post_conflict");
         if (old && input.expectedRevision === undefined || input.expectedRevision !== undefined && input.expectedRevision !== (old?.revision ?? 0)) fail("post_conflict");
-        return { src, revision:old?.revision ?? 0, fingerprint:fingerprint(src,input) };
+        return { src, revision:old?.revision ?? 0, fingerprint:fingerprint(src,input), consentEpoch:consent?.epoch ?? 0 };
       });
       // Provider work is outside retryable transactions. Durable receipt coalesces devices.
       const receipt = input.photoId && input.visibility !== "private" ? await media.prepare({uid,catchId:input.catchId,photoId:input.photoId},initial.src.photo) : null;
@@ -127,14 +135,62 @@ export function createPublicationService({ db, media, cursors, env = {}, now = (
         await guard(tx,uid);
         const profile = (await tx.get(db.doc(`publicProfiles/${uid}`))).data();
         if (profile?.uid !== uid) fail("save_profile_first");
+        const consent = (await tx.get(db.doc(publicationConsentPath(uid)))).data();
+        assertPublicationConsent(consent, input.visibility);
+        if ((consent?.epoch ?? 0) !== initial.consentEpoch) fail("consent_conflict");
         const old = (await tx.get(ref)).data(), src = await source(tx,uid,input.catchId,input.photoId);
+        if (automaticEpoch !== undefined && (old || consent?.epoch !== automaticEpoch || !automaticCatchEligible(src.parent,consent)
+          || input.photoId && src.parent.privacy?.photoVisibility !== "public")) fail("post_conflict");
         if ((old?.revision ?? 0) !== initial.revision || fingerprint(src,input) !== initial.fingerprint) fail("post_conflict");
         const row = { id,ownerUid:uid,sourceCatchId:input.catchId,sourcePhotoId:input.photoId,fields:input.fields,description:input.description,
           content:publicationContent(src.parent,input,src.water),sourceFingerprint:initial.fingerprint,visibility:input.visibility,mediaReceipt:receipt,
+          publicationEpoch:consent?.epoch ?? 0,
           revision:initial.revision+1,createdAt:old?.createdAt ?? now(),updatedAt:now(),deleted:false,moderationState:old?.moderationState ?? "visible",schemaVersion:1 };
         tx.set(ref,row); return dto({row,profile,audience:"owner"});
       });
       return {post:saved};
+    },
+    async publishNew(uid) {
+      const receipt = (await db.doc(publicationConsentPath(uid)).get()).data();
+      if (receipt?.mode !== "public") return { published: 0 };
+      const scanRef = db.doc(`users/${uid}/socialPreferences/publicationScan`), scan = (await scanRef.get()).data();
+      let query = db.collection(`users/${uid}/catches`).where("createdAt",">=",new Date(receipt.acceptedAt).toISOString())
+        .orderBy("createdAt","desc").orderBy(FieldPath.documentId(),"desc");
+      if (scan?.epoch === receipt.epoch && typeof scan.createdAt === "string" && typeof scan.id === "string") query=query.startAfter(scan.createdAt,scan.id);
+      const page = await query.limit(10).get();
+      let published = 0;
+      let boundary = null;
+      for (const snapshot of page.docs) {
+        if (published >= 3) break;
+        boundary = {createdAt:snapshot.data().createdAt,id:snapshot.id};
+        const record = snapshot.data();
+        if (!automaticCatchEligible(record,receipt) || (await db.doc(`socialPosts/${publicationId(uid,snapshot.id)}`).get()).exists) continue;
+        let photoId = null;
+        const attached = Object.keys(record.photoRefs ?? {}).filter(id=>record.photoRefs[id] === true);
+        if (attached.length && record.privacy.photoVisibility === "public") {
+          if (!media) continue;
+          for (const id of attached.slice(0,4)) {
+            const photo = (await snapshot.ref.collection("photos").doc(id).get()).data();
+            if (activeSocialPhoto(record,photo,uid,id) && photo.type === "image/jpeg" && photo.cloud?.state === "synced") {photoId=id;break;}
+          }
+          if (!photoId) continue; // Retry after the private photo upload completes.
+        }
+        try {
+          await this.save(uid,{catchId:snapshot.id,photoId,visibility:"public",fields:{length:true,weight:true,method:true,date:"month",water:false},description:"",expectedRevision:0},{automaticEpoch:receipt.epoch});
+          published++;
+        } catch (error) {
+          if (!["post_conflict","photo_preparing","photo_unavailable","post_unavailable"].includes(error.message)) throw error;
+        }
+      }
+      // Cycle through bounded pages, including deferred photos behind already
+      // published rows. A new consent epoch invalidates the prior scan cursor.
+      await db.runTransaction(async tx=>{
+        await guard(tx,uid);
+        const current=(await tx.get(db.doc(publicationConsentPath(uid)))).data();
+        if (current?.epoch !== receipt.epoch || current.mode !== "public") return;
+        tx.set(scanRef,{epoch:receipt.epoch,...(boundary && (page.size === 10 || published >= 3) ? boundary : {}),updatedAt:now()});
+      });
+      return {published};
     },
     async own(uid,{catchId}) {
       socialUid(catchId);
@@ -142,7 +198,8 @@ export function createPublicationService({ db, media, cursors, env = {}, now = (
         await guard(tx,uid); const row = (await tx.get(db.doc(`socialPosts/${publicationId(uid,catchId)}`))).data();
         // Owner can repair stale approval after source edits; never expose another owner's source.
         const profile = (await tx.get(db.doc(`publicProfiles/${uid}`))).data();
-        return {post:row && row.ownerUid === uid && profile ? dto({row,profile,audience:"owner"}) : null};
+        return {post:row && row.ownerUid === uid && profile ? dto({row,profile,audience:"owner"}) : null,
+          publicationConsent:(await tx.get(db.doc(publicationConsentPath(uid)))).data() ?? null};
       });
     },
     async list(uid,{identity,cursor,previewAudience}) {

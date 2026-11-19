@@ -71,3 +71,11 @@ Emulator metadata lookup emitted non-fatal `ETIMEDOUT`/`ENOTFOUND` warnings. The
 - Authenticated composer consent was checked without submitting; two social/profile views had no overflow at measured widths from 320 to 1920 px. The browser could not realize exactly 1024 px. Local `/api/progression/reconcile` 404 and a later profile 401 were not treated as production results.
 - No production user data, credentials, push, merge, Stage 9, or deployment was used.
 - Next: rerun emulator suites when safely available, decide if public consent must be persisted server-side, and continue the remaining authenticated module/browser audit.
+
+## Owner-authorized takeover — 2026-11-19
+
+Latest owner instructions authorize the verified main release and supersede the earlier no-push checkpoint. Branch: codex/ui-terminology-length-priority; takeover HEAD eb095a7ae499a744db3a24616f932ba6bbaf1e73; origin/main and production at inspection: 7b7631d8ea93ad17d04c5508e2f0bcbdbf9bb752. Nine local commits are a linear descendant; the reported 81-commit divergence belongs to another worktree, left untouched.
+
+Implemented: obsolete species/standalone diary inference removed; journal stories and tips retained. Server-owned version-1 publication consent, epochs/CAS, private-mode revocation, no historical auto-publication, bounded idempotent new-catch publication with deferred-photo pagination. New profile public presets require meaningful confirmation. Local privacy switch now links to authoritative social settings. Fixed local API restart authentication and current-shell offline cache selection. No billing, source-data migration or Stage 9.
+
+Release gate and production result are recorded in the final release checkpoint. Whole-application audit remains PARTIAL. Next audit item: review the deterministic Home fallback that displays the literal generic method label when no method is known; do not invent diary evidence.

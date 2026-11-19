@@ -66,7 +66,7 @@ export default function AiSettings() {
   };
   return <div className="settings-ai-consent" style={{ display: "grid", gap: "var(--space-2-5)" }}>
     <h3>Volitelná AI přes Cloudflare</h3>
-    <p>AI je volitelná a její návrhy mohou obsahovat chyby. Rozpoznávání ryb, vysvětlování souhrnů deníku a AI na domovské stránce jsou vypnuté.</p>
+    <p>AI nabízí pouze volitelné rybářské příběhy a tipy z deníku. Návrhy mohou obsahovat chyby; běžné funkce aplikace fungují bez AI.</p>
     <details><summary>Co se odešle a komu</summary>
       <p>Poskytovatel: Cloudflare Workers AI. U rybářského příběhu odešleme pouze poznámku k vybranému úlovku. U deníkového tipu odešleme vypočítané souhrny synchronizovaných úlovků; fotografie, poznámky, GPS a názvy revírů se neposílají.</p>
       <p>Výsledky jsou návrhy. Text zkontroluješ před uložením a souhlas můžeš kdykoli odvolat. Odvolání nezruší již dokončené zpracování.</p>

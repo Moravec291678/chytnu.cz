@@ -8,6 +8,7 @@ const basic = { entryId, kind: "experience", visibility: "public", expectedRevis
 const choice = publicAchievementChoices()[0];
 function fixture(overrides = {}) {
   const rows = new Map(Object.entries({ [`publicProfiles/${uid}`]: { uid, sharedAchievementIds: [choice.id] },
+    [`users/${uid}/socialPreferences/publication`]: {version:1,mode:"public",epoch:1,acceptedAt:1},
     [`users/${uid}/serverProgressionState/summary`]: { ownerId: uid, serverEventXp: 120 }, ...overrides }));
   const writes = [], reads = [];
   const tx = { get: async path => { reads.push(path); return { exists: rows.has(path), data: () => rows.get(path) }; },

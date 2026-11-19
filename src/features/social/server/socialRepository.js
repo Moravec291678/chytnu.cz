@@ -6,6 +6,7 @@ import { relationshipView, transitionRelationship } from "../data/relationshipMo
 import { assertSocialInteraction, activeSocialPhoto } from "./socialAccess.js";
 import { createNotificationRecord } from "../../notifications/data/notificationModel.js";
 import { legacyShareApproval } from "./legacyShareApproval.js";
+import { publicationConsentPath, consentChoice, assertPublicationConsent } from "./publicationConsent.js";
 
 // No public HTTP surface in stage 1. Future handlers must use this authenticated boundary.
 // Admin roles deliberately grant no diary/social privacy bypass and no quota exemption.
@@ -163,7 +164,7 @@ export function createSocialRepository({ db, auth, now = () => Date.now(), profi
         return profile?.handle === normalized && (profile.discoverable || uid === targetUid) ? profile : null;
       });
     },
-    async saveProfile(token, input) {
+    async saveProfile(token, input, publicationConsent) {
       const uid = await identity(token);
       const editable = validateProfileInput(input), handle = editable.handle;
       return db.runTransaction(async tx => {
@@ -172,6 +173,16 @@ export function createSocialRepository({ db, auth, now = () => Date.now(), profi
         const [old, reserved] = await Promise.all([tx.get(ref), tx.get(claim)]);
         if (reserved.exists && reserved.data().uid !== uid) fail("handle_taken");
         const stamp = now();
+        const consentRef = db.doc(publicationConsentPath(uid));
+        const previousConsent = (await tx.get(consentRef)).data();
+        const receipt = consentChoice(publicationConsent, previousConsent, stamp);
+        assertPublicationConsent(receipt, editable.visibility);
+        if (receipt?.mode === "private") {
+          editable.visibility = "private";
+          editable.discoverable = editable.directoryDiscoverable = editable.regionDiscoverable = false;
+          editable.sections = Object.fromEntries(Object.keys(editable.sections).map(key => [key, "private"]));
+          editable.sharedCatchIds = []; editable.sharedPhotos = []; editable.sharedAchievementIds = [];
+        }
         const shareApprovals={},sources=new Map();
         for (const catchId of new Set([...editable.sharedCatchIds, ...editable.sharedPhotos.map(p => p.catchId)])) {
           const record = (await tx.get(db.doc(`users/${uid}/catches/${catchId}`))).data();
@@ -188,6 +199,7 @@ export function createSocialRepository({ db, auth, now = () => Date.now(), profi
           ...(internal.avatarVersion ? { avatarVersion: internal.avatarVersion, avatarAssetId: internal.avatarAssetId } : {}),
           createdAt: old.data()?.createdAt ?? stamp, updatedAt: stamp }, stamp);
         commitLimit();
+        if (publicationConsent !== undefined) tx.set(consentRef, receipt);
         // Retain old claims: a rename can never redirect another angler's old identity.
         if (old.exists && old.data().handle !== handle) tx.set(db.doc(`publicHandles/${old.data().handle}`), { uid, retired: true, createdAt: old.data().createdAt, updatedAt: stamp });
         tx.set(ref, { ...profile, searchPrefixes: buildDiscoveryPrefixes(profile), discoveryIndexVersion: 1 });

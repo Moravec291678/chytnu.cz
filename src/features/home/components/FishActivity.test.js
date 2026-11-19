@@ -5,7 +5,7 @@ import { renderToString } from "react-dom/server";
 import { createServer } from "vite";
 
 test("disabled Home fish activity actions share the compact action row", async () => {
-  const server = await createServer({ server: { middlewareMode: true, hmr: false }, appType: "custom" });
+  const server = await createServer({ server: { middlewareMode: true, hmr: false, watch: null }, appType: "custom" });
   try {
     const { default: FishActivity } = await server.ssrLoadModule("/src/features/home/components/FishActivity.jsx");
     const { StaticRouter } = await server.ssrLoadModule("react-router");

@@ -1,3 +1,4 @@
+import { publicProfileFixturePayload } from "./social-publication-fixture.mjs";
 // Only synthetic emulator users and fixtures. Never run against production.
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -23,10 +24,11 @@ const suffix = randomUUID().replaceAll("-", "").slice(0, 8), ids = {}, tokens = 
 const clientApp = initializeClientApp({ apiKey: "demo-key", projectId: "demo-chytnucz-local", authDomain: "localhost" }, `publication-client-${suffix}`);
 const clientAuth = initializeAuth(clientApp, { persistence: inMemoryPersistence }), clientDb = getClientFirestore(clientApp);
 connectAuthEmulator(clientAuth, "http://127.0.0.1:9099", { disableWarnings: true }); connectFirestoreEmulator(clientDb, "127.0.0.1", 8080);
-let checks = 0, time = Date.now(), requests = 0, preparations = 0, deliveries = 0, duringDelivery, lastHeaders;
+let checks = 0, time = Date.now(), requests = 0, preparations = 0, deliveries = 0, duringDelivery, duringPrepare, lastHeaders;
 const env = {}, socialPhoto = {
   async prepare(identity, photo) {
     assert.equal(photo.cloud.objectKey, `users/${identity.uid}/catches/${identity.catchId}/photos/${identity.photoId}/original`); checks++; preparations++;
+    if (duringPrepare) await duringPrepare();
     return { version: "123", sha256: photo.cloud.sha256, transformationVersion: 1, width: 100, height: 80 };
   },
   async delivery(identity, photo, receipt) {
@@ -45,7 +47,7 @@ function safe(value) {
 async function call(role, action, payload = {}, expected = 200) {
   if (++requests % 20 === 0) time += 60_000;
   const response = { statusCode: 200, headers: {}, setHeader(name, value) { this.headers[name.toLowerCase()] = value; }, status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } };
-  await handler({ method: "POST", headers: tokens[role] ? { authorization: `Bearer ${tokens[role]}` } : {}, body: { action, ...payload } }, response);
+  await handler({ method: "POST", headers: tokens[role] ? { authorization: `Bearer ${tokens[role]}` } : {}, body: { action, ...await publicProfileFixturePayload(action, payload, db, ids[role]) } }, response);
   lastHeaders = response.headers;
   assert.equal(response.statusCode, expected, `${role}/${action}: ${JSON.stringify(response.body)}`); checks++; return response.body;
 }
@@ -69,6 +71,32 @@ try {
     });
     equal(response.status, 200); tokens[role] = (await response.json()).idToken;
     await call(role, "save", { profile: { handle: `${role}_${suffix}`, displayName: `Synthetic ${role}`, visibility: "public", sections: { gallery: "public", catches: "public" } } });
+  }
+  // A real sixth account must acknowledge publication through the authenticated
+  // handler. Unlike the normal public fixtures, these calls deliberately bypass
+  // the fixture helper by providing an explicit publicationConsent property.
+  ids.choice = `publication-choice-${suffix}`;
+  await auth.createUser({ uid: ids.choice, email: `${ids.choice}@example.test`, password: `Synthetic-${suffix}-9!` });
+  const choiceLogin = await fetch("http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo-key", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: `${ids.choice}@example.test`, password: `Synthetic-${suffix}-9!`, returnSecureToken: true }),
+  });
+  equal(choiceLogin.status, 200); tokens.choice = (await choiceLogin.json()).idToken;
+  const choiceProfile = { handle: `choice_${suffix}`, displayName: "Consent fixture", visibility: "public", discoverable: true };
+  await call("choice", "save", { profile: choiceProfile, publicationConsent: undefined }, 403);
+  equal((await db.doc(`publicProfiles/${ids.choice}`).get()).exists, false);
+  await call("choice", "save", { profile: choiceProfile, publicationConsent: { version: 99, mode: "public" } }, 400);
+  await call("choice", "save", { profile: choiceProfile, publicationConsent: { version: 1, mode: "public", epoch: 999 } }, 400);
+  const choicePath = `users/${ids.choice}/socialPreferences/publication`;
+  equal((await db.doc(choicePath).get()).exists, false);
+  await call("choice", "save", { profile: { ...choiceProfile, visibility: "private", discoverable: false } });
+  equal((await db.doc(choicePath).get()).exists, false);
+  await call("choice", "save", { profile: choiceProfile, publicationConsent: { version: 1, mode: "public" } });
+  const choiceReceipt = (await db.doc(choicePath).get()).data();
+  equal(choiceReceipt.version, 1); equal(choiceReceipt.mode, "public"); equal(choiceReceipt.epoch, 1);
+  equal(choiceReceipt.acceptedAt, time);
+  for (const role of ["anonymous", "choice", "b", "owner", "co"]) {
+    equal((await direct(role, choicePath)).status, 403);
+    equal((await direct(role, choicePath, "PATCH", { fields: { epoch: { integerValue: "999" } } })).status, 403);
   }
   env.CHYTNU_OWNER_UID = ids.owner; env.CHYTNU_CO_CREATOR_UID = ids.co; handler = makeHandler();
   const original = { id: "catch", ownerId: ids.a, species: "Kapr", lengthCm: 53, weightKg: 3.2, weightSource: "manual",
@@ -243,6 +271,93 @@ try {
   releaseDeleted(); await assert.rejects(deletedPreparation, /photo_preparing/); checks++;
   equal((await db.collection(`users/${ids.c}/socialMediaReceipts`).get()).size, 0);
   await assert.rejects(deletingCoordinator.prepare(deletingIdentity, deletingPhoto), /post_unavailable/); checks++;
+  // One private choice revokes the profile and images immediately. A later
+  // public choice starts a fresh publication epoch; old posts stay withdrawn.
+  const profileA = { handle: `a_${suffix}`, displayName: "Synthetic a", visibility: "public", discoverable: true,
+    sections: { gallery: "public", catches: "public" } };
+  await call("anonymous", "posts.image", { postId });
+  await call("a", "save", { profile: { ...profileA, visibility: "private" }, publicationConsent: { version: 1, mode: "private", expectedEpoch: 1 } });
+  equal((await call("b", "view", { identity: ids.a })).profile, null);
+  await call("anonymous", "posts.image", { postId }, 404);
+  await call("b", "posts.image", { postId }, 404);
+  await call("a", "posts.save", { ...approved, expectedRevision: saved.revision }, 403);
+  const privateReceipt = (await db.doc(`users/${ids.a}/socialPreferences/publication`).get()).data();
+  equal(privateReceipt.mode, "private"); equal(privateReceipt.epoch, 2);
+  await call("a", "save", { profile: profileA, publicationConsent: { version: 1, mode: "public", expectedEpoch: 1 } }, 409);
+  await call("a", "save", { profile: profileA, publicationConsent: { version: 1, mode: "public" } }, 409);
+  equal((await db.doc(`users/${ids.a}/socialPreferences/publication`).get()).data(), privateReceipt);
+  equal((await call("b", "view", { identity: ids.a })).profile, null);
+  await call("a", "save", { profile: profileA, publicationConsent: { version: 1, mode: "public", expectedEpoch: 2 } });
+  const renewedReceipt = (await db.doc(`users/${ids.a}/socialPreferences/publication`).get()).data();
+  equal(renewedReceipt.epoch, 3);
+  await call("a", "save", { profile: profileA, publicationConsent: undefined }, 409);
+  await call("a", "save", { profile: profileA, publicationConsent: { version: 1, mode: "public" } }, 409);
+  equal((await db.doc(`users/${ids.a}/socialPreferences/publication`).get()).data(), renewedReceipt);
+  await call("anonymous", "posts.image", { postId }, 404);
+  equal((await list("b")).length, 0);
+  saved = (await call("a", "posts.save", { ...approved, expectedRevision: saved.revision })).post;
+  await call("anonymous", "posts.image", { postId });
+  equal((await postRef.get()).data().publicationEpoch, 3);
+  // Automatic publication reads actual cloud-synced sources, never historical
+  // private records. Two server instances/devices must converge on one post.
+  const automaticIds = ["auto-new", "auto-history", "auto-private", "auto-deleted"];
+  for (const catchId of automaticIds) {
+    const stamp = new Date(renewedReceipt.acceptedAt + (catchId === "auto-history" ? -60_000 : 1000)).toISOString();
+    await db.doc(`users/${ids.a}/catches/${catchId}`).set({ ...original, id: catchId, speciesKey: "carp", createdAt: stamp, caughtAt: stamp,
+      photoRefs: {}, deleted: catchId === "auto-deleted", privacy: { ...original.privacy, visibility: catchId === "auto-private" ? "private" : "public" } });
+  }
+  time += 2000;
+  const secondHandler = makeHandler();
+  const firstHandler = handler;
+  const deviceOne = call("a", "posts.publishNew");
+  handler = secondHandler;
+  const deviceTwo = call("a", "posts.publishNew");
+  const automaticResults = await Promise.all([deviceOne, deviceTwo]);
+  handler = firstHandler;
+  equal(automaticResults.reduce((sum, value) => sum + value.published, 0), 1);
+  const automaticPost = db.doc(`socialPosts/${publicationId(ids.a, "auto-new")}`);
+  equal((await automaticPost.get()).data().revision, 1);
+  equal((await automaticPost.get()).data().publicationEpoch, 3);
+  for (const catchId of automaticIds.slice(1)) equal((await db.doc(`socialPosts/${publicationId(ids.a, catchId)}`).get()).exists, false);
+  equal((await call("a", "posts.publishNew")).published, 0);
+  await call("a", "posts.delete", { postId: automaticPost.id, expectedRevision: 1 });
+  equal((await call("a", "posts.publishNew")).published, 0);
+  equal((await automaticPost.get()).data().deleted, true);
+  equal((await db.doc(`users/${ids.a}/progression/state`).get()).data(), privateXp);
+  // A manual photo publication approved under epoch 1 must not cross a
+  // private/public round trip while the external derivative is being prepared.
+  const pendingCatchId = "pending-consent";
+  const pendingRef = db.doc(`users/${ids.choice}/catches/${pendingCatchId}`);
+  await pendingRef.set({ ...original, ownerId: ids.choice, id: pendingCatchId });
+  await pendingRef.collection("photos").doc("photo").set({ ...originalPhoto,
+    cloud: { ...originalPhoto.cloud, objectKey: `users/${ids.choice}/catches/${pendingCatchId}/photos/photo/original` } });
+  duringPrepare = async () => {
+    await call("choice", "save", { profile: { ...choiceProfile, visibility: "private" },
+      publicationConsent: { version: 1, mode: "private", expectedEpoch: 1 } });
+    await call("choice", "save", { profile: choiceProfile,
+      publicationConsent: { version: 1, mode: "public", expectedEpoch: 2 } });
+  };
+  await call("choice", "posts.save", { ...basic, catchId: pendingCatchId, expectedRevision: 0 }, 409);
+  duringPrepare = null;
+  const pendingPostId = publicationId(ids.choice, pendingCatchId);
+  equal((await db.doc(`socialPosts/${pendingPostId}`).get()).exists, false);
+  equal((await db.doc(choicePath).get()).data().epoch, 3);
+  await call("anonymous", "posts.image", { postId: pendingPostId }, 404);
+  // Bounded scans must move past ten already-published records to reach an
+  // older eligible catch. All posts are created through the real handler.
+  const scanReceipt = (await db.doc(choicePath).get()).data();
+  for (let index = 0; index < 13; index++) {
+    const catchId = `scan-${index}`;
+    const stamp = new Date(scanReceipt.acceptedAt + (index === 12 ? 1000 : (index + 2) * 1000)).toISOString();
+    await db.doc(`users/${ids.choice}/catches/${catchId}`).set({ ...original, id: catchId, ownerId: ids.choice, speciesKey: "carp",
+      createdAt: stamp, caughtAt: stamp, photoRefs: {}, privacy: { ...original.privacy, visibility: "public" } });
+    if (index < 12) await call("choice", "posts.save", { catchId, photoId: null, visibility: "public", fields: {}, description: "", expectedRevision: 0 });
+  }
+  time += 15_000;
+  equal((await call("choice", "posts.publishNew")).published, 0);
+  equal((await db.doc(`socialPosts/${publicationId(ids.choice, "scan-12")}`).get()).exists, false);
+  equal((await call("choice", "posts.publishNew")).published, 1);
+  equal((await db.doc(`socialPosts/${publicationId(ids.choice, "scan-12")}`).get()).data().revision, 1);
   await db.doc(`accountDeletions/${ids.a}`).set({ status: "requested", ownerUid: ids.a });
   await call("anonymous", "posts.image", { postId }, 403);
   await db.doc(`accountDeletions/${ids.a}`).delete();
@@ -251,5 +366,5 @@ try {
   equal((await postRef.get()).exists, false); equal((await db.collection(`users/${ids.a}/socialMediaReceipts`).get()).size, 0);
   await call("anonymous", "posts.image", { postId }, 404);
   equal((await db.doc(`publicProfiles/${ids.b}`).get()).exists, true);
-  console.log(`Social publications: ${checks} real Auth/Firestore ownership, privacy, revocation, derivative caching and deletion checks PASS; 5 accounts`);
+  console.log(`Social publications: ${checks} real Auth/Firestore ownership, consent epochs, automatic publication, privacy, revocation, derivative caching and deletion checks PASS; 6 accounts`);
 } finally { await terminate(clientDb); await deleteClientApp(clientApp); await deleteApp(app); }

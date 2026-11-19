@@ -1,12 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { DEFAULT_NEW_ENTRY_VISIBILITY, entryComposerPayload, requiresPublicEntryConsent } from "./entryComposerModel.js";
+import { DEFAULT_NEW_ENTRY_VISIBILITY, entryComposerPayload } from "./entryComposerModel.js";
 
-test("new public posts require explicit confirmation while unchanged public edits do not", () => {
-  assert.equal(requiresPublicEntryConsent(DEFAULT_NEW_ENTRY_VISIBILITY, undefined), true);
-  assert.equal(requiresPublicEntryConsent("public", "private"), true);
-  assert.equal(requiresPublicEntryConsent("public", "public"), false);
-  assert.equal(requiresPublicEntryConsent("friends", "private"), false);
+test("new posts propose public visibility; authorization is controlled by the saved profile receipt", () => {
+  assert.equal(DEFAULT_NEW_ENTRY_VISIBILITY, "public");
 });
 
 test("entry edits retain owner entry identity, type and loaded CAS revision", () => {

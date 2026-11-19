@@ -29,3 +29,11 @@ Status: PARTIAL
 - The integrated browser quantizes requested widths; authenticated profile screens could not be measured at exactly 1024 px. Do not count this as exact 1024 px coverage.
 - No new profile was saved and no existing profile settings were changed. Authenticated route/API coverage remains incomplete; the browser later showed a logged-out state and the cause was not verified. The local `/api/progression/reconcile` 404 is a Vite harness limitation, not a production conclusion.
 - Physical iOS/Android and installed-PWA checks remain **MANUAL TEST REQUIRED**.
+
+## Authenticated takeover browser QA — 2026-11-19
+
+Real localhost handlers and Auth/Firestore emulators: A chose public profile with all public presets and explicit checkbox; A created an actual experience post, visible in feed and detail (ID 63076cc37d7fd4e32b951ae63f049bcfddfda76b01296c0d68732684c76ade7d). B logged in, created its own profile, reacted and commented; server confirmed both. B invited A; A accepted and saw B as a friend. A saved a manual carp catch (42 cm, estimated weight marked as estimated, no new XP). A changed to private; C logged in and was denied the original post, and username search returned no available profile.
+
+390px checks showed no horizontal overflow on catch/revoked-post screens. Production build guest Quick Catch accepted a non-private carp JPEG fixture, saved one incomplete catch and rendered the locally read-back image. No species AI control appeared. Local Cloudinary delivery was unavailable by design; media revocation/derivative privacy was tested in the emulator, not falsely claimed as a browser upload PASS.
+
+Offline close/reopen in the integrated browser showed an empty app; cause remains unverified. Online reopening was initiated but not completed before computer-use ended. Native Chrome inspection was stopped by the tool because it could not confidently determine the current browser URL. No further UI input was attempted. Physical-device/PWA acceptance and full responsive authenticated coverage remain UNVERIFIED. Original visual identity retained.

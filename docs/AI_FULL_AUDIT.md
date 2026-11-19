@@ -96,3 +96,9 @@ Overall audit: **PARTIAL**. Stage 8 remains **PASS** based on its previously rec
 - The public checkbox is a client-side consent gate; the API stores the requested visibility but does not persist a separate consent receipt. Assess whether a durable consent record is required before any public release.
 - Authenticated API flows, social emulator suites, exact 1024 px authenticated rendering, physical mobile devices and installed-PWA behavior remain unverified. Device checks are **MANUAL TEST REQUIRED**.
 - The strategic MVP still excludes social networking and AI. This audit change does not authorize either feature for production release.
+
+## Takeover review — 2026-11-19
+
+Reviewed local changes against main and retained earlier Journal/Gallery/Home/account-deletion fixes. Found and fixed: UI-only publication consent; stale-device public-mode restoration; pending photo approval crossing revocation epochs; automatic-publication starvation behind the newest ten catches; local-only misleading profile visibility; Vite restart deleting the new Firebase Admin app; stale offline shell selection and caching error responses. Direct private Firestore access remains denied; publication does not grant XP. No rules/index changes required.
+
+Audit remains PARTIAL: real installed iPhone/Android, offline browser startup and complete authenticated route/visual matrix are not verified. The integrated browser showed an empty offline reopening; a reliable independent Chrome check was prevented when computer-use stopped because it could not determine the browser URL. Do not label this a successful offline/PWA test or infer a confirmed production cause.

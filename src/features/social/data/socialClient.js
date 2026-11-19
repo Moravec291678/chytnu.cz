@@ -1,6 +1,9 @@
 import { firebaseAuth } from "../../auth/data/firebaseAuth.js";
 import { resolveApiUrl } from "../../../platform/api.js";
 const messages = {
+  consent_conflict: "Soukromí se změnilo na jiném zařízení. Obnov stránku a zkontroluj aktuální nastavení.",
+  publication_consent_required: "Nejdřív zvol a ulož veřejný režim v nastavení rybářského profilu.",
+  invalid_consent: "Potvrzení sdílení není platné. Otevři znovu nastavení rybářského profilu.",
   invalid_publication: "Zkontroluj obsah příspěvku a vybrané údaje.", post_unavailable: "Příspěvek byl odstraněn nebo pro tebe není dostupný.",
   post_conflict: "Příspěvek se mezitím změnil na jiném zařízení. Zavři sdílení a načti ho znovu.",
   photo_unavailable: "Fotografii nyní nelze bezpečně sdílet. Zkontroluj synchronizaci a zkus to později.",

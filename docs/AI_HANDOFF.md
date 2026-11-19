@@ -225,3 +225,11 @@ Celkový audit zůstává **PARTIAL**. Stage 8 zůstává **PASS** podle dříve
 3. Rozhodnout, zda veřejný checkbox vyžaduje serverově trvalý consent záznam.
 4. Pokračovat neověřenými aplikačními moduly; zachovat PARTIAL, dokud nebude ověřeno celé autentizované chování.
 5. Při navázání zachovat commit `cee56ccff78573e00610ce718f4ba4514de3a2df`; neprovádět push, merge, Stage 9 ani produkční deployment.
+
+## Current takeover checkpoint — 2026-11-19
+
+Owner explicitly authorized safe main push and Vercel deployment; earlier prohibitions above are superseded. Preserve all nine inherited commits and current implementation. No Social Stage 9. Missing .github/copilot-instructions.md, PRODUCT_STRATEGY_SOURCE.md and PRODUCT_DECISIONS_2026.md were not invented.
+
+Consent is private server-owned users/{uid}/socialPreferences/publication, with version/mode/epoch/acceptedAt. All new UI profile saves carry expectedEpoch. Cached clients without an epoch are rejected after any revocation. Manual image preparation binds initial and final consent epochs; automatic publication additionally requires source privacy and creation/catch timestamps after the current public epoch. Deleted or previously published IDs are never automatically restored. Cursor and receipt writes remain behind deletion fences.
+
+Browser A/B/C used emulator-only synthetic data. No production customer data, service-account download or provider inference was used. Test logs/export artifacts are in the system TEMP directory, excluded from Git. Physical-device and independent PWA/offline startup acceptance remain required; never clear IndexedDB or unsynced photo queues.

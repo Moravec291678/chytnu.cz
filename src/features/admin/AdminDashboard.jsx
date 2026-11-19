@@ -9,7 +9,7 @@ import { canOpenAdmin, hasAdminPermission } from "./adminClient.js";
 import { useAdminSession, useAdminResource } from "./useAdminSession.js";
 import "./AdminDashboard.css";
 
-const CAPABILITIES = { species: "Rozpoznávání ryb", diary: "AI rozbor deníku", recommendations: "AI doporučení", stories: "AI vyprávění" };
+const CAPABILITIES = { recommendations: "AI doporučení", stories: "AI vyprávění" };
 const AUDIENCE_NAMES = { everyone: "Všichni", testers: "Testeři", owner: "OWNER a spolutvůrce", selected: "Vybrané účty", disabled: "Vypnuto" };
 const PERMISSIONS = { "users.read": "Čtení účtů", "users.manage": "Správa běžných účtů", tasks: "Úkoly", audit: "Audit", monitoring: "Provoz a monitoring", support: "Případy podpory a schválený soukromý přístup", moderation: "Moderace veřejného obsahu" };
 const CATEGORIES = ["Bug", "Feature", "Improvement", "Design", "Security", "Maintenance"];

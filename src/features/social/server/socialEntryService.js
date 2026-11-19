@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { socialUid } from "../data/socialModel.js";
 import { selectedPublicAchievements } from "../data/publicProgressionModel.js";
 import { publicProgressionFromSummary } from "./publicProgressionService.js";
+import { publicationConsentPath, assertPublicationConsent } from "./publicationConsent.js";
 
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 const kinds = ["experience", "achievement", "milestone"];
@@ -56,6 +57,8 @@ export function createSocialEntryService({ db, guard, now = () => Date.now() }) 
         const [savedProfile, stored] = await Promise.all([`publicProfiles/${uid}`, `socialPosts/${id}`].map(path => tx.get(db.doc(path))));
         const profile = savedProfile.data(), old = stored.data();
         if (profile?.uid !== uid) fail("save_profile_first");
+        const consent = (await tx.get(db.doc(publicationConsentPath(uid)))).data();
+        assertPublicationConsent(consent, input.visibility);
         if ((old?.revision ?? 0) !== input.expectedRevision || old && (old.ownerUid !== uid || old.sourceEntryId !== input.entryId || old.kind !== input.kind)) fail("post_conflict");
         const content = { title: input.title?.trim() || "Zážitek od vody", description: input.description.trim() };
         if (input.kind === "achievement") {
@@ -67,7 +70,7 @@ export function createSocialEntryService({ db, guard, now = () => Date.now() }) 
           if (!snapshot || snapshot.xp <= 0) fail("post_unavailable");
           content.title = `Milník: úroveň ${snapshot.level}`; content.progression = snapshot;
         }
-        const row = { id, ownerUid: uid, kind: input.kind, sourceEntryId: input.entryId, content, visibility: input.visibility,
+        const row = { id, ownerUid: uid, kind: input.kind, sourceEntryId: input.entryId, content, visibility: input.visibility, publicationEpoch:consent?.epoch ?? 0,
           revision: (old?.revision ?? 0) + 1, createdAt: old?.createdAt ?? now(), updatedAt: now(), deleted: false,
           moderationState: old?.moderationState ?? "visible", schemaVersion: 1 };
         tx.set(ref, row);

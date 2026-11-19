@@ -39,37 +39,3 @@
   background: var(--surface-1); color: var(--text-primary); font-size: var(--font-size-14); line-height: 1.5;
 }
 .settings-ai-consent [role="alert"], .insights-ai-explanation > [role="alert"], .catch-detail-section > details:not([class]) [role="alert"] { border-color: rgb(var(--accent-orange-rgb) / 45%); background: var(--accent-orange-soft); }
-
-.ai-species-status {
-  display: grid;
-  min-width: 0;
-  gap: var(--space-1);
-  color: var(--text-secondary);
-  font-size: var(--font-size-13);
-  line-height: 1.5;
-  overflow-wrap: anywhere;
-}
-.ai-species-caption {
-  display: block;
-  margin-top: var(--space-1);
-  color: var(--accent-blue);
-  font-size: var(--font-size-12);
-  font-weight: 700;
-  line-height: 1.5;
-  overflow-wrap: anywhere;
-}
-.ai-species-status > strong { color: var(--text-primary); }
-.ai-species-status :where(button, a) {
-  display: inline-flex;
-  min-height: var(--control-height);
-  align-items: center;
-  justify-self: start;
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--control-radius);
-  background: var(--surface-2);
-  color: var(--accent-green);
-  font: inherit;
-  font-weight: 750;
-  text-decoration: none;
-}

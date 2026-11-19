@@ -14,8 +14,8 @@ const MESSAGES = {
   rate_limited: "AI požadavek byl omezen. Úlovek je uložený; podrobnosti o limitu teď nejsou dostupné.",
   user_daily_limit: "Vyčerpal jsi svůj dnešní interní AI limit aplikace. Další pokus proběhne po jeho obnovení.",
   app_daily_limit: "Dnešní interní bezpečnostní rozpočet AI aplikace je využitý. Nejde o potvrzení vyčerpání limitu Cloudflare.",
-  text_daily_limit: "Dnešní kapacita textových AI nástrojů je využitá. Zbývající kapacitu chráníme pro fotografie úlovků.",
-  provider_quota: "Bezplatný denní limit Cloudflare je vyčerpaný. Úlovky se dál ukládají; rozpoznání počká na obnovení kapacity.",
+  text_daily_limit: "Dnešní bezplatná kapacita deníkových AI nástrojů je využitá. Zkus to po obnovení limitu.",
+  provider_quota: "Bezplatný denní limit Cloudflare je vyčerpaný. Deník a úlovky zůstávají dostupné bez AI.",
   request_in_progress: "Tento návrh se už připravuje. Výsledek načteme, až bude hotový.",
   provider_capacity: "AI je momentálně vytížená. Zkus to za chvíli.",
   provider_throttled: "Poskytovatel AI požadavek omezil. Přesný typ omezení teď není dostupný. Úlovek zůstává uložený.",
@@ -74,7 +74,7 @@ export function canDisplayAiResult(result, { ownerId, consent, capability }) {
 /** Existing authenticated backend only. Personal payloads are obtained server-side after independent consent checks. */
 export function createAiClient({ ownerId = null, getOwnerId = firebaseAuth.currentUserId,
   getToken = firebaseAuth.currentIdToken, fetchImpl = globalThis.fetch, flags = AI_FEATURES,
-  endpoint = () => resolveApiUrl("/api/ai/species"), provider = AI_PROVIDER, timeoutMs = 30_000 } = {}) {
+  endpoint = () => resolveApiUrl("/api/ai/journal"), provider = AI_PROVIDER, timeoutMs = 30_000 } = {}) {
   async function request(body, { signal } = {}) {
     const currentOwner = ownerId ?? getOwnerId();
     if (!currentOwner || getOwnerId() !== currentOwner) throw new AiClientError("unauthenticated");
@@ -114,7 +114,7 @@ export function createAiClient({ ownerId = null, getOwnerId = firebaseAuth.curre
       capabilities: Object.fromEntries(CAPABILITIES.map((key) => [key, capabilities?.[key] === true])) }, options).then(consentResult),
     revokeConsent: (options) => request({ action: "consent.revoke" }, options).then(consentResult),
     async run(capability, input, { consent, signal } = {}) {
-      if (!["stories", "diary", "recommendations"].includes(capability) || flags[capability] !== true) throw new AiClientError("disabled");
+      if (!["stories", "recommendations"].includes(capability) || flags[capability] !== true) throw new AiClientError("disabled");
       if (!hasAiConsent(consent, capability, provider)) throw new AiClientError("consent_required");
       const result = await request(taskPayload(capability, input), { signal });
       if (capability === "stories") return validateAiStoryDraft(result.draft ?? result);

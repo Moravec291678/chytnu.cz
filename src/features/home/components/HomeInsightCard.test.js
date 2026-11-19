@@ -5,7 +5,7 @@ import { renderToString } from "react-dom/server";
 import { createServer } from "vite";
 
 test("Home analysis first render is safe before async cache loading for guests and signed-in diaries", async () => {
-  const server = await createServer({ server: { middlewareMode: true }, appType: "custom" });
+  const server = await createServer({ server: { middlewareMode: true, hmr: false, watch: null }, appType: "custom" });
   try {
     const { default: Card } = await server.ssrLoadModule("/src/features/home/components/HomeInsightCard.jsx");
     const { DataScopeContext } = await server.ssrLoadModule("/src/features/auth/context/dataScopeContextValue.js");

@@ -1,3 +1,4 @@
+import { publicProfileFixtureConsent } from "./social-publication-fixture.mjs";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { initializeApp, deleteApp } from "firebase-admin/app";
@@ -28,7 +29,7 @@ try {
   await rejected(() => repo.saveProfile(tokens.a, pa), "social_disabled");
   await db.doc("adminConfig/social").set({ enabled: true }); // Emulator fixture only; no production activation.
   equal((await repo.saveProfile(tokens.a, pa)).visibility, "private");
-  await repo.saveProfile(tokens.b, pb);
+  await repo.saveProfile(tokens.b, pb, await publicProfileFixtureConsent(pb, db, ids.b));
   equal(await repo.getProfile(tokens.b, ids.a), null);
   equal((await repo.getProfile(tokens.a, ids.b)).uid, ids.b);
   equal((await repo.findByHandle(tokens.a, pb.handle.toUpperCase())).uid, ids.b);
@@ -62,7 +63,7 @@ try {
   const race = await Promise.allSettled(["b", "c"].map(role => repo.saveProfile(tokens[role], { handle: `race_${suffix}`, displayName: role })));
   equal(race.filter(r => r.status === "fulfilled").length, 1);
   equal((await repo.saveProfile(tokens.owner, { handle: `owner_${suffix}`, displayName: "Owner fixture" })).uid, ids.owner);
-  await repo.saveProfile(tokens.a, { ...pa, handle: `renamed_${suffix}`, visibility: "public", discoverable: true });
+  await repo.saveProfile(tokens.a, { ...pa, handle: `renamed_${suffix}`, visibility: "public", discoverable: true }, await publicProfileFixtureConsent({ visibility: "public" }, db, ids.a));
   equal(await repo.findByHandle(tokens.c, pa.handle), null);
   equal((await repo.findByHandle(tokens.c, `renamed_${suffix}`)).uid, ids.a);
   await db.doc(`crews/fixture-${suffix}`).set({ ownerUid: ids.a, memberUids: [ids.a, ids.b], name: "Fixture crew", visibility: "private", createdAt: time, updatedAt: time });

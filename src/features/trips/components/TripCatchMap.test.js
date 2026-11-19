@@ -5,7 +5,7 @@ import { renderToString } from "react-dom/server";
 import { createServer } from "vite";
 
 test("Trip map renders four owner-scoped catch links before optional tiles load, including unknown fish", async () => {
-  const server = await createServer({ server: { middlewareMode: true }, appType: "custom" });
+  const server = await createServer({ server: { middlewareMode: true, hmr: false, watch: null }, appType: "custom" });
   try {
     const { default: Map } = await server.ssrLoadModule("/src/features/trips/components/TripCatchMap.jsx");
     const { DataScopeContext } = await server.ssrLoadModule("/src/features/auth/context/dataScopeContextValue.js");

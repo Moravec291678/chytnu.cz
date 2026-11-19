@@ -1,3 +1,4 @@
+import { publicProfileFixturePayload } from "./social-publication-fixture.mjs";
 // Synthetic local fixtures only. Requires the Auth and Firestore emulators.
 import assert from "node:assert/strict";
 import { randomUUID, createHash } from "node:crypto";
@@ -45,7 +46,7 @@ const safe = value => {
 async function call(role, action, payload = {}, expected = 200) {
   if (++requests % 18 === 0) time += 60_000;
   const response = { statusCode: 200, setHeader() {}, status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } };
-  await handler({ method: "POST", headers: tokens[role] ? { authorization: `Bearer ${tokens[role]}` } : {}, body: { action, ...payload } }, response);
+  await handler({ method: "POST", headers: tokens[role] ? { authorization: `Bearer ${tokens[role]}` } : {}, body: { action, ...await publicProfileFixturePayload(action, payload, db, ids[role]) } }, response);
   assert.equal(response.statusCode, expected, `${role}/${action}: ${JSON.stringify(response.body)}`);
   checks++;
   return response.body;

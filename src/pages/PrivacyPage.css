@@ -67,6 +67,9 @@
 .privacy-toggle-row small { color: var(--text-secondary); font-size: var(--font-size-11); line-height: 1.4; }
 .privacy-toggle-row input { width: 22px; height: 22px; flex: 0 0 22px; accent-color: var(--accent-green); cursor: pointer; }
 .privacy-toggle-row input:disabled { cursor: wait; opacity: 0.55; }
+.privacy-profile-settings { display: grid; min-width: 0; gap: var(--space-2-5); }
+.privacy-profile-link { min-height: 44px; color: var(--accent-green); text-decoration: none; }
+.privacy-profile-link:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 2px; }
 .privacy-heatmap-heading { padding-top: var(--space-0-5); }
 
 .privacy-places-card { gap: var(--space-2-75); }

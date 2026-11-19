@@ -19,6 +19,7 @@ import { completedSyncState, SYNC_LIFECYCLE_STATE } from "../data/syncLifecycleS
 import { preparePhotoSyncService } from "./photoSyncPreparation.js";
 import { serverProgressionClaimService } from "../../progression/data/serverProgressionClaimService.js";
 import { userFacingErrorMessage } from "../../../shared/errors/userFacingError.js";
+import { publishNewSyncedCatches } from "../../social/data/automaticPublication.js";
 
 const initialState = { status: "idle", sent: 0, applied: 0, conflicts: 0, pending: 0, failed: 0, pullPending: 0, error: "", errorCode: "", errorEndpoint: "", nextRetryAt: null, lastResult: "never", showSyncStatus: false, presentationId: null };
 
@@ -154,6 +155,7 @@ export function SyncProvider({ children }) {
         : result;
       await photoService.finalizeNativeUploads(userId).catch(() => {});
       void serverProgressionClaimService.process(userId).catch(() => {});
+      if (isOwnerActive()) void publishNewSyncedCatches(userId);
       // A successful aggregate run alone cannot prove a particular photo was acknowledged.
       const pendingAcks = pendingPhotoAcknowledgments();
       if (pendingAcks.size) {

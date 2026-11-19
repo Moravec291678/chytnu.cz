@@ -1,3 +1,4 @@
+import { publicProfileFixturePayload } from "./social-publication-fixture.mjs";
 // Synthetic local fixtures only; never production or paid media providers.
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -33,7 +34,7 @@ const equal = (actual, expected) => { assert.deepEqual(actual, expected); checks
 async function call(role, action, payload = {}, status = 200) {
   if (++requests % 15 === 0) time += 60000;
   const res = { statusCode: 200, setHeader() {}, status(code) { this.statusCode = code; return this; }, json(value) { this.body = value; return this; } };
-  await handler({ method: "POST", headers: tokens[role] ? { authorization: `Bearer ${tokens[role]}` } : {}, body: { action, ...payload } }, res);
+  await handler({ method: "POST", headers: tokens[role] ? { authorization: `Bearer ${tokens[role]}` } : {}, body: { action, ...await publicProfileFixturePayload(action, payload, db, ids[role]) } }, res);
   assert.equal(res.statusCode, status, `${role}/${action}: ${JSON.stringify(res.body)}`); checks++; return res.body;
 }
 const feed = (role = "b", mode = "global", more = {}) => call(role, "feed.list", { mode, ...more });

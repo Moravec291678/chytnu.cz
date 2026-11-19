@@ -35,6 +35,16 @@ function SegmentedOptions({ label, value, options, onChange, disabled }) {
   </div>;
 }
 
+export function ProfileSharingSettingsLink() {
+  return <div className="privacy-profile-settings">
+    <Link className="privacy-toggle-row privacy-profile-link" to="/profile/social">
+      <span><strong>Rybářský profil a online sdílení</strong><small>Veřejný nebo soukromý režim účtu</small></span>
+      <span aria-hidden="true">→</span>
+    </Link>
+    <p className="privacy-hint">Viditelnost profilu a přístup ke sdíleným příspěvkům a fotografiím měň v nastavení rybářského profilu. Změnu potvrdí server a platí i pro ostatní zařízení.</p>
+  </div>;
+}
+
 export default function PrivacyPage() {
   const scope = useDataScope();
   const { state: catchState } = useCatches();
@@ -132,12 +142,8 @@ export default function PrivacyPage() {
       </section>
 
       <section className="privacy-card" aria-labelledby="privacy-visibility-title">
-        <div className="privacy-section-heading"><span className="privacy-icon" aria-hidden="true">◉</span><div><h2 id="privacy-visibility-title">Viditelnost</h2><p>Uložené volby, bez aktivního zveřejnění</p></div></div>
-        <label className="privacy-toggle-row">
-          <span><strong>Veřejný profil</strong><small>Volba se ukládá pro tento profil.</small></span>
-          <input type="checkbox" role="switch" checked={currentSettings.profileVisibility === "public"} disabled={disabled} onChange={(event) => save({ profileVisibility: event.target.checked ? "public" : "private" })} />
-        </label>
-        <p className="privacy-hint privacy-backend-note">Veřejné profily zatím nejsou aktivní. Tato volba nic nezveřejňuje ani neposílá na server.</p>
+        <div className="privacy-section-heading"><span className="privacy-icon" aria-hidden="true">◉</span><div><h2 id="privacy-visibility-title">Viditelnost</h2><p>Online profil a místní předvolby deníku</p></div></div>
+        <ProfileSharingSettingsLink />
         <SegmentedOptions
           label="Výchozí viditelnost nových úlovků"
           value={currentSettings.defaultCatchVisibility}
@@ -148,7 +154,7 @@ export default function PrivacyPage() {
           disabled={disabled}
           onChange={(visibility) => save({ defaultCatchVisibility: visibility, defaultCatchVisibilityExplicit: true })}
         />
-        <p className="privacy-hint">Platí pro nové úlovky. Již uložené záznamy se nezmění. Fotografie a poloha mají vlastní nastavení.</p>
+        <p className="privacy-hint">Platí pro nové úlovky. Již uložené záznamy se nezmění. Fotografie a poloha mají vlastní nastavení. Tato předvolba se ukládá v tomto zařízení; veřejná volba sama nic nepublikuje. Online sdílení vyžaduje potvrzený veřejný režim účtu. Na novém zařízení zkontroluj předvolbu znovu.</p>
         <div className="privacy-toggle-row privacy-heatmap-heading">
           <span><strong>Moje úlovky v heatmapě</strong><small>Preference se uloží jen pro tento profil.</small></span>
           <input type="checkbox" aria-label="Zahrnout úlovky do heatmapy podle zvolené granularity" checked={currentSettings.heatmapGranularity !== HEATMAP_GRANULARITY.OFF} disabled={disabled} onChange={(event) => save({ heatmapGranularity: event.target.checked ? HEATMAP_GRANULARITY.AREA : HEATMAP_GRANULARITY.OFF })} />

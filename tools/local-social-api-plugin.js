@@ -15,7 +15,7 @@ function assertEmulatorOnly(server) {
     throw new Error("Lokální sociální API vyžaduje výhradně loopback a demo Firebase emulátory.");
   }
   const credentials = ["FIREBASE_CONFIG", "GOOGLE_APPLICATION_CREDENTIALS", "GOOGLE_APPLICATION_CREDENTIALS_JSON",
-    "FIREBASE_SERVICE_ACCOUNT", "FIREBASE_ADMIN_CREDENTIALS"];
+    "FIREBASE_SERVICE_ACCOUNT", "FIREBASE_SERVICE_ACCOUNT_JSON", "FIREBASE_ADMIN_CREDENTIALS"];
   const credentialPresent = credentials.some((key) => String(process.env[key] ?? "").trim());
   const cloudPrefixPresent = Object.keys(process.env).some((key) =>
     /^(VERCEL|CLOUDINARY_|AI_|OPENAI_|ANTHROPIC_|GEMINI_|CLOUDFLARE_)/.test(key));
@@ -65,22 +65,27 @@ async function readRequestBody(request) {
 }
 
 export function localSocialApiPlugin() {
+  let cleanup;
   return {
     name: "chytnucz-local-social-api",
     apply: "serve",
+    async closeBundle() { await cleanup?.(); },
     async configureServer(server) {
       if (process.env.CHYTNU_LOCAL_SOCIAL_API !== "1") return;
       assertEmulatorOnly(server);
 
       const [{ cert, initializeApp, getApps }, { getAuth }, { getFirestore },
-        { createPublicProfileService }, { createSocialHandler }] = await Promise.all([
+        { createPublicProfileService }, { createSocialHandler }, { createServerProgressionApi }] = await Promise.all([
         import("firebase-admin/app"),
         import("firebase-admin/auth"),
         import("firebase-admin/firestore"),
         import("../src/features/social/server/publicProfileService.js"),
         import("../src/features/social/server/socialApi.js"),
+        import("../src/server/progressionApi.js"),
       ]);
-      const appName = `chytnucz-local-social-${process.pid}`;
+      // Vite restarts in the same process. Never reuse an app still being
+      // cleaned up by the previous server instance.
+      const appName = `chytnucz-local-social-${process.pid}-${randomBytes(6).toString("hex")}`;
       const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
       const app = getApps().find((candidate) => candidate.name === appName)
         ?? initializeApp({
@@ -107,10 +112,20 @@ export function localSocialApiPlugin() {
         cursorSecret: randomBytes(32).toString("hex"),
       });
       const handler = createSocialHandler({ service });
+      // Reuse the production request handler, while leaving shadow progression
+      // disabled: this local harness must never fabricate authoritative XP or
+      // load the production service account required by its enabled mode.
+      const progression = await createServerProgressionApi({ env: {} });
+      const routes = new Map([
+        ["/api/social", handler],
+        ["/api/progression/reconcile", progression.reconcile],
+        ["/api/progression/claim-catch", progression.claim],
+      ]);
 
       server.middlewares.use(async (request, response, next) => {
         const pathname = new URL(request.url ?? "/", "http://127.0.0.1").pathname;
-        if (pathname !== "/api/social") return next();
+        const route = routes.get(pathname);
+        if (!route) return next();
         let body;
         try {
           body = await readRequestBody(request);
@@ -123,11 +138,12 @@ export function localSocialApiPlugin() {
           return;
         }
         request.body = body;
-        return handler(request, responseAdapter(response)).catch(next);
+        return route(request, responseAdapter(response)).catch(next);
       });
 
-      server.httpServer?.once("close", () => {
-        void (async () => {
+      let cleanupPromise;
+      cleanup = () => {
+        cleanupPromise ??= (async () => {
           try {
             await restoreLocalSocialConfig(socialConfigRef, previousSocialConfig);
           } catch (error) {
@@ -140,7 +156,8 @@ export function localSocialApiPlugin() {
             console.error(`Lokální Firebase emulátor se nepodařilo ukončit: ${error.message}`);
           }
         })();
-      });
+        return cleanupPromise;
+      };
     },
   };
 }

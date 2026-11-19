@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../../auth/context/authContextValue.js";
 import { socialRequest } from "../data/socialClient.js";
+import { canShareWithAudience, hasPublicPublicationConsent } from "../data/profileSettingsModel.js";
 import "./socialGallery.css";
 import "./socialProfiles.css";
 
@@ -20,10 +21,10 @@ export default function CatchPublication({ record, photoId, onChanged }) {
   useEffect(() => {
     if (!uid) return undefined;
     const controller = new AbortController();
-    socialRequest("posts.own", { catchId: record.id }, { signal: controller.signal }).then(({ post }) => {
+    socialRequest("posts.own", { catchId: record.id }, { signal: controller.signal }).then(({ post, publicationConsent }) => {
       if (controller.signal.aborted) return;
-      setLoaded({ key, post });
-      setForm({ key, visibility: post?.deleted ? "private" : post?.visibility ?? "private", description: post?.deleted ? "" : post?.content.description ?? "", fields: { ...initialFields, ...(!post?.deleted ? post?.fields : {}) } });
+      setLoaded({ key, post, publicationConsent });
+      setForm({ key, visibility: post?.deleted ? "private" : post?.visibility ?? (hasPublicPublicationConsent(publicationConsent) ? "public" : "private"), description: post?.deleted ? "" : post?.content.description ?? "", fields: { ...initialFields, ...(!post?.deleted ? post?.fields : {}) } });
     }).catch(error => { if (!controller.signal.aborted) setLoaded({ key, error: error.message }); });
     return () => controller.abort();
   }, [uid, key, record.id, reload]);
@@ -32,7 +33,7 @@ export default function CatchPublication({ record, photoId, onChanged }) {
   const post = loaded?.key === key ? loaded.post : null;
   const patch = (field, value) => { setForm(old => ({ ...old, [field]: value })); setFeedback(null); };
   async function perform(remove = false) {
-    if (!ready || busy) return;
+    if (!ready || busy || !remove && !canShareWithAudience(loaded.publicationConsent, form.visibility)) return;
     const controller = new AbortController(); actionRef.current = controller;
     setBusyKey(key); setFeedback(null);
     try {
@@ -57,6 +58,7 @@ export default function CatchPublication({ record, photoId, onChanged }) {
         <fieldset disabled={busy}>
           <p><strong>{record.species || "Úlovek"}</strong>{photoId ? " · vybraná fotografie" : " · bez fotografie"}</p>
           <label>Komu příspěvek ukázat<select value={form.visibility} onChange={event => patch("visibility", event.target.value)}>{Object.entries(visibilityLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+          {!canShareWithAudience(loaded.publicationConsent, form.visibility) && <p role="status">Pro zveřejnění nejdřív potvrď veřejný režim. <Link to="/profile/social">Nastavit soukromí a sdílení</Link></p>}
           <div className="publication-options">
             <label><input type="checkbox" checked={form.fields.length} onChange={event => patch("fields", { ...form.fields, length: event.target.checked })} /> Délka{record.lengthCm > 0 ? `: ${record.lengthCm} cm` : " (je-li vyplněna)"}</label>
             <label><input type="checkbox" checked={form.fields.weight} onChange={event => patch("fields", { ...form.fields, weight: event.target.checked })} /> Hmotnost{record.weightKg > 0 ? `: ${record.weightKg} kg` : " (je-li vyplněna)"}</label>
@@ -66,7 +68,7 @@ export default function CatchPublication({ record, photoId, onChanged }) {
           <label>Datum<select value={form.fields.date} onChange={event => patch("fields", { ...form.fields, date: event.target.value })}><option value="none">Nesdílet</option><option value="month">Pouze měsíc a rok</option><option value="day">Den bez času</option></select></label>
           <label>Veřejný popis<textarea maxLength={1000} value={form.description} onChange={event => patch("description", event.target.value)} placeholder="Napiš jen to, co chceš sdílet. Přesné místo ani soukromé údaje sem nepatří." /></label>
           {post && <p className="social-help">Aktuálně: {post.deleted ? "Příspěvek není zveřejněný" : visibilityLabels[post.visibility]}. Uložení znovu schválí vybrané údaje z deníku{photoId ? " a tuto fotografii" : ""}.</p>}
-          <div className="social-button-row"><button className="social-primary" disabled={busy}>{busy ? "Ukládám…" : form.visibility === "private" ? "Uložit soukromou kopii" : "Schválit a sdílet"}</button>{post && !post.deleted && <button type="button" disabled={busy} onClick={() => perform(true)}>Odstranit sdílený příspěvek</button>}</div>
+          <div className="social-button-row"><button className="social-primary" disabled={busy || !canShareWithAudience(loaded.publicationConsent, form.visibility)}>{busy ? "Ukládám…" : form.visibility === "private" ? "Uložit soukromou kopii" : "Schválit a sdílet"}</button>{post && !post.deleted && <button type="button" disabled={busy} onClick={() => perform(true)}>Odstranit sdílený příspěvek</button>}</div>
         </fieldset>
       </form>}
     </>}

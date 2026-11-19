@@ -1,3 +1,4 @@
+import { publicProfileFixtureConsent, publicProfileFixturePayload } from "./social-publication-fixture.mjs";
 import assert from "node:assert/strict";
 import { randomUUID, createHash } from "node:crypto";
 import { initializeApp, deleteApp } from "firebase-admin/app";
@@ -22,7 +23,7 @@ async function account(role) {
 }
 async function call(role, action, payload = {}, expected = 200) {
   const res = { statusCode: 200, setHeader() {}, status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } };
-  await handler({ method: "POST", headers: tokens[role] ? { authorization: `Bearer ${tokens[role]}` } : {}, body: { action, ...payload } }, res);
+  await handler({ method: "POST", headers: tokens[role] ? { authorization: `Bearer ${tokens[role]}` } : {}, body: { action, ...await publicProfileFixturePayload(action, payload, db, ids[role]) } }, res);
   equal(res.statusCode, expected); return res.body;
 }
 async function allPages(role, request) {
@@ -38,7 +39,7 @@ async function allPages(role, request) {
 try {
   await account("viewer"); await account("stranger");
   profiles.viewer = { handle: `viewer_${suffix}`, displayName: "Hledající rybář", visibility: "public", discoverable: true };
-  await repo.saveProfile(tokens.viewer, profiles.viewer);
+  await repo.saveProfile(tokens.viewer, profiles.viewer, await publicProfileFixtureConsent(profiles.viewer, db, ids.viewer));
   for (let i = 0; i < 18; i++) {
     const role = `u${String(i).padStart(2,"0")}`; await account(role);
     profiles[role] = { handle: `angler${String(i).padStart(2,"0")}_${suffix}`, displayName: i < 2 ? "Jiří Novák" : `Rybář Číslo ${i}`,
@@ -47,7 +48,7 @@ try {
     if (i === 5) profiles[role].visibility = "private";
     if (i === 6) profiles[role].visibility = "friends";
     if (i === 7) profiles[role].discoverable = false;
-    await repo.saveProfile(tokens[role], profiles[role]);
+    await repo.saveProfile(tokens[role], profiles[role], await publicProfileFixtureConsent(profiles[role], db, ids[role]));
   }
   handler = createSocialHandler({ service: createPublicProfileService({ db, auth, avatar: {}, now: () => time,
     env: { CHYTNU_OWNER_UID: ids.u00, CHYTNU_CO_CREATOR_UID: ids.u01 }, cursorSecret: "synthetic-emulator-cursor-secret-32-plus-characters" }) });
@@ -56,7 +57,7 @@ try {
   await db.doc(`users/${ids.u00}/catches/fixture/photos/photo`).set({ id:"photo",type:"image/jpeg",size:1000,deleted:false,cloud:{state:"synced",provider:"cloudinary",sha256:"a".repeat(64),objectKey:`users/${ids.u00}/catches/fixture/photos/photo/original`} });
   Object.assign(profiles.u00, { sharedCatchIds: ["fixture"], sharedPhotos: [{ catchId: "fixture", photoId: "photo" }] });
   Object.assign(profiles.u00.sections, { catches: "public", gallery: "public", statistics: "public" });
-  await repo.saveProfile(tokens.u00, profiles.u00);
+  await repo.saveProfile(tokens.u00, profiles.u00, await publicProfileFixtureConsent(profiles.u00, db, ids.u00));
   await repo.block(tokens.u09, ids.viewer); // Last candidate on a full scanned page is hidden.
   await db.doc(`accountSuspensions/${ids.u08}`).set({ suspended: true });
   await call("anonymous", "search", { query: "angler" }, 401);
@@ -93,13 +94,13 @@ try {
   // Turning discovery off does not invalidate an already offered invitation.
   await repo.saveProfile(tokens.viewer, { ...profiles.viewer, discoverable: false });
   equal((await call("u00", "relationship", { targetUid: ids.viewer, operation: "accept" })).relationship.status, "friends");
-  await repo.saveProfile(tokens.viewer, profiles.viewer);
+  await repo.saveProfile(tokens.viewer, profiles.viewer, await publicProfileFixtureConsent(profiles.viewer, db, ids.viewer));
   equal((await call("viewer", "search", { query: profiles.u00.handle })).users[0].relationship.status, "friends");
   await call("viewer", "relationship", { targetUid: ids.u09, operation: "request" }, 404);
   await call("viewer", "relationship", { targetUid: ids.u05, operation: "request" }, 404);
   await call("stranger", "relationship", { targetUid: ids.u00, operation: "accept" }, 400);
   const originalHandle = profiles.u00.handle;
-  profiles.u00.handle = `renamed_${suffix}`; await repo.saveProfile(tokens.u00, profiles.u00);
+  profiles.u00.handle = `renamed_${suffix}`; await repo.saveProfile(tokens.u00, profiles.u00, await publicProfileFixtureConsent(profiles.u00, db, ids.u00));
   equal((await call("viewer", "search", { query: originalHandle })).users.length, 0);
   equal((await call("viewer", "search", { query: profiles.u00.handle })).users[0].uid, ids.u00);
   await call("viewer", "save", { profile: { handle: originalHandle, displayName: "Thief" } }, 409);

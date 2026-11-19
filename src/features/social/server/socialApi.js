@@ -2,14 +2,16 @@ import { createPublicProfileService } from "./publicProfileService.js";
 import { createSocialAvatarService } from "./socialAvatar.js";
 import { createSocialPhotoService } from "./socialPhoto.js";
 import { getAccountDeletionAdminContext } from "../../../server/cloudinaryApi.js";
-const actions = { friends: ["tab", "cursor"], "friends.status": ["targetUid"], search: ["query", "field", "mode", "cursor"], relationship: ["targetUid", "operation", "operationId", "expectedRevision"], self: [], save: ["profile"], view: ["identity"], preview: ["audience"], block: ["targetUid", "blocked"], report: ["targetUid", "reason"],
+const actions = { friends: ["tab", "cursor"], "friends.status": ["targetUid"], search: ["query", "field", "mode", "cursor"], relationship: ["targetUid", "operation", "operationId", "expectedRevision"], self: [], save: ["profile", "publicationConsent"], view: ["identity"], preview: ["audience"], block: ["targetUid", "blocked"], report: ["targetUid", "reason"],
   "interactions.list": ["postId", "cursor"], "reactions.set": ["postId", "kind", "operationId"], "comments.save": ["postId", "commentId", "text", "expectedRevision"], "comments.delete": ["postId", "commentId", "expectedRevision"], "reports.create": ["postId", "commentId", "reason", "details"],
   "posts.save": ["catchId","photoId","visibility","fields","description","expectedRevision"], "posts.own": ["catchId"], "posts.list": ["identity","cursor","previewAudience"], "posts.image": ["postId","previewAudience"], "posts.delete": ["postId","expectedRevision"],
   "progression.compare": ["targetUid"],
+  "posts.publishNew": [],
   "feed.list": ["mode","cursor","limit"],"posts.view":["postId"],
   "entries.save":["entryId","kind","visibility","expectedRevision","title","description","achievementId"],
   "avatar.set": ["jpegBase64"], "avatar.remove": [], image: ["identity", "kind", "catchId", "photoId"] };
 const errors = { unauthenticated: 401, authentication_required: 401, account_unavailable: 403, forbidden: 403,
+  invalid_consent: 400, publication_consent_required: 403, consent_conflict: 409,
   invalid_publication:400,post_unavailable:404,post_conflict:409,interaction_conflict:409,comment_unavailable:404,comment_conflict:409,comment_duplicate:429,invalid_interaction:400,photo_preparing:409,photo_unavailable:503,
   social_disabled: 503, social_unavailable: 404, profile_unavailable: 404, social_rate_limit: 429, request_limit: 429,
   handle_taken: 409, invalid_profile: 400, invalid_shared_catch: 400, invalid_shared_photo: 400, invalid_request: 400,

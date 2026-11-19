@@ -17,7 +17,7 @@ test("production factory fails closed without independently confirmed free confi
 test("configured production API still requires Firebase auth and rejects removed operator actions", async () => {
   const handler = createProductionAiApplication({ env: configuration });
   const res = response();
-  await handler({ method: "POST", body: { action: "species", catchId: "c", photoId: "p" } }, res);
+  await handler({ method: "POST", body: { action: "story", catchId: "c", task: "improve" } }, res);
   assert.equal(res.code, 401);
   const operator = response();
   await handler({ method: "POST", body: { action: "operator_fish_check" } }, operator);
