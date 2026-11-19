@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createAiApplicationApi, createFirebaseAiApplicationDependencies } from "./aiApplicationApi.js";
+import { AI_FEATURES } from "../aiPolicy.js";
 
 const capabilities = { species: true, stories: true, diary: true, recommendations: true };
 const consent = () => ({ ownerId: "owner", provider: "cloudflare", version: 1, capabilities: { ...capabilities },
@@ -60,6 +61,16 @@ test("explicit per-capability consent and feature flags guard personal payloads 
   const { state, handler } = fixture({ features: { ...capabilities, species: false } });
   assert.equal((await call(handler, { action: "species", catchId: "catch-1", photoId: "photo-1" })).code, 503);
   assert.equal(state.calls.photo, 0);
+});
+
+test("production feature set disables species and diary inference before private data or quota access", async () => {
+  const { state, handler } = fixture({ features: AI_FEATURES });
+  assert.equal((await call(handler, { action: "species", catchId: "catch-1", photoId: "photo-1" })).body.error, "ai_disabled");
+  assert.equal((await call(handler, { action: "diary" })).body.error, "ai_disabled");
+  assert.equal((await call(handler, { action: "recommendations" })).code, 200);
+  const home = await call(handler, { action: "home", fingerprint: "b".repeat(32) });
+  assert.equal(home.body.error, "invalid_request");
+  assert.deepEqual(state.calls, { photo: 0, quota: 1, species: 0, text: 0, analysis: 1, save: 1 });
 });
 
 test("consent API exposes only public fields and requires an explicit current-version revision for updates", async () => {
@@ -319,31 +330,29 @@ test("structured application/provider errors expose safe codes and known reset o
   assert.deepEqual(result.body, { error: "provider_auth" });
 });
 
-test("Home rechecks owned deterministic fingerprint, caches prose and rejects stale or thin evidence before inference", async () => {
-  const report = { version: "personal-fishing-v1", fingerprint: "c".repeat(32), providerSummary: { candidates: [{ candidate: 1 }] },
-    strongest: { evidenceIds: ["catch-1"] } };
+test("legacy Home AI action is rejected before consent, quota or inference", async () => {
   let generations = 0;
-  const setup = fixture({ getOwnedContext: async () => ({ catches: [record()] }), buildHomeAnalysis: () => report,
-    homeProvider: async () => { generations++; return { text: "Porovnej podobné výpravy se stejnou metodou." }; } });
-  assert.equal((await call(setup.handler, { action: "home", fingerprint: "b".repeat(32) })).code, 409);
-  const first = await call(setup.handler, { action: "home", fingerprint: report.fingerprint });
-  assert.equal(first.code, 200); assert.equal(first.body.modelVersion, report.version);
-  const cached = await call(setup.handler, { action: "home", fingerprint: report.fingerprint });
-  assert.equal(cached.code, 200); assert.equal(generations, 1); assert.equal(setup.state.calls.quota, 1);
-  report.providerSummary.candidates = [];
-  assert.equal((await call(setup.handler, { action: "home", fingerprint: report.fingerprint })).code, 422);
-  assert.equal(generations, 1);
+  const setup = fixture({ homeProvider: async () => { generations++; return { text: "must not run" }; }, diagnostic() {} });
+  const result = await call(setup.handler, { action: "home", fingerprint: "b".repeat(32) });
+  assert.equal(result.code, 400);
+  assert.equal(result.body.error, "invalid_request");
+  assert.equal(generations, 0);
+  assert.equal(setup.state.calls.quota, 0);
 });
 
-test("automatic consent starts only at explicit opt-in, retains its original epoch, and revokes with photo permission", async () => {
+test("consent persistence ignores disabled AI capabilities and revokes the supported capabilities", async () => {
   const db = fakeFirestore();
   const deps = createFirebaseAiApplicationDependencies({ env: {}, admin: async () => ({ db }), now: () => Date.parse("2026-11-08T10:00:00Z") });
   const enabled = await deps.setConsent("owner", { version: 1, capabilities, expectedRevision: 0, automaticSpecies: true });
-  assert.equal(enabled.automaticSpecies, true); assert.equal(enabled.automaticSpeciesFrom, "2026-11-08T10:00:00.000Z");
+  assert.equal(enabled.capabilities.species, false); assert.equal(enabled.capabilities.diary, false);
+  assert.equal(enabled.capabilities.stories, true); assert.equal(enabled.capabilities.recommendations, true);
+  assert.equal(enabled.automaticSpecies, false); assert.equal(enabled.automaticSpeciesFrom, null);
   const updated = await deps.setConsent("owner", { version: 1, capabilities, expectedRevision: 1 });
-  assert.equal(updated.automaticSpeciesFrom, enabled.automaticSpeciesFrom);
-  const revoked = await deps.setConsent("owner", { version: 1, expectedRevision: 2, capabilities: { ...capabilities, species: false } });
+  assert.equal(updated.automaticSpecies, false);
+  const revoked = await deps.setConsent("owner", { version: 1, expectedRevision: 2,
+    capabilities: { ...capabilities, stories: false, recommendations: false } });
   assert.equal(revoked.automaticSpecies, false); assert.equal(revoked.automaticSpeciesFrom, null);
+  assert.equal(revoked.capabilities.stories, false); assert.equal(revoked.capabilities.recommendations, false);
 });
 
 test("unavailable image preflight consumes no inference reservation", async () => {

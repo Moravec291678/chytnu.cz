@@ -1,6 +1,5 @@
 import { buildPrivateCatchMarkers, getCatchCoordinates } from "./catchMap.js";
 import { isRecordVisible, validateDataScope } from "../../auth/data/localDataScope.js";
-import { suggestedSpeciesForDisplay } from "../../ai/automaticSpecies.js";
 import { getPrimaryAvailablePhoto } from "../../catches/data/catchPhotos.js";
 import { LIVE_GPS_MAX_ACCURACY_METERS } from "../../catches/data/catchVerification.js";
 import { distanceBetweenCoordinatesMeters } from "../../waters/data/nearbyWaterMatch.js";
@@ -28,9 +27,8 @@ export function buildTripCatchMarkers(catches, trip, options) {
     if (record.gpsSource === "live-gps" && accuracyMeters !== null
       && (!Number.isFinite(accuracyMeters) || accuracyMeters <= 0 || accuracyMeters > LIVE_GPS_MAX_ACCURACY_METERS)) return [];
     const photos = Array.isArray(record.photos) ? record.photos.filter(photo => photo && typeof photo === "object" && typeof photo.id === "string") : [];
-    const suggestion = suggestedSpeciesForDisplay({ ...record, photos });
     const base = baseMarkers.get(record.id);
-    return [{ ...base, species: suggestion?.label || (typeof record.species === "string" && record.species.trim() ? record.species : "Druh zatím neurčen"), aiSuggested: Boolean(suggestion),
+    return [{ ...base, species: typeof record.species === "string" && record.species.trim() ? record.species : "Druh zatím neurčen",
       ...coordinates,
       weightKg: record.weightSource === "estimated" || !Number.isFinite(record.weightKg) || !(record.weightKg > 0) ? null : record.weightKg,
       lengthCm: Number.isFinite(record.lengthCm) && record.lengthCm > 0 ? record.lengthCm : null,

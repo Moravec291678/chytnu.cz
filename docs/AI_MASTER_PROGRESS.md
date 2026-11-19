@@ -57,3 +57,16 @@ Emulator metadata lookup emitted non-fatal `ETIMEDOUT`/`ENOTFOUND` warnings. The
 - Latest validation: `npm test` 1,165/1,165 PASS; lint, build and `git diff --check` PASS; the Stage 8 social Auth/Firestore emulator suite passed 131 checks.
 - Browser limitation: Vite does not serve the Vercel `/api/*` functions. Social/progression browser requests returned local 404s; authenticated browser testing of those API-backed interactions remains unverified.
 - This checkpoint is committed locally and unpushed; overall audit remains PARTIAL. No production deployment or Stage 9 work was performed.
+
+## Current checkpoint — 2026-11-19
+
+- Audit remains **PARTIAL**; Stage 8 remains **PASS** from previously documented evidence.
+- Branch `codex/ui-terminology-length-priority`, base HEAD `fc86517032629e351a4dff49dec11b3749707102`; current work was not yet committed at checkpoint creation.
+- Restricted AI to optional story drafts and diary recommendations; disabled species recognition, standalone diary AI explanations and Home AI requests. Legacy Home AI cache is cleared while local insight state is preserved.
+- New social posts have a public form default but cannot submit before confirmation. New profile defaults are public at the top level only; sections and discoverability remain private/off. Historical documents/data are not migrated and server defaults remain private-first.
+- Local Vite social harness restores its previous emulator configuration on close.
+- Validation: 1,156 unit tests, lint, build and client secret scan, product inventory, local-only photos, two local harness tests, and diff check passed. Build has existing large-chunk warnings.
+- Rules/Auth/Sync emulator tests were not re-run because existing app/emulator processes occupied configured ports 5174/9099/8080. Processes were left running. Previously recorded 131 Stage 8 social checks are historical.
+- Authenticated composer consent was checked without submitting; two social/profile views had no overflow at measured widths from 320 to 1920 px. The browser could not realize exactly 1024 px. Local `/api/progression/reconcile` 404 and a later profile 401 were not treated as production results.
+- No production user data, credentials, push, merge, Stage 9, or deployment was used.
+- Next: rerun emulator suites when safely available, decide if public consent must be persisted server-side, continue remaining authenticated module/browser audit, then record the local commit SHA here and in `AI_HANDOFF.md`.

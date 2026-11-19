@@ -25,7 +25,7 @@ test("a single day and insufficient comparison group never masquerade as a suppo
   const sameDay = timeFixture().map(item => ({ ...item, caughtAt: item.caughtAt.replace(/2026-10-\d\d/, "2026-10-01") }));
   const result = build(sameDay);
   assert.equal(result.strongest.isInsight, false);
-  assert.equal(result.providerSummary.candidates.length, 0);
+  assert.equal(Object.hasOwn(result, "providerSummary"), false);
   assert.match(result.strongest.experiment, /dvě stejně dlouhé části/);
 });
 test("method-length and weather-length comparisons hold species constant and use valid recorded weather only", () => {
@@ -44,13 +44,12 @@ test("method-length and weather-length comparisons hold species constant and use
   assert.ok(weather.evidenceIds.every(id => !id.startsWith("float") && id !== "other-species"));
   assert.match(weather.uncertainty, /meteorologického modelu/);
 });
-test("water-bait pattern remains private: model receives numeric comparisons without names, coordinates, IDs or notes", () => {
+test("water-bait comparisons stay local and do not produce an AI provider payload", () => {
   const records = Array.from({ length: 12 }, (_, i) => record(`private-id-${i}`, i + 1, 12, { waterId: i < 6 ? "secret-water-A" : "secret-water-B",
     locationName: "Soukromá tůň", baits: [{ key: i < 6 ? "worm" : "corn", label: "Tajný recept" }], notes: "private note", coordinates: { latitude: 50, longitude: 14 } }));
   const report = build(records, { waters: [{ id: "secret-water-A", name: "Soukromá tůň" }] });
   assert.ok(report.candidates.some(item => item.family === "species-water-bait"));
-  const sent = JSON.stringify(report.providerSummary);
-  for (const secret of ["private-id", "secret-water", "Soukromá", "Tajný", "private note", "latitude", "longitude", "worm", "corn"]) assert.ok(!sent.includes(secret), secret);
+  assert.equal(Object.hasOwn(report, "providerSummary"), false);
 });
 test("trip effort denominator includes zero-catch completed trips and excludes active/overlapping trips", () => {
   const trips = Array.from({ length: 6 }, (_, i) => ({ id: `trip${i}`, methodKey: i < 3 ? "feeder" : "float",

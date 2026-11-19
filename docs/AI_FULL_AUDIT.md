@@ -69,3 +69,30 @@ Status remains **PARTIAL**. This wave did not start Stage 9 or change the overal
 - No confirmed privacy leak was identified in this wave. Physical iOS/Android testing remains **MANUAL TEST REQUIRED**.
 - Latest validation: unit tests 1,165/1,165, lint, build, `git diff --check`, and the 131-check Stage 8 social Auth/Firestore emulator suite passed.
 - Changes are local and unpushed. Continue with a Vercel-compatible local API/emulator harness for authenticated social browser scenarios, then proceed through remaining unverified modules. Do not deploy or start Stage 9.
+
+## 2026-11-19 — AI scope, privacy defaults, and local API safety
+
+Overall audit: **PARTIAL**. Stage 8 remains **PASS** based on its previously recorded emulator evidence. No Stage 9, push, merge, or deployment was performed.
+
+### Verified changes
+
+- Fixed production AI capability policy to retain only user-triggered fishing-story drafts and diary-derived recommendations. Species recognition and standalone diary explanations are disabled; Home insights remain deterministic/local. Old Home AI cache fields are removed without discarding the local insight selection.
+- New social posts default to public only in the composer, with an explicit checkbox gating submission. New profile settings default the top-level profile to public while keeping all sections private and discovery disabled; switching a profile/section to public requires confirmation. Server defaults and existing data remain private-first.
+- Moved the JPEG metadata rewriter to shared media code so social/admin image paths do not depend on AI modules.
+- Local social Vite harness now restores the prior emulator `adminConfig/social` value when it closes; restoration and first-time cleanup have 2 unit tests.
+
+### Test and browser evidence
+
+- `npm test` 1,156/1,156 PASS; lint, build, client secret scan, product inventory, local-only photo test, local API restoration test and `git diff --check` PASS.
+- Build still reports existing large chunks; no new performance claim is made.
+- Community composer consent behavior was exercised with a synthetic draft and not submitted. `/community` and `/profile/social` showed no horizontal overflow across measured widths 320–1920 px; browser width quantization yielded 1023/1025 instead of exactly 1024 for these authenticated screens.
+- Existing guest route matrix and prior synthetic Catch/Trip checks remain as recorded above; this checkpoint did not increase route-count claims.
+- Rules/Auth/Sync emulator suites were not re-run because the configured ports were already occupied by the existing local app/emulators. They were not stopped to avoid disturbing the running session. Prior Stage 8 social emulator evidence (131 checks) is historical, not a fresh result.
+- Local Vite `api/progression/reconcile` 404 and a later profile API 401 were observed. They are local harness/session limitations; they do not prove production failure. No authenticated profile save or public post was made.
+
+### Findings and residual risk
+
+- No new exploitable vulnerability was confirmed.
+- The public checkbox is a client-side consent gate; the API stores the requested visibility but does not persist a separate consent receipt. Assess whether a durable consent record is required before any public release.
+- Authenticated API flows, social emulator suites, exact 1024 px authenticated rendering, physical mobile devices and installed-PWA behavior remain unverified. Device checks are **MANUAL TEST REQUIRED**.
+- The strategic MVP still excludes social networking and AI. This audit change does not authorize either feature for production release.

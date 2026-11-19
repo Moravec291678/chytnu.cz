@@ -20,3 +20,12 @@ Status: PARTIAL
 - Screenshot comparison found the inactive Home fish-activity card's detail link touching its action button (0 px gap at 1920 px). Both controls now use the existing compact action row. Post-fix computed gap: 14 px at 320 px, 84 px at 390 px and 181 px at desktop; no overflow.
 - A synthetic Catch and Trip were exercised through the UI and removed after verification.
 - Vercel `/api/*` routes are not provided by the Vite dev server; API-backed social browser behavior remains unverified. Physical iPhone/Android and PWA service-worker behavior remain **MANUAL TEST REQUIRED**.
+
+## 2026-11-19 — AI consent and social visibility screens
+
+- Preserved the existing dark palette, green accent tokens and component identity.
+- Exercised the community composer’s public-default consent flow in the browser with synthetic draft text only. The submit button was disabled before confirmation, enabled after confirmation, and disabled again after unchecking. Nothing was published.
+- Checked `/community` with the composer open and `/profile/social` with the existing synthetic profile at measured CSS widths 320, 360, 375, 390, 430, 768, 1025, 1280, 1440 and 1920 for the composer, and 320, 360, 375, 390, 430, 767, 1023, 1280, 1440 and 1920 for profile settings. No horizontal overflow was observed.
+- The integrated browser quantizes requested widths; authenticated profile screens could not be measured at exactly 1024 px. Do not count this as exact 1024 px coverage.
+- No new profile was saved and no existing profile settings were changed. Authenticated route/API coverage remains incomplete; the browser later showed a logged-out state and the cause was not verified. The local `/api/progression/reconcile` 404 is a Vite harness limitation, not a production conclusion.
+- Physical iOS/Android and installed-PWA checks remain **MANUAL TEST REQUIRED**.

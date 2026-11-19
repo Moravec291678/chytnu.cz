@@ -4,17 +4,12 @@ import Layout from "../../../shared/layout/Layout.jsx";
 import { useAuth } from "../../auth/context/authContextValue.js";
 import { useProgression } from "../../progression/context/progressionContextValue.js";
 import { socialRequest } from "../data/socialClient.js";
+import { editableProfile, requiresProfilePublicConsent } from "../data/profileSettingsModel.js";
 import { FishingProfileView } from "./PublicFishingProfile.jsx";
 import "./socialProfiles.css";
 import "./publicProgression.css";
 
 const sectionLabels = { interests: "Region a rybářské zájmy", statistics: "Statistiky", catches: "Vybrané úlovky", gallery: "Vybrané fotografie", achievements: "Úroveň a sdílené úspěchy", trophies: "Trofejní vitrína" };
-const sectionDefaults = Object.fromEntries(Object.keys(sectionLabels).map(key => [key, "private"]));
-function editableProfile(profile) {
-  return { handle: profile?.handle ?? "", displayName: profile?.displayName ?? "", bio: profile?.bio ?? "", region: profile?.region ?? "", specialization: profile?.specialization ?? "", favoriteSpecies: profile?.favoriteSpecies ?? "",
-    visibility: profile?.visibility ?? "private", discoverable: profile?.discoverable === true, directoryDiscoverable: profile?.directoryDiscoverable === true, regionDiscoverable: profile?.regionDiscoverable === true,
-    sections: { ...sectionDefaults, ...profile?.sections }, sharedCatchIds: profile?.sharedCatchIds ?? [], sharedPhotos: profile?.sharedPhotos ?? [], sharedAchievementIds: profile?.sharedAchievementIds ?? [] };
-}
 function VisibilityOptions() { return <><option value="private">Pouze já</option><option value="friends">Přátelé</option><option value="public">Veřejně</option></>; }
 async function avatarJpeg(file) {
   if (!file || !["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > 10_000_000) throw new Error("Vyber JPEG, PNG nebo WebP do 10 MB.");
@@ -44,6 +39,7 @@ export default function SocialProfileSettings() {
   const [busyUid, setBusyUid] = useState(null);
   const [feedback, setFeedback] = useState(null);
   const [preview, setPreview] = useState(null);
+  const [publicConsent, setPublicConsent] = useState(false);
   const [revision, setRevision] = useState(0);
   const avatarInput = useRef(null), currentUid = useRef(uid), actionController = useRef(null);
   useEffect(() => { currentUid.current = uid; }, [uid]);
@@ -52,7 +48,7 @@ export default function SocialProfileSettings() {
     if (!uid) return undefined;
     const controller = new AbortController();
     socialRequest("self", {}, { signal: controller.signal }).then(value => {
-      if (!controller.signal.aborted) { setLoaded({ uid, ...value }); setForm({ uid, value: editableProfile(value.profile) }); }
+      if (!controller.signal.aborted) { setLoaded({ uid, ...value }); setForm({ uid, value: editableProfile(value.profile, { newProfile: !value.profile }) }); setPublicConsent(false); }
     }).catch(reason => { if (!controller.signal.aborted) setLoaded({ uid, error: reason.message }); });
     return () => controller.abort();
   }, [uid, revision]);
@@ -64,7 +60,11 @@ export default function SocialProfileSettings() {
   const unlocked = new Set((ledger.events ?? []).filter(event => event.ownerId === uid && event.scopeKey === `account:${uid}` && event.type === "achievement.unlocked")
     .map(event => event.reasonKey?.slice("achievement.unlocked:".length)));
   const achievementChoices = ready ? (loaded.achievementChoices ?? []).filter(item => unlocked.has(item.id) || loaded.profile?.sharedAchievementIds?.includes(item.id)) : [];
-  const patch = (name, value) => { setForm(old => ({ uid, value: { ...old.value, [name]: value } })); setFeedback(null); setPreview(null); };
+  const patch = (name, value) => {
+    setForm(old => ({ uid, value: { ...old.value, [name]: value } }));
+    if (name === "visibility" || name === "sections") setPublicConsent(false);
+    setFeedback(null); setPreview(null);
+  };
   async function action(task, success) {
     if (busy || !uid) return;
     const controller = new AbortController(); actionController.current = controller;
@@ -74,6 +74,7 @@ export default function SocialProfileSettings() {
     finally { setBusyUid(active => active === startedUid ? null : active); }
   }
   const selectedPhotos = profile?.sharedPhotos ?? [];
+  const requiresPublicConfirmation = ready && requiresProfilePublicConsent(profile, loaded.profile);
   function toggleCatch(id) {
     patch("sharedCatchIds", profile.sharedCatchIds.includes(id) ? profile.sharedCatchIds.filter(value => value !== id) : [...profile.sharedCatchIds, id].slice(0, 12));
   }
@@ -86,10 +87,11 @@ export default function SocialProfileSettings() {
     {uid && loaded?.uid !== uid && <p role="status">Načítám nastavení…</p>}
     {loaded?.uid === uid && loaded.error && <p role="alert" className="social-error">{loaded.error}<button onClick={() => setRevision(value => value + 1)}>Zkusit znovu</button></p>}
     {ready && profile && <>
-      <form onSubmit={event => { event.preventDefault(); action(async signal => { const value = await socialRequest("save", { profile }, { signal }); if (currentUid.current === uid && !signal.aborted) { setLoaded(old => ({ ...old, profile: value.profile })); setForm({ uid, value: editableProfile(value.profile) }); setPreview(null); } }, "Profil byl uložen. Změny viditelnosti už platí pro další zobrazení."); }}>
+      <form onSubmit={event => { event.preventDefault(); if (requiresPublicConfirmation && !publicConsent) { setFeedback({ uid, error: "Nejdřív potvrď, že chceš nové veřejné části profilu zpřístupnit všem." }); return; } action(async signal => { const value = await socialRequest("save", { profile }, { signal }); if (currentUid.current === uid && !signal.aborted) { setLoaded(old => ({ ...old, profile: value.profile })); setForm({ uid, value: editableProfile(value.profile) }); setPublicConsent(false); setPreview(null); } }, "Profil byl uložen. Změny viditelnosti už platí pro další zobrazení."); }}>
         <fieldset disabled={busy}>
         <section className="social-panel"><h2>Jak tě ostatní poznají</h2><div className="social-field-grid"><label>Zobrazované jméno<input required maxLength={60} value={profile.displayName} onChange={event => patch("displayName", event.target.value)} autoComplete="nickname" /></label><label>Veřejné uživatelské jméno<input required minLength={3} maxLength={24} pattern="[A-Za-z][A-Za-z0-9_]{2,23}" value={profile.handle} onChange={event => patch("handle", event.target.value)} autoCapitalize="none" autoCorrect="off" spellCheck={false} aria-describedby="social-handle-help" /></label></div><p id="social-handle-help" className="social-help">3–24 znaků: písmena bez diakritiky, číslice a podtržítko. Začni písmenem. Velikost písmen nerozhoduje.</p><label>O mně<textarea maxLength={280} value={profile.bio} onChange={event => patch("bio", event.target.value)} placeholder="Co tě na rybaření baví?" /></label><div className="social-field-grid"><label>Obecný region (dobrovolné)<input maxLength={80} value={profile.region} onChange={event => patch("region", event.target.value)} placeholder="Například jižní Morava" /></label><label>Rybářská specializace<input maxLength={160} value={profile.specialization} onChange={event => patch("specialization", event.target.value)} placeholder="Například přívlač" /></label><label>Oblíbené druhy ryb<input maxLength={160} value={profile.favoriteSpecies} onChange={event => patch("favoriteSpecies", event.target.value)} /></label></div></section>
         <section className="social-panel"><h2>Viditelnost</h2><p className="social-help">Veřejné sekce mohou číst i návštěvníci bez přihlášení. Blokování účtu anonymní přístup neomezuje.</p><label>Celý profil<select value={profile.visibility} onChange={event => patch("visibility", event.target.value)}><VisibilityOptions /></select></label><label className="social-check"><input type="checkbox" checked={profile.discoverable} onChange={event => patch("discoverable", event.target.checked)} /><span>Povolit vyhledání podle uživatelského jména</span></label><p className="social-help">Vypnutí vyhledávání neruší účet. Přímý odkaz se nadále řídí viditelností profilu.</p><label className="social-check"><input type="checkbox" checked={profile.directoryDiscoverable} onChange={event => patch("directoryDiscoverable", event.target.checked)} /><span>Zařadit do přehledu rybářů a hledání podle jména a veřejných zájmů</span></label><label className="social-check"><input type="checkbox" checked={profile.regionDiscoverable} onChange={event => patch("regionDiscoverable", event.target.checked)} /><span>Povolit hledání podle dobrovolně zveřejněného regionu</span></label><p className="social-help">Ve výsledcích se objeví jen veřejný profil s povolenou dohledatelností. Region a zájmy se používají pouze při veřejné viditelnosti této sekce. GPS se pro hledání nepoužívá.</p><div className="social-field-grid">{Object.entries(sectionLabels).map(([key, label]) => <label key={key}>{label}<select value={profile.sections[key]} onChange={event => patch("sections", { ...profile.sections, [key]: event.target.value })}><VisibilityOptions /></select></label>)}</div><p className="social-help">Sekce nikdy nezpřístupní celý profil širšímu okruhu, než dovoluje nastavení nahoře.</p></section>
+        {requiresPublicConfirmation && <label className="social-check"><input type="checkbox" checked={publicConsent} onChange={event => setPublicConsent(event.target.checked)} /><span>Souhlasím se zveřejněním nově veřejných částí profilu. Uvidí je každý, i bez přihlášení. Deník, přesná místa a poznámky zůstávají skryté, pokud je výslovně nevyberu ke sdílení.</span></label>}
         <section className="social-panel"><h2>Výslovně vybrané úlovky a fotografie</h2><p className="social-help">Statistiky a trofeje propojí tento výběr (nejvýše 12 úlovků) a nejvýše 20 posledních povolených samostatných příspěvků bez započtení stejného úlovku dvakrát. Pokud je výběr omezený, souhrn to označí. Přesné místo ani soukromé poznámky se nesdílí. Na profil lze vybrat nejvýše 6 fotografií.</p>{loaded.candidateCatches?.length ? <div className="social-share-choices">{loaded.candidateCatches.map(record => <div key={record.id}><label className="social-check"><input type="checkbox" checked={profile.sharedCatchIds.includes(record.id)} disabled={!profile.sharedCatchIds.includes(record.id) && profile.sharedCatchIds.length >= 12} onChange={() => toggleCatch(record.id)} /><span>{record.species || "Úlovek"}{record.lengthCm > 0 ? ` · ${record.lengthCm} cm` : ""}{record.caughtAt && Number.isFinite(Date.parse(record.caughtAt)) ? ` · ${new Date(record.caughtAt).toLocaleDateString("cs-CZ")}` : ""}</span></label>{record.photos?.map((photo, index) => { const checked = selectedPhotos.some(item => item.catchId === record.id && item.photoId === photo.photoId); return <label className="social-check social-photo-choice" key={photo.photoId}><input type="checkbox" checked={checked} disabled={!checked && selectedPhotos.length >= 6} onChange={() => togglePhoto(record.id, photo.photoId)} /><span>Sdílet fotografii {index + 1}</span></label>; })}</div>)}</div> : <p className="social-empty">Zatím nejsou dostupné synchronizované úlovky k výběru. Profil můžeš uložit i bez nich.</p>}</section>
         <section className="social-panel"><h2>Úspěchy k vystavení</h2><p className="social-help">Nejvýše 12 výslovně vybraných splněných úspěchů. Nabídka vychází z odměn v tomto zařízení; dřívější výběr z jiného zařízení zůstává zachovaný. Server místní splnění neumí ověřit, proto se vystavené úspěchy označí jako nahlášené a neověřené. XP ani historické odměny se vystavením nemění.</p>
           <p className="social-help">Viditelnost řídí sekce „Úroveň a sdílené úspěchy“ výše. Úroveň a XP se sdílí jen ze skutečně serverem potvrzených událostí. Skryté úspěchy se do této veřejné nabídky nezařazují.</p>

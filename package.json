@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:local-social": "node tools/local-social-dev.mjs",
     "build": "vite build && node tools/cloudinary-client-secret-scan.mjs",
     "build:android": "npm run build && cap sync android",
     "build:ios": "npm run build && cap sync ios",

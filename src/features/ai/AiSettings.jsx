@@ -5,10 +5,8 @@ import { AI_FEATURES, hasAiConsent } from "./aiPolicy.js";
 import { AI_CONSENT_CHANGED_EVENT, AI_PROVIDER, createAiClient } from "./aiClient.js";
 
 const LABELS = {
-  species: "Rozpoznávání druhů ryb z fotografie",
   stories: "Pomoc s rybářským vyprávěním",
-  diary: "AI vysvětlení souhrnů deníku",
-  recommendations: "AI návrhy pro další vycházku",
+  recommendations: "Tipy pro další vycházku podle souhrnů deníku",
 };
 const enabled = Object.keys(LABELS).filter((key) => AI_FEATURES[key]);
 const emptyChoices = () => Object.fromEntries(Object.keys(LABELS).map((key) => [key, false]));
@@ -17,7 +15,6 @@ export default function AiSettings() {
   const scope = useDataScope();
   const client = useMemo(() => createAiClient({ ownerId: scope.ownerId }), [scope.ownerId]);
   const [state, setState] = useState({ ownerId: null, status: "loading", choices: emptyChoices(), consent: null });
-  const [automaticSpecies, setAutomaticSpecies] = useState(false);
   const ticket = useRef(0);
   const saving = useRef(false);
   const invalidateRequests = useCallback(() => { ticket.current++; }, []);
@@ -27,7 +24,6 @@ export default function AiSettings() {
     const controller = new AbortController();
     client.getConsent({ signal: controller.signal }).then((consent) => {
       if (sequence !== ticket.current) return;
-      setAutomaticSpecies(consent?.automaticSpecies === true);
       setState({ ownerId: scope.ownerId, status: "ready", consent,
         choices: Object.fromEntries(Object.keys(LABELS).map((key) => [key, hasAiConsent(consent, key, AI_PROVIDER)])) });
     }).catch((error) => {
@@ -36,7 +32,7 @@ export default function AiSettings() {
     return () => { invalidateRequests(); controller.abort(); };
   }, [client, scope.ownerId, scope.status, invalidateRequests]);
   if (!enabled.length) return null;
-  if (!scope.ownerId) return <div><h3>Volitelná AI</h3><p>Pro AI funkce se <Link to="/login">přihlas</Link>. Rychlé ukládání a místní přehledy fungují i bez nich.</p></div>;
+  if (!scope.ownerId) return <div><h3>Volitelná AI</h3><p>Pro AI funkce se <Link to="/login">přihlas</Link>. Deník a místní přehledy fungují i bez nich.</p></div>;
   const current = state.ownerId === scope.ownerId ? state : { status: "loading", choices: emptyChoices(), consent: null };
   const busy = current.status === "loading" || current.status === "saving";
   const changeConsent = async (revoke = false) => {
@@ -46,13 +42,12 @@ export default function AiSettings() {
     setState({ ...current, ownerId: scope.ownerId, status: "saving", error: "", message: "" });
     try {
       const consent = revoke ? await client.revokeConsent() : await client.updateConsent(current.choices, {
-        expectedRevision: current.consent?.revision ?? 0, automaticSpecies: automaticSpecies && current.choices.species });
+        expectedRevision: current.consent?.revision ?? 0 });
       if (sequence !== ticket.current) return;
-      setAutomaticSpecies(consent?.automaticSpecies === true);
       setState({ ownerId: scope.ownerId, status: "ready", consent,
         choices: Object.fromEntries(Object.keys(LABELS).map((key) => [key, hasAiConsent(consent, key, AI_PROVIDER)])),
         message: (revoke || consent?.revokedAt ? "Souhlas s AI byl odvolán. Další obsah se bez nového souhlasu neodešle."
-          : consent?.automaticSpecies ? "Volby AI jsou uložené. Nové rychlé úlovky rozpoznáme automaticky, až bude fotografie nahraná a bezplatná kapacita dostupná." : "Volby AI jsou uložené. Každou analýzu spustíš sám.")
+          : "Volby AI jsou uložené. Každý textový návrh nebo deníkový tip spustíš samostatně.")
           + (consent?.cleanupPending ? " Smazání uložených návrhů ještě není dokončené. Zkus odvolání souhlasu zopakovat." : "") });
       window.dispatchEvent(new Event(AI_CONSENT_CHANGED_EVENT));
     } catch (error) {
@@ -60,7 +55,6 @@ export default function AiSettings() {
         try {
           const consent = await client.getConsent();
           if (sequence !== ticket.current) return;
-          setAutomaticSpecies(consent?.automaticSpecies === true);
           setState({ ownerId: scope.ownerId, status: "ready", consent, error: error.message,
             choices: Object.fromEntries(Object.keys(LABELS).map((key) => [key, hasAiConsent(consent, key, AI_PROVIDER)])) });
           window.dispatchEvent(new Event(AI_CONSENT_CHANGED_EVENT));
@@ -72,23 +66,16 @@ export default function AiSettings() {
   };
   return <div className="settings-ai-consent" style={{ display: "grid", gap: "var(--space-2-5)" }}>
     <h3>Volitelná AI přes Cloudflare</h3>
-    <p>Ve výchozím stavu je vše vypnuté. Analýzy spouštíš tlačítkem; pro nové rychlé úlovky můžeš zvlášť povolit automatické rozpoznávání. AI může chybovat.</p>
+    <p>AI je volitelná a její návrhy mohou obsahovat chyby. Rozpoznávání ryb, vysvětlování souhrnů deníku a AI na domovské stránce jsou vypnuté.</p>
     <details><summary>Co se odešle a komu</summary>
-      <p>Poskytovatel: Cloudflare Workers AI. Při rozpoznávání odešleme vybranou fotografii zbavenou metadat. Přesná poloha ani celý deník se neposílají.</p>
-      <p>Pro vysvětlení deníku a doporučení odešleme vypočítané souhrny bez jednotlivých úlovků, fotografií a poznámek. Pro práci s historkou odešleme pouze poznámku vybraného úlovku. Do poznámky proto nevkládej údaje, které externí službě sdělovat nechceš.</p>
-      <p>Výsledky jsou návrhy. Druh potvrdíš v editoru a text zkontroluješ před uložením. Souhlas můžeš kdykoli odvolat; tím se nezruší již dokončené zpracování.</p>
+      <p>Poskytovatel: Cloudflare Workers AI. U rybářského příběhu odešleme pouze poznámku k vybranému úlovku. U deníkového tipu odešleme vypočítané souhrny synchronizovaných úlovků; fotografie, poznámky, GPS a názvy revírů se neposílají.</p>
+      <p>Výsledky jsou návrhy. Text zkontroluješ před uložením a souhlas můžeš kdykoli odvolat. Odvolání nezruší již dokončené zpracování.</p>
       <p><Link to="/privacy-policy">Zásady ochrany soukromí</Link></p>
     </details>
     {enabled.map((key) => <label className="settings-toggle" key={key} style={{ minHeight: "44px" }}>
       <input type="checkbox" checked={current.choices[key]} disabled={busy} onChange={(event) => setState({ ...current, ownerId: scope.ownerId, choices: { ...current.choices, [key]: event.target.checked }, message: "" })} />
       <span>{LABELS[key]}</span>
     </label>)}
-    <label className="settings-toggle">
-      <input type="checkbox" checked={automaticSpecies && current.choices.species} disabled={busy || !current.choices.species}
-        onChange={event => setAutomaticSpecies(event.target.checked)} />
-      <span>Automaticky rozpoznávat ryby z fotografií nových rychlých úlovků</span>
-    </label>
-    <p>Po uložení tohoto souhlasu stačí vyfotit a odložit telefon. AI počká na nahrání snímku a volnou kapacitu. Při pozastavené PWA práce pokračuje až po jejím znovuotevření; fotografie je uložená nezávisle.</p>
     <p>Zaškrtnutím vybraných možností a stiskem „Uložit souhlas s AI“ souhlasíš s popsaným externím zpracováním těchto údajů.</p>
     <button className="settings-primary-button" type="button" disabled={busy} onClick={() => void changeConsent(false)}>{current.status === "saving" ? "Ukládám…" : "Uložit souhlas s AI"}</button>
     <button className="settings-secondary-button" type="button" disabled={busy} onClick={() => void changeConsent(true)}>Odvolat veškerý souhlas s AI</button>

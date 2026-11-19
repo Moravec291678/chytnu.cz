@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../../auth/context/authContextValue.js";
 import { socialRequest } from "../data/socialClient.js";
 import { useSocialConnection } from "./useSocialConnection.js";
-import { entryComposerPayload } from "../data/entryComposerModel.js";
+import { DEFAULT_NEW_ENTRY_VISIBILITY, entryComposerPayload, requiresPublicEntryConsent } from "../data/entryComposerModel.js";
 
 export default function CommunityEntryComposer({ onPublished, initialPost, onOpenChange }) {
   const { user } = useAuth();
@@ -12,7 +12,8 @@ export default function CommunityEntryComposer({ onPublished, initialPost, onOpe
   const [open, setOpen] = useState(false);
   const [options, setOptions] = useState(null);
   const [kind, setKind] = useState(initialPost?.kind ?? "experience");
-  const [visibility, setVisibility] = useState(initialPost?.visibility ?? "private");
+  const [visibility, setVisibility] = useState(initialPost?.visibility ?? DEFAULT_NEW_ENTRY_VISIBILITY);
+  const [publicConsent, setPublicConsent] = useState(false);
   const [title, setTitle] = useState(initialPost?.content.title ?? "");
   const [description, setDescription] = useState(initialPost?.content.description ?? "");
   const [achievementId, setAchievementId] = useState(initialPost?.content.achievement?.id ?? "");
@@ -34,13 +35,17 @@ export default function CommunityEntryComposer({ onPublished, initialPost, onOpe
   async function submit(event) {
     event.preventDefault();
     if (busy || !online || !uid) return;
+    if (requiresPublicEntryConsent(visibility, initialPost?.visibility) && !publicConsent) {
+      setAction({ uid, error: "Nejdřív potvrď zveřejnění příspěvku pro všechny." });
+      return;
+    }
     const controller = new AbortController(); controllerRef.current = controller;
     setAction({ uid, busy: true });
     try {
       const saved = await socialRequest("entries.save", entryComposerPayload({ entryId, kind, visibility, title, description, achievementId }, initialPost), { signal: controller.signal });
       if (controller.signal.aborted) return;
       setAction({ uid, postId: saved.post.id, message: visibility === "private" ? "Příspěvek je uložený pouze pro tebe. Najdeš ho ve své sdílené galerii na profilu." : "Příspěvek je uložený pro vybraný okruh čtenářů." });
-      if (!initialPost) { setDescription(""); setTitle(""); setVisibility("private"); setAchievementId(""); setEntryId(crypto.randomUUID()); }
+      if (!initialPost) { setDescription(""); setTitle(""); setVisibility("public"); setPublicConsent(false); setAchievementId(""); setEntryId(crypto.randomUUID()); }
       onPublished();
     } catch (error) { if (!controller.signal.aborted) setAction({ uid, error: error.message }); }
   }
@@ -55,9 +60,12 @@ export default function CommunityEntryComposer({ onPublished, initialPost, onOpe
         {kind === "achievement" && <>{current.achievements?.length ? <label>Úspěch z tvého profilu<select required value={achievementId} disabled={busy} onChange={event => setAchievementId(event.target.value)}><option value="">Vyber úspěch</option>{current.achievements.map(item => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label> : <p>Na profilu zatím nemáš vybraný úspěch ke sdílení. <Link to="/profile/social">Upravit profil</Link></p>}<p>Úspěchy jsou nahlášené uživatelem; server jejich splnění neověřil.</p></>}
         {kind === "milestone" && <p>{current.progression ? `Sdílíš potvrzený stav: úroveň ${current.progression.level}, ${current.progression.xp} XP.` : "Zatím nemáš serverem potvrzený milník ke sdílení."}</p>}
         <label>Text příspěvku<textarea maxLength={1000} required value={description} disabled={busy} onChange={event => setDescription(event.target.value)} /></label>
-        <label>Kdo příspěvek uvidí<select value={visibility} disabled={busy} onChange={event => setVisibility(event.target.value)}><option value="private">Pouze já</option><option value="friends">Přátelé</option><option value="public">Pro všechny</option></select></label>
+        <label>Kdo příspěvek uvidí<select value={visibility} disabled={busy} onChange={event => { setVisibility(event.target.value); setPublicConsent(false); }}><option value="private">Pouze já</option><option value="friends">Přátelé</option><option value="public">Pro všechny</option></select></label>
+        {requiresPublicEntryConsent(visibility, initialPost?.visibility) && <label className="social-check"><input type="checkbox" checked={publicConsent} disabled={busy} onChange={event => setPublicConsent(event.target.checked)} /><span>Souhlasím se zveřejněním tohoto příspěvku. Uvidí ho každý, i bez přihlášení.</span></label>}
         <p>Viditelnost také respektuje nastavení příslušné sekce profilu. Nejvýše 5 uložení za minutu a 20 za den.</p>
-        <button type="submit" disabled={busy || !online || !description.trim() || kind === "achievement" && !achievementId || kind === "milestone" && !current.progression}>{busy ? "Ukládám…" : initialPost ? "Uložit změny" : visibility === "private" ? "Uložit jen pro mě" : "Sdílet příspěvek"}</button>
+        <button type="submit" disabled={busy || !online || !description.trim()
+          || requiresPublicEntryConsent(visibility, initialPost?.visibility) && !publicConsent
+          || kind === "achievement" && !achievementId || kind === "milestone" && !current.progression}>{busy ? "Ukládám…" : initialPost ? "Uložit změny" : visibility === "private" ? "Uložit jen pro mě" : "Sdílet příspěvek"}</button>
       </form>}
       {action?.uid === uid && (action.message || action.error) && <div role={action.error ? "alert" : "status"}><p>{action.error || action.message}</p>{action.postId && <Link to={`/community/post/${action.postId}`}>Otevřít příspěvek →</Link>}</div>}
     </div>}

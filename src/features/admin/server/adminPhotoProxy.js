@@ -1,6 +1,6 @@
 import { getCloudinarySdk, cloudinaryPublicId } from "../../../server/cloudinaryApi.js";
 import { adminError } from "./adminValidation.js";
-import { stripJpegMetadata } from "../../ai/server/productionSpeciesApi.js";
+import { stripJpegMetadata } from "../../../shared/media/jpegMetadata.js";
 
 export class AdminPhotoResponse {
   constructor(bytes) { this.bytes = bytes; }

@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { AI_FEATURES } from "../aiPolicy.js";
 import { CLOUDFLARE_ZERO_COST_MODEL, createCloudflareSpeciesProvider, createCloudflareTextProvider } from "./cloudflareProvider.js";
 
 const configuration = { accountId: "a".repeat(32), apiToken: "test-only-token-for-cloudflare", model: CLOUDFLARE_ZERO_COST_MODEL };
@@ -37,7 +36,6 @@ test("Cloudflare adapter pins a real free-eligible model and sends one bounded v
   } });
   assert.deepEqual(await provider(image), suggestion);
   assert.equal(calls, 1);
-  assert.equal(typeof AI_FEATURES.species, "boolean");
 });
 
 test("unsupported model/account/token/timeout and invalid image never dispatch", async () => {
@@ -148,23 +146,6 @@ test("safe provider codes distinguish authorization, capacity, allocation, timeo
   const bad = createCloudflareSpeciesProvider({ ...configuration, fetchImpl: async () => reply(suggestion, { finish_reason: "length" }) });
   await assert.rejects(bad(image), error => error.aiCode === "invalid_ai_response");
 });
-
-test("Home interpretation uses bounded anonymous numeric evidence and rejects fabricated numeric prose", async () => {
-  const { createCloudflareHomeProvider } = await import("./cloudflareProvider.js");
-  const summary = { version: "personal-fishing-v1", recordCount: 12, candidates: [{ candidate: 1, family: "species-method-time", numbers: { countA: 8, countB: 4 }, evidenceCount: 12, limitation: "Recorded catches only." }] };
-  let calls = 0;
-  const provider = createCloudflareHomeProvider({ ...configuration, fetchImpl: async (url, init) => {
-    calls++; const body = JSON.parse(init.body);
-    assert.equal(body.messages[1].content, JSON.stringify(summary));
-    return reply({ text: "Souvislost může odrážet volbu místa nebo délku lovu. Porovnej podobně dlouhé výpravy se stejnou metodou." });
-  } });
-  assert.match((await provider({ summary })).text, /může/);
-  await assert.rejects(provider({ summary: { ...summary, notes: "private" } }), TypeError);
-  assert.equal(calls, 1);
-  const fabricated = createCloudflareHomeProvider({ ...configuration, fetchImpl: async () => reply({ text: "Úspěšnost je 90 %." }) });
-  await assert.rejects(fabricated({ summary }), error => error.aiCode === "invalid_ai_response");
-});
-
 
 test("provider usage comes from the authenticated response, separate from model JSON", async () => {
   const usage = { prompt_tokens: 1200, completion_tokens: 90, total_tokens: 1290 }; let observed;

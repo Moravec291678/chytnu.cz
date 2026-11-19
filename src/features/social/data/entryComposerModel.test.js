@@ -1,6 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { entryComposerPayload } from "./entryComposerModel.js";
+import { DEFAULT_NEW_ENTRY_VISIBILITY, entryComposerPayload, requiresPublicEntryConsent } from "./entryComposerModel.js";
+
+test("new public posts require explicit confirmation while unchanged public edits do not", () => {
+  assert.equal(requiresPublicEntryConsent(DEFAULT_NEW_ENTRY_VISIBILITY, undefined), true);
+  assert.equal(requiresPublicEntryConsent("public", "private"), true);
+  assert.equal(requiresPublicEntryConsent("public", "public"), false);
+  assert.equal(requiresPublicEntryConsent("friends", "private"), false);
+});
 
 test("entry edits retain owner entry identity, type and loaded CAS revision", () => {
   const post = { sourceEntryId: "original-entry", kind: "experience", revision: 7 };

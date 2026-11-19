@@ -123,3 +123,105 @@ Overall audit remains **PARTIAL**; Stage 8 remains **PASS**. No Stage 9, merge, 
 - `docs/AI_HANDOFF.md`
 
 Implementation/test checkpoint commit: `eb1aa8d129d29aca943cbd331c04b20672628089` (local only). The documentation clarification is committed separately. Nothing has been pushed or deployed.
+
+## Aktuální pokračování — 2026-11-19
+
+Celkový audit zůstává **PARTIAL**. Stage 8 zůstává **PASS** podle dříve dokončených kontrol; tato práce nezačala Stage 9 ani nezměnila `main`, produkci nebo vzdálenou větev.
+
+### Git a zachování práce
+
+- Větev: `codex/ui-terminology-length-priority`.
+- Základní HEAD před touto sadou změn: `fc86517032629e351a4dff49dec11b3749707102`.
+- Pracovní strom obsahuje necommitnutou práci uvedenou níže; žádné změny nebyly zahozeny ani přepsány.
+- Push, merge a produkční deployment: neprovedeny.
+
+### Dokončeno
+
+- Produkční AI capability jsou pevně omezené: povoleny zůstávají pouze dobrovolné `stories` a `recommendations`; `species` a samostatné `diary` vysvětlování jsou vypnuté. Automatické rozpoznávání, Home AI volání a jejich klientská UI integrace byly odstraněny. Historické výsledky AI na Home se při načtení lokální cache odstraní; ostatní lokální výběr postřehu zůstává.
+- Nové příspěvky ve formuláři předvolí „Pro všechny“, ale odesílací tlačítko zůstane zakázané do výslovného potvrzení. Nový profil může mít veřejnou viditelnost; jeho sekce zůstávají soukromé, vyhledatelnost vypnutá a přechod do veřejného stavu vyžaduje potvrzení. Serverové výchozí hodnoty i uložená historická data zůstávají beze změny private-first; žádná migrace dat neproběhla.
+- Lokální sociální Vite harness odmítá cloudové/pro produkční credentials a při zavření obnovuje předchozí `adminConfig/social`; přidány dva cílené testy obnovy.
+- JPEG metadata helper byl přesunut do neutrální sdílené media vrstvy a nadále se používá pro sociální/admin fotografie.
+- Composer byl v browseru ověřen se syntetickým textem: bez souhlasu je tlačítko zakázané, po potvrzení povolené, po odvolání opět zakázané. Příspěvek nebyl odeslán.
+
+### Ověření tohoto checkpointu
+
+- `npm test`: **1 156/1 156 PASS**.
+- `npm run lint`: PASS.
+- `npm run build`: PASS; klientský scan tajemství prošel pro 161 assetů. Zůstává upozornění na velké JS chunky (největší HEIC chunk).
+- `npm run product`: PASS.
+- `npm run test:photos`: PASS (local-only photo sync).
+- `node --test tools/local-social-api-plugin.test.mjs`: **2/2 PASS**.
+- `git diff --check`: PASS.
+- `npm run test:rules`, `npm run test:auth` a `npm run test:sync` nebyly v tomto checkpointu spuštěny: existující browser a Auth/Firestore emulátory již používaly porty 5174, 9099 a 8080. Nebyly zastaveny ani přepsány. Historický výsledek Stage 8 sociálního emulator suite 131 checks PASS zůstává zaznamenán v předchozí části; není vydáván za nový běh.
+- Browser responsive kontrola `/community` a `/profile/social`: bez horizontálního overflow na měřených šířkách od 320 do 1920 px. Propojený browser zaokrouhluje 1024 px na 1023/1025 px; plný desetibodový exact matrix zůstává doložen jen pro dřívější guest smoke. Nový profil se neukládal.
+- Lokální `/api/progression/reconcile` v obyčejném Vite harnessu vrací 404; později browser zobrazil nepřihlášený stav a profilová API odpověděla 401, ale příčina není ověřena. Jde o omezení lokálního harnessu/session, nikoli důkaz produkčního selhání. Fyzické iOS/Android a instalovaná PWA: **MANUAL TEST REQUIRED**.
+
+### Změněné soubory v této sadě
+
+- `docs/AI_HANDOFF.md`
+- `docs/AI_FULL_AUDIT.md`
+- `docs/AI_MASTER_PROGRESS.md`
+- `docs/AI_TEST_EVIDENCE.md`
+- `docs/AI_VISUAL_QA.md`
+- `docs/PRODUCT_SCOPE_MVP.md`
+- `docs/FIREBASE_EMULATOR.md`
+- `package.json`
+- `vite.config.js`
+- `tools/local-social-api-plugin.js`
+- `tools/local-social-api-plugin.test.mjs` (nový)
+- `tools/local-social-dev.mjs`
+- `src/shared/media/jpegMetadata.js` (nový)
+- `src/features/admin/server/adminPhotoProxy.js`
+- `src/features/ai/AiSettings.jsx`
+- `src/features/ai/AutomaticSpeciesStatus.jsx` (smazán)
+- `src/features/ai/CatchAiAssistance.jsx`
+- `src/features/ai/DiaryAiExplanation.jsx`
+- `src/features/ai/aiClient.js`
+- `src/features/ai/aiClient.test.js`
+- `src/features/ai/aiFoundation.test.js`
+- `src/features/ai/aiPolicy.js`
+- `src/features/ai/approveSpeciesInEditor.js` (smazán)
+- `src/features/ai/approveSpeciesInEditor.test.js` (smazán)
+- `src/features/ai/automaticSpecies.js` (smazán)
+- `src/features/ai/automaticSpecies.test.js` (smazán)
+- `src/features/ai/personalFishingAnalysis.js`
+- `src/features/ai/personalFishingAnalysis.test.js`
+- `src/features/ai/server/aiApplicationApi.js`
+- `src/features/ai/server/aiApplicationApi.test.js`
+- `src/features/ai/server/cloudflareProvider.js`
+- `src/features/ai/server/cloudflareProvider.test.js`
+- `src/features/ai/server/productionApplicationApi.js`
+- `src/features/ai/server/productionSpeciesApi.js`
+- `src/features/catches/components/CatchCard.jsx`
+- `src/features/catches/context/CatchContext.jsx`
+- `src/features/home/components/HomeInsightCard.jsx`
+- `src/features/home/utils/homeInsightCache.js`
+- `src/features/home/utils/homeInsightCache.test.js`
+- `src/features/map/data/tripCatchMap.js`
+- `src/features/map/data/tripCatchMap.test.js`
+- `src/features/social/components/CommunityEntryComposer.jsx`
+- `src/features/social/components/SocialProfileSettings.jsx`
+- `src/features/social/data/entryComposerModel.js`
+- `src/features/social/data/entryComposerModel.test.js`
+- `src/features/social/data/profileSettingsModel.js` (nový)
+- `src/features/social/data/profileSettingsModel.test.js` (nový)
+- `src/features/social/server/socialAvatar.js`
+- `src/features/social/server/socialPhoto.js`
+- `src/pages/AddCatchPage.jsx`
+- `src/pages/CatchDetailPage.jsx`
+- `src/pages/SettingsPage.jsx`
+
+### Bezpečnost a otevřené body
+
+- V této sadě nebyla potvrzena nová bezpečnostní zranitelnost; produkční přihlášení ani reálná uživatelská data nebyla použita.
+- Potvrzení veřejného sdílení je nyní UX gate ve formuláři, nikoli samostatný serverově uložený consent záznam. Pokud má aplikace vyžadovat auditovatelný právní souhlas, musí následovat samostatné rozhodnutí a API změna; přímé API požadavky dnes stále přijímají explicitní `visibility`.
+- Strategické MVP nadále neobsahuje sociální síť ani AI. Povolené AI capability a předvolba veřejnosti se týkají existujícího auditu, nikoli schválení produkčního release.
+- Commit SHA pro právě rozpracovanou sadu se doplní až po vytvoření lokálního commitu. Push/deployment zůstávají zakázány.
+
+### Další krok pro Codex
+
+1. Potvrdit aktuální branch/HEAD a dokončit lokální code review bez zásahů do Stage 9.
+2. Až budou emulátory bezpečně volné, znovu spustit `npm run test:rules`, `npm run test:auth`, `npm run test:sync` a Stage 8 social suite; použít pouze syntetické účty.
+3. Rozhodnout, zda veřejný checkbox vyžaduje serverově trvalý consent záznam.
+4. Pokračovat neověřenými aplikačními moduly; zachovat PARTIAL, dokud nebude ověřeno celé autentizované chování.
+5. Zaznamenat následný commit SHA do tohoto handoffu. Neprovádět push, merge, Stage 9 ani produkční deployment.

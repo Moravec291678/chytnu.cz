@@ -13,7 +13,7 @@ const ID = /^[A-Za-z0-9_-]{1,128}$/;
 const SHA = /^[a-f0-9]{64}$/;
 const CAPABILITIES = ["species", "stories", "diary", "recommendations"];
 const TASKS = ["summarize", "improve", "clarity", "title"];
-const ACTIONS = ["consent.get", "consent.update", "consent.revoke", "species", "species.auto", "species.status", "home", "story", "diary", "recommendations"];
+const ACTIONS = ["consent.get", "consent.update", "consent.revoke", "species", "species.auto", "species.status", "story", "diary", "recommendations"];
 const EVIDENCE_KEYS = ["count", "species", "hours", "months", "methods", "baits", "measuredLengthCount", "meanLengthCm", "longestCm", "missing", "period", "limitations"];
 const encode = new TextEncoder();
 const hash = (value) => createHash("sha256").update(typeof value === "string" ? value : JSON.stringify(value)).digest("hex");
@@ -32,9 +32,10 @@ function validCapabilities(value) {
 function consentView(value) {
   if (!value || value.version !== AI_CONSENT_VERSION || value.provider !== "cloudflare"
     || !validCapabilities(value.capabilities) || !Number.isSafeInteger(value.revision) || value.revision < 1) return null;
-  return { version: value.version, provider: value.provider, capabilities: value.capabilities,
+  const capabilities = Object.fromEntries(CAPABILITIES.map(key => [key, AI_FEATURES[key] === true && value.capabilities[key] === true]));
+  return { version: value.version, provider: value.provider, capabilities,
     grantedAt: value.grantedAt ?? null, revokedAt: value.revokedAt ?? null, revision: value.revision,
-    automaticSpecies: value.automaticSpecies === true, automaticSpeciesFrom: value.automaticSpeciesFrom ?? null };
+    automaticSpecies: false, automaticSpeciesFrom: null };
 }
 
 function parseRequest(req) {
@@ -44,12 +45,10 @@ function parseRequest(req) {
   if (!body || typeof body !== "object" || Array.isArray(body) || !ACTIONS.includes(body.action)) throw failure("invalid_request", 400);
   const speciesAction = body.action.startsWith("species");
   const allowed = body.action === "consent.update" ? ["action", "version", "expectedRevision", "capabilities", ...(Object.hasOwn(body, "automaticSpecies") ? ["automaticSpecies"] : [])]
-    : speciesAction ? ["action", "catchId", "photoId"] : body.action === "home" ? ["action", "fingerprint"]
-      : body.action === "story" ? ["action", "catchId", "task"] : ["action"];
+    : speciesAction ? ["action", "catchId", "photoId"] : body.action === "story" ? ["action", "catchId", "task"] : ["action"];
   if (Object.keys(body).length !== allowed.length || Object.keys(body).some((key) => !allowed.includes(key))) throw failure("invalid_request", 400);
   if ((speciesAction || body.action === "story") && (typeof body.catchId !== "string" || !ID.test(body.catchId))) throw failure("invalid_request", 400);
   if (speciesAction && (typeof body.photoId !== "string" || !ID.test(body.photoId))) throw failure("invalid_request", 400);
-  if (body.action === "home" && (typeof body.fingerprint !== "string" || body.fingerprint.length > 128 || !/^[A-Za-z0-9_-]+$/.test(body.fingerprint))) throw failure("invalid_request", 400);
   if (body.action === "story" && !TASKS.includes(body.task)) throw failure("invalid_request", 400);
   if (body.action === "consent.update" && (body.version !== AI_CONSENT_VERSION || !validCapabilities(body.capabilities)
     || !Number.isSafeInteger(body.expectedRevision) || body.expectedRevision < 0
@@ -87,7 +86,7 @@ function boundedSummary(summary) {
 export function createAiApplicationApi({ enabled = false, features = AI_FEATURES, providerName = "cloudflare", modelId,
   verifyToken, getConsent, setConsent, getOwnedPhoto, getOwnedCatch, listOwnedCatches,
   getCachedResult, saveResult, consumeRateLimit, speciesProvider, textProvider, analysisProvider,
-  getOwnedPhotoIdentity, claimRequest, finishRequest, homeProvider, getOwnedContext, buildHomeAnalysis,
+  getOwnedPhotoIdentity, claimRequest, finishRequest,
   authorizeRuntime, recordInference, settleRateLimit, getQuotaPolicy,
   diagnostic = safeAiDiagnostic, now = () => Date.now() } = {}) {
   const observeInference = async outcome => { try { await recordInference?.(outcome); } catch { /* Best-effort operational aggregate only. */ } };
@@ -121,8 +120,8 @@ export function createAiApplicationApi({ enabled = false, features = AI_FEATURES
             ...(Object.hasOwn(body, "automaticSpecies") ? { automaticSpecies: body.automaticSpecies } : {}) });
         return send(res, 200, { consent: consentView(value), ...(value.cleanupPending ? { cleanupPending: true } : {}) });
       }
-      const capability = body.action.startsWith("species") ? "species" : body.action === "home" ? "recommendations" : body.action === "story" ? "stories" : body.action;
-      const provider = body.action === "home" ? homeProvider : capability === "species" ? speciesProvider : capability === "stories" ? textProvider : analysisProvider;
+      const capability = body.action.startsWith("species") ? "species" : body.action === "story" ? "stories" : body.action;
+      const provider = capability === "species" ? speciesProvider : capability === "stories" ? textProvider : analysisProvider;
       if (features[capability] !== true || typeof provider !== "function"
         || ![consumeRateLimit, getCachedResult, saveResult].every((fn) => typeof fn === "function")) throw failure("ai_disabled", 503);
       const consent = await checkConsent(uid, capability);
@@ -140,12 +139,6 @@ export function createAiApplicationApi({ enabled = false, features = AI_FEATURES
             || !Number.isFinite(Date.parse(photo.createdAt))) return send(res, 200, { status: "ineligible" });
         }
         sourceHash = hash([body.catchId, body.photoId, photo.sourceSha256]);
-      } else if (body.action === "home") {
-        if (typeof getOwnedContext !== "function" || typeof buildHomeAnalysis !== "function") throw failure("ai_disabled", 503);
-        source = buildHomeAnalysis(await getOwnedContext(uid));
-        if (source.fingerprint !== body.fingerprint) throw failure("source_changed", 409);
-        if (!source.providerSummary?.candidates?.length) throw failure("insufficient_data", 422);
-        sourceHash = hash([source.version, source.fingerprint]);
       } else if (capability === "stories") {
         if (typeof getOwnedCatch !== "function") throw failure("ai_disabled", 503);
         source = await getOwnedCatch(uid, body.catchId);
@@ -163,14 +156,13 @@ export function createAiApplicationApi({ enabled = false, features = AI_FEATURES
         if (!analysis.providerSummary.count) throw failure("insufficient_data", 422);
         sourceHash = hash([analysis.providerSummary, analysis.evidenceIds, source.truncated]);
       }
-      const key = hash(["ai-v1", body.action === "home" ? "home" : capability, modelId, sourceHash]);
+      const key = hash(["ai-v1", capability, modelId, sourceHash]);
       if (body.action === "species.status" && photo.confirmed) return send(res, 200, { status: "confirmed", sourceSha256: photo.sourceSha256 });
       const cached = await getCachedResult(uid, key);
       if (cached?.ownerId === uid && cached.type === (capability === "species" ? "species" : body.action) && cached.provider === providerName
         && cached.modelId === modelId && cached.sourceHash === sourceHash && cached.consentRevision === consent.revision) {
         await checkConsent(uid, capability, consent.revision);
         if (capability === "species") return send(res, 200, { ...validateSpeciesSuggestion(cached.result), sourceSha256: photo.sourceSha256 });
-        if (body.action === "home") return send(res, 200, { ...cached.result, consentRevision: consent.revision });
         if (capability === "stories") {
           createStoryDraft(source.notes, cached.result?.text, body.task);
           return send(res, 200, { ...cached.result, originalNotes: source.notes, sourceNotes: source.notes,
@@ -205,14 +197,7 @@ export function createAiApplicationApi({ enabled = false, features = AI_FEATURES
       inferenceCapability = capability;
       if (capability === "species") {
         result = validateSpeciesSuggestion(await provider({ bytes: speciesPayload.bytes, mimeType: speciesPayload.mimeType, onUsage }));
-      } else if (body.action === "home") {
-        const output = await provider({ summary: source.providerSummary, onUsage });
-        if (typeof output?.text !== "string" || !output.text.trim() || output.text.length > 3000) throw new AiServiceError("invalid_ai_response");
-        if (buildHomeAnalysis(await getOwnedContext(uid)).fingerprint !== source.fingerprint) throw failure("source_changed", 409);
-        result = { status: "generated", text: output.text.trim(), fingerprint: source.fingerprint, modelVersion: source.version,
-          consentRevision: consent.revision, evidenceIds: source.strongest.evidenceIds, generatedAt: new Date(now()).toISOString() };
-      }
-      else if (capability === "stories") {
+      } else if (capability === "stories") {
         const output = await provider({ notes: source.notes, action: body.task, onUsage });
         result = { ...createStoryDraft(source.notes, output?.text, body.task), task: body.task, catchId: body.catchId,
           sourceNotes: source.notes, baseRevision: source.serverRevision ?? null };
@@ -277,15 +262,14 @@ export function createFirebaseAiApplicationDependencies({ env, admin = () => get
         const revision = Number.isSafeInteger(previous?.revision) ? previous.revision : 0;
         if (!values.revoke && (values.version !== AI_CONSENT_VERSION || !validCapabilities(values.capabilities)
           || values.expectedRevision !== revision)) throw failure("consent_conflict", 409);
-        const capabilities = values.revoke ? Object.fromEntries(CAPABILITIES.map((key) => [key, false])) : values.capabilities;
+        const capabilities = Object.fromEntries(CAPABILITIES.map((key) => [key,
+          !values.revoke && AI_FEATURES[key] === true && values.capabilities[key] === true]));
         const granted = CAPABILITIES.some((key) => capabilities[key]);
         const timestamp = new Date(now()).toISOString();
         const consent = { ownerId: uid, version: AI_CONSENT_VERSION, provider: "cloudflare", capabilities,
           grantedAt: granted ? timestamp : previous?.grantedAt ?? null, revokedAt: granted ? null : timestamp,
           revision: revision + 1, updatedAt: timestamp,
-          automaticSpecies: !values.revoke && capabilities.species && (values.automaticSpecies ?? previous?.automaticSpecies) === true,
-          automaticSpeciesFrom: !values.revoke && capabilities.species && (values.automaticSpecies ?? previous?.automaticSpecies) === true
-            ? previous?.automaticSpecies === true ? previous.automaticSpeciesFrom ?? timestamp : timestamp : null };
+          automaticSpecies: false, automaticSpeciesFrom: null };
         transaction.set(ref, consent);
         return consent;
       });
@@ -321,18 +305,6 @@ export function createFirebaseAiApplicationDependencies({ env, admin = () => get
       if ((await db.doc(`accountDeletions/${uid}`).get()).exists) throw failure("account_unavailable", 403);
       const snapshot = await db.collection(`users/${uid}/catches`).orderBy("caughtAt", "desc").limit(501).get();
       return { records: snapshot.docs.slice(0, 500).map((doc) => doc.data()).filter((record) => own(record, uid, record.id)), truncated: snapshot.size > 500 };
-    },
-    getOwnedContext: async (uid) => {
-      requireIdentity(uid);
-      const { db } = await admin();
-      if ((await db.doc(`accountDeletions/${uid}`).get()).exists) throw failure("account_unavailable", 403);
-      const read = async name => {
-        const snapshot = await db.collection(`users/${uid}/${name}`).limit(501).get();
-        if (snapshot.size > 500) throw failure("journal_unavailable", 503);
-        return snapshot.docs.map(doc => doc.data()).filter(record => own(record, uid, record.id));
-      };
-      const [catches, trips, waters] = await Promise.all([read("catches"), read("trips"), read("waters")]);
-      return { catches, trips, waters };
     },
     getCachedResult: async (uid, key) => {
       requireIdentity(uid);

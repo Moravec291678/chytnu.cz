@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 import { getCloudinarySdk } from "../../../server/cloudinaryApi.js";
-import { stripJpegMetadata } from "../../ai/server/productionSpeciesApi.js";
+import { stripJpegMetadata } from "../../../shared/media/jpegMetadata.js";
 import { socialUid } from "../data/socialModel.js";
 
 export const MAX_SOCIAL_AVATAR_BYTES = 200_000;

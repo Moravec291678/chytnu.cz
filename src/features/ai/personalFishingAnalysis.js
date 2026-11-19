@@ -1,6 +1,6 @@
 import { DEFAULT_SPECIES } from "../../shared/constants/speciesCatalog.js";
 
-export const HOME_ANALYSIS_VERSION = "personal-fishing-v1";
+export const PERSONAL_ANALYSIS_VERSION = "personal-fishing-v1";
 export const personalRecordCountLabel = count => `${count} ${count === 1 ? "záznam" : count >= 2 && count <= 4 ? "záznamy" : "záznamů"}`;
 const DAY = 86_400_000;
 const text = value => typeof value === "string" ? value.trim().slice(0, 120) : "";
@@ -87,7 +87,7 @@ export function buildPersonalFishingAnalysis(catches = [], { trips = [], waters 
       end: Date.parse(trip.endedAt), method: text(trip.methodKey), waterId: text(trip.waterId), baitKey: text(trip.baitKey) }));
   const waterNames = new Map((Array.isArray(waters) ? waters : []).filter(water => water && !water.deleted).map(water => [water.id, text(water.name)]));
   for (const row of rows) row.waterLabel = waterNames.get(row.water.slice(3)) || row.waterLabel || "zapsaná voda";
-  const fingerprint = checksum([HOME_ANALYSIS_VERSION, timeZone, rows.map(({ species, methodLabel, baitLabels, waterLabel, ...row }) => {
+  const fingerprint = checksum([PERSONAL_ANALYSIS_VERSION, timeZone, rows.map(({ species, methodLabel, baitLabels, waterLabel, ...row }) => {
     void species; void methodLabel; void baitLabels; void waterLabel; return row;
   }), cleanTrips.map(trip => ({ ...trip, start: Number.isFinite(trip.start) ? trip.start : null, end: Number.isFinite(trip.end) ? trip.end : null }))]);
   const candidates = [];
@@ -117,8 +117,7 @@ export function buildPersonalFishingAnalysis(catches = [], { trips = [], waters 
           experiment: `Při další vycházce se stejnou metodou porovnej okno ${window} s jiným časem na stejné vodě. Zapiš dobu obou částí i část bez úlovku.`, evidence: speciesRows, strength: 12 + difference * 10 });
       }
     }
-    // Local water identities remain local; only anonymous numeric comparisons
-    // are included in providerSummary below.
+    // Keep comparisons tied to the local water identity; no provider payload is built.
     for (const [water, a] of groups(speciesRows.filter(row => row.water), row => row.water)) {
       const b = speciesRows.filter(row => row.water && row.water !== water);
       if (!supported(a, b)) continue;
@@ -244,11 +243,8 @@ export function buildPersonalFishingAnalysis(catches = [], { trips = [], waters 
       uncertainty: "Pro srovnání délek potřebujeme alespoň čtyři ryby v každé skupině a alespoň tři různé dny na obou stranách.", evidence: latest ? [latest, ...(reference !== latest ? [reference] : [])] : [], strength: 0 });
     diverse.push(candidates.at(-1));
   }
-  const providerSummary = { version: HOME_ANALYSIS_VERSION, recordCount: rows.length, candidates: diverse.filter(item => item.isInsight).slice(0, 3)
-    .map((item, index) => ({ candidate: index + 1, family: item.family, numbers: item.numbers, evidenceCount: item.evidenceIds.length,
-      limitation: item.family === "recorded-trip-effort" ? "Recorded trip time may include breaks; no catch probability or causal conclusion." : "Recorded catches only; no complete effort denominator or causal conclusion." })) };
-  return { version: HOME_ANALYSIS_VERSION, fingerprint, candidates: diverse, strongest: diverse[0], recordCount: rows.length,
-    evidenceIds: rows.map(row => row.id), providerSummary, truncated: Array.isArray(catches) && catches.length > 500 };
+  return { version: PERSONAL_ANALYSIS_VERSION, fingerprint, candidates: diverse, strongest: diverse[0], recordCount: rows.length,
+    evidenceIds: rows.map(row => row.id), truncated: Array.isArray(catches) && catches.length > 500 };
 }
 
 export function selectPersonalInsight(candidates, seenIds = [], currentId = null) {

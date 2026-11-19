@@ -30,3 +30,9 @@ Budoucí prvky bez funkčního zdroje dat mají vypnuté výchozí přepínače 
 ## Kritérium vydání
 
 Lokální web/PWA beta může začít až po fyzickém offline testu. Veřejná účtová verze navíc vyžaduje oddělený staging a produkční cloud, produkční e-mail/Google konfiguraci, serverový lifecycle účtu, právní dokumenty, cenový dohled a bezpečnostní kontrolu nasazených pravidel.
+
+## Upřesnění rozsahu auditu — 2026-11-19
+
+- AI zůstává mimo strategické MVP a není tímto auditem schválena k produkčnímu vydání. V existujícím kódu zůstávají pouze volitelné návrhy rybářských příběhů a tipy z agregovaného deníku; rozpoznávání druhů, samostatné AI vysvětlování deníku a AI na Home jsou vypnuté.
+- Sociální síť zůstává mimo první MVP release. V rámci auditu existujících obrazovek lze nové příspěvky předvyplnit jako veřejné pouze s výslovným potvrzením; nově vytvářený profil má veřejný pouze nejvyšší profilový přepínač, zatímco sekce a dohledatelnost zůstávají vypnuté/soukromé. Serverové výchozí hodnoty a historická data zůstávají private-first a nemigrují se.
+- UI potvrzení není samostatným serverově uchovávaným souhlasem; před veřejným release je třeba rozhodnout, zda je požadován trvalý auditní záznam.

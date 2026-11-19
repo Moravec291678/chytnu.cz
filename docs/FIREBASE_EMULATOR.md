@@ -5,6 +5,7 @@
 Lokální vývoj používá pouze Firebase Authentication a Cloud Firestore Emulator s demo projektem `demo-chytnucz-local`. IndexedDB zůstává zdrojem pravdy. Příkazy emulátoru nečtou `.env.local` a nemají fallback do skutečného projektu.
 
 - `npm run emulators`: Auth + Firestore
+- `npm run dev:local-social`: loopback-only browser app and the existing social HTTP handler, backed only by the demo Auth/Firestore emulators; requires `npm run emulators`
 - `npm run test:auth`: registrace, e-mail login, session, reset, ověření, logout a syntetický Google credential
 - `npm run test:rules`: Firestore vlastnictví, schema, default deny a zákaz přímého mazání
 - `npm run test:sync`: Catch, Trip, Water, receipts, delta, revize, retry, konflikty a tombstones
@@ -25,3 +26,5 @@ Druhé zařízení obdrží metadata, ale bez místních bytes zobrazí bezpečn
 ## Omezení
 
 Emulátor neprokazuje skutečný Google popup, autorizované domény, e-mailové doručení, nasazenou verzi pravidel, produkční kvóty ani chování mobilního background režimu. Skutečný staging projekt je `chutnucz`; tento dokument ani skripty jej automaticky nenasazují.
+
+Lokální `dev:local-social` při startu dočasně povolí sociální API pouze v demo Firestore emulátoru. Při zavření Vite serveru obnoví předchozí hodnotu `adminConfig/social`, případně dokument odstraní, pokud před spuštěním neexistoval. Browser testy nesmí odesílat skutečné příspěvky ani používat produkční účty.

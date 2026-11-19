@@ -23,8 +23,6 @@ import "./AddCatchPage.css";
 import { isIncompleteQuickCatch } from "../features/catches/data/quickCatch.js";
 import CatchAiAssistance from "../features/ai/CatchAiAssistance.jsx";
 import { buildCatchEnvironmentPresentation } from "../features/catches/data/catchEnvironmentPresentation.js";
-import AutomaticSpeciesStatus from "../features/ai/AutomaticSpeciesStatus.jsx";
-import { suggestedSpeciesForDisplay } from "../features/ai/automaticSpecies.js";
 import { normalizeCatchPrivacy } from "../features/privacy/data/privacyModel.js";
 
 function formatDate(value) {
@@ -141,7 +139,6 @@ function CatchDetailPage() {
     ["Délka boje", valueLabel(item.fightMinutes, "min")],
   ].filter(([, value]) => value !== null && value !== undefined && value !== "");
   const environment = buildCatchEnvironmentPresentation(item, { online: globalThis.navigator?.onLine !== false });
-  const suggestedSpecies = suggestedSpeciesForDisplay(item);
   const privacy = normalizeCatchPrivacy(item.privacy);
   const recognition = getCatchRecognition(item, state.catches);
   const isPersonalBest = recognition.personalBest;
@@ -177,7 +174,7 @@ function CatchDetailPage() {
             </Link>
           </div>
         </header>
-        {(item.speciesLatin || suggestedSpecies?.latinName) && <p className="catch-detail-latin">{item.speciesLatin || suggestedSpecies.latinName}</p>}
+        {item.speciesLatin && <p className="catch-detail-latin">{item.speciesLatin}</p>}
         {item.speciesKey ? (
           <h1 className="catch-detail-species-heading">
             <Link to={`/species/${item.speciesKey}`} className="catch-detail-species-link" title="Zobrazit detail druhu">
@@ -185,9 +182,8 @@ function CatchDetailPage() {
             </Link>
           </h1>
         ) : (
-          <h1>{suggestedSpecies?.label || item.species}</h1>
+          <h1>{item.species}</h1>
         )}
-        <AutomaticSpeciesStatus record={item} />
         {catchDateLabel && <p className="catch-detail-date">{catchDateLabel}</p>}
         {item.quickCatch && item.quickCatch.provenance?.caughtAt !== "manual" && <p className="catch-detail-date">Čas převzatý z fotografie nebo jejího uložení; přesný čas záběru nebyl potvrzen.</p>}
         {item.quickCatch && <details className="catch-detail-date">
@@ -198,7 +194,7 @@ function CatchDetailPage() {
               pressureHpa: "Tlak", windKmh: "Vítr", speciesKey: "Druh ryby", lengthCm: "Délka", weightKg: "Hmotnost" };
             const sources = { manual: "Potvrzeno při úpravě", device: "Čas uložení v zařízení", exif: "Údaje fotografie",
               active_trip: "Aktivní vycházka", gps: "Poloha zařízení", weather_api: "Zdroj počasí", derived: "Výpočet podle data",
-              ai_suggestion: "Návrh AI", saved_water: "Uložený revír" };
+              saved_water: "Uložený revír" };
             const value = ["moonPhase", "airTempC", "pressureHpa", "windKmh", "waterTempC"].includes(field) ? item.conditions?.[field] : item[field];
             const present = value !== null && value !== undefined && value !== "" && (!Array.isArray(value) || value.length > 0);
             return labels[field] && sources[source] ? <div key={field}><dt>{labels[field]}</dt><dd>{present ? sources[source] : "Nezadáno"}</dd></div> : null;

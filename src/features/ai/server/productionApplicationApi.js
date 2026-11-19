@@ -1,17 +1,16 @@
 import { settleCloudflareReservation } from "./cloudflareAccounting.js";
 import { AI_FEATURES } from "../aiPolicy.js";
 import { createAiApplicationApi, createFirebaseAiApplicationDependencies } from "./aiApplicationApi.js";
-import { createFirebaseSpeciesDependencies } from "./productionSpeciesApi.js";
-import { CLOUDFLARE_ZERO_COST_MODEL, createCloudflareSpeciesProvider, createCloudflareTextProvider, createCloudflareAnalysisProvider, createCloudflareHomeProvider } from "./cloudflareProvider.js";
-import { buildPersonalFishingAnalysis } from "../personalFishingAnalysis.js";
+import { CLOUDFLARE_ZERO_COST_MODEL, createCloudflareTextProvider, createCloudflareAnalysisProvider } from "./cloudflareProvider.js";
 import { createZeroCostQuota, blockZeroCostQuota } from "./zeroCostQuota.js";
-import { getAccountDeletionAdminContext } from "../../../server/cloudinaryApi.js";
+import { getAccountDeletionAdminContext, verifyFirebaseIdToken } from "../../../server/cloudinaryApi.js";
 import { createAiRequestLease } from "./aiRequestLease.js";
 import { loadAdminRuntime } from "../../admin/server/adminAccess.js";
 import { isRuntimeFeatureEnabled } from "../../admin/adminPolicy.js";
 import { createAiOperationalDiagnostics } from "./aiOperationalDiagnostics.js";
 
-export function createProductionAiApplication({ env = globalThis.process?.env ?? {}, features = AI_FEATURES } = {}) {
+export function createProductionAiApplication({ env = globalThis.process?.env ?? {} } = {}) {
+  const features = AI_FEATURES;
   const enabled = Object.values(features).some(value => value === true) && env.AI_PROVIDER === "cloudflare"
     && env.AI_ZERO_COST_CONFIRMED === "true" && env.AI_CLOUDFLARE_MODEL === CLOUDFLARE_ZERO_COST_MODEL;
   if (!enabled) return createAiApplicationApi();
@@ -22,7 +21,11 @@ export function createProductionAiApplication({ env = globalThis.process?.env ??
         await blockZeroCostQuota({ db, Timestamp });
       } };
     return createAiApplicationApi({ enabled, features, providerName: "cloudflare", modelId: CLOUDFLARE_ZERO_COST_MODEL,
-      ...createFirebaseSpeciesDependencies({ env }), ...createFirebaseAiApplicationDependencies({ env }),
+      ...createFirebaseAiApplicationDependencies({ env }),
+      verifyToken: async token => {
+        const { auth } = await getAccountDeletionAdminContext(env);
+        return verifyFirebaseIdToken(auth, token);
+      },
       authorizeRuntime: async (uid, capability) => {
         const { db } = await getAccountDeletionAdminContext(env);
         const { access, config } = await loadAdminRuntime(db, uid, { env });
@@ -53,11 +56,8 @@ export function createProductionAiApplication({ env = globalThis.process?.env ??
         const { db } = await getAccountDeletionAdminContext(env);
         return createAiRequestLease({ db }).finish(uid, key, ticket, options);
       },
-      speciesProvider: createCloudflareSpeciesProvider(configuration),
       textProvider: createCloudflareTextProvider(configuration),
       analysisProvider: createCloudflareAnalysisProvider(configuration),
-      homeProvider: createCloudflareHomeProvider(configuration),
-      buildHomeAnalysis: ({ catches, trips, waters }) => buildPersonalFishingAnalysis(catches, { trips, waters }),
     });
   } catch { return createAiApplicationApi(); }
 }

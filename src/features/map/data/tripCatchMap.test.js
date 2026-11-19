@@ -68,15 +68,15 @@ test("near-identical catch positions keep every catch accessible in a shared pop
   for (const marker of groups[0]) assert.deepEqual({ latitude: marker.latitude, longitude: marker.longitude }, rows.find(row => row.id === marker.id).coordinates);
 });
 
-test("markers distinguish AI suggestions from confirmed fish and display only measured weight", () => {
+test("legacy AI proposals never determine marker species and only measured weight is displayed", () => {
   const digest = "a".repeat(64);
   const row = { ...catchRecord("suggested"), captureMode: "quick", lengthCm: 38, weightKg: 1.5, weightSource: "estimated",
     photos: [{ id: "photo", contentSha256: digest }],
     aiSpeciesSuggestion: { status: "suggestion", speciesKey: "commonCarp", photoId: "photo", ownerId: scope.ownerId, sourceSha256: digest } };
   const marker = buildTripCatchMarkers([row], trip, scope)[0];
-  assert.equal(marker.aiSuggested, true); assert.equal(marker.species, "Kapr obecný"); assert.equal(marker.weightKg, null); assert.equal(marker.lengthCm, 38);
+  assert.equal(marker.aiSuggested, undefined); assert.equal(marker.species, "Druh zatím neurčen"); assert.equal(marker.weightKg, null); assert.equal(marker.lengthCm, 38);
   const corrected = buildTripCatchMarkers([{ ...row, speciesKey: "northernPike", species: "Štika obecná", weightSource: "manual" }], trip, scope)[0];
-  assert.equal(corrected.aiSuggested, false); assert.equal(corrected.species, "Štika obecná"); assert.equal(corrected.weightKg, 1.5);
+  assert.equal(corrected.species, "Štika obecná"); assert.equal(corrected.weightKg, 1.5);
 });
 
 test("optional marker details tolerate malformed legacy photo and species metadata", () => {

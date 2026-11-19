@@ -166,25 +166,3 @@ export function createCloudflareAnalysisProvider(configuration) {
     return { text: output.text.trim(), evidenceKeys: [...new Set(output.evidenceKeys)] };
   };
 }
-
-export function createCloudflareHomeProvider(configuration) {
-  const complete = createCompletion(configuration);
-  return async ({ summary, onUsage }) => {
-    if (!summary || summary.version !== "personal-fishing-v1" || !Array.isArray(summary.candidates)
-      || Object.keys(summary).some(key => !["version", "recordCount", "candidates"].includes(key))
-      || !summary.candidates.length || summary.candidates.length > 3 || summary.candidates.some(item =>
-        !item || Object.keys(item).some(key => !["candidate", "family", "numbers", "evidenceCount", "limitation"].includes(key))
-        || !/^[a-z-]{1,64}$/.test(item.family ?? "") || !item.numbers || typeof item.numbers !== "object"
-        || Object.values(item.numbers).some(value => typeof value !== "number" || !Number.isFinite(value)))
-      || encoder.encode(JSON.stringify(summary)).length > 12_000) {
-      throw new TypeError("Invalid home evidence.");
-    }
-    const output = await complete("Jsi zkušený český analytik osobního rybářského deníku. Dostáváš deterministicky vypočtené, anonymizované kandidáty souvislostí. "
-      + "Vysvětli jen první (nejlépe podložený) kandidát jako opatrnou hypotézu a navrhni konkrétní srovnávací pokus pro příští výpravu. "
-      + "Nepřepisuj statistiky, neuváděj žádná čísla, nevymýšlej podmínky, místa ani příčiny. Četnost úlovků bez úplného úsilí není úspěšnost. "
-      + "Žádné obecné rady, žádné sliby záběru. Maximálně tři stručné české věty, vrať pouze JSON s jediným polem text.", JSON.stringify(summary), onUsage);
-    if (!output || Object.keys(output).length !== 1 || typeof output.text !== "string"
-      || !output.text.trim() || output.text.length > 1200 || /\d/.test(output.text)) throw new AiServiceError("invalid_ai_response");
-    return { text: output.text.trim() };
-  };
-}

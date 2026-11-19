@@ -281,8 +281,8 @@ export default function SettingsPage() {
       <section className="settings-card" aria-labelledby="settings-ai-title">
         <h2 id="settings-ai-title">Umělá inteligence a místní postřehy</h2>
         {Object.values(AI_FEATURES).some(Boolean)
-          ? <p>Externí AI je volitelná a vyžaduje samostatný souhlas níže. Rychlé uložení úlovku ani místní přehledy na ní nezávisejí.</p>
-          : <p>Externí AI je vypnutá. Fotografie ani obsah deníku se neposílají AI poskytovateli. Rozpoznávání ryb a pomoc s historkami čekají na ověřenou bezplatnou službu a výslovný souhlas.</p>}
+          ? <p>Externí AI je volitelná a vyžaduje samostatný souhlas níže. Dostupná je pouze pomoc s rybářským vyprávěním a tip pro další vycházku z deníku. Rychlé uložení úlovku ani místní přehledy na ní nezávisejí.</p>
+          : <p>Externí AI je vypnutá. Fotografie ani obsah deníku se neposílají AI poskytovateli. Rybářské záznamy a místní výpočty fungují dál.</p>}
         <label className="settings-toggle"><input type="checkbox" checked={preferences.localDiaryAnalysis !== false} onChange={event => update({ localDiaryAnalysis: event.target.checked })} /> Místní analýza deníku</label>
         <label className="settings-toggle"><input type="checkbox" checked={preferences.localFishingRecommendations !== false} onChange={event => update({ localFishingRecommendations: event.target.checked })} /> Místní doporučení pro další výpravu</label>
         <p>Tyto výpočty fungují zdarma v zařízení i bez AI. Nejde o souhlas s externím zpracováním.</p>

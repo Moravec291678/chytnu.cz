@@ -37,7 +37,7 @@ export default function DiaryAiExplanation({ report }) {
     return () => { controller.abort(); window.removeEventListener(AI_CONSENT_CHANGED_EVENT, load); cancelRequests(); };
   }, [client, scope.ownerId, cancelRequests]);
   if (!AI_FEATURES.diary && !AI_FEATURES.recommendations) return null;
-  if (!scope.ownerId) return <div><h3>Volitelné vysvětlení AI</h3><p>Pro AI se <Link to="/login">přihlas</Link>. Místní rozbor funguje i bez ní.</p></div>;
+  if (!scope.ownerId) return <div><h3>Volitelný tip AI z deníku</h3><p>Pro AI se <Link to="/login">přihlas</Link>. Místní rozbor funguje i bez ní.</p></div>;
   const consent = consentState.ownerId === scope.ownerId ? consentState.consent : null;
   const run = async (capability) => {
     if (requestBusy.current) return;
@@ -59,12 +59,12 @@ export default function DiaryAiExplanation({ report }) {
       if (currentSequence === sequence.current) setState((previous) => ({ ...previous, busy: "", error: error.message }));
     } finally { requestBusy.current = false; }
   };
-  const capabilities = [["diary", "Vysvětlit souhrny pomocí AI"], ["recommendations", "Navrhnout možnosti pro další vycházku"]]
+  const capabilities = [["diary", "Vysvětlit souhrny pomocí AI"], ["recommendations", "Vytvořit tip pro další vycházku"]]
     .filter(([key]) => AI_FEATURES[key]);
   return <div className="insights-ai-explanation">
-    <h3>Volitelné vysvětlení a návrhy AI</h3>
-    <p>Cloudflare dostane pouze vypočítané souhrny synchronizovaných úlovků, bez fotografií, poznámek a přesné polohy. Místní výpočty výše zůstávají podkladem pro ověření.</p>
-    <p>AI popis může chybovat. Jeho návrhy jsou hypotézy k posouzení, nikoli zaručená předpověď nebo náhrada skutečných statistik. <Link to="/settings">Nastavit souhlas s AI</Link></p>
+    <h3>Volitelný tip AI z deníku</h3>
+    <p>Cloudflare dostane pouze vypočítané souhrny synchronizovaných úlovků, bez fotografií, poznámek, názvů revírů a přesné polohy. Místní výpočty výše zůstávají podkladem pro ověření.</p>
+    <p>Tip může chybovat; je to hypotéza, nikoli předpověď ani náhrada statistik. <Link to="/settings">Nastavit souhlas s AI</Link></p>
     {capabilities.map(([key, label]) => {
       const allowed = hasAiConsent(consent, key, AI_PROVIDER);
       const result = state.results[key];

@@ -6,7 +6,8 @@ import { analyzeDiary } from "./diaryAnalysis.js";
 import { approveStoryDraft, createStoryDraft } from "./storyDraft.js";
 import { createSpeciesApi } from "./server/speciesApi.js";
 import { createGeminiSpeciesProvider } from "./server/geminiProvider.js";
-import { createFirebaseSpeciesDependencies, createProductionSpeciesApi, stripJpegMetadata } from "./server/productionSpeciesApi.js";
+import { createFirebaseSpeciesDependencies, createProductionSpeciesApi } from "./server/productionSpeciesApi.js";
+import { stripJpegMetadata } from "../../shared/media/jpegMetadata.js";
 import { createHash } from "node:crypto";
 
 const consent = { version: 1, provider: "test-provider", grantedAt: "2026-11-04T10:00:00Z", capabilities: { species: true } };

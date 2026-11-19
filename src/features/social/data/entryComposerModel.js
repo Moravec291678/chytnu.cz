@@ -1,4 +1,7 @@
 /** An edit retains the server identity, immutable type and loaded CAS revision. */
+export const DEFAULT_NEW_ENTRY_VISIBILITY = "public";
+export const requiresPublicEntryConsent = (visibility, previousVisibility) => visibility === "public" && previousVisibility !== "public";
+
 export function entryComposerPayload(draft, initialPost) {
   const kind = initialPost?.kind ?? draft.kind;
   return {

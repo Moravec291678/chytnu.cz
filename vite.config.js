@@ -2,8 +2,11 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { createHash } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
+import { localSocialApiPlugin } from './tools/local-social-api-plugin.js'
 
 /* global process */
+
+const localSocialApi = process.env.CHYTNU_LOCAL_SOCIAL_API === '1'
 
 function appBuildId() {
   const deployed = process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA || process.env.VITE_BUILD_ID || process.env.VERCEL_DEPLOYMENT_ID;
@@ -71,7 +74,9 @@ self.addEventListener('notificationclick', (event) => {
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), offlineShell()],
+  plugins: [react(), localSocialApiPlugin(), offlineShell()],
+  envDir: localSocialApi ? false : undefined,
+  server: localSocialApi ? { host: '127.0.0.1', strictPort: true } : undefined,
   resolve: {
     alias: [{ find: /^react-router-dom$/, replacement: 'react-router' }],
   },

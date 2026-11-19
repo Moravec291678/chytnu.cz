@@ -1,7 +1,6 @@
 import { firebaseAuth } from "../auth/data/firebaseAuth.js";
 import { resolveApiUrl } from "../../platform/api.js";
 import { AI_FEATURES, AI_CONSENT_VERSION, hasAiConsent } from "./aiPolicy.js";
-import { validateSpeciesSuggestion } from "./speciesSuggestion.js";
 import { createStoryDraft } from "./storyDraft.js";
 
 export const AI_PROVIDER = "cloudflare";
@@ -45,10 +44,6 @@ const identifier = (value) => typeof value === "string" && /^[A-Za-z0-9_-]{1,128
 const consentResult = (value) => value?.consent ? { ...value.consent, ...(typeof value.quotaPolicyVersion === "string" ? { quotaPolicyVersion: value.quotaPolicyVersion } : {}), ...(value.cleanupPending === true ? { cleanupPending: true } : {}) } : null;
 
 function taskPayload(capability, input) {
-  if (capability === "species") {
-    if (!identifier(input?.catchId) || !identifier(input?.photoId)) throw new AiClientError("unavailable");
-    return { action: "species", catchId: input.catchId, photoId: input.photoId };
-  }
   if (capability === "stories") {
     if (!identifier(input?.catchId) || !["summarize", "improve", "clarity", "title"].includes(input.task)) throw new AiClientError("unavailable");
     return { action: "story", catchId: input.catchId, task: input.task };
@@ -72,7 +67,7 @@ export function canApproveAiStory(record, draft) {
 }
 
 export function canDisplayAiResult(result, { ownerId, consent, capability }) {
-  return Boolean(result && ownerId && result.ownerId === ownerId && Number.isSafeInteger(result.consentRevision)
+  return Boolean(AI_FEATURES[capability] === true && result && ownerId && result.ownerId === ownerId && Number.isSafeInteger(result.consentRevision)
     && result.consentRevision > 0 && result.consentRevision === consent?.revision && hasAiConsent(consent, capability, AI_PROVIDER));
 }
 
@@ -118,42 +113,10 @@ export function createAiClient({ ownerId = null, getOwnerId = firebaseAuth.curre
       ...(typeof automaticSpecies === "boolean" ? { automaticSpecies } : {}),
       capabilities: Object.fromEntries(CAPABILITIES.map((key) => [key, capabilities?.[key] === true])) }, options).then(consentResult),
     revokeConsent: (options) => request({ action: "consent.revoke" }, options).then(consentResult),
-    async runHome({ fingerprint }, { consent, signal } = {}) {
-      if (!flags.recommendations) throw new AiClientError("disabled");
-      if (!hasAiConsent(consent, "recommendations", provider)) throw new AiClientError("consent_required");
-      if (!/^[a-f0-9]{32}$/.test(fingerprint ?? "")) throw new AiClientError("stale_catch");
-      const result = await request({ action: "home", fingerprint }, { signal });
-      if (result.status !== "generated" || result.fingerprint !== fingerprint || result.modelVersion !== "personal-fishing-v1"
-        || result.consentRevision !== consent.revision || typeof result.text !== "string" || !result.text.trim() || result.text.length > 3000
-        || !Number.isFinite(Date.parse(result.generatedAt)) || !Array.isArray(result.evidenceIds)
-        || !result.evidenceIds.length || result.evidenceIds.length > 500 || result.evidenceIds.some(id => !identifier(id))) throw new AiClientError("invalid_response");
-      return result;
-    },
-    async automaticSpecies({ catchId, photoId, statusOnly = false }, { consent, signal } = {}) {
-      if (!flags.species) throw new AiClientError("disabled");
-      if (!hasAiConsent(consent, "species", provider) || (!statusOnly && !consent.automaticSpecies)) throw new AiClientError("consent_required");
-      if (!identifier(catchId) || !identifier(photoId)) throw new AiClientError("invalid_response");
-      const result = await request({ action: statusOnly ? "species.status" : "species.auto", catchId, photoId }, { signal });
-      if (["pending", "confirmed", "ineligible"].includes(result.status)) return result;
-      const { sourceSha256, ...payload } = result;
-      if (!/^[a-f0-9]{64}$/.test(sourceSha256 ?? "")) throw new AiClientError("invalid_response");
-      try { return { ...validateSpeciesSuggestion(payload), sourceSha256 }; }
-      catch { throw new AiClientError("invalid_response"); }
-    },
     async run(capability, input, { consent, signal } = {}) {
-      if (!CAPABILITIES.includes(capability) || flags[capability] !== true) throw new AiClientError("disabled");
+      if (!["stories", "diary", "recommendations"].includes(capability) || flags[capability] !== true) throw new AiClientError("disabled");
       if (!hasAiConsent(consent, capability, provider)) throw new AiClientError("consent_required");
       const result = await request(taskPayload(capability, input), { signal });
-      if (capability === "species") {
-        try {
-          const sourceSha256 = result.sourceSha256;
-          if (typeof sourceSha256 !== "string" || !/^[a-f0-9]{64}$/.test(sourceSha256)) throw new TypeError("Missing photo identity.");
-          const { sourceSha256: ignoredSourceHash, ...payload } = result;
-          void ignoredSourceHash;
-          return { ...validateSpeciesSuggestion(result.suggestion ?? payload), sourceSha256 };
-        }
-        catch { throw new AiClientError("invalid_response"); }
-      }
       if (capability === "stories") return validateAiStoryDraft(result.draft ?? result);
       const value = result.explanation ?? result;
       if (typeof value?.text !== "string" || !value.text.trim() || value.text.length > 16_000) throw new AiClientError("invalid_response");

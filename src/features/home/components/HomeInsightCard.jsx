@@ -1,107 +1,73 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useDataScope } from "../../auth/context/dataScopeContextValue.js";
-import { AI_FEATURES, hasAiConsent } from "../../ai/aiPolicy.js";
-import { AI_CONSENT_CHANGED_EVENT, createAiClient } from "../../ai/aiClient.js";
 import { buildPersonalFishingAnalysis, selectPersonalInsight, personalRecordCountLabel } from "../../ai/personalFishingAnalysis.js";
 import { waterRepository } from "../../waters/data/waterRepository.js";
-import { clearHomeInsightState, loadHomeInsightState, saveHomeInsightState, usableHomeAiResult } from "../utils/homeInsightCache.js";
+import { loadHomeInsightState, saveHomeInsightState } from "../utils/homeInsightCache.js";
 import "./HomeInsightCard.css";
 
 const today = time => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Prague", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(time));
-const HARD_LIMITS = new Set(["user_daily_limit", "app_daily_limit", "text_daily_limit", "provider_quota"]);
 
-export default function HomeInsightCard({ catches, trips, contextReady = true }) {
+export default function HomeInsightCard({ catches, trips }) {
   const scope = useDataScope();
-  const client = useMemo(() => createAiClient({ ownerId: scope.ownerId }), [scope.ownerId]);
   const [waters, setWaters] = useState([]);
   const [stored, setStored] = useState(null);
-  const [activity, setActivity] = useState({ busy: false, error: "" });
+  const [cacheError, setCacheError] = useState("");
   const [clock, setClock] = useState(() => Date.now());
-  const state = useRef(null), sequence = useRef(0), pending = useRef(null), inFlight = useRef(false);
-  const cancelRequests = useCallback(() => { sequence.current++; pending.current?.abort(); }, []);
+  const state = useRef(null), sequence = useRef(0);
   const report = useMemo(() => buildPersonalFishingAnalysis(catches, { trips, waters, now: clock }), [catches, trips, waters, clock]);
-  const fingerprint = useRef(report.fingerprint);
-  useEffect(() => { fingerprint.current = report.fingerprint; }, [report.fingerprint]);
-  const cache = stored?.scopeKey === scope.scopeKey ? stored : null;
+  const cache = stored?.scopeKey === scope.scopeKey && stored.ownerId === scope.ownerId ? stored : null;
   const currentId = cache?.selection?.fingerprint === report.fingerprint && cache.selection.day === today(clock) ? cache.selection.id : null;
   const selected = selectPersonalInsight(report.candidates, cache?.seenIds, currentId);
   const persist = useCallback(async (patch, ticket = sequence.current) => {
     const previous = state.current;
     if (!previous || ticket !== sequence.current) return false;
     const next = { ...previous, ...patch };
-    const saved = await saveHomeInsightState(scope, next, previous).catch(() => false);
-    if (!saved || ticket !== sequence.current) return false;
-    state.current = next; setStored(next); return true;
+    try {
+      const saved = await saveHomeInsightState(scope, next, previous);
+      if (!saved) throw new Error("Postřeh se mezitím změnil nebo jej nelze uložit.");
+      if (ticket !== sequence.current) return false;
+      state.current = next;
+      setStored(next);
+      setCacheError("");
+      return true;
+    } catch (error) {
+      if (ticket === sequence.current) setCacheError(error.message || "Postřeh se nepodařilo uložit.");
+      return false;
+    }
   }, [scope]);
   useEffect(() => {
     let active = true;
-    const ticket = ++sequence.current;
-    const controller = new AbortController();
-    const refreshConsent = async (clear = false) => {
-      const loadTicket = clear ? ++sequence.current : sequence.current;
-      if (clear) {
-        pending.current?.abort();
-        await clearHomeInsightState(scope).catch(() => {});
-        if (!active || loadTicket !== sequence.current) return;
-        const cleared = await loadHomeInsightState(scope).catch(() => null);
-        if (!active || loadTicket !== sequence.current) return;
-        state.current = cleared; setStored(cleared); setActivity({ busy: false, error: "" });
-      }
-      if (!scope.ownerId || globalThis.navigator?.onLine === false) return;
+    sequence.current++;
+    const refresh = async () => {
+      const ticket = ++sequence.current;
       try {
-        const consent = await client.getConsent({ signal: controller.signal });
-        if (!active || loadTicket !== sequence.current) return;
-        const previous = state.current;
-        if (!previous) return;
-        await persist({ consent, result: previous.consent?.revision === consent?.revision ? previous.result : null }, loadTicket);
-      } catch { /* Offline cached consent permits display only, never a new inference. */ }
+        const [value, waterList] = await Promise.all([loadHomeInsightState(scope), waterRepository.list(scope)]);
+        if (!active || ticket !== sequence.current) return;
+        state.current = value;
+        setStored(value);
+        setWaters(waterList);
+        setClock(Date.now());
+        setCacheError("");
+      } catch (error) {
+        if (active && ticket === sequence.current) setCacheError(error.message || "Místní postřeh se nepodařilo načíst.");
+      }
     };
-    void loadHomeInsightState(scope).then(async value => {
-      if (!active || ticket !== sequence.current) return;
-      state.current = value; setStored(value);
-      await refreshConsent();
-    }).catch(() => {});
-    void waterRepository.list(scope).then(value => { if (active) setWaters(value); }).catch(() => {});
-    const consentChanged = () => { void refreshConsent(true); };
-    const refreshed = () => { setClock(Date.now()); void refreshConsent();
-      void waterRepository.list(scope).then(value => { if (active) setWaters(value); }).catch(() => {}); };
-    window.addEventListener(AI_CONSENT_CHANGED_EVENT, consentChanged);
-    window.addEventListener("online", refreshed); window.addEventListener("focus", refreshed);
-    window.addEventListener("chytnu:local-data-restored", refreshed);
-    return () => { active = false; cancelRequests(); controller.abort();
-      window.removeEventListener(AI_CONSENT_CHANGED_EVENT, consentChanged); window.removeEventListener("online", refreshed); window.removeEventListener("focus", refreshed);
-      window.removeEventListener("chytnu:local-data-restored", refreshed); };
-  }, [scope, client, persist, cancelRequests]);
+    void refresh();
+    window.addEventListener("focus", refresh);
+    window.addEventListener("chytnu:local-data-restored", refresh);
+    return () => {
+      active = false;
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener("chytnu:local-data-restored", refresh);
+    };
+  }, [scope]);
   useEffect(() => {
     if (!cache || !selected || (cache.selection?.id === selected.id && cache.selection.fingerprint === report.fingerprint && cache.selection.day === today(clock))) return;
     void Promise.resolve().then(() => persist({ selection: { id: selected.id, fingerprint: report.fingerprint, day: today(clock) },
       seenIds: [...(state.current?.seenIds ?? []).filter(id => id !== selected.id), selected.id].slice(-40) }));
   }, [cache, selected, report.fingerprint, persist, clock]);
   if (!selected) return null;
-  const consent = cache?.consent;
-  const allowed = hasAiConsent(consent, "recommendations", "cloudflare");
-  const aiAvailable = usableHomeAiResult(cache, { ownerId: scope.ownerId, fingerprint: report.fingerprint, evidenceIds: report.evidenceIds, now: clock });
-  const blocked = cache?.blocked?.fingerprint === report.fingerprint
-    && (!cache.blocked.retryAt || Date.parse(cache.blocked.retryAt) > clock);
-  const generate = async () => {
-    if (inFlight.current || !allowed || globalThis.navigator?.onLine === false || blocked || !report.providerSummary.candidates.length) return;
-    inFlight.current = true;
-    const ticket = sequence.current, sourceFingerprint = report.fingerprint;
-    const controller = new AbortController(); pending.current = controller;
-    setActivity({ busy: true, error: "" });
-    try {
-      const result = await client.runHome({ fingerprint: sourceFingerprint }, { consent, signal: controller.signal });
-      if (ticket !== sequence.current || fingerprint.current !== sourceFingerprint) return;
-      if (result.fingerprint !== sourceFingerprint || result.consentRevision !== consent.revision) throw new Error("Deník nebo souhlas se mezitím změnil. Zobrazený místní rozbor zůstává aktuální.");
-      await persist({ result: { ...result, ownerId: scope.ownerId }, blocked: null }, ticket);
-      if (ticket === sequence.current) setActivity({ busy: false, error: "" });
-    } catch (error) {
-      if (ticket !== sequence.current) return;
-      if (HARD_LIMITS.has(error.code)) await persist({ blocked: { fingerprint: sourceFingerprint, code: error.code, retryAt: error.retryAt ?? null } }, ticket);
-      setActivity({ busy: false, error: error.message || "AI není dostupná. Místní rozbor zůstává k dispozici." });
-    } finally { inFlight.current = false; }
-  };
   const nextInsight = () => {
     const index = report.candidates.findIndex(item => item.id === selected.id);
     const next = report.candidates[(index + 1) % report.candidates.length];
@@ -123,14 +89,6 @@ export default function HomeInsightCard({ catches, trips, contextReady = true })
       {report.candidates.length > 1 && <button type="button" className="home-personal-secondary" onClick={nextInsight}>Další podložený postřeh ({report.candidates.length})</button>}
       <Link className="home-personal-analysis-link" to="/insights">Otevřít přehledy deníku →</Link>
     </details>
-    {AI_FEATURES.recommendations && scope.ownerId && report.providerSummary.candidates.length > 0 && <div className="home-personal-ai">
-      {aiAvailable ? <><span className="home-progress-kicker">Výklad od AI · k ověření</span><p><strong>{report.strongest.title}</strong></p><p>{cache.result.text}</p><small>Výklad patří k nejsilnějšímu postřehu výše, i když si právě prohlížíš jiný podklad. Uloženo {new Date(cache.result.generatedAt).toLocaleDateString("cs-CZ")}.</small></>
-        : <><p>Volitelná AI může vyložit vypočítané souvislosti. Otevření Home žádný požadavek modelu nespouští.</p>
-          {allowed ? <button type="button" className="home-personal-secondary" disabled={activity.busy || blocked || !contextReady || globalThis.navigator?.onLine === false} onClick={() => void generate()}>{activity.busy ? "AI připravuje výklad…" : "Vygenerovat AI tip"}</button>
-            : <Link to="/settings">Povolit AI doporučení v nastavení</Link>}
-          {blocked && <p role="status">Další generování je dočasně zastavené kvůli bezplatnému limitu. Místní postřeh zůstává dostupný.</p>}
-        </>}
-      {activity.error && <p role="alert">{activity.error}</p>}
-    </div>}
+    {cacheError && <p role="status">{cacheError} Místní rozbor zůstává dostupný.</p>}
   </section>;
 }
