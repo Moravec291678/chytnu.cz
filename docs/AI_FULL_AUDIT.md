@@ -17,6 +17,7 @@
 - Security review found no confirmed exploitable vulnerability in the reviewed application scope.
 - Mixed static/dynamic import of `PublicFishingProfile` was removed to reduce build ambiguity.
 - 2026-11-19 account-deletion fix: owned `socialPosts` documents recursively delete comments and reactions. Other users' posts remain. Verified with focused account-deletion unit cases and the 131-check social interaction emulator suite.
+- 2026-11-19 journal audit fix: duplicate `longest` sort option removed and all sort keys centralized in `JOURNAL_SORTS`; 7 focused journal tests PASS.
 - Guest access to `/community` could dereference an absent action state. The busy flag now requires an authenticated UID, with an SSR regression test.
 - The production Cloudinary API checked `accountDeletions/{uid}` but did not check `accountSuspensions/{uid}`. It now checks both markers and responds with HTTP 403 before attempting photo access. Regression tests verify neither blocked state reads photo data.
 - The profile layout was consolidated into clearer, related sections.

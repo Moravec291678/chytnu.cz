@@ -6,15 +6,11 @@ import { DEFAULT_METHODS } from "../shared/constants/constants";
 import CatchCard from "../features/catches/components/CatchCard";
 import { useCatches } from "../features/catches/context/useCatches";
 import { useTrips } from "../features/trips/context/useTrips";
-import { filterAndSortCatches, hasActiveJournalFilters } from "../features/catches/utils/catchJournal";
+import { filterAndSortCatches, hasActiveJournalFilters, JOURNAL_SORTS } from "../features/catches/utils/catchJournal";
 import { normalizeText } from "../shared/utils/helpers";
 import "./JournalPage.css";
 
 const EMPTY_FILTERS = { search: "", speciesKey: "", dateFrom: "", dateTo: "", favoriteOnly: false, incompleteOnly: false, result: "", methodKey: "", tripId: "", sort: "newest" };
-const SORTS = [
-  ["newest", "Nejnovější"], ["oldest", "Nejstarší"], ["longest", "Nejdelší"], ["heaviest", "Nejtěžší"],
-  ["lightest", "Nejlehčí"], ["longest", "Nejdelší"], ["shortest", "Nejkratší"],
-];
 
 function pluralize(count, forms) {
   const remainder = count % 100;
@@ -73,7 +69,7 @@ function JournalPage() {
         {filtersExpanded && <div id="journal-filter-panel" className="journal-filter-panel">
         <div className="journal-filter-grid">
           <label>Druh<select className="journal-control" value={filters.speciesKey} onChange={(event) => setFilter("speciesKey", event.target.value)}><option value="">Všechny druhy</option>{species.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}</select></label>
-          <label>Řazení<select className="journal-control" value={filters.sort} onChange={(event) => setFilter("sort", event.target.value)}>{SORTS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+          <label>Řazení<select className="journal-control" value={filters.sort} onChange={(event) => setFilter("sort", event.target.value)}>{JOURNAL_SORTS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
           <label>Od<input className="journal-control" aria-label="Datum od" type="date" value={filters.dateFrom} onChange={(event) => setFilter("dateFrom", event.target.value)} /></label>
           <label>Do<input className="journal-control" aria-label="Datum do" type="date" value={filters.dateTo} onChange={(event) => setFilter("dateTo", event.target.value)} /></label>
           <label>Výsledek<select className="journal-control" value={filters.result} onChange={(event) => setFilter("result", event.target.value)}><option value="">Jakýkoli</option><option value="released">Puštěno</option><option value="kept">Ponecháno</option><option value="unspecified">Neuvedeno</option></select></label>

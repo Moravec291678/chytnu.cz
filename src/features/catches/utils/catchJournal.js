@@ -1,6 +1,15 @@
 import { normalizeText } from "../../../shared/utils/helpers.js";
 import { isIncompleteQuickCatch } from "../data/quickCatch.js";
 
+export const JOURNAL_SORTS = [
+  ["newest", "Nejnovější"],
+  ["oldest", "Nejstarší"],
+  ["longest", "Nejdelší"],
+  ["heaviest", "Nejtěžší"],
+  ["lightest", "Nejlehčí"],
+  ["shortest", "Nejkratší"],
+];
+
 function localDate(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";

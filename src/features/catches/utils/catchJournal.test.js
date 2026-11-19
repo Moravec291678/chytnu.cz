@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { filterAndSortCatches, hasActiveJournalFilters } from "./catchJournal.js";
+import { filterAndSortCatches, hasActiveJournalFilters, JOURNAL_SORTS } from "./catchJournal.js";
 
 const records = [
   { id: "a", species: "Kapr obecný", speciesKey: "carp", caughtAt: "2026-05-03T09:00:00.000Z", weightKg: null, lengthCm: null, locationName: "Labe", method: { key: "feeder", label: "Feeder" }, baits: [], notes: "", isFavorite: true, result: "released", tripId: "trip-1" },
@@ -8,6 +8,12 @@ const records = [
 ];
 
 const defaults = { search: "", speciesKey: "", dateFrom: "", dateTo: "", favoriteOnly: false, result: "", methodKey: "", tripId: "", sort: "newest" };
+
+test("journal exposes a unique complete sort list", () => {
+  const keys = JOURNAL_SORTS.map(([key]) => key);
+  assert.equal(new Set(keys).size, keys.length);
+  assert.equal(JOURNAL_SORTS.filter(([key]) => key === "shortest").length, 1);
+});
 
 test("journal search ignores Czech diacritics and filters by real fields", () => {
   assert.deepEqual(filterAndSortCatches(records, { ...defaults, search: "stika" }).map((item) => item.id), ["b"]);
