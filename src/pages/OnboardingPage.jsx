@@ -179,7 +179,7 @@ export default function OnboardingPage() {
               <span className="onboarding-mode-description">Metoda, nástraha, podmínky, statistiky.</span>
             </button>
           </div>
-          <p className="onboarding-mode-note">Kdykoli změníš v Profilu.</p>
+          <p className="onboarding-mode-note">Režim kdykoli změníš v Profilu. Úlovky se ukládají nejprve v zařízení a po přihlášení se synchronizují. Nic se nesdílí veřejně bez tvého potvrzení.</p>
           {error && <p className="onboarding-step-one-error" role="alert">{error}</p>}
         </section>
         <button className="onboarding-step-one-continue" type="button" onClick={() => setStep(2)}>
@@ -204,6 +204,7 @@ export default function OnboardingPage() {
           <li>3 · Délka a váha</li>
         </ol>
         <p className="onboarding-location-description">Místo, čas a počasí se doplní samo.</p>
+        <p className="onboarding-location-description">GPS je volitelné. Přesnou polohu nikde automaticky nezveřejňujeme.</p>
         <div className="onboarding-location-options" role="group" aria-label="Výchozí přesnost polohy">
           {[ ["exact", "Přesně"], ["approximate", "Přibližně"], ["none", "Bez GPS"] ].map(([mode, label]) => (
             <button

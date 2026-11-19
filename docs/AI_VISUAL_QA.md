@@ -45,6 +45,11 @@ Status: PARTIAL
 - Removed the redundant List/Map/Calendar tabs from the Home recent-catches panel; its Journal link remains, and those views stay available in the Journal. Removed the now-unused Home-only CSS.
 - Regression coverage confirms the Journal link is retained and the destination tabs remain in Journal. Full tests/visual review follow.
 
+## 2026-11-20 — onboarding privacy and storage clarity
+
+- The existing two-step onboarding now states that records save locally first and sync after sign-in, public sharing requires the user's confirmation, and GPS is optional with precise location not automatically public. No new mandatory step or permission prompt was added.
+- Copy is covered by `src/pages/OnboardingPage.test.js`. Small-screen visual fit still needs a viewport check.
+
 ## Authenticated takeover browser QA — 2026-11-19
 
 Real localhost handlers and Auth/Firestore emulators: A chose public profile with all public presets and explicit checkbox; A created an actual experience post, visible in feed and detail (ID 63076cc37d7fd4e32b951ae63f049bcfddfda76b01296c0d68732684c76ade7d). B logged in, created its own profile, reacted and commented; server confirmed both. B invited A; A accepted and saw B as a friend. A saved a manual carp catch (42 cm, estimated weight marked as estimated, no new XP). A changed to private; C logged in and was denied the original post, and username search returned no available profile.
