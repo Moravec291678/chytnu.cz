@@ -69,6 +69,19 @@ export function countActiveGalleryFilters(filters = {}) {
     + Number(Boolean(filters.period && filters.period !== "all")) + Number(Boolean(filters.favoriteOnly));
 }
 
+export function resetGalleryFilters(current = {}) {
+  return {
+    ...current,
+    search: "",
+    speciesKey: "",
+    waterKey: "",
+    period: "all",
+    dateFrom: "",
+    dateTo: "",
+    favoriteOnly: false,
+  };
+}
+
 export function getGalleryOptions(items) {
   const species = new Map();
   const waters = new Map();

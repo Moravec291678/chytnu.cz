@@ -4,7 +4,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
 import { readFile } from "node:fs/promises";
-import { buildGalleryItems, countActiveGalleryFilters, filterAndSortGallery, getGalleryMissingMessage, getGalleryOptions, getGalleryPhotoLoadRequest } from "./catchGallery.js";
+import { buildGalleryItems, countActiveGalleryFilters, filterAndSortGallery, getGalleryMissingMessage, getGalleryOptions, getGalleryPhotoLoadRequest, resetGalleryFilters } from "./catchGallery.js";
 import GalleryPhotoImage, { GalleryPhotoFailure } from "../../../pages/GalleryPhotoImage.js";
 
 const catches = [
@@ -57,6 +57,21 @@ test("active filter count excludes search and sort", () => {
   assert.equal(countActiveGalleryFilters({ search: "kapr", sort: "oldest" }), 0);
   assert.equal(countActiveGalleryFilters({ speciesKey: "carp", search: "kapr", sort: "oldest" }), 1);
   assert.equal(countActiveGalleryFilters({ speciesKey: "carp", waterKey: "id:w1", period: "year", favoriteOnly: true }), 4);
+});
+
+test("resetting gallery filters clears search and panel criteria without changing sort", () => {
+  const reset = resetGalleryFilters({
+    search: "rybník", speciesKey: "carp", waterKey: "id:w1", period: "custom:range",
+    dateFrom: "2026-01-01", dateTo: "2026-12-31", favoriteOnly: true, sort: "oldest",
+  });
+  assert.equal(reset.search, "");
+  assert.equal(reset.speciesKey, "");
+  assert.equal(reset.waterKey, "");
+  assert.equal(reset.period, "all");
+  assert.equal(reset.dateFrom, "");
+  assert.equal(reset.dateTo, "");
+  assert.equal(reset.favoriteOnly, false);
+  assert.equal(reset.sort, "oldest");
 });
 
 test("gallery normalizes legacy, guest, local, remote and multi-photo records without needing a nested Catch", () => {

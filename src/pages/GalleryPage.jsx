@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import Layout from "../shared/layout/Layout";
 import { useCatches } from "../features/catches/context/useCatches";
 import { photoFrameStyle } from "../features/catches/data/photoFraming.js";
-import { buildGalleryItems, countActiveGalleryFilters, filterAndSortGallery, getGalleryOptions } from "../features/catches/data/catchGallery.js";
+import { buildGalleryItems, countActiveGalleryFilters, filterAndSortGallery, getGalleryOptions, resetGalleryFilters } from "../features/catches/data/catchGallery.js";
 import { useDataScope } from "../features/auth/context/dataScopeContextValue.js";
 import { useModalFocusTrap } from "../shared/hooks/useModalFocusTrap.js";
 import GalleryPhotoImage from "./GalleryPhotoImage.js";
@@ -86,7 +86,7 @@ function GalleryPage() {
   const photos = useMemo(() => filterAndSortGallery(allItems, filters), [allItems, filters]);
   const moveViewer = useCallback((direction) => setViewerIndex((current) => current < 0 || !photos.length ? -1 : (current + direction + photos.length) % photos.length), [photos.length]);
   const closeViewer = useCallback(() => setViewerIndex(-1), []);
-  const clearFilters = () => setFilters((current) => ({ ...current, ...EMPTY_FILTERS }));
+  const clearFilters = () => setFilters(resetGalleryFilters);
   const set = (key, value) => setFilters((current) => ({ ...current, [key]: value }));
   const setDraft = (key, value) => setFilterDraft((current) => ({ ...current, [key]: value }));
   const activeFilterCount = countActiveGalleryFilters(filters);
