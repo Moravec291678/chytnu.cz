@@ -19,6 +19,9 @@
 - 2026-11-19 account-deletion fix: owned `socialPosts` documents recursively delete comments and reactions. Other users' posts remain. Verified with focused account-deletion unit cases and the 131-check social interaction emulator suite.
 - 2026-11-19 journal audit fix: duplicate `longest` sort option removed and all sort keys centralized in `JOURNAL_SORTS`; 7 focused journal tests PASS.
 - 2026-11-19 gallery audit fix: active filter reset now clears text search and all panel criteria without resetting sort; 37 focused catch/gallery tests PASS.
+- 2026-11-19 trips/waters/species audit: 15 trip tests, 38 water/RIS tests and 20 species/trophy tests PASS.
+- 2026-11-19 social/settings/sync audit: 129 social unit tests, 86 notification/privacy/settings/sync unit tests, Auth/Sync/Photos emulators and the complete rules emulator suite PASS.
+- Final complete unit suite: 1,164/1,164 PASS.
 - Guest access to `/community` could dereference an absent action state. The busy flag now requires an authenticated UID, with an SSR regression test.
 - The production Cloudinary API checked `accountDeletions/{uid}` but did not check `accountSuspensions/{uid}`. It now checks both markers and responds with HTTP 403 before attempting photo access. Regression tests verify neither blocked state reads photo data.
 - The profile layout was consolidated into clearer, related sections.

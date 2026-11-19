@@ -14,6 +14,8 @@
 - Fixed account deletion so owned social posts recursively remove comments and reactions while preserving other owners' posts.
 - Fixed the duplicate journal sort option and centralized the sort list.
 - Fixed gallery filter reset so text and structured filters both clear without changing sort.
+- Completed continuing audit waves for trips, waters/RIS, species/progression, social interactions and settings/sync.
+- Final unit suite: 1,164/1,164 PASS; lint/build/product checks PASS.
 - `npm run test:auth`, `npm run test:sync`, `npm run test:photos` and `npm run test:rules` were rerun for the resume checkpoint; suites passed when run without emulator-instance overlap.
 
 ## Git checkpoint

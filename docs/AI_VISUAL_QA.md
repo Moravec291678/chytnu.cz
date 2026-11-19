@@ -10,3 +10,4 @@ Status: PARTIAL
 - Gallery has short broken-photo copy, 44 px retry actions and responsive viewer controls.
 - Journal sort controls now share one unique key list.
 - Remaining: real 320 px and desktop screenshots, authenticated route screenshots, iPhone/Android physical viewport checks.
+- Browser smoke used guest routes and did not replace physical-device validation.

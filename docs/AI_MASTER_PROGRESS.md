@@ -14,6 +14,9 @@ Updated for the resumed full-application audit on `codex/ui-terminology-length-p
 - Account deletion now recursively removes owned social post comment and reaction subcollections; the fix passed focused unit and emulator coverage.
 - Journal sort options are now unique and shared by UI/test code; 7 focused journal tests pass.
 - Gallery reset now clears search and structured filters without changing sort; 37 focused catch/gallery tests pass.
+- Trips, RIS waters and species/trophy flows passed 73 focused tests.
+- Social, settings, privacy and sync audit passed 215 focused unit tests plus Auth/Sync/Photos/Rules emulator suites.
+- Final complete unit suite increased to 1,164 passed tests.
 - Safe-stop WIP commit `61f9e2c46fe122a4c96194e919c6a13c6617fb3a` is pushed to the development branch; the follow-up documentation update is pushed as well.
 - Use `git log -1 --format=%H` to identify the current branch head before resuming.
 
