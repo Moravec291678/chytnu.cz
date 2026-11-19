@@ -89,7 +89,7 @@ Overall audit remains **PARTIAL**; Stage 8 remains **PASS**. No Stage 9, merge, 
 
 ### Completed
 
-- Authenticated the app with a synthetic Firebase Auth emulator account. Navigated 47 routes at the browser's effective 400 px width; no page exception or persistent loading state was observed.
+- Authenticated the app with a synthetic Firebase Auth emulator account. Navigated 47 route paths at the browser's effective 400 px width; no page exception or persistent loading state was observed. The synthetic `/community/post/audit-post` URL had no fixture and no heading, so real post-detail behavior remains unverified.
 - Created a synthetic Catch and Trip, linked them, checked Journal, Catch detail, Statistics, Rewards and Trips, then deleted both test records.
 - Tested 47 guest routes at ten exact widths: 320, 360, 375, 390, 430, 768, 1024, 1280, 1440 and 1920 px (470 route/width checks). No horizontal overflow or persistent loading state was observed.
 - Fixed the Home fish-activity inactive card's touching detail link and button by placing both in the existing responsive compact action row. Added an SSR regression test.
@@ -122,4 +122,4 @@ Overall audit remains **PARTIAL**; Stage 8 remains **PASS**. No Stage 9, merge, 
 - `docs/AI_TEST_EVIDENCE.md`
 - `docs/AI_HANDOFF.md`
 
-The code and documentation changes are confined to `codex/ui-terminology-length-priority`; they have not been pushed or deployed. Check `git log` for the local checkpoint commit.
+Implementation/test checkpoint commit: `eb1aa8d129d29aca943cbd331c04b20672628089` (local only). The documentation clarification is committed separately. Nothing has been pushed or deployed.

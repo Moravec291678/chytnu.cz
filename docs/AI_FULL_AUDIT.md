@@ -62,7 +62,7 @@ Firebase emulators emitted non-fatal metadata lookup warnings (`ETIMEDOUT`/`ENOT
 
 Status remains **PARTIAL**. This wave did not start Stage 9 or change the overall visual identity.
 
-- Authenticated synthetic account A: 47 routes rendered at the browser's effective 400 px width without page exceptions or persistent loading states. Created a synthetic Catch and Trip, linked them, verified Journal, Catch detail, Statistics, Rewards and Trips, then removed both records.
+- Authenticated synthetic account A: navigated 47 route paths at the browser's effective 400 px width without page exceptions or persistent loading states. The synthetic `/community/post/audit-post` URL had no fixture and no heading; a real post-detail screen remains unverified. Created a synthetic Catch and Trip, linked them, verified Journal, Catch detail, Statistics, Rewards and Trips, then removed both records.
 - Guest responsive browser matrix: 47 routes × 10 widths (320, 360, 375, 390, 430, 768, 1024, 1280, 1440 and 1920 px) = 470 checks. No horizontal overflow or persistent loading screen was observed. This matrix was guest-only.
 - Confirmed and fixed a 0 px separation between the Home fish-activity detail link and action button at desktop width. The existing compact flex action row now owns both controls; the SSR regression test verifies the shared row and order.
 - Browser `/api/social` and `/api/progression/reconcile` requests returned 404 because Vite does not host this repository's Vercel serverless functions. This is a local harness limitation; it does not establish a production backend failure. Authenticated browser social/API flows remain unverified.
