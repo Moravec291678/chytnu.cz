@@ -196,7 +196,9 @@ test("gallery route is grouped with profile reports without changing bottom navi
     readFile(new URL("../../../pages/JournalPage.css", import.meta.url), "utf8"),
   ]);
   assert.match(journal, /to="\/trips">Vycházky/);
-  assert.match(journalCss, /\.journal-tabs\s*\{[^}]*grid-template-columns:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\)/);
+  assert.match(journal, /to="\/gallery">Galerie/);
+  assert.match(journal, /to="\/stats">Statistiky/);
+  assert.match(journalCss, /\.journal-tabs\s*\{[^}]*grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\)/);
   assert.doesNotMatch(layout, /to="\/gallery"/);
 });
 

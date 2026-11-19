@@ -46,10 +46,12 @@ function JournalPage() {
         </div>
       </div>
       <nav className="journal-tabs" aria-label="Části deníku">
-        <span className="journal-tab journal-tab-active" aria-current="page">Seznam</span>
+        <span className="journal-tab journal-tab-active" aria-current="page">Úlovky</span>
         <Link className="journal-tab" to="/journal/map">Mapa</Link>
         <Link className="journal-tab" to="/journal/calendar">Kalendář</Link>
         <Link className="journal-tab" to="/trips">Vycházky</Link>
+        <Link className="journal-tab" to="/gallery">Galerie</Link>
+        <Link className="journal-tab" to="/stats">Statistiky</Link>
       </nav>
       <div className="journal-controls">
         <label className="journal-favorite-filter"><input type="checkbox" checked={filters.incompleteOnly} onChange={event => setFilter("incompleteOnly", event.target.checked)} /> Doplnit později</label>

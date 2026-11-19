@@ -7,7 +7,7 @@ Audit baseline: 2026-11-20. This map reflects `src/app/App.jsx` and navigation l
 | Section | Entry route | Related routes |
 | --- | --- | --- |
 | Domů | `/` | `/fish-activity`, `/insights`, `/season-story`, `/year-summary` |
-| Deník | `/journal` | `/add`, `/catch/:id`, `/catch/:id/edit`, `/catch/:id/reward`, `/catch/:id/share`, `/journal/calendar`, `/journal/map`, `/trips`, `/trips/new`, `/trips/:id`, `/trips/:id/edit`, `/gallery`, `/stats`, `/map`, `/album`, `/species/:speciesKey`, `/species/:speciesKey/mastery` |
+| Deník | `/journal` | Visible section links: `/trips`, `/gallery`, `/stats`, `/journal/calendar`, `/journal/map`. Catch flows: `/add`, `/catch/:id`, `/catch/:id/edit`, `/catch/:id/reward`, `/catch/:id/share`. Reference pages: `/map`, `/album`, `/species/:speciesKey`, `/species/:speciesKey/mastery` |
 | Komunita | `/community` | `/community/post/:postId`, `/community/catch/:catchId`, `/community/:postId/report`, `/friends`, `/community/find` (feature flag), `/nearby`, `/crew`, `/waters/:waterId/chat` |
 | Profil | `/profile` | `/profile/social` and `/u/:identity` (public profiles feature flag), `/settings`, `/privacy`, `/notifications`, `/achievements`, `/levels`, `/challenges`, `/streak`, `/supporter` (feature flag), `/admin/*` (server-authorized) |
 | Quick Catch | `/add` | Persistent central action, independent of the four sections |
