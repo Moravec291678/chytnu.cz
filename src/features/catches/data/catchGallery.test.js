@@ -186,7 +186,17 @@ test("gallery route is grouped with profile reports without changing bottom navi
   assert.match(app, /path="\/gallery"/);
   assert.match(profile, /id="profile-reports"[\s\S]*?to="\/gallery" title="Galerie"/);
   assert.match(layout, /aria-label="Hlavní navigace"/);
-  assert.match(layout, /nav-label">Domů[\s\S]*nav-label">Deník[\s\S]*nav-label">Vycházky[\s\S]*nav-label">Profil/);
+  assert.match(layout, /nav-label">Domů[\s\S]*nav-label">Deník[\s\S]*nav-label">Komunita[\s\S]*nav-label">Profil/);
+  assert.match(layout, /to="\/community" className=\{itemClass\(communityActive\)\}/);
+  assert.match(layout, /pathname === "\/trips" \|\| pathname\.startsWith\("\/trips\/"\)/);
+  assert.match(layout, /pathname === "\/profile" \|\| pathname === "\/profile\/social" \|\| pathname === "\/settings"/);
+  assert.match(layout, /pathname\.startsWith\("\/u\/"\)/);
+  const [journal, journalCss] = await Promise.all([
+    readFile(new URL("../../../pages/JournalPage.jsx", import.meta.url), "utf8"),
+    readFile(new URL("../../../pages/JournalPage.css", import.meta.url), "utf8"),
+  ]);
+  assert.match(journal, /to="\/trips">Vycházky/);
+  assert.match(journalCss, /\.journal-tabs\s*\{[^}]*grid-template-columns:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\)/);
   assert.doesNotMatch(layout, /to="\/gallery"/);
 });
 

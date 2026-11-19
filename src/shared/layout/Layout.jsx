@@ -17,7 +17,7 @@ function NavIcon({ name }) {
   };
   if (name === "home") return <svg viewBox="0 0 24 24" {...common}><path d="m3 10 9-7 9 7" /><path d="M5 9v12h14V9M9 21v-7h6v7" /></svg>;
   if (name === "journal") return <svg viewBox="0 0 24 24" {...common}><path d="M6 3h12a2 2 0 0 1 2 2v16H6a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3Z" /><path d="M8 8h8M8 12h8M8 16h6M5 21V6a3 3 0 0 1 3-3" /></svg>;
-  if (name === "trips") return <svg viewBox="0 0 24 24" {...common}><path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z" /><circle cx="12" cy="10" r="2.5" /></svg>;
+  if (name === "community") return <svg viewBox="0 0 24 24" {...common}><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20a6.5 6.5 0 0 1 13 0M17 5.5a3.5 3.5 0 0 1 0 6.8M18 14a6 6 0 0 1 3.5 5.5" /></svg>;
   return <svg viewBox="0 0 24 24" {...common}><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></svg>;
 }
 
@@ -44,8 +44,9 @@ function Layout({ children }) {
   }, []);
   const itemClass = (active) => active ? "nav-item nav-item-active" : "nav-item";
   const homeActive = pathname === "/";
-  const journalActive = pathname.startsWith("/journal") || pathname.startsWith("/catch/") || pathname.startsWith("/species/") || pathname === "/gallery" || pathname === "/album" || pathname === "/map";
-  const tripsActive = pathname === "/trips" || pathname.startsWith("/trips/");
+  const journalActive = pathname.startsWith("/journal") || pathname.startsWith("/catch/") || pathname.startsWith("/species/") || pathname === "/gallery" || pathname === "/album" || pathname === "/map" || pathname === "/stats" || pathname === "/trips" || pathname.startsWith("/trips/");
+  const communityActive = pathname === "/community" || pathname.startsWith("/community/") || pathname.startsWith("/u/") || pathname === "/friends" || pathname === "/nearby" || pathname === "/crew" || /^\/waters\/[^/]+\/chat$/.test(pathname);
+  const profileActive = pathname === "/profile" || pathname === "/profile/social" || pathname === "/settings" || pathname === "/privacy" || pathname === "/notifications" || pathname === "/achievements" || pathname === "/levels" || pathname === "/challenges" || pathname === "/streak" || pathname === "/supporter";
   return (
         <div className={adminRoute ? "layout layout-admin" : pathname === "/gallery" ? "layout layout-gallery" : "layout"}>
       <SyncStatus sync={sync} isOnline={isOnline} compact={sync?.status === "syncing" && sync?.showSyncStatus && compactSyncId === syncPresentationId} />
@@ -63,11 +64,11 @@ function Layout({ children }) {
         <Link to="/add" className="nav-fab" aria-label="Přidat úlovek" aria-current={pathname === "/add" ? "page" : undefined}>
           +
         </Link>
-        <Link to="/trips" className={itemClass(tripsActive)} aria-current={tripsActive ? "page" : undefined}>
-          <span className="nav-icon" aria-hidden="true"><NavIcon name="trips" /></span>
-          <span className="nav-label">Vycházky</span>
+        <Link to="/community" className={itemClass(communityActive)} aria-current={communityActive ? "page" : undefined}>
+          <span className="nav-icon" aria-hidden="true"><NavIcon name="community" /></span>
+          <span className="nav-label">Komunita</span>
         </Link>
-        <Link to="/profile" className={itemClass(pathname === "/profile")} aria-current={pathname === "/profile" ? "page" : undefined}>
+        <Link to="/profile" className={itemClass(profileActive)} aria-current={profileActive ? "page" : undefined}>
           <span className="nav-icon" aria-hidden="true"><NavIcon name="profile" /></span>
           <span className="nav-label">Profil</span>
         </Link>

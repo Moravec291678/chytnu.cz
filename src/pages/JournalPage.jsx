@@ -45,10 +45,11 @@ function JournalPage() {
           <p>{state.catches.length} {pluralize(state.catches.length, ["úlovek", "úlovky", "úlovků"])} · {species.length} {pluralize(species.length, ["druh", "druhy", "druhů"])}</p>
         </div>
       </div>
-      <nav className="journal-tabs" aria-label="Zobrazení deníku">
+      <nav className="journal-tabs" aria-label="Části deníku">
         <span className="journal-tab journal-tab-active" aria-current="page">Seznam</span>
         <Link className="journal-tab" to="/journal/map">Mapa</Link>
         <Link className="journal-tab" to="/journal/calendar">Kalendář</Link>
+        <Link className="journal-tab" to="/trips">Vycházky</Link>
       </nav>
       <div className="journal-controls">
         <label className="journal-favorite-filter"><input type="checkbox" checked={filters.incompleteOnly} onChange={event => setFilter("incompleteOnly", event.target.checked)} /> Doplnit později</label>
