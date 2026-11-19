@@ -46,3 +46,14 @@ Emulator metadata lookup emitted non-fatal `ETIMEDOUT`/`ENOTFOUND` warnings. The
 3. Review compatible fixes for the Firebase CLI development dependency advisories without forcing a downgrade.
 4. Complete emulator and authenticated browser smoke checks.
 5. Do not start Stage 9 or deploy to production.
+
+## Latest audit checkpoint — 2026-11-19
+
+- Authenticated local browser QA used a synthetic account. All 47 reachable routes rendered at 400 px; no page exception or persistent loading state was observed.
+- A synthetic Catch and Trip were created, linked and inspected through Journal, Catch detail, Statistics, Rewards and Trips. Both records were deleted afterward.
+- Guest responsive matrix: 47 routes at 320, 360, 375, 390, 430, 768, 1024, 1280, 1440 and 1920 px (470 route/width checks), with no horizontal overflow or persistent loading state.
+- Fixed the Home fish-activity inactive-state actions touching at desktop width by reusing the compact flex action row; added an SSR regression test.
+- Stabilized a photo upload test that incorrectly required parallel uploads to complete in a fixed order. The exact expected photo IDs remain asserted.
+- Latest validation: `npm test` 1,165/1,165 PASS; lint, build and `git diff --check` PASS; the Stage 8 social Auth/Firestore emulator suite passed 131 checks.
+- Browser limitation: Vite does not serve the Vercel `/api/*` functions. Social/progression browser requests returned local 404s; authenticated browser testing of those API-backed interactions remains unverified.
+- This checkpoint remains local and unpushed; overall audit remains PARTIAL. No production deployment or Stage 9 work was performed.

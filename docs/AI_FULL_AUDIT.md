@@ -57,3 +57,15 @@ Firebase emulators emitted non-fatal metadata lookup warnings (`ETIMEDOUT`/`ENOT
 3. Find a compatible resolution for the 14 development-tool advisories without a forced Firebase CLI downgrade.
 4. Reconcile any further evidence with existing audit documents and tests.
 5. Do not start Stage 9 or deploy to production without explicit approval.
+
+## 2026-11-19 — authenticated and responsive browser QA checkpoint
+
+Status remains **PARTIAL**. This wave did not start Stage 9 or change the overall visual identity.
+
+- Authenticated synthetic account A: 47 routes rendered at the browser's effective 400 px width without page exceptions or persistent loading states. Created a synthetic Catch and Trip, linked them, verified Journal, Catch detail, Statistics, Rewards and Trips, then removed both records.
+- Guest responsive browser matrix: 47 routes × 10 widths (320, 360, 375, 390, 430, 768, 1024, 1280, 1440 and 1920 px) = 470 checks. No horizontal overflow or persistent loading screen was observed. This matrix was guest-only.
+- Confirmed and fixed a 0 px separation between the Home fish-activity detail link and action button at desktop width. The existing compact flex action row now owns both controls; the SSR regression test verifies the shared row and order.
+- Browser `/api/social` and `/api/progression/reconcile` requests returned 404 because Vite does not host this repository's Vercel serverless functions. This is a local harness limitation; it does not establish a production backend failure. Authenticated browser social/API flows remain unverified.
+- No confirmed privacy leak was identified in this wave. Physical iOS/Android testing remains **MANUAL TEST REQUIRED**.
+- Latest validation: unit tests 1,165/1,165, lint, build, `git diff --check`, and the 131-check Stage 8 social Auth/Firestore emulator suite passed.
+- Changes are local and unpushed. Continue with a Vercel-compatible local API/emulator harness for authenticated social browser scenarios, then proceed through remaining unverified modules. Do not deploy or start Stage 9.

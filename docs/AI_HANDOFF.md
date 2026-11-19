@@ -82,3 +82,44 @@ Firebase emulator runs emitted non-fatal metadata lookup warnings (`ETIMEDOUT`/`
 3. Review the 14 development-tool advisories and identify a compatible Firebase CLI dependency path; do not force-downgrade Firebase CLI.
 4. Perform browser smoke checks after the Router v7 upgrade and continue the uncompleted route/module audit.
 5. Keep production deployment, merge, and any push to `main` off-limits without explicit approval.
+
+## Resumed browser QA checkpoint — 2026-11-19
+
+Overall audit remains **PARTIAL**; Stage 8 remains **PASS**. No Stage 9, merge, push, or deployment was performed in this wave.
+
+### Completed
+
+- Authenticated the app with a synthetic Firebase Auth emulator account. Navigated 47 routes at the browser's effective 400 px width; no page exception or persistent loading state was observed.
+- Created a synthetic Catch and Trip, linked them, checked Journal, Catch detail, Statistics, Rewards and Trips, then deleted both test records.
+- Tested 47 guest routes at ten exact widths: 320, 360, 375, 390, 430, 768, 1024, 1280, 1440 and 1920 px (470 route/width checks). No horizontal overflow or persistent loading state was observed.
+- Fixed the Home fish-activity inactive card's touching detail link and button by placing both in the existing responsive compact action row. Added an SSR regression test.
+- Corrected a flaky photo upload test assertion to compare the exact photo IDs rather than relying on nondeterministic parallel completion order.
+
+### Validation
+
+- `npm test`: 1,165/1,165 PASS.
+- `npm run lint`: PASS.
+- `npm run build`: PASS; existing large-chunk warnings remain.
+- `git diff --check`: PASS.
+- Photo cloud service tests: 39/39 PASS; fish-activity regression: 1/1 PASS.
+- Stage 8 Auth/Firestore social emulator suite: 131 checks PASS across six synthetic accounts.
+
+### Limitations and next steps
+
+- The integrated browser remained at 400 px despite viewport requests; only the guest matrix has exact 320–1920 px coverage.
+- Vite does not host Vercel serverless `/api/*` functions. Local social/progression browser requests returned 404; this harness limitation leaves authenticated social browser interactions unverified. Configure a safe Vercel-compatible local API/emulator harness, then exercise A/B/C visibility and mutations through direct API calls and the browser.
+- Physical iOS/Android and installed-PWA service-worker behavior: **MANUAL TEST REQUIRED**.
+- Continue the remaining module audit after API-backed browser coverage; preserve overall PARTIAL until verified. Do not start Stage 9 or deploy.
+
+### Current checkpoint files
+
+- `src/features/home/components/FishActivity.jsx`
+- `src/features/home/components/FishActivity.test.js`
+- `src/features/catches/data/photoCloudService.test.js`
+- `docs/AI_MASTER_PROGRESS.md`
+- `docs/AI_FULL_AUDIT.md`
+- `docs/AI_VISUAL_QA.md`
+- `docs/AI_TEST_EVIDENCE.md`
+- `docs/AI_HANDOFF.md`
+
+The code and documentation changes are confined to `codex/ui-terminology-length-priority`; they have not been pushed or deployed. Check `git log` for the local checkpoint commit.

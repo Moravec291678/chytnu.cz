@@ -379,7 +379,7 @@ test("NotFoundError in one IndexedDB photo Blob is isolated while readable photo
   assert.equal(first.errorCode, "photo_local_blob_unreadable", "reconcile-only failure is surfaced as partial attention, not global fatal error");
   assert.equal(first.needsAttention, true);
   assert.equal(first.uploaded, 2);
-  assert.deepEqual(provider.calls.uploads.map((call) => call.photoId), ["p-a", "p-c"]);
+  assert.deepEqual(provider.calls.uploads.map((call) => call.photoId).sort(), ["p-a", "p-c"]);
   const saved = await catchRepository.get("catch-a-b-c", scope);
   assert.equal(saved.photos[1].localError.code, "photo_local_blob_unreadable");
   assert.equal(saved.photos[1].localError.errorName, "NotFoundError");

@@ -131,14 +131,16 @@ function FishActivity({ detailed = false }) {
           Orientační podmínky podle místního počasí. Poloha se použije jen pro načtení odhadu.
         </p>
 
-        <button
-          className="fish-activity-action"
-          type="button"
-          onClick={enableActivity}
-        >
-          Zobrazit odhad
-        </button>
-        {!detailed && <Link className="fish-activity-detail-link" to="/fish-activity">Jak odhad funguje <span aria-hidden="true">→</span></Link>}
+        <div className={detailed ? "fish-activity-actions" : "fish-activity-actions fish-activity-actions--compact"}>
+          {!detailed && <Link className="fish-activity-detail-link" to="/fish-activity">Jak odhad funguje <span aria-hidden="true">→</span></Link>}
+          <button
+            className="fish-activity-action"
+            type="button"
+            onClick={enableActivity}
+          >
+            Zobrazit odhad
+          </button>
+        </div>
       </section>
     );
   }

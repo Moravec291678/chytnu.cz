@@ -20,3 +20,15 @@ Status: PARTIAL
 - `npm run test:photos`: PASS
 - Guest browser smoke: PASS for core guest routes
 - Physical devices: NOT AVAILABLE
+
+## 2026-11-19 — resumed audit validation
+
+- `npm test`: **1,165/1,165 PASS**. The first run exposed an unrelated ordering assumption in a parallel photo-upload test; isolated execution passed, and the assertion now compares the exact uploaded ID set without assuming completion order. The full suite then passed.
+- `npm run lint`: PASS.
+- `npm run build`: PASS; existing large-chunk warnings remain.
+- `git diff --check`: PASS.
+- `node --test src/features/catches/data/photoCloudService.test.js`: 39/39 PASS.
+- Home fish-activity SSR regression test: 1/1 PASS.
+- Stage 8 social Auth/Firestore emulator integration: 131 checks PASS across six synthetic emulator accounts.
+- Browser: 47 authenticated routes at 400 px; 47 guest routes at each of ten exact widths (470 responsive checks). Browser API routes returned local 404 because the Vite server does not run Vercel functions; authenticated social browser operations remain unverified.
+- No production credentials or real user records were used. Physical mobile device coverage is unavailable.
