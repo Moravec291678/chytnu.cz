@@ -112,6 +112,21 @@ test("deletes only owner A including nested data and queues owned photo before A
   assert.deepEqual(deleted, ["A"]);
 });
 
+test("account deletion recursively removes owned social posts and interaction subcollections", async () => {
+  const { db, service } = fixture({
+    "socialPosts/post-A": { ownerUid: "A", text: "Vlastní příspěvek" },
+    "socialPosts/post-A/comments/comment-B": { ownerUid: "B", text: "Komentář jiného autora" },
+    "socialPosts/post-A/reactions/B": { ownerUid: "B", reaction: "respect" },
+    "socialPosts/post-B": { ownerUid: "B", text: "Příspěvek jiného autora" },
+  });
+  await service.request("A");
+  await drain(service);
+  assert.equal(db.rows.has("socialPosts/post-A"), false);
+  assert.equal(db.rows.has("socialPosts/post-A/comments/comment-B"), false);
+  assert.equal(db.rows.has("socialPosts/post-A/reactions/B"), false);
+  assert.equal(db.rows.has("socialPosts/post-B"), true);
+});
+
 test("account deletion removes AI consent, cached suggestions/drafts and per-user AI quotas while preserving other owners and global quota", async () => {
   const hash = createHash("sha256").update("A").digest("hex");
   const { db, service } = fixture({

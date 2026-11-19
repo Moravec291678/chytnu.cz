@@ -11,6 +11,7 @@
 - Guest browser route smoke passed for the main MVP and community routes; authenticated account flows remain unverified.
 - Security review found no confirmed exploitable vulnerability.
 - Removed the mixed static/dynamic `PublicFishingProfile` import; build verification passed and the mixed-import warning is gone.
+- Fixed account deletion so owned social posts recursively remove comments and reactions while preserving other owners' posts.
 - `npm run test:auth`, `npm run test:sync`, `npm run test:photos` and `npm run test:rules` were rerun for the resume checkpoint; suites passed when run without emulator-instance overlap.
 
 ## Git checkpoint

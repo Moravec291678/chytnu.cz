@@ -232,7 +232,7 @@ try {
   equal((await db.doc(`publicProfiles/${ids.b}`).get()).exists, false);
   equal((await db.doc(commentPath("public", retainedComment)).get()).exists, false);
   equal((await db.doc(`socialPosts/${bPost.id}`).get()).exists, false);
-  equal((await db.doc(`socialPosts/${bPost.id}/comments/${retainedByA}`).get()).exists, true);
+  equal((await db.doc(`socialPosts/${bPost.id}/comments/${retainedByA}`).get()).exists, false);
   await call("a", "interactions.list", { postId: bPost.id }, 404);
   equal((await direct("c", `socialPosts/${bPost.id}/comments/${retainedByA}`)).status, 403);
   equal((await db.doc(`socialPosts/${publicPost.id}`).get()).exists, true);

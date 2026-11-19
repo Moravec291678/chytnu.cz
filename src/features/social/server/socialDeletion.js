@@ -20,8 +20,7 @@ export async function deleteSocialPage(db, uid, pageSize = 50, deleteAvatar) {
     const page = await db.collection(collection).where(field, op, uid).limit(pageSize).get();
     for (const entry of page.docs) {
       if (collection === "socialPosts") {
-        // Child interactions belong to their authors and stay inaccessible without a parent post.
-        await entry.ref.delete();
+        await db.recursiveDelete(entry.ref);
       } else {
         await db.recursiveDelete(entry.ref);
       }

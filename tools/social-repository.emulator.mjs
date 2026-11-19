@@ -71,7 +71,12 @@ try {
   await db.doc(`socialPosts/fixture-${suffix}`).set({ ownerUid: ids.a, text: "Synthetic fixture only" });
   const commentPath = `socialPosts/fixture-${suffix}/comments/comment`;
   await db.doc(commentPath).set({ ownerUid: ids.b, text: "Preserve other owner's post" });
+  await db.doc(`socialPosts/fixture-${suffix}/reactions/${ids.b}`).set({ ownerUid: ids.b, reaction: "respect", createdAt: time });
   await db.doc(`users/${ids.b}/socialReferences/comment`).set({ path: commentPath });
+  const ownedPostId = `owned-${suffix}`;
+  await db.doc(`socialPosts/${ownedPostId}`).set({ ownerUid: ids.b, text: "Deleted account post" });
+  await db.doc(`socialPosts/${ownedPostId}/comments/${ids.a}`).set({ ownerUid: ids.a, text: "Comment to remove" });
+  await db.doc(`socialPosts/${ownedPostId}/reactions/${ids.a}`).set({ ownerUid: ids.a, reaction: "respect", createdAt: time });
   const deletion = createAccountDeletionService({ db, auth, now: () => time, photoDeletion: { enqueue: async () => {} }, pageSize: 2 });
   await deletion.request(ids.b);
   await rejected(() => repo.getProfile(tokens.a, ids.b), "social_unavailable");
@@ -79,6 +84,9 @@ try {
   equal((await db.doc(`publicProfiles/${ids.b}`).get()).exists, false);
   equal((await db.doc(commentPath).get()).exists, false);
   equal((await db.doc(`socialPosts/fixture-${suffix}`).get()).exists, true);
+  equal((await db.doc(`socialPosts/${ownedPostId}`).get()).exists, false);
+  equal((await db.doc(`socialPosts/${ownedPostId}/comments/${ids.a}`).get()).exists, false);
+  equal((await db.doc(`socialPosts/${ownedPostId}/reactions/${ids.a}`).get()).exists, false);
   equal((await db.doc(`publicProfiles/${ids.a}`).get()).exists, true);
   equal((await db.collection("publicHandles").where("uid", "==", ids.b).get()).size, 0);
   equal((await db.doc(`crews/fixture-${suffix}`).get()).data().memberUids, [ids.a]);
