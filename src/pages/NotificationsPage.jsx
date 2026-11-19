@@ -3,10 +3,11 @@ import { Link, useNavigate } from "react-router-dom";
 import { useDataScope } from "../features/auth/context/dataScopeContextValue.js";
 import { useNotifications } from "../features/notifications/context/notificationContextValue.js";
 import { useOptionalSync } from "../features/sync/context/syncContextValue.js";
-import { normalizeNotificationDeepLink } from "../features/notifications/data/notificationModel.js";
+import { normalizeNotificationDeepLink, normalizeSocialNotificationPreferences } from "../features/notifications/data/notificationModel.js";
+import { notificationRepository } from "../features/notifications/data/notificationRepository.js";
 import { readPreferences, savePreferences } from "../features/preferences/data/preferences.js";
 import { getNotificationAdapter } from "../platform/notifications/index.js";
-import { NOTIFICATION_PREFERENCES, NOTIFICATION_TYPE_PRESENTATION } from "../product/config/notifications.js";
+import { NOTIFICATION_PREFERENCES, NOTIFICATION_TYPE_PRESENTATION, SOCIAL_NOTIFICATION_PREFERENCES } from "../product/config/notifications.js";
 import Layout from "../shared/layout/Layout";
 import "./NotificationsPage.css";
 
@@ -35,10 +36,28 @@ export default function NotificationsPage() {
   const sync = useOptionalSync();
   const [preferenceOverride, setPreferenceOverride] = useState({ scopeKey: null, value: null });
   const [preferenceError, setPreferenceError] = useState("");
+  const [socialPreferenceState, setSocialPreferenceState] = useState({ scopeKey: null, value: null, saving: false, loadError: false });
   const [pushState, setPushState] = useState(initialPushState);
   const preferences = preferenceOverride.value && preferenceOverride.scopeKey === scope.scopeKey
     ? preferenceOverride.value
     : readPreferences(globalThis.localStorage, scope.scopeKey);
+  const socialPreferences = socialPreferenceState.scopeKey === scope.scopeKey
+    ? normalizeSocialNotificationPreferences(socialPreferenceState.value)
+    : normalizeSocialNotificationPreferences();
+
+  useEffect(() => {
+    let active = true;
+    if (scope.status !== "ready") return () => { active = false; };
+    if (!scope.ownerId) return () => { active = false; };
+    notificationRepository.getSocialPreferences({ scopeKey: scope.scopeKey, ownerId: scope.ownerId }).then(value => {
+      if (active) setSocialPreferenceState({ scopeKey: scope.scopeKey, value, saving: false, loadError: false });
+    }).catch(() => {
+      if (!active) return;
+      setSocialPreferenceState({ scopeKey: scope.scopeKey, value: null, saving: false, loadError: true });
+      setPreferenceError("Sociální preference se nepodařilo načíst. Zkontroluj připojení a otevři nastavení znovu.");
+    });
+    return () => { active = false; };
+  }, [scope.ownerId, scope.scopeKey, scope.status]);
 
   useEffect(() => {
     let active = true;
@@ -76,6 +95,21 @@ export default function NotificationsPage() {
       setPreferenceError("");
     } catch (saveError) {
       setPreferenceError(saveError.message);
+    }
+  }
+
+  async function toggleSocial(key, checked) {
+    if (!scope.ownerId || socialPreferenceState.scopeKey !== scope.scopeKey || socialPreferenceState.saving || socialPreferenceState.loadError) return;
+    const previous = socialPreferences;
+    const next = { ...previous, [key]: checked };
+    setSocialPreferenceState({ scopeKey: scope.scopeKey, value: next, saving: true, loadError: false });
+    setPreferenceError("");
+    try {
+      const saved = await notificationRepository.saveSocialPreferences(next, { scopeKey: scope.scopeKey, ownerId: scope.ownerId });
+      setSocialPreferenceState({ scopeKey: scope.scopeKey, value: saved, saving: false, loadError: false });
+    } catch (error) {
+      setSocialPreferenceState({ scopeKey: scope.scopeKey, value: previous, saving: false, loadError: false });
+      setPreferenceError(error?.message || "Sociální preference se nepodařilo synchronizovat.");
     }
   }
 
@@ -144,6 +178,17 @@ export default function NotificationsPage() {
         <details className="notifications-preferences" id="preferences">
           <summary>Preference oznámení</summary>
           <p className="notifications-preferences-intro">Ukládají se pro tento profil a vyjadřují zájem o jednotlivá témata.</p>
+          <h3>Sociální události</h3>
+          <p className="notifications-preferences-intro">Tyto volby se synchronizují mezi zařízeními. Oznámení zobrazují jen stručnou informaci a neobsahují soukromý obsah.</p>
+          {SOCIAL_NOTIFICATION_PREFERENCES.map(option => <label className="notification-option" key={option.key}>
+            <span className="notification-copy"><strong>{option.title}</strong><small>{option.description}</small></span>
+            <input type="checkbox" role="switch" checked={socialPreferences[option.key]}
+              disabled={!scope.ownerId || scope.status !== "ready" || socialPreferenceState.scopeKey !== scope.scopeKey || socialPreferenceState.saving || socialPreferenceState.loadError}
+              onChange={event => void toggleSocial(option.key, event.target.checked)} />
+          </label>)}
+          {scope.ownerId && socialPreferenceState.scopeKey !== scope.scopeKey && <p className="notifications-preferences-intro" role="status">Načítám synchronizované preference…</p>}
+          {!scope.ownerId && <p className="notifications-preferences-intro">Synchronizované sociální preference jsou dostupné po přihlášení.</p>}
+          <h3>Ostatní preference</h3>
           <div className="notifications-list" aria-label="Preference oznámení">
             {NOTIFICATION_PREFERENCES.map((option) => (
               <label className="notification-option" key={option.key}>
@@ -158,10 +203,10 @@ export default function NotificationsPage() {
         <section className="web-push-settings" aria-labelledby="web-push-title">
             <div>
               <strong id="web-push-title">Push oznámení</strong>
-              <p>{pushState.subscribed ? "Push oznámení jsou pro tento účet zapnutá." : pushState.support?.available ? "Doručení upozornění i mimo otevřenou aplikaci." : pushState.support?.reason || "Kontroluji podporu prohlížeče…"}</p>
+              <p>{pushState.subscribed ? "Toto zařízení je přihlášené k push oznámením, ale jejich odesílání z aplikace zatím není aktivní." : pushState.support?.available ? "Push doručování zatím není aktivní; události najdeš v oznámeních aplikace." : pushState.support?.reason || "Kontroluji podporu prohlížeče…"}</p>
             </div>
-            {scope.ownerId && <button type="button" className="web-push-toggle" onClick={() => void toggleWebPush()} disabled={pushState.busy || pushState.permission === "denied" || !pushState.support?.available}>
-              {pushState.busy ? "Nastavuji…" : pushState.subscribed ? "Vypnout oznámení" : "Zapnout oznámení"}
+            {scope.ownerId && <button type="button" className="web-push-toggle" onClick={() => void toggleWebPush()} disabled={pushState.busy || pushState.permission === "denied" || !pushState.support?.available || !pushState.subscribed}>
+              {pushState.busy ? "Nastavuji…" : pushState.subscribed ? "Vypnout oznámení" : "Push doručování není aktivní"}
             </button>}
             {scope.ownerId && !pushState.support?.available && pushState.support?.reason && <p className="web-push-unavailable">{pushState.support.reason}</p>}
             {!scope.ownerId && <p className="web-push-unavailable">Push oznámení vyžadují přihlášený účet.</p>}

@@ -1,8 +1,14 @@
 import { validateDataScope } from "../../auth/data/localDataScope.js";
-import { NOTIFICATION_COPY, NOTIFICATION_TYPES } from "../../../product/config/notifications.js";
+import { NOTIFICATION_COPY, NOTIFICATION_TYPES, SOCIAL_NOTIFICATION_PREFERENCES } from "../../../product/config/notifications.js";
 import { PRODUCT_LIMITS } from "../../../product/config/limits.js";
 
 export { NOTIFICATION_TYPES } from "../../../product/config/notifications.js";
+
+export function normalizeSocialNotificationPreferences(value = {}) {
+  return Object.fromEntries(SOCIAL_NOTIFICATION_PREFERENCES.map(({ key, defaultEnabled }) => [
+    key, typeof value?.[key] === "boolean" ? value[key] : defaultEnabled,
+  ]));
+}
 
 export function normalizeNotificationDeepLink(value) {
   if (typeof value !== "string") return null;

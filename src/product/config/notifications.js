@@ -37,3 +37,10 @@ export const NOTIFICATION_PREFERENCES = Object.freeze([
   { key: "streaksAndChallenges", title: "Série a výzvy", description: "Preference pro připomenutí série a výzev.", defaultEnabled: true },
   { key: "friendLegendaryCatch", title: "Výjimečný úlovek přítele", description: "Preference pro výjimečné úlovky přátel.", defaultEnabled: false },
 ]);
+
+export const SOCIAL_NOTIFICATION_PREFERENCES = Object.freeze([
+  { key: "friendRequests", title: "Žádosti o přátelství", description: "Nová žádost nebo přijetí žádosti.", defaultEnabled: true },
+  { key: "reactions", title: "Reakce na příspěvky", description: "Když někdo zareaguje na tvůj příspěvek.", defaultEnabled: true },
+  { key: "comments", title: "Komentáře k příspěvkům", description: "Když někdo okomentuje tvůj příspěvek.", defaultEnabled: true },
+  { key: "moderation", title: "Důležité zprávy moderace", description: "Informace o rozhodnutí týkajícím se tvého obsahu.", defaultEnabled: true },
+]);

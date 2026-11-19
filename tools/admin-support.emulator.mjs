@@ -84,6 +84,10 @@ try {
   await call("owner", "moderation.set", { uid: users.user, catchId: "public-fixture", hidden: true, reason: "Synthetic public moderation", expectedRevision: 0 });
   assert.equal((await db.doc(`users/${users.user}/catches/public-fixture`).get()).data().deleted, false);
   assert.ok((await db.collection(`users/${users.user}/notifications`).get()).docs.some(doc => doc.data().type === "support"));
+  const notificationCount = (await db.collection(`users/${users.user}/notifications`).get()).size;
+  await db.doc(`users/${users.user}/notificationPreferences/social`).set({ ownerId: users.user, moderation: false });
+  await call("owner", "moderation.set", { uid: users.user, catchId: "public-fixture", hidden: false, reason: "Synthetic restore", expectedRevision: 1 });
+  assert.equal((await db.collection(`users/${users.user}/notifications`).get()).size, notificationCount);
   const page = await call("owner", "users.list", { search: users.user }); assert.equal(page.users[0].uid, users.user);
   let indexed = await call("owner", "users.index");
   while (!indexed.complete) indexed = await call("owner", "users.index");

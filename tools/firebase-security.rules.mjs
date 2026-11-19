@@ -7,7 +7,7 @@ import {
   assertSucceeds,
   initializeTestEnvironment,
 } from "@firebase/rules-unit-testing";
-import { collection, deleteDoc, doc, getDoc, getDocs, query, setDoc, updateDoc, where, writeBatch } from "firebase/firestore";
+import { collection, deleteDoc, doc, getDoc, getDocs, query, serverTimestamp, setDoc, updateDoc, where, writeBatch } from "firebase/firestore";
 
 const projectId = "demo-chytnucz-local";
 const catchPath = (userId, catchId) => `users/${userId}/catches/${catchId}`;
@@ -376,6 +376,18 @@ test("notification inbox je owner-scoped a vlastní oznámení lze pouze označi
   await assertFails(setDoc(doc(bobDb, notificationPath("angler-a", "spoofed")), {
     ...notification, id: "spoofed", ownerId: "angler-a",
   }));
+});
+
+test("sociální preference oznámení může číst a měnit pouze jejich účet ve validovaném tvaru", async () => {
+  const path = "users/angler-a/notificationPreferences/social";
+  const value = { ownerId: "angler-a", friendRequests: true, reactions: false, comments: true, moderation: false, updatedAt: serverTimestamp() };
+  await assertSucceeds(setDoc(doc(alice.firestore(), path), value));
+  assert.equal((await assertSucceeds(getDoc(doc(alice.firestore(), path)))).data().reactions, false);
+  await assertSucceeds(updateDoc(doc(alice.firestore(), path), { reactions: true, updatedAt: serverTimestamp() }));
+  await assertFails(getDoc(doc(bob.firestore(), path)));
+  await assertFails(setDoc(doc(bob.firestore(), path), { ...value, ownerId: "angler-a" }));
+  await assertFails(setDoc(doc(alice.firestore(), "users/angler-a/notificationPreferences/other"), value));
+  await assertFails(setDoc(doc(alice.firestore(), path), { ...value, reactions: "true", updatedAt: serverTimestamp() }));
 });
 
 test("Web Push subscription je owner-scoped a přijímá pouze omezený endpoint a klíče", async () => {

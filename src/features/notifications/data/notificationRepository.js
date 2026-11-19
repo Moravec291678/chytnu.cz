@@ -1,6 +1,6 @@
 import { validateDataScope } from "../../auth/data/localDataScope.js";
 import { NOTIFICATION_STORE_NAME, openLocalDatabase } from "../../catches/data/catchRepository.js";
-import { createNotificationRecord, mergeNotificationReadState, sortNotificationsNewestFirst } from "./notificationModel.js";
+import { createNotificationRecord, mergeNotificationReadState, normalizeSocialNotificationPreferences, sortNotificationsNewestFirst } from "./notificationModel.js";
 
 const loadNotificationFirestore = () => import("./notificationFirestore.js").then((module) => module.notificationFirestore);
 
@@ -125,6 +125,52 @@ export function createNotificationRepository({ openDatabase = openLocalDatabase,
   }
 
   return Object.freeze({
+    async getSocialPreferences(scopeOptions) {
+      const scope = validateDataScope(scopeOptions ?? {});
+      if (!scope.ownerId || !remoteEnabled) return normalizeSocialNotificationPreferences();
+      const remoteStore = await resolveRemote();
+      return remoteStore?.getSocialPreferences
+        ? normalizeSocialNotificationPreferences(await remoteStore.getSocialPreferences(scope.ownerId))
+        : normalizeSocialNotificationPreferences();
+    },
+
+    async saveSocialPreferences(value, scopeOptions) {
+      const scope = validateDataScope(scopeOptions ?? {});
+      if (!scope.ownerId || !remoteEnabled) throw new Error("Přihlášení je potřeba pro synchronizaci preferencí oznámení.");
+      const remoteStore = await resolveRemote();
+      if (!remoteStore?.saveSocialPreferences) throw new Error("Synchronizace preferencí oznámení není dostupná.");
+      return normalizeSocialNotificationPreferences(await remoteStore.saveSocialPreferences(scope.ownerId,
+        normalizeSocialNotificationPreferences(value)));
+    },
+
+    async subscribe(scopeOptions, onRecords, onError = () => {}) {
+      const scope = validateDataScope(scopeOptions ?? {});
+      if (!scope.ownerId || !remoteEnabled || typeof onRecords !== "function") return () => {};
+      let remoteStore;
+      try { remoteStore = await resolveRemote(); } catch { return () => {}; }
+      if (!remoteStore?.subscribe) return () => {};
+      let disposed = false;
+      let queue = Promise.resolve();
+      let unsubscribe = () => {};
+      try {
+        unsubscribe = remoteStore.subscribe(scope.ownerId, records => {
+          queue = queue.then(async () => {
+            const byId = new Map((await localList(scope)).map(record => [record.id, record]));
+            for (const remoteRecord of records.filter(record => record?.ownerId === scope.ownerId)) {
+              try {
+                const normalized = createNotificationRecord(remoteRecord, scope);
+                byId.set(normalized.id, await localPut({
+                  ...mergeNotificationReadState(byId.get(normalized.id), normalized), remoteSyncStatus: "synced",
+                }));
+              } catch { /* Ignore malformed records instead of exposing them in the inbox. */ }
+            }
+            if (!disposed) onRecords(sortNotificationsNewestFirst([...byId.values()]));
+          }).catch(error => { if (!disposed) onError(error); });
+        }, error => { if (!disposed) onError(error); });
+      } catch (error) { onError(error); }
+      return () => { disposed = true; unsubscribe(); };
+    },
+
     async create(input, scopeOptions) {
       const scope = validateDataScope(scopeOptions ?? {});
       const normalized = createNotificationRecord(input, scope);

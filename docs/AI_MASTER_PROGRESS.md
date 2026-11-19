@@ -79,3 +79,12 @@ Latest owner instructions authorize the verified main release and supersede the 
 Implemented: obsolete species/standalone diary inference removed; journal stories and tips retained. Server-owned version-1 publication consent, epochs/CAS, private-mode revocation, no historical auto-publication, bounded idempotent new-catch publication with deferred-photo pagination. New profile public presets require meaningful confirmation. Local privacy switch now links to authoritative social settings. Fixed local API restart authentication and current-shell offline cache selection. No billing, source-data migration or Stage 9.
 
 Release gate and production result are recorded in the final release checkpoint. Whole-application audit remains PARTIAL. Next audit item: review the deterministic Home fallback that displays the literal generic method label when no method is known; do not invent diary evidence.
+
+## Stage 9 — social notifications checkpoint — 2026-11-19
+
+- Stage 9 in-app notifications: **PASS**. Friend requests/acceptances, first reactions per actor/post, new comments, and existing moderation notices use the existing owner-scoped inbox.
+- Social events are committed with their authorized relationship/post mutation; stable IDs, generic private-safe copy, block checks, server-read preferences, and idempotency prevent spoofing and notification storms.
+- Inbox updates across devices through a bounded Firestore subscription (latest 250). Social notification preferences are stored per account and restricted by Firestore Rules. Browser push delivery for social events remains unconnected and is not claimed as active.
+- Verification: full unit suite 1,162/1,162; lint/build/product/photo/diff checks PASS. Auth emulator PASS; sync emulator PASS; full rules/social emulator suite PASS. Focused evidence: rules 22 tests; admin support 50 checks; friendships 129 checks; interactions 136 checks.
+- Production Firebase rules were not deployed: `.firebaserc` names only the demo emulator project. Do not deploy to a guessed project. Vercel deployment is pending.
+- Next: Stage 10 Nearby privacy and presence. Do not start later stages before review and verification.

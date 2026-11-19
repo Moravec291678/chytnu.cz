@@ -145,12 +145,15 @@ try {
   ]);
   equal(reactionRace[0].counts.respect + reactionRace[1].counts.respect, 2);
   equal((await call("b", "interactions.list", { postId: publicPost.id })).counts.respect, 1);
+  equal((await db.collection(`users/${ids.a}/notifications`).where("title", "==", "Nová reakce").get()).size, 1);
   await call("b", "reactions.set", { postId: publicPost.id, kind: "trophy", operationId: op() });
+  equal((await db.collection(`users/${ids.a}/notifications`).where("title", "==", "Nová reakce").get()).size, 1);
   let summary = await call("a", "interactions.list", { postId: publicPost.id });
   equal(summary.counts.respect, 0); equal(summary.counts.trophy, 1); equal(summary.myReaction, null);
   await call("b", "reactions.set", { postId: publicPost.id, kind: null, operationId: op() });
   summary = await call("a", "interactions.list", { postId: publicPost.id });
   equal(summary.counts.trophy, 0);
+  await db.doc(`users/${ids.a}/notificationPreferences/social`).set({ ownerId: ids.a, friendRequests: true, reactions: false, comments: true, moderation: true });
   const concurrent = await Promise.all([
     call("b", "reactions.set", { postId: publicPost.id, kind: "respect", operationId: op() }),
     call("c", "reactions.set", { postId: publicPost.id, kind: "atmosphere", operationId: op() }),
@@ -158,10 +161,13 @@ try {
   equal(concurrent.length, 2);
   summary = await call("a", "interactions.list", { postId: publicPost.id });
   equal(summary.counts.respect, 1); equal(summary.counts.atmosphere, 1);
+  equal((await db.collection(`users/${ids.a}/notifications`).where("title", "==", "Nová reakce").get()).size, 1);
 
   const xssComment = randomUUID();
   const xssText = '<script>alert("x")</script>';
   const savedComment = await call("b", "comments.save", { postId: publicPost.id, commentId: xssComment, text: xssText, expectedRevision: 0 });
+  equal((await db.collection(`users/${ids.a}/notifications`).where("title", "==", "Nový komentář").get()).size, 1);
+  await db.doc(`users/${ids.a}/notificationPreferences/social`).set({ ownerId: ids.a, friendRequests: true, reactions: false, comments: false, moderation: true });
   equal(savedComment.comment.text, xssText);
   await call("b", "comments.save", { postId: publicPost.id, commentId: randomUUID(), text: "x".repeat(501), expectedRevision: 0 }, 400);
   await call("b", "comments.save", { postId: publicPost.id, commentId: randomUUID(), text: "   ", expectedRevision: 0 }, 400);
@@ -176,6 +182,7 @@ try {
   await call("c", "comments.delete", { postId: publicPost.id, commentId: xssComment, expectedRevision: 1 }, 404);
   const cComment = randomUUID();
   await call("c", "comments.save", { postId: publicPost.id, commentId: cComment, text: "Komentář od C", expectedRevision: 0 });
+  equal((await db.collection(`users/${ids.a}/notifications`).where("title", "==", "Nový komentář").get()).size, 1);
   await call("c", "comments.delete", { postId: publicPost.id, commentId: cComment, expectedRevision: 1 });
   const viewedByA = await call("a", "interactions.list", { postId: publicPost.id });
   equal(viewedByA.comments.some(comment => comment.id === xssComment), true);

@@ -69,6 +69,27 @@ export function NotificationProvider({ children }) {
   }, [refresh, scope.scopeKey, scope.status]);
 
   useEffect(() => {
+    if (scope.status !== "ready" || !scope.ownerId) return undefined;
+    let active = true;
+    let unsubscribe = () => {};
+    notificationRepository.subscribe({ scopeKey: scope.scopeKey, ownerId: scope.ownerId }, records => {
+      if (!active) return;
+      setState(previous => previous.scopeKey === scope.scopeKey
+        ? { ...previous, notifications: mergeNotificationList(previous.notifications, records), loading: false, error: "" }
+        : previous);
+    }, error => {
+      if (!active) return;
+      setState(previous => previous.scopeKey === scope.scopeKey
+        ? { ...previous, loading: false, error: userFacingErrorMessage(error, "Oznámení se nepodařilo synchronizovat.") }
+        : previous);
+    }).then(stop => {
+      if (active) unsubscribe = stop;
+      else stop();
+    }).catch(() => {});
+    return () => { active = false; unsubscribe(); };
+  }, [scope.ownerId, scope.scopeKey, scope.status]);
+
+  useEffect(() => {
     if (scope.status !== "ready" || progression.loading) return;
     const currentEvents = progression.events ?? [];
     const tracker = seenProgressionRef.current;

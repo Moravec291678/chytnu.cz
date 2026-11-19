@@ -99,6 +99,7 @@ try {
   equal(await listed("a", "friends", "b"), false); equal(await listed("b", "friends", "a"), false);
   await deniedInteraction("a", "b", true);
   await act("a", "c", "request");
+  equal((await db.collection(`users/${ids.c}/notifications`).where("title", "==", "Nová žádost o přátelství").get()).size, 1);
   await act("c", "a", "cancel", {}, 400);
   equal((await act("c", "a", "reject")).relationship.status, "rejected");
   await act("a", "c", "request", {}, 409);
@@ -106,7 +107,9 @@ try {
   await call("a", "block", { targetUid: ids.c, blocked: false });
   await act("a", "c", "request", {}, 409); // Cannot bypass rejection cooldown by block/unblock.
   time += 25 * 60 * 60_000; // Rejection anti-harassment cooldown, no wall-clock sleeping.
+  await db.doc(`users/${ids.c}/notificationPreferences/social`).set({ ownerId: ids.c, friendRequests: false });
   await act("a", "c", "request");
+  equal((await db.collection(`users/${ids.c}/notifications`).where("title", "==", "Nová žádost o přátelství").get()).size, 1);
   const cancelId = op(); equal((await act("a", "c", "cancel", { operationId: cancelId })).relationship.status, "cancelled");
   equal((await act("a", "c", "cancel", { operationId: cancelId })).relationship.status, "cancelled");
   // Concurrent reversed requests share exactly one canonical pair, never auto-accept.

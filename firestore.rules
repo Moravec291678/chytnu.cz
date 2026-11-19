@@ -342,6 +342,22 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    match /users/{userId}/notificationPreferences/{preferenceId} {
+      allow get: if signedInAs(userId) && preferenceId == 'social';
+      allow list: if false;
+      allow create, update: if signedInAs(userId)
+        && preferenceId == 'social'
+        && request.resource.data.keys().hasAll(['ownerId', 'friendRequests', 'reactions', 'comments', 'moderation', 'updatedAt'])
+        && request.resource.data.keys().hasOnly(['ownerId', 'friendRequests', 'reactions', 'comments', 'moderation', 'updatedAt'])
+        && request.resource.data.ownerId == userId
+        && request.resource.data.friendRequests is bool
+        && request.resource.data.reactions is bool
+        && request.resource.data.comments is bool
+        && request.resource.data.moderation is bool
+        && request.resource.data.updatedAt == request.time;
+      allow delete: if signedInAs(userId) && preferenceId == 'social';
+    }
+
     match /users/{userId}/pushSubscriptions/{subscriptionId} {
       allow get, list: if signedInAs(userId);
       allow create, update: if signedInAs(userId)

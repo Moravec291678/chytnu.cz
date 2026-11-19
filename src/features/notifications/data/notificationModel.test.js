@@ -2,11 +2,17 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   createNotificationRecord, mergeNotificationReadState, normalizeNotificationDeepLink,
-  progressionNotificationInput, sortNotificationsNewestFirst, stableNotificationId,
+  normalizeSocialNotificationPreferences, progressionNotificationInput, sortNotificationsNewestFirst, stableNotificationId,
 } from "./notificationModel.js";
 
 const scope = { scopeKey: "guest:notice-test", ownerId: null };
 const now = new Date("2026-10-28T10:00:00.000Z");
+
+test("social notification preferences default on, accept boolean overrides and ignore unknown keys", () => {
+  assert.deepEqual(normalizeSocialNotificationPreferences(), { friendRequests: true, reactions: true, comments: true, moderation: true });
+  assert.deepEqual(normalizeSocialNotificationPreferences({ reactions: false, unrelated: true, comments: "false" }),
+    { friendRequests: true, reactions: false, comments: true, moderation: true });
+});
 
 test("notification model validates data and binds records to the active scope", () => {
   const notification = createNotificationRecord({

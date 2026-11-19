@@ -243,19 +243,29 @@ export function createSocialRepository({ db, auth, now = () => Date.now(), profi
         const notify = transition.eventType && transition.eventType !== "removed"
           && (!Number.isSafeInteger(notificationTimes[transition.eventType]) || stamp - notificationTimes[transition.eventType] >= 10 * 60_000);
         if (notify) notificationTimes[transition.eventType] = stamp;
+        let notificationRef = null, notificationRecord = null;
+        if (notify) {
+          const recipient = transition.eventType === "requested" ? targetUid : transition.record.requestedBy;
+          const preference = (await tx.get(db.doc(`users/${recipient}/notificationPreferences/social`))).data();
+          if (preference?.friendRequests !== false) {
+            const id = `friend_${createHash("sha256").update(pair).digest("hex").slice(0,32)}_${transition.record.revision}_${transition.eventType}`;
+            notificationRef = db.doc(`users/${recipient}/notifications/${id}`);
+            const existingNotification = await tx.get(notificationRef);
+            if (!existingNotification.exists) {
+              const notification = createNotificationRecord({ id, type: "social",
+                title: transition.eventType === "requested" ? "Nová žádost o přátelství" : "Žádost o přátelství byla přijata",
+                body: "Aktuální propojení s rybáři najdeš v přehledu Přátelé.", deepLink: "/friends" },
+              { ownerId: recipient, scopeKey: `account:${recipient}` }, { now: new Date(stamp) });
+              notificationRecord = { ...notification }; delete notificationRecord.scopeKey;
+            }
+          }
+        }
         const record = { ...transition.record, rejectedUntil: transition.record.status === "rejected" ? stamp + 24*60*60_000 : rejectedUntil, notificationTimes, ...(snapshots ? { identitySnapshots: snapshots } : {}) };
         commitLimit(); tx.set(ref, record);
         if (receipt) tx.create(receipt, { pair, operation: action, createdAt: stamp });
         if (transition.eventType) {
           tx.set(ref.collection("events").doc(`latest${transition.eventType}`), { type: transition.eventType, revision: record.revision, actorUid: uid, targetUid, createdAt: stamp });
-          if (notify) {
-            const recipient = transition.eventType === "requested" ? targetUid : record.requestedBy;
-            const id = `friend_${createHash("sha256").update(pair).digest("hex").slice(0,32)}_${record.revision}_${transition.eventType}`;
-            const notification = createNotificationRecord({ id, type: "social", title: transition.eventType === "requested" ? "Nová žádost o přátelství" : "Pozvání bylo přijato",
-              body: "Aktuální propojení s rybáři najdeš v přehledu Přátelé.", deepLink: "/friends" }, { ownerId: recipient, scopeKey: `account:${recipient}` }, { now: new Date(stamp) });
-            const stored = { ...notification }; delete stored.scopeKey;
-            tx.set(db.doc(`users/${recipient}/notifications/${id}`), stored);
-          }
+          if (notificationRef && notificationRecord) tx.create(notificationRef, notificationRecord);
         }
         return record;
       });

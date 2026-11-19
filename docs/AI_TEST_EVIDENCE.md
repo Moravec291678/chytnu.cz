@@ -67,3 +67,11 @@ Browser evidence: the community post composer stayed disabled until public conse
 - Production deployed from GitHub `main`; Vercel reported READY for commit `1a85e3216be512d969bd7d13f12a2f3e8779b880`. Production homepage returned HTTP 200 with the ChytnuCz shell. Anonymous POST to `/api/ai/journal` was rejected with HTTP 401; no inference or customer data was used.
 - Authenticated emulator/browser work used synthetic accounts. AI provider inference and live Cloudinary media delivery were not tested. Full offline PWA reopen produced an inconclusive blank browser view and remains **MANUAL TEST REQUIRED**; no local storage or photo queue was cleared. Physical iOS/Android validation is also **MANUAL TEST REQUIRED**.
 - The broader application audit remains PARTIAL. No Firebase Rules deploy, paid-service activation, or Stage 9 work occurred.
+
+## Stage 9 social notifications — 2026-11-19
+
+- `npm test`: 1,162/1,162 PASS; `npm run lint`, `npm run build` (Cloudinary secret scan included), `npm run product`, `npm run test:photos`, `npm run test:auth`, `npm run test:sync`, `npm run test:rules`, and `git diff --check`: PASS.
+- Rules emulator: 22 tests PASS, including owner-only reads/writes and strict social preference schema. Full social rules suite exited 0.
+- Cross-account Auth/Firestore: friendships 129 checks PASS; social interactions 136 checks PASS; admin moderation 50 checks PASS. These cover deduplication, preferences, recipient privacy and forged cross-account writes.
+- Unit tests cover preference defaults/normalization, cross-device notification updates, read-state merge and unsubscribe cleanup.
+- Production Firestore rules deployment not performed because only the local demo project is configured. Physical device and authenticated browser multi-account acceptance remain unverified.

@@ -192,12 +192,21 @@ export function createAdminSupportService({ db, auth, ownerUid, actor, permit, t
   async function moderate(input, identity) {
     return transaction(identity, "moderation", async (tx, access, audit) => {
       void access;
-      const [record, current] = await Promise.all([tx.get(db.doc(`users/${input.uid}/catches/${input.catchId}`)), tx.get(moderationRef(input.uid, input.catchId))]);
+      const [record, current, notificationPreferences] = await Promise.all([
+        tx.get(db.doc(`users/${input.uid}/catches/${input.catchId}`)), tx.get(moderationRef(input.uid, input.catchId)),
+        tx.get(db.doc(`users/${input.uid}/notificationPreferences/social`)),
+      ]);
       check(record.exists && !record.data().deleted && record.data().privacy?.visibility === "public", "public_content_required", 400);
       const previous = row(current); check(rev(previous) === input.expectedRevision, "revision_conflict", 409);
       tx.set(moderationRef(input.uid, input.catchId), { targetUid: input.uid, catchId: input.catchId, hidden: input.hidden, reason: input.reason, revision: rev(previous) + 1, updatedAt: at(), actorUid: identity.uid });
-      const notification = createNotificationRecord({ id: `support_${randomUUID()}`, type: "support", title: input.hidden ? "Veřejné zobrazení úlovku bylo skryté" : "Veřejné zobrazení úlovku bylo obnovené", body: `Důvod: ${input.reason.slice(0, 200)}. Osobní záznam ani fotografie nebyly smazány.`, deepLink: "/privacy" }, { ownerId: input.uid, scopeKey: `account:${input.uid}` }, { now: new Date(now()) });
-      tx.set(db.doc(`users/${input.uid}/notifications/${notification.id}`), notification);
+      if (notificationPreferences.data()?.moderation !== false) {
+        const notification = createNotificationRecord({ id: `support_${randomUUID()}`, type: "support",
+          title: input.hidden ? "Veřejné zobrazení úlovku bylo skryté" : "Veřejné zobrazení úlovku bylo obnovené",
+          body: "Moderátor změnil stav veřejného zobrazení. Osobní záznam ani fotografie nebyly smazány.", deepLink: "/privacy" },
+        { ownerId: input.uid, scopeKey: `account:${input.uid}` }, { now: new Date(now()) });
+        const stored = { ...notification }; delete stored.scopeKey;
+        tx.set(db.doc(`users/${input.uid}/notifications/${notification.id}`), stored);
+      }
       audit(input.hidden ? "moderation.hide" : "moderation.restore", input.uid, [input.catchId]); return { hidden: input.hidden };
     });
   }

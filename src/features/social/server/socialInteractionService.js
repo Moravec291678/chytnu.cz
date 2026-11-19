@@ -5,6 +5,7 @@ import { interactionInput, REACTION_KINDS } from "../data/socialInteractionModel
 import { assertSocialInteraction } from "./socialAccess.js";
 import { interactionCounts, changeInteractionCounts, interactionReferenceId } from "./socialInteractionCounters.js";
 import { configuredCoCreatorUid, configuredOwnerUid } from "../../admin/server/adminAccess.js";
+import { createNotificationRecord } from "../../notifications/data/notificationModel.js";
 const fail = (code = "post_unavailable") => { throw new Error(code); };
 export function createSocialInteractionService({ db, publications, cursors, env = {}, now = () => Date.now() }) {
   function viewer(uid) { if (!uid) fail("authentication_required"); socialUid(uid); }
@@ -26,6 +27,22 @@ export function createSocialInteractionService({ db, publications, cursors, env 
     return () => refs.forEach((ref, index) => tx.set(ref, values[index]));
   }
   function reference(tx, uid, path) { tx.set(db.doc(`users/${uid}/socialReferences/${interactionReferenceId(path)}`), { path }); }
+  async function socialNotification(tx, { recipientUid, actorUid, kind, eventId, postId, stamp }) {
+    if (!recipientUid || recipientUid === actorUid) return null;
+    const preferenceRef = db.doc(`users/${recipientUid}/notificationPreferences/social`);
+    const notificationId = `social_${kind}_${createHash("sha256").update(`${recipientUid}/${actorUid}/${eventId}`).digest("hex").slice(0, 36)}`;
+    const notificationRef = db.doc(`users/${recipientUid}/notifications/${notificationId}`);
+    const [preferences, existing] = await Promise.all([tx.get(preferenceRef), tx.get(notificationRef)]);
+    if (preferences.data()?.[kind] === false || existing.exists) return null;
+    const copy = kind === "reactions"
+      ? { title: "Nová reakce", body: "Někdo reagoval na tvůj příspěvek." }
+      : { title: "Nový komentář", body: "Někdo okomentoval tvůj příspěvek." };
+    const record = createNotificationRecord({ id: notificationId, type: "social", ...copy,
+      createdAt: new Date(stamp).toISOString(), deepLink: `/community/post/${postId}` },
+    { ownerId: recipientUid, scopeKey: `account:${recipientUid}` }, { now: new Date(stamp) });
+    const stored = { ...record }; delete stored.scopeKey;
+    return { ref: notificationRef, record: stored };
+  }
   async function author(tx, uid) {
     const profile = (await tx.get(db.doc(`publicProfiles/${uid}`))).data();
     if (profile?.uid !== uid) fail("save_profile_first");
@@ -52,13 +69,19 @@ export function createSocialInteractionService({ db, publications, cursors, env 
         }
         const commitQuota = await quota(tx, uid, "reaction");
         const previous = !old?.deleted ? old?.kind : null, stamp = now();
+        if (row.ownerUid !== uid) await assertSocialInteraction({ tx, db, uid, targetUid: row.ownerUid });
+        const notification = input.kind && !previous ? await socialNotification(tx, {
+          recipientUid: row.ownerUid, actorUid: uid, kind: "reactions", eventId: `${input.postId}/${uid}`, postId: input.postId, stamp,
+        }) : null;
         const updated = changeInteractionCounts(row, { previousReaction: previous, nextReaction: input.kind });
         if (input.kind === null) {
           tx.delete(reactionRef); tx.delete(db.doc(`users/${uid}/socialReferences/${interactionReferenceId(path)}`));
         } else {
           tx.set(reactionRef, { ownerUid: uid, kind: input.kind, createdAt: old?.createdAt ?? stamp, updatedAt: stamp }); reference(tx, uid, path);
         }
-        tx.update(ref, updated); tx.set(receiptRef, { postId: input.postId, kind: input.kind, createdAt: stamp }); commitQuota();
+        tx.update(ref, updated); tx.set(receiptRef, { postId: input.postId, kind: input.kind, createdAt: stamp });
+        if (notification) tx.create(notification.ref, notification.record);
+        commitQuota();
         return summary(updated, input.kind ? { kind: input.kind } : null);
       });
     },
@@ -75,9 +98,15 @@ export function createSocialInteractionService({ db, publications, cursors, env 
         const spamRef = db.doc(`users/${uid}/socialCommentSpam/${spamKey}`), spam = (await tx.get(spamRef)).data(), stamp = now();
         if (spam && spam.commentId !== input.commentId && stamp - spam.createdAt < 60000) fail("comment_duplicate");
         const commitQuota = await quota(tx, uid, "comment");
+        if (!old && row.ownerUid !== uid) await assertSocialInteraction({ tx, db, uid, targetUid: row.ownerUid });
+        const notification = !old ? await socialNotification(tx, {
+          recipientUid: row.ownerUid, actorUid: uid, kind: "comments", eventId: `${input.postId}/${input.commentId}`, postId: input.postId, stamp,
+        }) : null;
         const saved = { id: input.commentId, ownerUid: uid, text: input.text, revision: (old?.revision ?? 0) + 1, createdAt: old?.createdAt ?? stamp, updatedAt: stamp, deleted: false, moderationState: old?.moderationState ?? "visible" };
         const updated = changeInteractionCounts(row, { comments: old ? 0 : 1 });
-        tx.set(commentRef, saved); tx.update(ref, updated); reference(tx, uid, path); tx.set(spamRef, { commentId: input.commentId, createdAt: stamp }); commitQuota();
+        tx.set(commentRef, saved); tx.update(ref, updated); reference(tx, uid, path); tx.set(spamRef, { commentId: input.commentId, createdAt: stamp });
+        if (notification) tx.create(notification.ref, notification.record);
+        commitQuota();
         return { comment: commentDto(saved, identity), commentCount: updated.commentCount };
       });
     },

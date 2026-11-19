@@ -22,6 +22,11 @@ test("Notification Center exposes read actions, deep links, empty state and reta
   assert.match(source, /Zatím tu nic není/);
   assert.match(source, /details className="notifications-preferences"/);
   assert.doesNotMatch(source, /Notification permission|requestPermission/);
-  assert.match(source, /Zapnout oznámení/);
+  assert.match(source, /Push doručování zatím není aktivní/);
+  assert.match(source, /!pushState\.subscribed/);
   assert.match(source, /notificationAdapter\.subscribe\(\)/);
+  assert.match(source, /Sociální události/);
+  assert.match(source, /SOCIAL_NOTIFICATION_PREFERENCES\.map/);
+  assert.match(source, /notificationRepository\.saveSocialPreferences/);
+  assert.match(source, /socialPreferenceState\.loadError/);
 });

@@ -1,8 +1,9 @@
 import {
-  collection, connectFirestoreEmulator, doc, getDoc, getDocs, getFirestore, limit, orderBy, query, setDoc, updateDoc,
+  collection, connectFirestoreEmulator, doc, getDoc, getDocs, getFirestore, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc,
 } from "firebase/firestore";
 import { firebaseAuth, getLocalFirebaseApp } from "../../auth/data/firebaseAuth.js";
 import { getBackendConfiguration } from "../../auth/data/backendConfig.js";
+import { normalizeSocialNotificationPreferences } from "./notificationModel.js";
 
 const EMULATOR_HOST = "127.0.0.1";
 const EMULATOR_PORT = 8080;
@@ -26,6 +27,10 @@ function requireCurrentOwner(ownerId) {
 
 function notificationCollection(firestore, ownerId) {
   return collection(firestore, "users", ownerId, "notifications");
+}
+
+function socialPreferencesReference(firestore, ownerId) {
+  return doc(firestore, "users", ownerId, "notificationPreferences", "social");
 }
 
 function serializeNotification(notification) {
@@ -64,5 +69,24 @@ export const notificationFirestore = Object.freeze({
   async markRead(ownerId, id, readAt) {
     requireCurrentOwner(ownerId);
     await updateDoc(doc(firestoreForNotifications(), "users", ownerId, "notifications", id), { readAt });
+  },
+  async getSocialPreferences(ownerId) {
+    requireCurrentOwner(ownerId);
+    const snapshot = await getDoc(socialPreferencesReference(firestoreForNotifications(), ownerId));
+    return normalizeSocialNotificationPreferences(snapshot.exists() ? snapshot.data() : {});
+  },
+  async saveSocialPreferences(ownerId, preferences) {
+    requireCurrentOwner(ownerId);
+    const normalized = normalizeSocialNotificationPreferences(preferences);
+    await setDoc(socialPreferencesReference(firestoreForNotifications(), ownerId), {
+      ownerId, ...normalized, updatedAt: serverTimestamp(),
+    });
+    return normalized;
+  },
+  subscribe(ownerId, onRecords, onError) {
+    requireCurrentOwner(ownerId);
+    const firestore = firestoreForNotifications();
+    const inbox = query(notificationCollection(firestore, ownerId), orderBy("createdAt", "desc"), limit(250));
+    return onSnapshot(inbox, snapshot => onRecords(snapshot.docs.map(item => item.data())), onError);
   },
 });

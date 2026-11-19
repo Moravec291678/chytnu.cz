@@ -119,3 +119,26 @@ test("a stale remote response cannot reopen a locally resolved sync warning", as
   assert.equal((await refreshing)[0].readAt, resolved.readAt);
   assert.equal((await createNotificationRepository({ remote: null }).list(scope))[0].readAt, resolved.readAt);
 });
+
+test("remote notification subscription merges cross-device inbox updates and stops on unsubscribe", async () => {
+  const remote = makeRemote();
+  const scope = { ownerId: "notice-live-owner", scopeKey: "account:notice-live-owner" };
+  const record = { ...input("from-other-device", "2026-10-28T14:00:00.000Z", { type: "social", deepLink: "/friends" }), ownerId: scope.ownerId };
+  remote.records.set(record.id, record);
+  let emit, stopped = false;
+  remote.subscribe = (ownerId, onRecords) => {
+    assert.equal(ownerId, scope.ownerId);
+    emit = onRecords;
+    return () => { stopped = true; };
+  };
+  const repository = createNotificationRepository({ remote });
+  let resolveUpdate;
+  const updated = new Promise(resolve => { resolveUpdate = resolve; });
+  const unsubscribe = await repository.subscribe(scope, resolveUpdate);
+  emit([record]);
+  const inbox = await updated;
+  assert.equal(inbox[0].id, record.id);
+  assert.equal(inbox[0].remoteSyncStatus, "synced");
+  unsubscribe();
+  assert.equal(stopped, true);
+});

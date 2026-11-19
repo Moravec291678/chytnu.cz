@@ -240,3 +240,7 @@ Browser A/B/C used emulator-only synthetic data. No production customer data, se
 - Full requested quality gate passed, including 1,154 unit tests and clean Auth, Sync, Photos, Product and full rules emulator checks. Detailed results are in `docs/AI_TEST_EVIDENCE.md`.
 - Vercel production deployment for that SHA reached READY and `https://chytnu-cz.vercel.app/` returned HTTP 200. Anonymous AI API access was rejected with 401.
 - Offline installed-PWA reopen, live Cloudinary delivery, physical devices and real model inference remain unverified. Keep the overall application audit PARTIAL until required manual checks are complete.
+
+## Current continuation — Stage 9 notifications
+
+Stage 9 in-app notifications are implemented and emulator/unit verified in local changes on `codex/ui-terminology-length-priority`; not yet committed or pushed. The change set adds server-generated friendship/reaction/comment notices, synchronized per-account social notification preferences, owner-only Firestore rules, and a bounded inbox subscription. `npm test` passed 1,162/1,162; lint/build/product/photos, Auth, Sync, full rules/social emulator suites, and `git diff --check` passed. Social browser-push sending is not implemented; do not claim it is active. `.firebaserc` points only to `demo-chytnucz-local`; no production Firebase rules deploy has occurred. Next: review/stage only Stage 9 files, commit/push the verified milestone, inspect Vercel readiness, then continue Stage 10 Nearby.
