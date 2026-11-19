@@ -8,3 +8,10 @@
 6. **Mobilní balení.** Po výsledku PWA pilotu potvrdit Capacitor, vytvořit podpisy a store konfiguraci, provést TestFlight/Internal Testing. Publikaci provést až po samostatném souhlasu.
 
 Sociální funkce, veřejné mapy, gamifikace, AI a monetizace následují pouze podle zpětné vazby po stabilním osobním deníku.
+
+## Resume checkpoint 2026-11-19
+
+- Stage 8 je vydatelný a měl v předchozí produkčním release ověřený Firebase index.
+- Aktuální audit zůstává PARTIAL.
+- Security review nepotvrdil žádnou jasnou zranitelnost v kontrolovaném kódu.
+- Další práce je aplikovat jen opravitelné a ověřitelné auditní nálezy; nepouštět se do Stage 9.

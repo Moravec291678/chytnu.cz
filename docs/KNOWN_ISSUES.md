@@ -11,8 +11,8 @@
 
 ## Technický dluh
 
-- Produkční `npm audit --omit=dev` hlásí 6 nálezů: 4 high v Firebase/@grpc stromu a 2 moderate v React Routeru. Celý vývojový strom hlásí 17 nálezů (9 high, 8 moderate). Navrhované opravy vyžadují major změny nebo nevhodný downgrade; nebyl použit `--force`.
-- Hlavní minifikovaný JS chunk klesl z přibližně 831–844 kB na přibližně 321 kB. Firebase sync a Leaflet se načítají odděleně; start je stále nutné změřit na slabším telefonu.
+- Produkční `npm audit --omit=dev` hlásí 0 nálezů. Celý vývojový strom hlásí 14 moderate advisories v Firebase CLI/development stromu. Navrhovaný downgrade na `firebase-tools@13.11.2` není kompatibilní volbou a nebyl použit.
+- Hlavní JS chunky mohou být velmi velké; build hlásí Leaflet a HEIC/EXIF-related chunky nad doporučeným limitem. Je nutné měřit start na slabším telefonu, ale neomezit funkčnost předmětem bez důkazů.
 - Jedna fotografie na Catch; samostatný thumbnail objekt a odstranění EXIF nejsou implementované.
 - Tombstones a operation receipts zatím nemají produkčně schválenou retenční/purge politiku.
 - Konfliktové UI nabízí praktickou volbu lokální/vzdálená a časy, nikoli detailní rozdíl jednotlivých polí.

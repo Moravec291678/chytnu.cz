@@ -1,12 +1,16 @@
 # AI master progress
 
-Updated for the safe-stop checkpoint on `codex/ui-terminology-length-priority`.
+Updated for the resumed full-application audit on `codex/ui-terminology-length-priority`.
 
 ## Current state
 
 - Stage 8/18 implementation: **PASS**.
 - Overall application audit: **PARTIAL**.
 - No Stage 9 work has started.
+- Main has been released to the production preview of the prior request only; future audit changes remain on the development branch until explicitly released.
+- Baseline on 2026-11-19: lint PASS, 1,161 unit tests PASS, build PASS, production audit 0 advisories.
+- Security review: no confirmed exploitable vulnerability found in the reviewed scope.
+- Mixed static/dynamic import for `PublicFishingProfile` was corrected.
 - Safe-stop WIP commit `61f9e2c46fe122a4c96194e919c6a13c6617fb3a` is pushed to the development branch; the follow-up documentation update is pushed as well.
 - Use `git log -1 --format=%H` to identify the current branch head before resuming.
 
@@ -31,7 +35,8 @@ Emulator metadata lookup emitted non-fatal `ETIMEDOUT`/`ENOTFOUND` warnings. The
 
 ## Continue tomorrow
 
-1. Verify branch and clean/expected worktree, then read `docs/AI_HANDOFF.md` and `docs/AI_FULL_AUDIT.md`.
-2. Continue the broad application audit; record it as PARTIAL until the remaining modules and browser smoke checks are complete.
+1. Continue the broad application audit; record it as PARTIAL until the remaining modules and browser smoke checks are complete.
+2. Resume from `docs/PROJECT_AUDIT.md`, `docs/KNOWN_ISSUES.md`, `docs/ROADMAP.md` and `docs/AI_HANDOFF.md`.
 3. Review compatible fixes for the Firebase CLI development dependency advisories without forcing a downgrade.
-4. Do not start Stage 9 or deploy to production.
+4. Complete emulator and authenticated browser smoke checks.
+5. Do not start Stage 9 or deploy to production.

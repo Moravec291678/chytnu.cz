@@ -5,6 +5,14 @@
 - **Stage 8/18: PASS.** The Stage 8 implementation remains complete; the real Auth/Firestore emulator suite passed again, including repository cleanup and six-account interactions.
 - **Overall application audit: PARTIAL.** No Stage 9 work was started. This checkpoint does not authorize production deployment, merge, or changes to `main`.
 
+## Resumed audit checkpoint
+
+- 2026-11-19 baseline: lint PASS, unit tests 1,161/1,161 PASS, build PASS.
+- Guest browser route smoke passed for the main MVP and community routes; authenticated account flows remain unverified.
+- Security review found no confirmed exploitable vulnerability.
+- Removed the mixed static/dynamic `PublicFishingProfile` import; build verification passed and the mixed-import warning is gone.
+- `npm run test:auth`, `npm run test:sync`, `npm run test:photos` and `npm run test:rules` were rerun for the resume checkpoint; suites passed when run without emulator-instance overlap.
+
 ## Git checkpoint
 
 - Branch: `codex/ui-terminology-length-priority`
@@ -40,6 +48,12 @@
 - `docs/AI_MASTER_PROGRESS.md`
 - `docs/AI_FULL_AUDIT.md`
 - `docs/AI_HANDOFF.md`
+- `src/app/App.jsx`
+- `docs/PROJECT_AUDIT.md`
+- `docs/PRODUCT_SCOPE_MVP.md`
+- `docs/ARCHITECTURE_DECISION.md`
+- `docs/KNOWN_ISSUES.md`
+- `docs/ROADMAP.md`
 
 ## Validation
 

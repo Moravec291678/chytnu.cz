@@ -21,7 +21,7 @@ Budoucí prvky bez funkčního zdroje dat mají vypnuté výchozí přepínače 
 
 ## Mimo první MVP
 
-- feed, komentáře, reakce, přátelé, Crew, chat a veřejné profily;
+- Crew, chat, real-time poloha a neověřené globální leaderboardy;
 - questy, streak, rarity, mastery a rozsáhlá gamifikace;
 - veřejné mapy, heatmapy a sdílení přesných GPS;
 - AI, marketplace, předplatné, Stripe a push notifikace;

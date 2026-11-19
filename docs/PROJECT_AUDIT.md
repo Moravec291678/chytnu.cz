@@ -1,5 +1,18 @@
 # Audit projektu ChytnuCz
 
+## Resume 2026-11-19
+
+- Full-application audit continues from the release-complete Stage 8 state.
+- `npm run lint`: PASS.
+- `npm test`: 1,161/1,161 PASS.
+- `npm run build`: PASS before the final mixed-import cleanup.
+- Production `npm audit --omit=dev`: 0 advisories.
+- Full audit: 14 moderate Firebase CLI/development advisories, no high or critical advisories.
+- Read-only security review: no confirmed exploitable vulnerability.
+- Guest browser smoke was rendered locally for `/`, `/journal`, `/add`, `/trips`, `/profile`, `/settings`, `/community`, `/waters`, `/stats` and `/gallery`.
+- Authenticated browser smoke and physical iOS/Android tests remain unverified.
+- No Stage 9 work has started.
+
 **Aktualizováno:** 21. 10. 2026
 **Rozsah:** aktuální pracovní strom po lokálním dokončení bezpečně proveditelných částí MVP
 

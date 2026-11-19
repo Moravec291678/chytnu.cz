@@ -14,6 +14,7 @@ import { isGuestAccessConfirmed } from "../features/auth/data/guestAccess.js";
 import { useAuth } from "../features/auth/context/authContextValue.js";
 import { canAccessProtectedRoute, isPublicRoute } from "./routeAccess.js";
 import { isFeatureEnabled } from "../shared/config/featureFlags.js";
+import PublicFishingProfile from "../features/social/components/PublicFishingProfile.jsx";
 
 function RouteAccessGuard() {
   const auth = useAuth();
@@ -31,7 +32,6 @@ const SpeciesDetailPage = lazy(() => import("../pages/SpeciesDetailPage"));
 const SpeciesAlbumPage = lazy(() => import("../pages/SpeciesAlbumPage"));
 const StatsPage = lazy(() => import("../pages/StatsPage"));
 const ProfilePage = lazy(() => import("../pages/ProfilePage"));
-const PublicFishingProfile = lazy(() => import("../features/social/components/PublicFishingProfile.jsx"));
 const SocialProfileSettings = lazy(() => import("../features/social/components/SocialProfileSettings.jsx"));
 const FriendsPage = lazy(() => import("../features/social/components/FriendsPage.jsx"));
 const FisherDiscovery = lazy(() => import("../features/social/components/FisherDiscovery.jsx"));
