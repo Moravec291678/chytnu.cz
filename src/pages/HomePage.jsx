@@ -254,12 +254,6 @@ function HomePage() {
             <h2 id="dashboard-recent-title">Poslední úlovky</h2>
             <Link to="/journal">Vše <span aria-hidden="true">→</span></Link>
           </div>
-          <nav className="dashboard-view-tabs" aria-label="Zobrazení úlovků">
-            <Link className="dashboard-view-tab dashboard-view-tab--active" to="/journal" aria-current="true">Seznam</Link>
-            <Link className="dashboard-view-tab" to="/journal/map">Mapa</Link>
-            <Link className="dashboard-view-tab" to="/journal/calendar">Kalendář</Link>
-          </nav>
-
           {catchState.loading ? (
             <div className="dashboard-loading" role="status" aria-label="Načítám místní deník">
               <span /><span /><span />

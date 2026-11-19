@@ -40,6 +40,11 @@ Status: PARTIAL
 - Home JSX now presents Quick Catch, fishing conditions, then active-trip context (or the start-trip action) before XP and seasonal/weekly challenge panels. No cards or data sources were removed.
 - A structural regression test verifies this order. It does not substitute for a visual screenshot or mobile viewport check; those remain outstanding for Stage 4.
 
+## 2026-11-20 — duplicate Home routes
+
+- Removed the redundant List/Map/Calendar tabs from the Home recent-catches panel; its Journal link remains, and those views stay available in the Journal. Removed the now-unused Home-only CSS.
+- Regression coverage confirms the Journal link is retained and the destination tabs remain in Journal. Full tests/visual review follow.
+
 ## Authenticated takeover browser QA — 2026-11-19
 
 Real localhost handlers and Auth/Firestore emulators: A chose public profile with all public presets and explicit checkbox; A created an actual experience post, visible in feed and detail (ID 63076cc37d7fd4e32b951ae63f049bcfddfda76b01296c0d68732684c76ade7d). B logged in, created its own profile, reacted and commented; server confirmed both. B invited A; A accepted and saw B as a friend. A saved a manual carp catch (42 cm, estimated weight marked as estimated, no new XP). A changed to private; C logged in and was denied the original post, and username search returned no available profile.

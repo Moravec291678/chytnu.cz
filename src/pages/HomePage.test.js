@@ -15,3 +15,12 @@ test("Home places Quick Catch, conditions, and current trip before progression e
   assert.ok(activeTrip < noTrip && noTrip < progression);
   assert.ok(progression < seasonalChallenge);
 });
+
+test("Home keeps one Journal entry and avoids repeating its section tabs", async () => {
+  const source = await readFile(new URL("./HomePage.jsx", import.meta.url), "utf8");
+  const journal = await readFile(new URL("./JournalPage.jsx", import.meta.url), "utf8");
+  assert.match(source, /<Link to="\/journal">Vše/);
+  assert.doesNotMatch(source, /dashboard-view-tabs|dashboard-view-tab/);
+  assert.match(journal, /to="\/journal\/map">Mapa/);
+  assert.match(journal, /to="\/journal\/calendar">Kalendář/);
+});

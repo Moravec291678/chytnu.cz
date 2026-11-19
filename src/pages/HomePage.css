@@ -521,35 +521,6 @@
   text-decoration: none;
 }
 
-.dashboard-view-tabs {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--space-0-5);
-  margin: 0 var(--space-5) var(--space-2-5);
-  padding: var(--space-0-75);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--surface-1);
-}
-
-.dashboard-view-tab {
-  display: flex;
-  min-height: 42px;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-sm);
-  color: var(--text-secondary);
-  font-size: var(--font-size-12);
-  font-weight: 800;
-  text-decoration: none;
-}
-
-.dashboard-view-tab:hover,
-.dashboard-view-tab--active {
-  background: var(--accent-green-soft);
-  color: var(--accent-green);
-}
-
 .dashboard-empty {
   display: grid;
   gap: var(--space-1-5);
