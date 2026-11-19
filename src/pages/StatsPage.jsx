@@ -187,13 +187,6 @@ function StatsPage() {
           </section>
         </>}
 
-        <section className="stats-panel stats-unavailable" aria-label="Doporučení na příštích 48 hodin">
-          <h2>Doporučení na 48 hodin</h2>
-          <p className="stats-panel-note">{isFeatureEnabled("aiInsights")
-            ? "Doporučení se zobrazí, až budou dostupné ověřené podmínky a výpočty pro tvá data."
-            : "Tato funkce zatím není dostupná. Zobrazené statistiky vycházejí pouze z tvých uložených záznamů."}</p>
-        </section>
-
         {isFeatureEnabled("supporter") && getEntitlementState(null, "supporter") !== "active" && <section className="stats-supporter" aria-label="Rybářský příběh sezóny">
           <span>SUPPORTER</span>
           <h2>Rybářský příběh sezóny</h2>

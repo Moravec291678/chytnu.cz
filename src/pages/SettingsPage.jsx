@@ -279,9 +279,9 @@ export default function SettingsPage() {
       </section>
 
       <section className="settings-card" aria-labelledby="settings-ai-title">
-        <h2 id="settings-ai-title">Umělá inteligence a místní postřehy</h2>
+        <h2 id="settings-ai-title">Příběhy a tipy z deníku</h2>
         {Object.values(AI_FEATURES).some(Boolean)
-          ? <p>Externí AI je volitelná a vyžaduje samostatný souhlas níže. Dostupná je pouze pomoc s rybářským vyprávěním a tip pro další vycházku z deníku. Rychlé uložení úlovku ani místní přehledy na ní nezávisejí.</p>
+          ? <p>Externí AI je volitelná a vyžaduje samostatný souhlas níže. Dostupné jsou pouze návrhy rybářských příběhů a tipy podle deníku. Rychlé uložení úlovku ani místní přehledy na ní nezávisejí.</p>
           : <p>Externí AI je vypnutá. Fotografie ani obsah deníku se neposílají AI poskytovateli. Rybářské záznamy a místní výpočty fungují dál.</p>}
         <label className="settings-toggle"><input type="checkbox" checked={preferences.localDiaryAnalysis !== false} onChange={event => update({ localDiaryAnalysis: event.target.checked })} /> Místní analýza deníku</label>
         <label className="settings-toggle"><input type="checkbox" checked={preferences.localFishingRecommendations !== false} onChange={event => update({ localFishingRecommendations: event.target.checked })} /> Místní doporučení pro další výpravu</label>

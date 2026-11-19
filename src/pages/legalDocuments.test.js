@@ -35,18 +35,20 @@ test("terms explain offline use, user content, fishing rules and account deletio
 test("AI privacy notice names actual processor, data minimization, opt-in, revocation and honest retention limits", () => {
   const text = flatten(PRIVACY_POLICY);
   assert.match(text, /Cloudflare Workers AI/);
-  assert.match(text, /Gemma 4 26B A4B/);
   assert.match(text, /samostatného souhlasu/);
   assert.match(text, /ve výchozím nastavení vypnuté/);
-  assert.match(text, /před odesláním odstraníme vložené EXIF údaje/);
   assert.match(text, /při výpadku může odstranění vyžadovat opakování/);
   assert.match(text, /nikoli celý deník/);
-  assert.match(text, /Pro historky odešleme pouze poznámky/);
+  assert.match(text, /Pro příběh odešleme pouze poznámku/);
+  assert.match(text, /Jediné externí AI funkce jsou volitelné návrhy rybářských příběhů/);
+  assert.match(text, /Fotografie se AI neposílají/);
   assert.match(text, /právní a bezpečnostní výjimky/);
   assert.match(text, /Nejde o záruku absolutní nulové retence/);
   assert.match(text, /Odvoláním souhlasu zastavíš další externí požadavky/);
   assert.match(text, /Souhlas a dostupné uložené výsledky zahrnuje export účtu/);
   assert.match(text, /při smazání účtu se odstraňují/);
+  assert.match(text, /Neprovádíme AI rozpoznávání ryb/);
+  assert.doesNotMatch(text, /Automatické rozpoznávání nových rychlých úlovků|Pro rozpoznání ryby odešleme|oprávnění uděluješ zvlášť pro rozpoznávání ryb/i);
   assert.doesNotMatch(text, /generování příběhů nejsou aktivované/);
 });
 

@@ -43,10 +43,8 @@ createRoot(document.getElementById("root")).render(
 );
 
 if (import.meta.env.PROD && !Capacitor.isNativePlatform() && "serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/sw.js").catch(() => {
-      // Offline installation is an enhancement; local IndexedDB data and the
-      // running application remain usable if registration is unavailable.
-    });
+  navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" }).catch(() => {
+    // Offline installation is an enhancement; local IndexedDB data and the
+    // running application remain usable if registration is unavailable.
   });
 }

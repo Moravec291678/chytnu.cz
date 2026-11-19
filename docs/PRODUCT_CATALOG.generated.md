@@ -108,8 +108,6 @@ Preference jsou uživatelsky nastavitelné: morningFishActivity (default ON), to
 | crew | Ne |
 | notifications | Ne |
 | supporter | Ne |
-| aiInsights | Ne |
-| dailyTips | Ne |
 | seasonStory | Ne |
 | publicSharing | Ano |
 

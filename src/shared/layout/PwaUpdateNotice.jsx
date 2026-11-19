@@ -1,21 +1,15 @@
 import { useEffect, useState } from "react";
+import { monitorPwaUpdates } from "./pwaUpdateMonitor.js";
 import "./PwaUpdateNotice.css";
 
 export default function PwaUpdateNotice({ syncing = false }) {
   const [available, setAvailable] = useState(false);
   const [dismissed, setDismissed] = useState(false);
 
-  useEffect(() => {
-    const serviceWorker = globalThis.navigator?.serviceWorker;
-    if (!serviceWorker) return undefined;
-    let hadController = Boolean(serviceWorker.controller);
-    const onControllerChange = () => {
-      if (hadController) setAvailable(true);
-      hadController = true;
-    };
-    serviceWorker.addEventListener("controllerchange", onControllerChange);
-    return () => serviceWorker.removeEventListener("controllerchange", onControllerChange);
-  }, []);
+  useEffect(() => monitorPwaUpdates({
+    serviceWorker: globalThis.navigator?.serviceWorker,
+    onAvailable: () => { setAvailable(true); setDismissed(false); },
+  }).dispose, []);
 
   if (!available || dismissed) return null;
   const update = () => {

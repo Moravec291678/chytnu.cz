@@ -95,6 +95,11 @@ test("generated service worker bypasses every non-GET request without cloning or
   assert.doesNotMatch(config, /event\.respondWith\(fetch\(event\.request\)\)/);
 });
 
+test("production registers service worker with HTTP cache bypass for prompt app updates", async () => {
+  const source = await readFile(new URL("../src/main.jsx", import.meta.url), "utf8");
+  assert.match(source, /serviceWorker\.register\("\/sw\.js", \{ updateViaCache: "none" \}\)/);
+});
+
 test("offline shell precaches all generated route and feature chunks, including lazy imports", async () => {
   const config = await readFile(new URL("../vite.config.js", import.meta.url), "utf8");
   assert.match(config, /const generated = Object\.values\(bundle\)\.map\(\(item\) => `\/\$\{item\.fileName\}`\);/);

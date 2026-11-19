@@ -14,8 +14,6 @@ export const FEATURES = Object.freeze({
   crew: false,
   notifications: false,
   supporter: false,
-  aiInsights: false,
-  dailyTips: false,
   seasonStory: false,
   publicSharing: true,
 });

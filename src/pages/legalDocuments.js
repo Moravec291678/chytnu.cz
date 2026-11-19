@@ -18,7 +18,7 @@ export const PRIVACY_POLICY = Object.freeze({
         { heading: "Rybářský deník", items: ["druh, délku a hmotnost ryby, datum a čas úlovku;", "metodu, nástrahu, poznámky, revír nebo vlastní vodu;", "údaje o vycházce, fotografie a další údaje, které do záznamu vložíš."] },
         { heading: "Poloha", items: ["GPS souřadnice úlovku nebo vycházky;", "polohu ručně zvolenou na mapě;", "souřadnice použité pro nalezení vody nebo načtení počasí."] , note: "Poloha není nutná pro každý záznam a některé údaje lze zadat ručně." },
         { heading: "Fotografie", items: ["obraz fotografie a její technická metadata;", "datum pořízení a GPS údaje, pokud je soubor obsahuje."] , note: "Metadata může aplikace použít k usnadnění zápisu nebo vyhodnocení kontextu úlovku." },
-        { heading: "Volitelné funkce AI", items: ["nastavení souhlasu s externím zpracováním, jeho verzi, změny a odvolání;", "návrhy druhů ryb, vysvětlení souhrnů a vyžádané návrhy vyprávění, pokud tuto funkci použiješ."] , note: "Externí zpracování je ve výchozím nastavení vypnuté. Návrh AI není potvrzený údaj deníku." },
+        { heading: "Volitelné příběhy a tipy", items: ["nastavení souhlasu s externím zpracováním, jeho verzi, změny a odvolání;", "vyžádané návrhy rybářských příběhů z vybrané poznámky a tipy z vypočítaných souhrnů deníku."] , note: "Externí zpracování je ve výchozím nastavení vypnuté. Návrh AI není potvrzený údaj deníku." },
         { heading: "Herní postup a technické údaje", items: ["XP, úrovně, achievementy, výzvy, série a mastery;", "stav synchronizace, identifikátory operací, konflikty mezi zařízeními a záznamy potřebné k zabránění duplicitním odměnám;", "technické údaje o chybách a neúspěšných synchronizacích."] , note: "Technické údaje nepoužíváme k vytváření reklamních profilů." },
       ],
     },
@@ -31,7 +31,7 @@ export const PRIVACY_POLICY = Object.freeze({
       paragraphs: [
         "Údaje potřebné pro účet a funkce aplikace zpracováváme za účelem poskytnutí služby a plnění souvisejících povinností.",
         "U volitelných funkcí, jako je poloha, fotografie nebo oznámení, rozhoduješ prostřednictvím oprávnění zařízení nebo nastavení. Některé technické údaje mohou být zpracovávány na základě oprávněného zájmu na zabezpečení a spolehlivém provozu.",
-        "Externí AI zpracování fotografie, souhrnů deníku nebo vybraných poznámek je dobrovolné a vychází ze samostatného souhlasu. Souhlas můžeš v nastavení Umělá inteligence změnit nebo odvolat; odvolání neovlivňuje zákonnost dřívějšího zpracování. Uložení úlovku, běžný deník i místní přehledy fungují bez tohoto souhlasu.",
+        "Externí AI zpracování vybrané poznámky pro návrh rybářského příběhu nebo vypočítaných souhrnů pro deníkové tipy je dobrovolné a vychází ze samostatného souhlasu. Fotografie se AI neposílají. Souhlas můžeš v nastavení Příběhy a tipy z deníku změnit nebo odvolat; odvolání neovlivňuje zákonnost dřívějšího zpracování. Uložení úlovku, běžný deník i místní přehledy fungují bez tohoto souhlasu.",
       ],
     },
     {
@@ -54,7 +54,7 @@ export const PRIVACY_POLICY = Object.freeze({
         "Google Firebase – autentizace, cloudová databáze a související serverové operace.",
         "Cloudinary – ukládání a doručování fotografií, pokud je cloudový foto transport v daném nasazení zapnutý.",
         "Vercel – hosting aplikace a serverových API funkcí.",
-        "Cloudflare, Inc. – pouze u výslovně povolených externích funkcí AI služba Workers AI s modelem Google Gemma 4; podrobnosti v části 6a.",
+        "Cloudflare, Inc. – pouze pokud jsou v nasazení dostupné externí příběhy a tipy AI přes Workers AI; podrobnosti v části 6a.",
         "Open-Meteo – při načtení počasí aplikace odešle souřadnice místa, pro které se počasí vyhledává.",
         "OpenStreetMap nebo související poskytovatelé mapových dlaždic – při zobrazení mapy probíhá běžná síťová komunikace s jejich servery.",
       ],
@@ -63,14 +63,12 @@ export const PRIVACY_POLICY = Object.freeze({
     {
       heading: "6a. Volitelná umělá inteligence",
       paragraphs: [
-        "Externí funkce používají Cloudflare Workers AI s modelem Google Gemma 4 26B A4B. Model je provozován Cloudflare; nejde o odesílání do Gemini API. Dostupnost závisí na konfiguraci a bezplatné kapacitě služby. Oprávnění uděluješ zvlášť pro rozpoznávání ryb, vysvětlení deníku, doporučení a pomoc s historkami; samotné vytvoření účtu ani fotografie není souhlasem s AI.",
-        "Automatické rozpoznávání nových rychlých úlovků povoluješ zvláštní volbou v nastavení. Po jejím uložení se způsobilé nové fotografie odešlou ke zpracování po dokončení nahrání, bez dalšího tlačítka. Při chybě připojení nebo nedostupné bezplatné kapacitě požadavek počká. Odvolání souhlasu zastaví další odesílání; již probíhající zpracování nelze vzít zpět. Při pozastavené aplikaci není pokračování na pozadí zaručené.",
-        "Pro rozpoznání ryby odešleme obraz vybrané fotografie a katalog druhů. Z fotografie před odesláním odstraníme vložené EXIF údaje, včetně GPS a času pořízení. Obraz může stále obsahovat obličeje nebo místo viditelné na fotografii; vybírej jen snímky, které máš právo takto zpracovat. Přesné GPS souřadnice ani další údaje z deníku k fotografii nepřidáváme.",
-        "Pro vysvětlení deníku a doporučení se nejprve vypočítají statistiky v aplikaci a externí model obdrží odvozené souhrny, nikoli celý deník, fotografie nebo přesné GPS. Pro historky odešleme pouze poznámky, které k dané úpravě vybereš. Text sám může obsahovat osobní údaje nebo popis místa; neposílej údaje, které k úpravě nejsou potřebné.",
+        "Jediné externí AI funkce jsou volitelné návrhy rybářských příběhů z vybrané poznámky a tipy z vypočítaných souhrnů deníku přes Cloudflare Workers AI. Dostupnost závisí na konfiguraci nasazení a bezplatné kapacitě služby. Neprovádíme AI rozpoznávání ryb, analýzu fotografií, předpovědi aktivity ryb, určování GPS ani automatické doplňování úlovků.",
+        "Pro příběh odešleme pouze poznámku k úlovku, jejíž úpravu výslovně spustíš. Pro deníkový tip se nejprve vypočítají statistiky v aplikaci a externí model obdrží pouze odvozené souhrny, nikoli celý deník, fotografie, poznámky nebo přesné GPS. Text poznámky může obsahovat osobní údaje nebo popis místa; neposílej údaje, které k úpravě nejsou potřebné.",
         "Cloudflare uvádí, že obsah standardních nestavových požadavků Workers AI nepoužívá k tréninku modelů a neuchovává ho déle, než vyžaduje zpracování a doručení odpovědi. Mohou platit právní a bezpečnostní výjimky a uchovávat se provozní metadata. Nejde o záruku absolutní nulové retence ani zpracování výhradně v EU. Pro aplikaci se nepoužívá ukládání obsahu do AI Gateway ani placený náhradní poskytovatel.",
         "Nastavení souhlasu a uložené výsledky jsou přiřazené tvému účtu. Odvoláním souhlasu zastavíš další externí požadavky a zahájí se odstranění uložených návrhů AI; při výpadku může odstranění vyžadovat opakování nebo pomoc podpory. Již odeslané zpracování nelze vzít zpět. Ručně přijaté nebo upravené údaje v běžném deníku zůstávají jeho součástí. Souhlas a dostupné uložené výsledky zahrnuje export účtu; při smazání účtu se odstraňují s ostatními cloudovými údaji.",
       ],
-      note: "AI se může mýlit. Druh zůstává návrhem do tvého potvrzení; text před uložením zkontroluj. Model nesmí sám měnit potvrzené druhy, míry ani poznámky. Pokud pro své rozhodnutí potřebuješ souhlas zákonného zástupce, používej externí AI pouze s jeho souhlasem.",
+      note: "AI se může mýlit. Návrhy příběhu i deníkové tipy zkontroluj; AI nemění úlovky ani poznámky bez tvého schválení. Pokud pro své rozhodnutí potřebuješ souhlas zákonného zástupce, používej externí AI pouze s jeho souhlasem.",
     },
     {
       heading: "7. Přenos mimo Evropský hospodářský prostor",

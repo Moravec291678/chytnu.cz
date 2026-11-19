@@ -8,6 +8,8 @@ test("future social, challenge and monetization UI stays disabled without real f
   assert.equal(isFeatureEnabled("friends"), true);
   assert.equal(isFeatureEnabled("community"), true);
   assert.equal(isFeatureEnabled("publicSharing"), true);
+  assert.equal(Object.hasOwn(FEATURES, "aiInsights"), false);
+  assert.equal(Object.hasOwn(FEATURES, "dailyTips"), false);
   assert.equal(isFeatureEnabled("seasonalChallenges"), false);
   assert.equal(isFeatureEnabled("unknown-feature"), false);
 });
