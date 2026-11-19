@@ -68,7 +68,7 @@ Status remains **PARTIAL**. This wave did not start Stage 9 or change the overal
 - Browser `/api/social` and `/api/progression/reconcile` requests returned 404 because Vite does not host this repository's Vercel serverless functions. This is a local harness limitation; it does not establish a production backend failure. Authenticated browser social/API flows remain unverified.
 - No confirmed privacy leak was identified in this wave. Physical iOS/Android testing remains **MANUAL TEST REQUIRED**.
 - Latest validation: unit tests 1,165/1,165, lint, build, `git diff --check`, and the 131-check Stage 8 social Auth/Firestore emulator suite passed.
-- Changes are local and unpushed. Continue with a Vercel-compatible local API/emulator harness for authenticated social browser scenarios, then proceed through remaining unverified modules. Do not deploy or start Stage 9.
+- Changes are local and unpushed. WIP code checkpoint: `cee56ccff78573e00610ce718f4ba4514de3a2df`. Continue through remaining unverified modules; do not deploy or start Stage 9.
 
 ## 2026-11-19 — AI scope, privacy defaults, and local API safety
 

@@ -216,7 +216,7 @@ Celkový audit zůstává **PARTIAL**. Stage 8 zůstává **PASS** podle dříve
 - V této sadě nebyla potvrzena nová bezpečnostní zranitelnost; produkční přihlášení ani reálná uživatelská data nebyla použita.
 - Potvrzení veřejného sdílení je nyní UX gate ve formuláři, nikoli samostatný serverově uložený consent záznam. Pokud má aplikace vyžadovat auditovatelný právní souhlas, musí následovat samostatné rozhodnutí a API změna; přímé API požadavky dnes stále přijímají explicitní `visibility`.
 - Strategické MVP nadále neobsahuje sociální síť ani AI. Povolené AI capability a předvolba veřejnosti se týkají existujícího auditu, nikoli schválení produkčního release.
-- Commit SHA pro právě rozpracovanou sadu se doplní až po vytvoření lokálního commitu. Push/deployment zůstávají zakázány.
+- WIP commit této sady: `cee56ccff78573e00610ce718f4ba4514de3a2df` (lokální, nepushnutý). Push/deployment zůstávají zakázány.
 
 ### Další krok pro Codex
 
@@ -224,4 +224,4 @@ Celkový audit zůstává **PARTIAL**. Stage 8 zůstává **PASS** podle dříve
 2. Až budou emulátory bezpečně volné, znovu spustit `npm run test:rules`, `npm run test:auth`, `npm run test:sync` a Stage 8 social suite; použít pouze syntetické účty.
 3. Rozhodnout, zda veřejný checkbox vyžaduje serverově trvalý consent záznam.
 4. Pokračovat neověřenými aplikačními moduly; zachovat PARTIAL, dokud nebude ověřeno celé autentizované chování.
-5. Zaznamenat následný commit SHA do tohoto handoffu. Neprovádět push, merge, Stage 9 ani produkční deployment.
+5. Při navázání zachovat commit `cee56ccff78573e00610ce718f4ba4514de3a2df`; neprovádět push, merge, Stage 9 ani produkční deployment.

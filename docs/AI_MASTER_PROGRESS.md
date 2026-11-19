@@ -62,6 +62,7 @@ Emulator metadata lookup emitted non-fatal `ETIMEDOUT`/`ENOTFOUND` warnings. The
 
 - Audit remains **PARTIAL**; Stage 8 remains **PASS** from previously documented evidence.
 - Branch `codex/ui-terminology-length-priority`, base HEAD `fc86517032629e351a4dff49dec11b3749707102`; current work was not yet committed at checkpoint creation.
+- WIP checkpoint commit: `cee56ccff78573e00610ce718f4ba4514de3a2df` (local only; no push). The working tree was clean after this commit.
 - Restricted AI to optional story drafts and diary recommendations; disabled species recognition, standalone diary AI explanations and Home AI requests. Legacy Home AI cache is cleared while local insight state is preserved.
 - New social posts have a public form default but cannot submit before confirmation. New profile defaults are public at the top level only; sections and discoverability remain private/off. Historical documents/data are not migrated and server defaults remain private-first.
 - Local Vite social harness restores its previous emulator configuration on close.
@@ -69,4 +70,4 @@ Emulator metadata lookup emitted non-fatal `ETIMEDOUT`/`ENOTFOUND` warnings. The
 - Rules/Auth/Sync emulator tests were not re-run because existing app/emulator processes occupied configured ports 5174/9099/8080. Processes were left running. Previously recorded 131 Stage 8 social checks are historical.
 - Authenticated composer consent was checked without submitting; two social/profile views had no overflow at measured widths from 320 to 1920 px. The browser could not realize exactly 1024 px. Local `/api/progression/reconcile` 404 and a later profile 401 were not treated as production results.
 - No production user data, credentials, push, merge, Stage 9, or deployment was used.
-- Next: rerun emulator suites when safely available, decide if public consent must be persisted server-side, continue remaining authenticated module/browser audit, then record the local commit SHA here and in `AI_HANDOFF.md`.
+- Next: rerun emulator suites when safely available, decide if public consent must be persisted server-side, and continue the remaining authenticated module/browser audit.
