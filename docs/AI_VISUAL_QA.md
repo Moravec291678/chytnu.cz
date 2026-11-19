@@ -30,6 +30,16 @@ Status: PARTIAL
 - No new profile was saved and no existing profile settings were changed. Authenticated route/API coverage remains incomplete; the browser later showed a logged-out state and the cause was not verified. The local `/api/progression/reconcile` 404 is a Vite harness limitation, not a production conclusion.
 - Physical iOS/Android and installed-PWA checks remain **MANUAL TEST REQUIRED**.
 
+## 2026-11-20 — four-section navigation implementation
+
+- Source navigation now presents Domů, Deník, Komunita, Profil and preserves the center Quick Catch button. Trips are linked in the Journal's four section tabs.
+- No browser viewport run was performed after this edit. The earlier 320–1920 px coverage predates it and is not evidence for the new layout. Narrow-screen and safe-area navigation verification remains pending; physical device checks remain manual.
+
+## 2026-11-20 — Home dashboard hierarchy
+
+- Home JSX now presents Quick Catch, fishing conditions, then active-trip context (or the start-trip action) before XP and seasonal/weekly challenge panels. No cards or data sources were removed.
+- A structural regression test verifies this order. It does not substitute for a visual screenshot or mobile viewport check; those remain outstanding for Stage 4.
+
 ## Authenticated takeover browser QA — 2026-11-19
 
 Real localhost handlers and Auth/Firestore emulators: A chose public profile with all public presets and explicit checkbox; A created an actual experience post, visible in feed and detail (ID 63076cc37d7fd4e32b951ae63f049bcfddfda76b01296c0d68732684c76ade7d). B logged in, created its own profile, reacted and commented; server confirmed both. B invited A; A accepted and saw B as a friend. A saved a manual carp catch (42 cm, estimated weight marked as estimated, no new XP). A changed to private; C logged in and was denied the original post, and username search returned no available profile.

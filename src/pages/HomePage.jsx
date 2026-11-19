@@ -214,6 +214,17 @@ function HomePage() {
         {QUICK_CATCH_FEATURES.capture && <QuickCatchButton />}
         <FishActivity />
 
+        {activeTrip && <ActiveTripSummary trip={activeTrip} catches={catches} />}
+        {!tripState.loading && !tripState.error && !activeTrip && (
+          <Link className="home-no-trip" to="/trips/new">
+            <span>
+              <strong>Žádná aktivní vycházka</strong>
+              <span>Zahájit novou vycházku</span>
+            </span>
+            <span aria-hidden="true">→</span>
+          </Link>
+        )}
+
         {!ledger.loading && !ledger.error && <Link className="home-progress-card home-xp-card" to="/levels" aria-label={`Úroveň ${ledger.summary.level}, ${ledger.summary.xp} XP, hodnost ${ledger.summary.rank.name}. Otevřít postup`}>
           <div className="home-progress-heading"><span className="home-progress-kicker">Tvůj postup</span><span>Úrovně a XP →</span></div>
           <h2>Úroveň {ledger.summary.level} · {ledger.summary.rank.name}</h2>
@@ -228,17 +239,6 @@ function HomePage() {
             <SeasonalChallengeCard challenge={seasonalChallenge} />
           <WeeklyProgressCard tasks={[challenges.daily[0], challenges.weekly[0]]} streak={weeklyStreak} />
           </>
-        )}
-
-        {activeTrip && <ActiveTripSummary trip={activeTrip} catches={catches} />}
-        {!tripState.loading && !tripState.error && !activeTrip && (
-          <Link className="home-no-trip" to="/trips/new">
-            <span>
-              <strong>Žádná aktivní vycházka</strong>
-              <span>Zahájit novou vycházku</span>
-            </span>
-            <span aria-hidden="true">→</span>
-          </Link>
         )}
 
         {(catchState.error || tripState.error || ledger.error) && (
