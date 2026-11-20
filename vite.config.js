@@ -24,10 +24,11 @@ function offlineShell() {
   return {
     name: 'chytnucz-offline-shell',
     apply: 'build',
-    generateBundle(_, bundle) {
+    // Vite removes CSS-only JavaScript facades during its normal output hooks.
+    generateBundle: { order: 'post', handler(_, bundle) {
       const generated = Object.values(bundle).map((item) => `/${item.fileName}`);
-      const files = ['/', '/index.html', '/favicon.svg', '/icons.svg', '/icon-192.png', '/icon-512.png', '/manifest.webmanifest', ...generated];
-      const version = createHash('sha256').update(generated.sort().join('|')).digest('hex').slice(0, 16);
+      const files = [...new Set(['/index.html', '/favicon.svg', '/icons.svg', '/icon-192.png', '/icon-512.png', '/manifest.webmanifest', ...generated])];
+      const version = createHash('sha256').update(['immutable-navigation-v1', ...generated.sort()].join('|')).digest('hex').slice(0, 16);
       const source = `const CACHE = ${JSON.stringify(`chytnucz-shell-${version}`)};
 const FILES = ${JSON.stringify(files)};
 self.addEventListener('install', (event) => event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(FILES)).then(() => self.skipWaiting())));
@@ -41,32 +42,31 @@ self.addEventListener('fetch', (event) => {
   const request = event.request;
   const url = new URL(request.url);
   if (request.method !== 'GET' || url.origin !== self.location.origin) return;
+  if (url.pathname === '/api' || url.pathname.startsWith('/api/')) return;
   if (request.mode === 'navigate') {
-    event.respondWith(fetch(request).then((response) => {
-      if (response.ok && response.headers.get('content-type')?.split(';')[0].trim().toLowerCase() === 'text/html') {
-        const copy = response.clone();
-        event.waitUntil(caches.open(CACHE).then((cache) => cache.put('/index.html', copy)).catch(() => {}));
-      }
-      return response;
-    }).catch(() => caches.open(CACHE).then((cache) => cache.match('/index.html'))));
+    // The installed HTML and generated assets belong to the same deployment.
+    event.respondWith(fetch(request).catch(() => caches.open(CACHE).then((cache) => cache.match('/index.html'))));
     return;
   }
   if (url.pathname.startsWith('/assets/') || ['/favicon.svg', '/icons.svg', '/icon-192.png', '/icon-512.png', '/manifest.webmanifest'].includes(url.pathname)) {
     event.respondWith(caches.match(request).then((cached) => cached || fetch(request)));
   }
 });
+function notificationPath(value) {
+  return typeof value === 'string' && /^\\/(?!\\/)[A-Za-z0-9/_?=&%#.-]*$/.test(value) ? value : '/notifications';
+}
 self.addEventListener('push', (event) => {
   let payload = {};
   try { payload = event.data ? event.data.json() : {}; } catch { payload = { body: event.data?.text() || '' }; }
+  if (!payload || typeof payload !== 'object') payload = {};
   const title = typeof payload.title === 'string' && payload.title ? payload.title.slice(0, 120) : 'ChytnuCz';
   const body = typeof payload.body === 'string' ? payload.body.slice(0, 500) : '';
-  const path = typeof payload.deepLink === 'string' && /^\\/[A-Za-z0-9/_?=&%#.-]*$/.test(payload.deepLink) ? payload.deepLink : '/notifications';
+  const path = notificationPath(payload.deepLink);
   event.waitUntil(self.registration.showNotification(title, { body, icon: '/icon-192.png', badge: '/icon-192.png', data: { deepLink: path } }));
 });
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const path = event.notification.data?.deepLink;
-  const target = typeof path === 'string' && /^\\/[A-Za-z0-9/_?=&%#.-]*$/.test(path) ? new URL(path, self.location.origin).href : new URL('/notifications', self.location.origin).href;
+  const target = new URL(notificationPath(event.notification.data?.deepLink), self.location.origin).href;
   event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
     const existing = clients.find((client) => new URL(client.url).origin === self.location.origin);
     if (existing) { existing.navigate(target); return existing.focus(); }
@@ -74,7 +74,7 @@ self.addEventListener('notificationclick', (event) => {
   }));
 });`;
       this.emitFile({ type: 'asset', fileName: 'sw.js', source });
-    },
+    } },
   };
 }
 

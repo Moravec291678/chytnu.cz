@@ -9,7 +9,8 @@ async function generatedWorker(fetchImpl) {
   const { default: config } = await import("../vite.config.js");
   const plugin = config.plugins.find(item => item.name === "chytnucz-offline-shell");
   let source;
-  plugin.generateBundle.call({ emitFile: asset => { source = asset.source; } }, {}, {
+  assert.equal(plugin.generateBundle.order, "post");
+  plugin.generateBundle.handler.call({ emitFile: asset => { source = asset.source; } }, {}, {
     app: { fileName: "assets/app-new.js" }, html: { fileName: "index.html" },
   });
   const current = JSON.parse(/^const CACHE = (.+);$/m.exec(source)[1]);
@@ -31,10 +32,13 @@ async function generatedWorker(fetchImpl) {
     },
     keys: async () => [...rows.keys()], delete: async key => rows.delete(key),
   };
+  const opened = [], notifications = [];
   runInNewContext(source, { self: { location: { origin: "https://chytnu.test" },
-    addEventListener: (type, handler) => handlers.set(type, handler), clients: { claim: async () => {} } },
+    addEventListener: (type, handler) => handlers.set(type, handler),
+    registration: { showNotification: async (title, options) => { notifications.push({ title, options }); } },
+    clients: { claim: async () => {}, matchAll: async () => [], openWindow: async url => { opened.push(url); } } },
   URL, caches, fetch: fetchImpl });
-  return { rows, current, handlers, async navigate(path = "/journal") {
+  return { rows, current, handlers, opened, notifications, async navigate(path = "/journal") {
     let response; const pending = [];
     handlers.get("fetch")({ request: { method: "GET", mode: "navigate", url: `https://chytnu.test${path}` },
       respondWith: value => { response = value; }, waitUntil: value => pending.push(value) });
@@ -58,17 +62,39 @@ test("generated worker uses the current offline shell while retaining old lazy a
   assert.equal(await (await response).text(), "OLD-CHUNK");
 });
 
-test("generated worker caches successful HTML only; errors, other content and cache write failures preserve navigation", async () => {
-  for (const [status, contentType] of [[503, "text/html"], [404, "text/html"], [200, "application/json"]]) {
-    const worker = await generatedWorker(async () => new Response("UNSUITABLE", { status, headers: { "content-type": contentType } }));
+test("push and notification clicks accept internal paths and fall back when the target is external", async () => {
+  const worker = await generatedWorker();
+  let pending;
+  const waitUntil = value => { pending = value; };
+  worker.handlers.get("push")({ data: { json: () => null }, waitUntil });
+  await pending;
+  assert.equal(worker.notifications[0].options.data.deepLink, "/notifications");
+  for (const deepLink of ["//outside.test", "/journal?view=all"]) {
+    worker.handlers.get("notificationclick")({ notification: { close() {}, data: { deepLink } }, waitUntil });
+    await pending;
+  }
+  assert.deepEqual(worker.opened, ["https://chytnu.test/notifications", "https://chytnu.test/journal?view=all"]);
+});
+
+test("online navigation to a newer deployment cannot overwrite the installed offline shell", async () => {
+  let online = true;
+  const worker = await generatedWorker(async () => {
+    if (!online) throw new Error("offline");
+    return new Response('<script type="module" src="/assets/future.js"></script>', { headers: { "content-type": "text/html" } });
+  });
+  assert.match(await (await worker.navigate()).text(), /future\.js/);
+  online = false;
+  assert.equal(await (await worker.navigate()).text(), "CURRENT");
+  assert.equal(await worker.navigate("/api/social"), undefined);
+  assert.equal(await worker.navigate("/api"), undefined);
+});
+
+test("navigation preserves online HTTP errors without caching their response", async () => {
+  for (const status of [404, 503]) {
+    const worker = await generatedWorker(async () => new Response("ERROR", { status }));
     assert.equal((await worker.navigate()).status, status);
     assert.equal(await worker.rows.get(worker.current).get("/index.html").clone().text(), "CURRENT");
   }
-  const worker = await generatedWorker(async () => new Response("FRESH", { headers: { "content-type": "text/html; charset=utf-8" } }));
-  assert.equal(await (await worker.navigate()).text(), "FRESH");
-  assert.equal(await worker.rows.get(worker.current).get("/index.html").clone().text(), "FRESH");
-  worker.rows.get(worker.current).set = () => { throw new Error("cache full"); };
-  assert.equal(await (await worker.navigate()).text(), "FRESH");
 });
 
 test("Vercel config builds Vite into dist and preserves SPA routes", async () => {
@@ -103,7 +129,7 @@ test("production registers service worker with HTTP cache bypass for prompt app 
 test("offline shell precaches all generated route and feature chunks, including lazy imports", async () => {
   const config = await readFile(new URL("../vite.config.js", import.meta.url), "utf8");
   assert.match(config, /const generated = Object\.values\(bundle\)\.map\(\(item\) => `\/\$\{item\.fileName\}`\);/);
-  assert.match(config, /const files = \[[^\]]+\.\.\.generated\];/);
+  assert.match(config, /const files = \[\.\.\.new Set\(\[[^\]]+\.\.\.generated\]\)\];/);
   assert.match(config, /cache\.addAll\(FILES\)/);
 });
 
@@ -114,7 +140,7 @@ test("service worker keeps one prior shell for open tabs and only caches same-or
   assert.match(config, /previous\.filter\(\(key\) => key !== keep\)\.map\(\(key\) => caches\.delete\(key\)\)/);
   assert.match(config, /url\.pathname\.startsWith\('\/assets\/'\) \|\| \['\/favicon\.svg', '\/icons\.svg', '\/icon-192\.png', '\/icon-512\.png', '\/manifest\.webmanifest'\]/);
   assert.match(config, /url\.origin !== self\.location\.origin/);
-  assert.doesNotMatch(config, /url\.pathname\.startsWith\('\/api\//);
+  assert.match(config, /url\.pathname\.startsWith\('\/api\/'\)\) return;/);
 });
 
 test("environment example declares public client variables without server credentials", async () => {
