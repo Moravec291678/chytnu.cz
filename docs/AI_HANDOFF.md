@@ -244,3 +244,10 @@ Browser A/B/C used emulator-only synthetic data. No production customer data, se
 ## Current continuation — Stage 9 notifications
 
 Stage 9 in-app notifications: released in `1a83e11fbdb2cd9d513af119fec8ecd0582c8cd4`, pushed to `main`; Vercel production READY on the same SHA. Firestore Rules were deployed only to confirmed project `chutnucz`. `npm test` passed 1,162/1,162; lint/build/product/photos, Auth, Sync, full rules/social emulator suites, and `git diff --check` passed. Live page returned HTTP 200 and production notification bundle contains the preferences UI. Social browser-push sending is not implemented and the new-subscription control stays disabled. Physical mobile and authenticated live browser checks remain unverified. Next: inspect existing Nearby/privacy implementation and complete Stage 10 without rebuilding prior stages.
+
+## Obnova obou plánů – stav produkce a pokračování
+
+- Na produkci je d18f59545c140acae7d24364dbc691815739da06, READY. Vydané milníky: UX navigace 81ce9c5, Nearby 32a5092, audit RIS 64dcf5d a autorizovaná přítomnost u revíru d18f595. Live katalog HTTP 200, oba anonymní stavové dotazy HTTP 401.
+- Vydaná sada 1 177/1 177, lint/build PASS. Stage 12 navíc 22 testovacích kontrol Auth/Firestore, navazujících 83 kontrol Nearby a skutečný přihlášený tok Chromium 390 px PASS.
+- Etapa 13 PARTIAL. waterRoomMessageService.js má ověřené členství, ohraničené stránkování, uložení zprávy bez duplicit, blokování a manifest pro mazání účtu. Dva cílené jednotkové testy a lint prošly. Zbývá napojit autentizované API s limity, reporty a moderaci, zachovat místní zprávy při úpravě WaterChatPage a ověřit více účtů před vydáním.
+- Původní worktree chytnu-terminology zachovává všechny dříve rozpracované soubory. V této větvi pokračovat od posledního produkčního commitu a nezaměnit původní kopie již vydaných změn za nové funkce.
