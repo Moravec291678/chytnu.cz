@@ -101,6 +101,28 @@ try {
   assert.deepEqual(await call(5, "nearby.discover"), { active: false, profiles: [] }); checks++;
   assert.deepEqual(await call(5, "nearby.status"), { accepted: false, showProfile: false, expiresAt: null }); checks++;
   console.log(`Nearby emulator: ${checks} checks PASS`);
+  const previousChecks = checks;
+  const waterId = catalogue[0].id;
+  await call(-1, "waterPresence.status", {}, 401);
+  await call(0, "waterPresence.join", { waterId, confirmed: true, longitude: 14 }, 400);
+  await call(0, "waterPresence.join", { waterId, confirmed: false }, 400);
+  const session = await call(0, "waterPresence.join", { waterId, confirmed: true });
+  assert.deepEqual(await call(0, "waterPresence.status"), session); checks++;
+  assert.deepEqual(await call(1, "waterPresence.status"), { active: false }); checks++;
+  await call(1, "waterPresence.leave", { sessionId: session.sessionId });
+  assert.deepEqual(await call(0, "waterPresence.status"), session); checks++;
+  const directWater = await fetch(`http://127.0.0.1:8080/v1/projects/demo-chytnucz-local/databases/(default)/documents/waterPresence/${docId}`, { headers: { Authorization: `Bearer ${tokens[0]}` } });
+  assert.equal(directWater.status, 403); checks++;
+  const { sessionId } = await call(0, "waterPresence.refresh", { sessionId: session.sessionId });
+  await call(0, "waterPresence.leave", { sessionId: session.sessionId }, 409);
+  assert.notEqual(session.sessionId, sessionId); checks++;
+  await call(0, "waterPresence.leave", { sessionId });
+  assert.deepEqual(await call(0, "waterPresence.status"), { active: false }); checks++;
+  const expired = await call(0, "waterPresence.join", { waterId, confirmed: true });
+  time += 30 * 60_000;
+  assert.deepEqual(await call(0, "waterPresence.status"), { active: false }); checks++;
+  await call(0, "waterPresence.refresh", { sessionId: expired.sessionId }, 409);
+  console.log(`Water presence emulator: ${checks - previousChecks} checks PASS`);
 } finally {
   for (const uid of ids) { await db.doc(`accountDeletions/${uid}`).delete(); await db.doc(`accountSuspensions/${uid}`).delete(); await auth.deleteUser(uid).catch(() => {}); }
   await app.delete();

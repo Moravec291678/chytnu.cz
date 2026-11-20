@@ -20,6 +20,7 @@ import { createSocialFeedService } from "./socialFeedService.js";
 import { createSocialInteractionService } from "./socialInteractionService.js";
 import { publicationConsentPath } from "./publicationConsent.js";
 import { createNearbyPresenceService } from "./nearbyPresenceService.js";
+import { createWaterPresenceService } from "./waterPresenceService.js";
 export const profileError = (code, status = 400) => Object.assign(new Error(code), { code, status });
 export function createPublicProfileService({ db, auth, avatar, socialPhoto, env = {}, cursorSecret, now = () => Date.now() }) {
   const repository = createSocialRepository({ db, auth, now, profilesEnabled: true });
@@ -29,6 +30,7 @@ export function createPublicProfileService({ db, auth, avatar, socialPhoto, env 
   const feed=createSocialFeedService({db,publications,cursors:createSocialCursor({env,secret:cursorSecret,now})});
   const interactions=createSocialInteractionService({db,publications,cursors:createSocialCursor({env,secret:cursorSecret,now}),env,now});
   const nearby=createNearbyPresenceService({db,now});
+  const waterPresence = createWaterPresenceService({ db, now });
   async function identity(token) {
     if (!token) throw profileError("authentication_required", 401);
     try { return (await auth.verifyIdToken(token, true)).uid; } catch { throw profileError("authentication_required", 401); }
@@ -46,6 +48,10 @@ export function createPublicProfileService({ db, auth, avatar, socialPhoto, env 
       if (["nearby.join", "nearby.consent", "nearby.discover", "nearby.waterActivity"].includes(action)) {
         const key = createHash("sha256").update(uid).digest("hex");
         limits.push([`social-nearby-${action}-minute-${key}`, minute, 4], [`social-nearby-${action}-day-${key}`, day, 12]);
+      }
+      if (action === "waterPresence.join" || action === "waterPresence.refresh") {
+        const key = createHash("sha256").update(uid).digest("hex");
+        limits.push([`social-water-presence-minute-${key}`, minute, 4], [`social-water-presence-day-${key}`, day, 12]);
       }
       const rows = await Promise.all(limits.map(([key]) => tx.get(db.doc(`serverRateLimits/${key}`))));
       limits.forEach(([key, window, limit], i) => {
@@ -95,6 +101,7 @@ export function createPublicProfileService({ db, auth, avatar, socialPhoto, env 
     if (!uid && !["view", "image", "posts.list", "posts.image","posts.view"].includes(action)) throw profileError("authentication_required", 401);
     // A full stop is idempotent and must work after exhausting the join/change budget.
     if (action === "nearby.consent" && payload.accepted === false) return nearby.setConsent(uid, false, payload.showProfile);
+    if (action === "waterPresence.leave") return waterPresence.leave(uid, payload.sessionId);
     await limited(uid, action);
     if (action === "feed.list") return feed.list(uid,payload);
     if (action === "nearby.join") return nearby.join(uid,payload);
@@ -103,6 +110,9 @@ export function createPublicProfileService({ db, auth, avatar, socialPhoto, env 
     if (action === "nearby.status") return nearby.status(uid);
     if (action === "nearby.discover") return nearby.discover(uid);
     if (action === "nearby.waterActivity") return publications.nearbyWaterActivity(uid,payload.catalogueId);
+    if (action === "waterPresence.status") return waterPresence.status(uid);
+    if (action === "waterPresence.join") return waterPresence.join(uid, payload);
+    if (action === "waterPresence.refresh") return waterPresence.refresh(uid, payload.sessionId);
     if (action === "interactions.list") return interactions.list(uid,payload);
     if (action === "reactions.set") return interactions.setReaction(uid,payload);
     if (action === "comments.save") return interactions.saveComment(uid,payload);

@@ -105,10 +105,10 @@ export function createNearbyPresenceService({ db, now = () => Date.now() }) {
   };
 }
 
-export async function cleanupExpiredNearbyPresence({ db, now = Date.now, limit = 200 }) {
+async function cleanupExpiredPresence(collection, { db, now = Date.now, limit = 200 }) {
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500) throw new TypeError("Invalid cleanup limit");
   const cutoff = now();
-  const expired = await db.collection("nearbyPresence").where("expiresAt", "<=", cutoff).limit(limit).get();
+  const expired = await db.collection(collection).where("expiresAt", "<=", cutoff).limit(limit).get();
   if (expired.empty || expired.docs.length === 0) return { deleted: 0, more: false };
   const deleted = await db.runTransaction(async tx => {
     const current = await Promise.all(expired.docs.map(row => tx.get(row.ref)));
@@ -118,3 +118,6 @@ export async function cleanupExpiredNearbyPresence({ db, now = Date.now, limit =
   });
   return { deleted, more: expired.docs.length === limit };
 }
+
+export const cleanupExpiredNearbyPresence = options => cleanupExpiredPresence("nearbyPresence", options);
+export const cleanupExpiredWaterPresence = options => cleanupExpiredPresence("waterPresence", options);

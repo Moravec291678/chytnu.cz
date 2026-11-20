@@ -98,3 +98,10 @@ Release gate and production result are recorded in the final release checkpoint.
 - Poloha pro hledání katalogových revírů zůstává v zařízení. Návrhy měří vzdálenost k referenčnímu bodu RIS a vyžadují výběr. Aktivita zvoleného revíru čte pouze schválené veřejné publikace obsahující daný katalogový revír. Odpověď vynechává fotografie a soukromé údaje.
 - Server přestane počítat relaci při expiraci. Uložené záznamy odstraňuje stávající denní úklid po nejvýše 200 položkách. Před smazáním znovu ověří expiraci. Firebase TTL a placené služby nejsou potřeba.
 - Ověření: 1 173 jednotkových testů, lint, build a kontrola tajných klíčů PASS. 83 kontrol Nearby v emulátoru Auth/Firestore se šesti syntetickými účty PASS. Přihlášený průchod Chromium 390 px se syntetickou polohou a skutečným lokálním API PASS. Fyzické zařízení zůstává neověřené.
+
+## Sociální síť 11–12/18 – geometrie a přítomnost u revíru
+
+- Etapa 11: audit snapshotu RIS dokončen a vydán v commitu 64dcf5d91626983319cceb8e2288c1a612dcb991. Osmnáct cílených testů prošlo. Vercel READY na odpovídajícím commitu. Podrobnosti jsou v docs/SOCIAL_RIS_GEOMETRY.md.
+- Etapa 12: přihlášený rybář může v katalogovém detailu potvrdit přítomnost na 30 minut, načíst stav, prodloužit nebo ukončit relaci. Backend ověřuje skutečný katalogový identifikátor, účet a platnost serverové relace. GPS se nevyžaduje ani neukládá. Stav je určený pro vlastní účet. Změny používají rotační ID relace, aby starší zařízení nepřepsalo novější volbu. Expiraci ověřuje každý autorizační dotaz.
+- Přístupová pravidla a indexy Firebase zůstaly stejné. Denní úklid využívá existující úlohu. Emulátor 22 kontrol přítomnosti u revíru a 83 kontrol Nearby PASS. Chromium při 390 px s přihlášeným syntetickým účtem ověřilo potvrzení, zapnutí, prodloužení a ukončení.
+- Další sociální milník je etapa 13. Napojit živý chat na existující serverovou autorizaci revíru, bezpečné stránkování a moderaci a zachovat staré místní zprávy.

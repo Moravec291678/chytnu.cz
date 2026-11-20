@@ -46,13 +46,13 @@ const schema = {
   reaction: { ownerUid: uid, kind: oneOf(["like", "congratulations"]) },
   block: { ownerUid: uid, targetUid: uid },
   nearby: { ownerUid: uid, coarseCell: v => typeof v === "string" && /^[0123456789bcdefghjkmnpqrstuvwxyz]{4}$/.test(v), expiresAt: Number.isSafeInteger },
-  presence: { ownerUid: uid, waterId: water, expiresAt: Number.isSafeInteger },
+  presence: { ownerUid: uid, waterId: water, expiresAt: Number.isSafeInteger, sessionId: v => typeof v === "string" && /^[0-9a-f-]{36}$/.test(v) },
   room: { waterId: water },
   message: { ownerUid: uid, text: text(1000) },
   conversation: { memberUids: v => members(v) && v.length === 2 },
   crew: { ownerUid: uid, memberUids: members, name: text(60), visibility },
 };
-const optional = { profile: ["bio"], relationship: ["revision", "lastActorUid", "identitySnapshots", "notificationTimes", "rejectedUntil"], post: ["waterId"] };
+const optional = { profile: ["bio"], relationship: ["revision", "lastActorUid", "identitySnapshots", "notificationTimes", "rejectedUntil"], post: ["waterId"], presence: ["sessionId"] };
 export function validateSocialRecord(kind, input, { now = Date.now() } = {}) {
   const fields = schema[kind];
   if (!fields || !input || typeof input !== "object" || Array.isArray(input)) throw new TypeError("Invalid social record");
