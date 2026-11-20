@@ -11,6 +11,7 @@ import { toRemoteRecord } from "../../sync/data/firestoreSyncAdapter.js";
 import { getWaterRelatedCatches } from "./waterDetailStats.js";
 import { openLocalDatabase, APP_META_STORE_NAME, catchRepository } from "../../catches/data/catchRepository.js";
 import { quickCaptureGenerationKey } from "../../catches/data/quickCaptureLifecycle.js";
+import { nearbyWaterPoints, waterPoint } from "./waterLocation.js";
 
 const base = new URL(`../../../../public/data/ris/${RIS_MANIFEST.version}/`,import.meta.url);
 const index = JSON.parse(await readFile(new URL("index.json",base),"utf8"));
@@ -37,6 +38,35 @@ test("catalogue search ignores accents and number spacing and combines actual fi
   assert.equal(filterCatalogue(index,{query:"4510091"}).length,2); assert.equal(filterCatalogue(index,{query:"4 510 091"}).length,2);
   const filtered=filterCatalogue(index,{fisheryType:"Pstruhový",union:index.find(row=>row.fisheryType==="Pstruhový").union,withCoordinates:true});
   assert.ok(filtered.length); assert.ok(filtered.every(row=>row.coordinates&&row.fisheryType==="Pstruhový"));
+});
+
+test("RIS geometry audit reconciles every indexed point with its detail and retains distinct waters at shared points", () => {
+  const groups = new Map();
+  let missing = 0;
+  for (const row of index) {
+    const detail = allDetails[row.id]?.detail;
+    assert.ok(detail, row.id);
+    assert.deepEqual(row.coordinates, detail.coordinates, row.id);
+    assert.equal(row.geometry ?? row.polygon ?? row.boundary ?? detail.geometry ?? detail.polygon ?? detail.boundary, undefined, row.id);
+    if (!row.coordinates) {
+      missing++;
+      continue;
+    }
+    const point = waterPoint(row.coordinates);
+    assert.ok(point, row.id);
+    const key = `${point.latitude},${point.longitude}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(row);
+  }
+  assert.equal(missing, RIS_MANIFEST.missing.coordinates);
+  assert.equal(groups.size, 1260);
+  const shared = [...groups.values()].filter(group => group.length > 1);
+  assert.deepEqual(shared.map(group => group.length), [2, 2, 2]);
+  const now = Date.parse("2026-11-20T00:00:00Z");
+  for (const group of shared) {
+    const matches = nearbyWaterPoints(index, { coordinates: group[0].coordinates, accuracyMeters: 20, capturedAt: new Date(now).toISOString() }, { now });
+    for (const water of group) assert.ok(matches.some(match => match.water.id === water.id && match.distanceMeters === 0), water.id);
+  }
 });
 test("catalogue cache survives reopen without network and failed requests remain retryable",async()=>{
   let calls=0;
