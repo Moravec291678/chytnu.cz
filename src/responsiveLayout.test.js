@@ -31,3 +31,18 @@ test("Gallery viewer height accounts for iPhone safe areas", async () => {
   const gallery = await css("./pages/GalleryPage.css");
   assert.match(gallery, /\.gallery-viewer\{[^}]*height:min\(900px,calc\(100dvh - env\(\s*safe-area-inset-top\s*\) - env\(\s*safe-area-inset-bottom\s*\)\)\)/);
 });
+
+test("primary navigation and Journal shortcuts have narrow-width and safe-area layout constraints", async () => {
+  const [layout, layoutCss, journal, journalCss] = await Promise.all([
+    css("./shared/layout/Layout.jsx"),
+    css("./shared/layout/Layout.css"),
+    css("./pages/JournalPage.jsx"),
+    css("./pages/JournalPage.css"),
+  ]);
+  assert.match(layout, /nav-label">Domů[\s\S]*nav-label">Deník[\s\S]*nav-label">Komunita[\s\S]*nav-label">Profil/);
+  assert.match(layoutCss, /\.bottom-nav\s*\{[^}]*width:\s*100%[^}]*max-width:\s*487px[^}]*safe-area-inset-bottom/);
+  assert.match(layoutCss, /\.nav-item\s*\{[^}]*min-width:\s*0[^}]*min-height:\s*48px[^}]*flex:\s*1 1 0/);
+  assert.match(layoutCss, /@media\s*\(max-width:\s*360px\)[\s\S]*\.nav-fab\s*\{[^}]*width:\s*56px/);
+  assert.match(journal, /to="\/trips">Vycházky[\s\S]*to="\/gallery">Galerie[\s\S]*to="\/stats">Statistiky/);
+  assert.match(journalCss, /\.journal-tabs\s*\{[^}]*grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\)/);
+});
