@@ -76,3 +76,13 @@ Browser evidence: the community post composer stayed disabled until public conse
 - Unit tests cover preference defaults/normalization, cross-device notification updates, read-state merge and unsubscribe cleanup.
 - Production Firestore rules deployment not performed because only the local demo project is configured. Physical device and authenticated browser multi-account acceptance remain unverified.
 - Follow-up release: `firestore.rules` was deployed to the verified ChytnuCZ Firebase project `chutnucz`; Vercel production is READY for code SHA `1a83e11fbdb2cd9d513af119fec8ecd0582c8cd4`, live home HTTP 200, production notification UI bundle verified.
+
+## Produkční audit – PWA, hlavní navigace a nativní oprávnění
+
+Výchozí produkce i main byly 6587d4518125949851d42bb725b99ecc41d08850. Práce proběhla na větvi codex/chytnu-release-continuation. Původní worktree s 27 rozpracovanými soubory zůstal zachovaný.
+
+- PWA: build obsahoval pět odkazů na odstraněné JS soubory, což zablokovalo instalaci service workeru. Seznam se nyní generuje po dokončení ostatních výstupních hooků Vite a build kontroluje existenci všech 154 položek. Offline HTML se uchovává s odpovídajícími assety. API zůstává mimo offline cache a odkazy z oznámení míří do aplikace.
+- Navigace: jedna mapa sekcí sjednocuje stav podstránek, staré adresy s lomítkem, aktivitu ryb, Hotspoty a oznámení. Nastavení profilu a chat revíru mají vlastní odpovídající rodiče.
+- Chromium: 180 přechodů na 18 trasách při 320, 360, 375, 390, 430, 768, 1024, 1280, 1440 a 1920 px. Bez zjištěného vodorovného přetečení v těchto kontrolách. Po odpojení serveru prošlo šest navigací a offline Quick Catch se skutečným čtením fotografie v detailu po novém načtení. Fyzická PWA a restart celého prohlížeče jsou neověřené.
+- Android wrapper deklaruje polohu v popředí, iOS popisuje účel kamery a polohy při používání aplikace. XML a tři platformní testy prošly. Android target/compile SDK je 36 a applicationId/bundle ID je cz.chytnu.app. Android SDK a Xcode v tomto prostředí nejsou k dispozici. Podpisy, fyzické testy a store balíčky zůstávají otevřené.
+- Prošlo 1 183 jednotkových testů, lint, build, produktový inventář, kontrola Cloudinary klientských secret markerů a npm audit produkčních závislostí bez nálezů. Firebase Rules, Auth, Sync a Photos prošly v lokálním testovacím prostředí.

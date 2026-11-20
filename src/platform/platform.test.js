@@ -28,3 +28,16 @@ test("Capacitor uses the Vite build output and leaves the PWA service worker web
   assert.match(config, /"appId":\s*"cz\.chytnu\.app"/);
   assert.match(entry, /!Capacitor\.isNativePlatform\(\)\s*&&\s*"serviceWorker" in navigator/);
 });
+
+test("Capacitor declares foreground location and camera purposes for existing capture flows", async () => {
+  const [android, ios] = await Promise.all([
+    readFile(new URL("../../android/app/src/main/AndroidManifest.xml", import.meta.url), "utf8"),
+    readFile(new URL("../../ios/App/App/Info.plist", import.meta.url), "utf8"),
+  ]);
+  assert.match(android, /<uses-permission android:name="android\.permission\.ACCESS_COARSE_LOCATION"\s*\/>/);
+  assert.match(android, /<uses-permission android:name="android\.permission\.ACCESS_FINE_LOCATION"\s*\/>/);
+  assert.doesNotMatch(android, /ACCESS_BACKGROUND_LOCATION/);
+  assert.match(ios, /<key>NSCameraUsageDescription<\/key>\s*<string>[^<]+<\/string>/);
+  assert.match(ios, /<key>NSLocationWhenInUseUsageDescription<\/key>\s*<string>[^<]+<\/string>/);
+  assert.doesNotMatch(ios, /NSLocationAlways|<key>UIBackgroundModes<\/key>/);
+});

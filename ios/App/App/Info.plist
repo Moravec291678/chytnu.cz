@@ -24,6 +24,10 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Foťák použijeme, až se rozhodneš vyfotit úlovek do rybářského deníku.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Polohu použijeme na tvou žádost pro návrh revíru, načtení počasí nebo doplnění soukromého záznamu o úlovku.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
