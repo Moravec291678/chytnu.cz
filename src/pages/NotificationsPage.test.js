@@ -11,7 +11,7 @@ test("Home offers a bell inbox with unread count while Profile remains in primar
   assert.match(home, /dashboard-notification-badge/);
   assert.match(home, /useNotifications\(\)/);
   assert.match(layout, /to="\/profile" className=\{itemClass\(profileActive\)\}/);
-  assert.match(layout, /pathname === "\/notifications"/);
+  assert.match(layout, /navigationSection\(pathname\)/);
   assert.match(layout, /to="\/journal" className=\{itemClass\(journalActive\)\}/);
 });
 

@@ -6,6 +6,7 @@ import PwaUpdateNotice from "./PwaUpdateNotice.jsx";
 import "./Layout.css";
 import "./SyncStatus.css";
 import { SYNC_STATUS_COMPACT_DELAY_MS } from "./syncStatusView.js";
+import { navigationSection } from "./navigationSection.js";
 
 function NavIcon({ name }) {
   const common = {
@@ -43,11 +44,11 @@ function Layout({ children }) {
     };
   }, []);
   const itemClass = (active) => active ? "nav-item nav-item-active" : "nav-item";
-  const homeActive = pathname === "/";
-  const journalActive = pathname.startsWith("/journal") || pathname.startsWith("/catch/") || pathname.startsWith("/species/") || pathname === "/gallery" || pathname === "/album" || pathname === "/map" || pathname === "/stats" || pathname === "/insights" || pathname === "/season-story" || pathname === "/year-summary" || pathname === "/trips" || pathname.startsWith("/trips/");
-  const communityActive = pathname === "/community" || pathname.startsWith("/community/") || pathname.startsWith("/u/") || pathname === "/friends" || pathname === "/nearby" || pathname === "/crew" || /^\/waters\/[^/]+\/chat$/.test(pathname);
-  const watersProfileActive = (pathname === "/waters" || pathname.startsWith("/waters/")) && !/^\/waters\/[^/]+\/chat$/.test(pathname);
-  const profileActive = pathname === "/profile" || pathname === "/profile/social" || pathname === "/settings" || pathname === "/privacy" || pathname === "/notifications" || pathname === "/achievements" || pathname === "/levels" || pathname === "/challenges" || pathname === "/streak" || pathname === "/supporter" || watersProfileActive;
+  const section = navigationSection(pathname);
+  const homeActive = section === "home";
+  const journalActive = section === "journal";
+  const communityActive = section === "community";
+  const profileActive = section === "profile";
   return (
         <div className={adminRoute ? "layout layout-admin" : pathname === "/gallery" ? "layout layout-gallery" : "layout"}>
       <SyncStatus sync={sync} isOnline={isOnline} compact={sync?.status === "syncing" && sync?.showSyncStatus && compactSyncId === syncPresentationId} />
@@ -62,7 +63,7 @@ function Layout({ children }) {
           <span className="nav-icon" aria-hidden="true"><NavIcon name="journal" /></span>
           <span className="nav-label">Deník</span>
         </Link>
-        <Link to="/add" className="nav-fab" aria-label="Přidat úlovek" aria-current={pathname === "/add" ? "page" : undefined}>
+        <Link to="/add" className="nav-fab" aria-label="Přidat úlovek" aria-current={section === "capture" ? "page" : undefined}>
           +
         </Link>
         <Link to="/community" className={itemClass(communityActive)} aria-current={communityActive ? "page" : undefined}>
