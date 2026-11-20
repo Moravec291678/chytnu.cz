@@ -23,3 +23,7 @@
 
 - Emulator testy nedokazují produkční kvóty, region, IAM, fakturaci, doručování e-mailu ani mobilní background sync.
 - Browser QA použilo izolovaný IAB na 390 px a syntetická data. Google popup a plný offline restart zůstaly omezením IAB.
+
+## Aktualizace auditu 20. listopadu 2026
+
+Chromium ověřilo offline obnovu aplikace a fotografie po restartu celého procesu. Neověřené zůstávají fyzická instalovaná PWA, živá Cloudinary distribuce, výkon na slabších telefonech a podepsané Android/iOS balíčky. Aktuální stav vydání, navigace a bezpečnostních testů je v AI_FULL_AUDIT.md. Starší poznámky o veřejných funkcích a infrastruktuře popisují tehdejší stav MVP.

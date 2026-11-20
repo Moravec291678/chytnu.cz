@@ -15,3 +15,7 @@ Sociální funkce, veřejné mapy, gamifikace, AI a monetizace následují pouze
 - Aktuální audit zůstává PARTIAL.
 - Security review nepotvrdil žádnou jasnou zranitelnost v kontrolovaném kódu.
 - Další práce je aplikovat jen opravitelné a ověřitelné auditní nálezy; nepouštět se do Stage 9.
+
+## Audit 20. listopadu 2026
+
+Webová oprava PWA prošla offline obnovou úlovku s fotografií po úplném restartu Chromia. Další akceptace se týká nainstalované PWA na fyzickém Androidu a iPhonu, živého sdílení fotografií s testovacím účtem a měření na slabším telefonu. Nativní vydání čeká na ověření sestavení, podpisu a hardwarových toků.

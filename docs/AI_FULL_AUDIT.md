@@ -121,3 +121,7 @@ Stage 9 release follow-up: code commit `1a83e11fbdb2cd9d513af119fec8ecd0582c8cd4
 - **Android a iOS.** Deklarace kamery a polohy odpovídají stávajícím nativním tokům. Android target/compile SDK 36. Pro nativní ověření je potřeba Android SDK a na Macu Xcode 26 nebo novější s iOS 26 SDK. Zůstávají podpisy, reálné kamery, GPS, HEIC, safe areas, testovací balíčky a ověření na fyzických zařízeních. [Google Play](https://support.google.com/googleplay/android-developer/answer/11926878?hl=en-en) · [Apple](https://developer.apple.com/news/upcoming-requirements/?id=02032026a).
 
 **Před úplnou akceptací** projít všechny přihlášené uživatelské toky na zařízení, instalovanou PWA na Androidu a iPhonu a živé Cloudinary sdílení s testovacím účtem a snímkem. Tento průchod zahrnoval hostovskou matici v Chromiu a samostatnou bezpečnostní verifikaci přes emulátor. Fyzická zařízení a podepsané buildy nebyly k dispozici.
+
+### Následné ověření vydání
+
+Vercel produkce potvrdila READY pro 65b7f623f6d9dee1dd9ebccb574173aac2ce0c6e. Domů, Deník a service worker vrátily HTTP 200. Na lokálním Vite serveru se skutečným Firebase Auth emulátorem se přihlásil syntetický ověřený účet, dokončil onboarding bez požadavku na GPS a prošel navigaci 14 tras při deseti šířkách. 140 kontrol trasy, aktivní sekce a vodorovného přetečení prošlo. Kompletní přihlášené transakční toky a fyzická zařízení zůstávají mimo tuto matici.

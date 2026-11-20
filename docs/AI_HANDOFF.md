@@ -255,3 +255,5 @@ Stage 9 in-app notifications: released in `1a83e11fbdb2cd9d513af119fec8ecd0582c8
 ## Stav úplného auditu · 20. listopadu 2026
 
 Pracovní větev codex/chytnu-release-continuation v chytnu-terminology-ux-checkpoint. Původní chytnu-terminology na 208baf2 obsahuje 27 zachovaných rozpracovaných souborů. Nasazeno 81406e2, 951ac12 a 0fe9d8a. Následuje lokální analýza, odkazy v Deníku a zpráva v AI_FULL_AUDIT.md. Prošlo 1 184 jednotkových testů, Chromium 180 kombinací a offline znovuotevření po restartu procesu. Navázat ověřením autentizovaných webových toků, živých fotografií, fyzických zařízení a nativních buildů. Windows ponechán zapnutý kvůli nezavřeným bodům auditu.
+
+Následně push 65b7f623f6d9dee1dd9ebccb574173aac2ce0c6e a Vercel READY na stejném SHA. Přihlášení, onboarding a 140 přihlášených kombinací navigace prošly v Chromiu s emulátorem. Pokračovat transakčními uživatelskými toky a fyzickou akceptací.

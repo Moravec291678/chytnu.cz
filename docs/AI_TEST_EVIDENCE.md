@@ -92,3 +92,6 @@ Výchozí produkce i main byly 6587d4518125949851d42bb725b99ecc41d08850. Práce 
 - 1 184/1 184 jednotkových testů po úpravách Deníku a analýzy. Lint, build a product PASS. Build ověřil 154 souborů offline manifestu a 162 klientských assetů kontrolou Cloudinary secret markerů.
 - Chromium na lokálním produkčním buildu a s testovací fotografií. Po odpojení serveru šest úspěšných navigací a čtení fotografie Quick Catch. Ukončení celého procesu přes Browser.close, nové spuštění se stejným testovacím profilem a stále odpojeným serverem, detail znovu načetl fotografii s nenulovou skutečnou šířkou.
 - Fyzická instalovaná PWA, iOS/Android podepsané buildy a Cloudinary v produkci zůstávají neověřené.
+
+- Přihlášený Chromium test: skutečný Auth emulátor, ověřený syntetický účet, přihlášení přes formulář, dokončení onboardingu bez GPS, potom 14 tras × 10 šířek. Všech 140 kontrol bez nálezu. Testovací účet a lokální běhy emulátoru byly ukončeny.
+- Vercel production READY na SHA 65b7f623f6d9dee1dd9ebccb574173aac2ce0c6e. Home, Deník a service worker HTTP 200.

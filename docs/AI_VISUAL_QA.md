@@ -66,3 +66,7 @@ Offline close/reopen in the integrated browser showed an empty app; cause remain
 ## Browser QA · 20. listopadu 2026
 
 Chromium ověřilo 18 tras při šířkách 320, 360, 375, 390, 430, 768, 1024, 1280, 1440 a 1920 px v hostovském režimu. Kontroly ověřily trasu, aktivní sekci a vodorovné přetečení bez nálezu. Při 390 px skutečným kliknutím prošly všechny tři odkazy z rozbalovací skupiny přehledů v Deníku. Tato sada nepokrývá všechny přihlášené obrazovky, vizuální regresi všech komponent ani hardwarové safe areas.
+
+### Doplňující ověření přihlášeného účtu
+
+Syntetický účet Firebase Auth prošel přihlášením e-mailem, onboardingem bez žádosti o GPS a 140 kombinacemi přihlášené trasy a šířky. Rozsah zahrnul Domů, Deník, Vycházky, Galerii, Statistiky, Komunitu, Přátele, Okolí, Profil, Nastavení, Soukromí, katalog revírů, Přidat úlovek a Oznámení při stejných deseti šířkách. Kontrolovaná navigace bez nálezu.
