@@ -9,6 +9,7 @@ import { getWaterCatchSeasonCounts, getWaterHourlyCatchRate, getWaterRelatedCatc
 import { waterRepository } from "../features/waters/data/waterRepository.js";
 import CatchCard from "../features/catches/components/CatchCard.jsx";
 import ConfirmDialog from "../shared/components/ConfirmDialog.jsx";
+import { isFeatureEnabled } from "../shared/config/featureFlags.js";
 import "./WaterDetailPage.css";
 const CatalogueWaterMap=lazy(()=>import("../features/waters/components/CatalogueWaterMap.jsx"));
 
@@ -165,7 +166,7 @@ function WaterDetailPage() {
         <Link to={`/waters/${water.id}/edit`} aria-label="Upravit revír" className="water-detail-icon-button">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 16.5-.8 4.3 4.3-.8L20 7.5 16.5 4 4 16.5Z" /><path d="m14.8 5.7 3.5 3.5" /></svg>
         </Link>
-        <Link to={`/waters/${water.id}/chat`} aria-label="Chat revíru" className="water-detail-icon-button">💬</Link>
+        {isFeatureEnabled("waterChat") && <Link to={`/waters/${water.id}/chat`} aria-label="Chat revíru" className="water-detail-icon-button">💬</Link>}
         <button type="button" className="water-detail-icon-button" aria-label="Smazat revír" onClick={() => setConfirmingDelete(true)} disabled={deleting}>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m-9 0 1 13h10l1-13M10 11v6m4-6v6" /></svg>
         </button>

@@ -13,7 +13,7 @@ if (process.env.FIRESTORE_EMULATOR_HOST !== "127.0.0.1:8080" || process.env.FIRE
 const app = initializeApp({ projectId: "demo-chytnucz-local" }, `nearby-${randomUUID()}`), db = getFirestore(app), auth = getAuth(app);
 const suffix = randomUUID().replaceAll("-", "").slice(0, 8), ids = [], tokens = [];
 let time = Date.now(), checks = 0;
-const handler = createSocialHandler({ service: createPublicProfileService({ db, auth, env: {}, now: () => time,
+const handler = createSocialHandler({ features: { nearby: true, waterPresence: true }, service: createPublicProfileService({ db, auth, env: {}, now: () => time,
   cursorSecret: "synthetic-nearby-emulator-cursor-key-over-32-characters" }) });
 async function call(index, action, payload = {}, expected = 200) {
   const response = { statusCode: 200, setHeader() {}, status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } };

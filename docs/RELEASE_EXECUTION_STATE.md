@@ -13,7 +13,7 @@
 
 ## Registrované úkoly
 
-**Rozdělení:** P0 0 potvrzených, P1 14 podmínek příslušného vydání, P2 3 a P3 2. P1 pro obchod, sociální beta nebo cloud se uplatňuje v uvedeném rozsahu. **Stavy:** 7 NOT STARTED, 2 IN PROGRESS, 10 BLOCKED. Dokončené dílčí funkce jsou uvedené s důkazem nahoře nebo u ID; žádný z 19 otevřených úkolů ještě nesplňuje všechny podmínky pro VERIFIED nebo DEPLOYED. Příznak nasazení popisuje celek úkolu, u existujících komponent uvádí přesný dostupný rozsah.
+**Rozdělení:** P0 0 potvrzených, P1 14 podmínek příslušného vydání, P2 3 a P3 2. P1 pro obchod, sociální beta nebo cloud se uplatňuje v uvedeném rozsahu. **Stavy:** 6 NOT STARTED, 3 IN PROGRESS, 10 BLOCKED. Dokončené dílčí funkce jsou uvedené s důkazem nahoře nebo u ID; žádný z 19 otevřených úkolů ještě nesplňuje všechny podmínky pro VERIFIED nebo DEPLOYED. Příznak nasazení popisuje celek úkolu, u existujících komponent uvádí přesný dostupný rozsah.
 
 ### P0 · Bezpečnost a data
 
@@ -21,7 +21,7 @@
 
 ### P1 · Podmínky webu a pilotu
 
-- **REL-01 · Rozsah pilotu a uzavření nedokončených funkcí · NOT STARTED.** Soubory `src/app/App.jsx`, `src/product/config/featureFlags.js`, `src/features/social/server/socialApi.js`. Závislost rozhodnutí o rozsahu. Test přímých a navigačních tras i akcí pro hosta, účet a ownera, zvlášť zachování deníku offline. Hotovo, když nepovolené UI i serverové operace odpovídají schválené matici a historie zůstává čitelná v oprávněném scope. Vlastník schvaluje rozsah. **Nasazeno:** stávající dílčí přepínače a lokální Crew; jednotná hranice celého pilotu otevřená.
+- **REL-01 · Rozsah pilotu a uzavření nedokončených funkcí · IN PROGRESS.** Soubory `src/app/App.jsx`, `src/product/config/featureFlags.js`, `src/features/social/server/socialApi.js`. Závislost rozhodnutí o rozsahu. Test přímých a navigačních tras i akcí pro hosta, účet a ownera, zvlášť zachování deníku offline. Hotovo, když nepovolené UI i serverové operace odpovídají schválené matici a historie zůstává čitelná v oprávněném scope. Vlastník schvaluje rozsah. **Nasazeno:** stávající dílčí přepínače a lokální Crew; jednotná hranice celého pilotu otevřená.
 - **REL-02 · Identita prostředí, pravidla a rollback · IN PROGRESS.** Soubory `vercel.json`, `firestore.rules`, `firestore.indexes.json`, `docs/FIREBASE_PRODUCTION_SETUP.md`. Závislost přístupy jen v potřebném rozsahu. Test porovnání pravidel a indexů, izolovaný preview smoke a návrat se správnou verzí rules. Hotovo po doložení Vercel/Firebase identity, rolí IAM, domén, retence a odděleného preview. Vlastník potvrzuje či deleguje přístup a izolaci. **Nasazeno:** audit už potvrdil shodu produkčních pravidel a indexů; izolace a návrat jako celek otevřené.
 - **REL-03 · Živé Cloudinary fotky · BLOCKED.** Blokátor schválený sandbox, syntetické účty a živý poskytovatel. Soubory `api/cloudinary/`, `src/server/cloudinaryApi.js`, `src/features/catches/data/photoInput.js`. Závislost REL-02. E2E JPEG a HEIC, přerušený upload, opakování, autorizace originálu, doručení derivátu, EXIF a cleanup. Hotovo při čitelné fotce na obou zařízeních, prázdné frontě a potvrzeném odstranění dohodnutých médií. Vlastník schválí prostředí a přístup. **Nasazeno:** capability enabled a obsluha existuje; živá akceptace chybí.
 - **REL-04 · Auth, export, obnova a skutečný výmaz · BLOCKED.** Blokátor schválené živé testovací účty e-mail a Google, odkaz z e-mailu a živý cleanup. Soubory `src/pages/LoginPage.jsx`, `src/pages/SettingsPage.jsx`, `api/account/delete.js`, `docs/ACCOUNT_DELETION.md`. Závisí na REL-02, návaznost na média REL-03. Test registrace a ověření, reset, expirace, A/B scope, hranice exportu, obnovy, žádosti s čerstvým auth a dokončení výmazu i po odhlášení. Hotovo s doloženou izolací a kontrolou lokálních, účtových, Cloudinary a sociálních dat. Vlastník schválí syntetické účty a scope. **Nasazeno:** existující obsluha účtu; živá akceptace jako celek otevřená.
@@ -52,43 +52,48 @@
 
 ## Návaznost promptů 00–33
 
-K dispozici je znění Promptu 00 a auditní milníky M1–M6. Čísla 01–33 níže tvoří pracovní mapu, dokud nepřijde přesné znění jednotlivých zadání. Každá etapa má vlastní výstup. Více etap u jednoho ID označuje odlišnou část téhož úkolu. Důkazy se přebírají jednou a poslední část ověří celý kontrakt. Kontrola veřejného vydání v 33 nečeká na odložitelné etapy 25–32.
+Řídí se souborem chytnucz_34_postupnych_codex_promptu.md ze Stažených souborů. Všechny 34 bloky se obsahově shodují se čtyřmi svazky. Mapa níže nahrazuje předběžné pořadí z Promptu 00. Stejné ID připomíná společné kritérium, dílčí důkazy se mezi prompty přebírají.
 
-1. **00 — Převzetí.** Ověřený baseline, registr a pravidla.
-2. **01 — REL-01.** Soupis skutečných tras a serverových akcí. Schvalovatelná matice soukromého pilotu, rolí a funkcí mimo scope.
-3. **02 — REL-01.** Router a odkazy podle schválené matice, včetně přímých Crew/chat URL a zachování dat.
-4. **03 — REL-01.** Serverové hranice a společný negativní test UI/API pro hosta, účet a ownera.
-5. **04 — REL-02.** Přehled projektu, domén, IAM, režimů a retence bez tajných hodnot. Převzít důkaz o rules/indexech.
-6. **05 — REL-02.** Izolované preview, readiness smoke a dokumentovaný návrat konfigurace. Skutečný cvičný návrat provozu je v 22.
-7. **06 — REL-07.** Kritická kontrola základních cest v prohlížeči, opravy zálohových vstupů a navigace s kontinuitou deep linků.
-8. **07 — REL-08.** RIS, počasí, mapy a licence. Odebrání či ruční fallback pouze u neschváleného zdroje.
-9. **08 — REL-08.** Texty, kontakty, retence a podle scope moderace, schválení odpovědnou osobou.
-10. **09 — REL-03.** Připravit izolovanou syntetickou sadu foto a E2E diagnostiku.
-11. **10 — REL-03.** Živý upload, dvě zařízení, přerušení, restart a dočtení fotky.
-12. **11 — REL-03.** Média na hranici oprávnění: originál, EXIF derivátu, přístup a definitivní úklid média.
-13. **12 — RISK-01.** Provider limit, životnost grantů, odmítnutí a úklid překročeného uploadu.
-14. **13 — REL-04.** Živá registrace a přihlášení e-mailem a Google, reset a střídání účtů.
-15. **14 — REL-04.** Export s limity a chybějícím médiem, zkušební obnova v čistém scope.
-16. **15 — REL-04.** Výmaz účtu až po dokončení fronty, nezávislost na relaci a zachování účtu B.
-17. **16 — REL-05.** Souhlas a odvolání mezi účty a starou relací. Použít důkaz přístupu médií z 11, ověřit revizi a TTL po odvolání.
-18. **17 — REL-06.** Instalovaná iOS PWA, galerie/HEIC, kamera, GPS a offline obnovení.
-19. **18 — REL-06.** Instalovaná Android PWA, kamera, GPS, offline obnovení a fronta.
-20. **19 — REL-06.** Aktualizace a konflikt s již neodeslanou frontou z předchozích fyzických testů.
-21. **20 — REL-07.** Přístupnost a referenční měření: zoom, fokus, čtečka, klávesnice a velké seznamy. Optimalizační změny v 27.
-22. **21 — REL-09.** Provozní signály, cron, backlog, příjemce a doručený syntetický alert.
-23. **22 — REL-09.** Cvičný návrat verze s outboxem a obnova z dohodnuté zálohy.
-24. **23 — REL-10.** Akceptační podmínky, limity, schválení a příprava pozvaného pilotu.
-25. **24 — REL-10.** Pilot, výsledky a rozhodnutí o rozšiřování podle kvót, defektů a podpory.
-26. **25 — RISK-02.** Inventář zdrojů, CSP report-only a bezpečný přechod podle výsledků.
-27. **26 — RISK-03.** Offline kolize stejného revíru a bezpečná detekce či potvrzené sloučení.
-28. **27 — POST-01.** Měřené změny chunků, stránkování a cache proti scénáři z 20.
-29. **28 — MOB-01.** Android build, podpis a Play testovací kanál.
-30. **29 — MOB-02.** iOS archiv, podpis a TestFlight.
-31. **30 — MOB-03.** Publikovat ověřenou vnější cestu výmazu, schválit store deklarace a připravit podání.
-32. **31 — POST-02.** Samostatná sociální beta, jen moduly s uzavřenou bezpečností a moderací.
-33. **32 — POST-03.** Schválené volitelné funkce po vlastní akceptaci a potvrzené dostupnosti zdarma.
-34. **33 — REL-10.** Finální rozhodnutí o veřejném webu nad aktuálním SHA a důkazy z pilotu, bez opakování pokrytých testů na shodném kandidátovi.
+- **00 — ŘÍDICÍ CHECKPOINT, SKUTEČNÝ BACKLOG A BEZPEČNÝ PLÁN PRÁCE** · baseline
+- **01 — REL-01/REL-02: ROZSAH PRVNÍ VERZE, FEATURE FLAGS A BEZPEČNOST TRAS** · REL-01/02
+- **02 — REGISTRACE, PŘIHLÁŠENÍ, RESET HESLA A DVA SKUTEČNÉ ÚČTY** · REL-04
+- **03 — SOUKROMÍ, VEŘEJNÉ PROJEKCE, PUBLIKACE A ODVOLÁNÍ SOUHLASU** · REL-05
+- **04 — EXPORT UŽIVATELSKÝCH DAT A ÚPLNÝ VÝMAZ ÚČTU** · REL-04/09
+- **05 — OFFLINE OUTBOX, VÍCE ZAŘÍZENÍ A BEZCHYBNÁ SYNCHRONIZACE** · REL-04/06
+- **06 — SKUTEČNÝ CLOUDINARY UPLOAD, DORUČENÍ A DRUHÉ ZAŘÍZENÍ** · REL-03
+- **07 — REVOKACE VEŘEJNÝCH FOTOGRAFIÍ, CLEANUP A MAZÁNÍ MÉDIÍ** · REL-03/05 + RISK-01
+- **08 — QUICK CATCH A DENÍK: KOMPLETNÍ REÁLNÝ E2E** · REL-06/07
+- **09 — VÝPRAVY, REVÍRY, MAPY A DŮVĚRYHODNOST RIS DAT** · REL-08 + RISK-03
+- **10 — XP, STATISTIKY, OSOBNÍ REKORDY A DENÍKOVÉ PŘÍBĚHY/TIPY** · REL-07 + POST-03
+- **11 — INSTALOVANÁ PWA NA REÁLNÉM ANDROIDU, OFFLINE A UPDATE** · REL-06
+- **12 — INSTALOVANÁ PWA NA REÁLNÉM IPHONU A MOBILNÍ SAFARI** · REL-06
+- **13 — NAVIGACE A FUNKČNOST VŠECH 56 TRAS** · REL-07
+- **14 — JEDNOTNÝ DESIGN SYSTEM, VIZUÁLNÍ HIERARCHIE A TYPOGRAFIE** · REL-07
+- **15 — PŘÍSTUPNOST, MOBILNÍ KLÁVESNICE A VELKÉ DATOVÉ SADY** · REL-07
+- **16 — VÝKON, VELKÉ CHUNKY, SÍŤ A ROZPOČET FIREBASE ČTENÍ** · POST-01
+- **17 — FINÁLNÍ BEZPEČNOST API, PRAVIDEL, LIMITŮ A ADMINISTRACE** · REL-02/05 + RISK-02
+- **18 — PRÁVNÍ TEXTY, LICENCE RIS/OSM A PROVOZNÍ PRAVIDLA** · REL-08
+- **19 — MONITORING, INCIDENTY, OBNOVA A ROLLBACK** · REL-09
+- **20 — KVÓTY, NÁKLADY, BEZPLATNÝ TARIF A OMEZENÍ SOCIÁLNÍHO PROVOZU** · REL-09/10 + RISK-01
+- **21 — PŘÍPRAVA UZAVŘENÉHO PILOTU PRO 10–20 ÚČTŮ** · REL-10
+- **22 — VYHODNOCENÍ PILOTU, OPRAVNÉ ITERACE A EXIT GATE** · REL-10
+- **23 — VEŘEJNÉ SPUŠTĚNÍ WEBOVÉ/PWA APLIKACE PRO RYBÁŘE** · REL-10
+- **24 — ANDROID CAPACITOR SESTAVENÍ A FYZICKÉ NATIVNÍ TESTY** · MOB-01
+- **25 — GOOGLE PLAY CONSOLE, INTERNÍ TESTOVÁNÍ A PUBLIKACE** · MOB-01/03
+- **26 — IOS CAPACITOR BUILD, XCODE A FYZICKÝ IPHONE** · MOB-02
+- **27 — TESTFLIGHT A APPLE APP STORE PUBLIKACE** · MOB-02/03
+- **28 — SOCIÁLNÍ JÁDRO 1–9: KOMPLETNÍ ŽIVÁ AKCEPTACE** · REL-05 + POST-02
+- **29 — NEARBY, BEZPEČNÁ PŘÍTOMNOST A VYHLEDÁVÁNÍ RYBÁŘŮ V OKOLÍ** · POST-02
+- **30 — KATALOGOVÁ GEOMETRIE REVÍRŮ A SERVEROVÉ ČLENSTVÍ U REVÍRU** · REL-08 + POST-02
+- **31 — CHAT U REVÍRU — DOKONČIT BACKEND, MODERACI A UI** · POST-02
+- **32 — SOUKROMÉ ZPRÁVY, CREW A KOMUNITNÍ OBSAH REVÍRŮ** · POST-02
+- **33 — KOMPLETNÍ SOCIÁLNÍ INTEGRACE, ADMIN, FINÁLNÍ RELEASE 1.0+** · POST-02/03
+
+## Průběh podle hlavního plánu
+
+- **00 · PASS.** Checkpoint 0bf13ec ověřen, původních 27 změn zachováno. Hlavní soubor a čtyři svazky potvrzeny, pořadí aktualizováno zde. Produkce READY na 68fbf04.
+- **01 · PARTIAL · 21. listopadu 2026.** Technické uzavření Crew, místního chatu, Okolí a nové přítomnosti hotové. Přímé geo operace selžou před službou, odvolání zůstává autorizované. [Rozsah všech 56 tras](RELEASE_SCOPE_MATRIX.md). Lint, 1 187 jednotkových testů, build, product a plná Rules sada (1 667 dílčích kontrol) PASS. Chromium: 180 hostovských a 140 přihlášených kombinací, 10 zavřených přímých vstupů hosta, 10 přihlášených, 4 anonymní přesměrování, kontrola menu a offline foto. První pomocný běh nestihl úklid před ukončením emulátoru, samostatný opakovaný běh PASS včetně úklidu. Commit identifikuje git log pro RELEASE_SCOPE_MATRIX.md. Vývojový push ověřit proti stejnojmenné vzdálené větvi. Vercel produkce 68fbf04. Otevřené vlastníkovo vymezení sociálního pilotu a potvrzení izolace preview REL-02. Vydání je uzavřené.
 
 ## Přesný bod pokračování
 
-**Prompt 01, REL-01, začít inventářem na větvi checkpointu.** Projít `src/app/App.jsx`, `src/product/config/featureFlags.js`, `src/features/social/server/socialApi.js` a autorizační dispatch `src/features/social/server/publicProfileService.js`. Z existujících tras a akcí sestavit jedinou matici host/účet/owner s kategoriemi povoleno v soukromém pilotu, uzavřeno a podmíněné schválením. Zahrnout přímé `/crew`, `/waters/:waterId/chat`, Okolí, profily, feed a volitelná AI volání. Připojit důkaz současného chování a očekávaný negativní test pro každý zákaz. Při chybějícím schválení dokončit inventář a označit jen nasazovací rozhodnutí jako blokované. Zásahy do routeru a serveru patří do samostatných etap 02 a 03.
+**Prompt 02** · spustit a zhodnotit izolované Auth scénáře, nezávislé relace a ochranu dat. Živý e-mail/Google vyžaduje schválené syntetické účty. Vlastní scope pilotu z Promptu 01 se řeší souběžně před vydáním.

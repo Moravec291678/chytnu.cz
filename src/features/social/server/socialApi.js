@@ -1,3 +1,4 @@
+import { FEATURES } from "../../../product/config/featureFlags.js";
 import { createPublicProfileService } from "./publicProfileService.js";
 import { createSocialAvatarService } from "./socialAvatar.js";
 import { createSocialPhotoService } from "./socialPhoto.js";
@@ -20,7 +21,15 @@ const errors = { unauthenticated: 401, authentication_required: 401, account_una
   handle_taken: 409, invalid_profile: 400, invalid_shared_catch: 400, invalid_shared_photo: 400, invalid_request: 400,
   consent_required: 403, water_presence_required: 403, water_presence_conflict: 409,
   save_profile_first: 400, invalid_avatar: 400, avatar_unavailable: 503, invalid_search: 400, invalid_cursor: 400, profile_required: 409, discovery_unavailable: 503, relationship_conflict: 409 };
-export function createSocialHandler({ service }) {
+function isAvailable(action, payload, features) {
+  // Leave and consent withdrawal must work for stale clients after a rollout closes.
+  if (action === "nearby.leave" || action === "waterPresence.leave") return true;
+  if (action === "nearby.consent" && payload.accepted === false) return true;
+  if (action.startsWith("nearby.")) return features.nearby === true;
+  if (action.startsWith("waterPresence.")) return features.waterPresence === true;
+  return true;
+}
+export function createSocialHandler({ service, features = FEATURES }) {
   return async (req, res) => {
     res.setHeader?.("Cache-Control", "private, no-store, max-age=0");
     res.setHeader?.("X-Content-Type-Options", "nosniff");
@@ -35,6 +44,7 @@ export function createSocialHandler({ service }) {
       const token = header?.match(/^Bearer ([^\s]+)$/)?.[1] ?? null;
       if (header && !token) return res.status(401).json({ error: "authentication_required" });
       const { action, ...payload } = body;
+      if (!isAvailable(action, payload, features)) return res.status(404).json({ error: "social_unavailable" });
       return res.status(200).json(await service.execute(action, payload, token));
     } catch (error) {
       const code = Object.hasOwn(errors, error?.code ?? "") ? error.code : Object.hasOwn(errors, error?.message ?? "") ? error.message

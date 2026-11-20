@@ -40,6 +40,7 @@ Zaškrtnuto znamená ověřeno v uvedeném prostředí. Nový kandidát musí m�
 
 ## Sociální a volitelné funkce
 
+- [x] Kandidát Promptu 01 v hostovském Chromiu uzavírá přímé Crew, chat a Okolí a zachovává offline foto. Automatické HTTP testy ověřily uzavření geo akcí a zachování odvolání pro starou relaci. [Matice rozsahu](RELEASE_SCOPE_MATRIX.md).
 - [ ] Veřejná trasa a serverová operace pro funkci mimo pilot konzistentně nedostupné bez ztráty místních konceptů. Nepovinný AI provider zůstává vypnutý, pokud nebyl výslovně schválen.
 - [ ] Pokud komunita v rozsahu, A/B/C ověří disclosure, serverové potvrzení a zákaz tiché publikace starších záznamů. Odvolání ze dvou zařízení včetně staré fronty. Publikace, blok, zákaz interakce, přístupnost sdílených médií, odstranění a report.
 - [ ] Role OWNER a CO_CREATOR testovány serverově. Moderátor nemá plošný přístup k přesnému GPS. Revokace přístupu účinná na existující relaci. Moderace má určenou odpovědnost a zaznamenaný výsledek.

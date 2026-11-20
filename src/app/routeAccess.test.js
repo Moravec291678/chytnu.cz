@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { canAccessProtectedRoute, isPublicRoute, resolveAuthenticatedRedirect } from "./routeAccess.js";
@@ -34,4 +35,13 @@ test("public post permalink does not open community settings or private catch ro
   assert.equal(isPublicRoute("/community"),false);
   assert.equal(isPublicRoute(`/community/post/${"a".repeat(64)}/edit`),false);
   assert.equal(isPublicRoute("/community/catch/private-catch"),false);
+});
+
+test("closed social routes fail at the router as well as outside a session", async () => {
+  const router = await readFile(new URL("./App.jsx", import.meta.url), "utf8");
+  for (const [path, flag] of [["/crew", "crew"], ["/nearby", "nearby"], ["/waters/:waterId/chat", "waterChat"]]) {
+    assert.equal(isPublicRoute(path.replace(":waterId", "fixture")), false, path);
+    const registration = router.split("\n").find(line => line.includes('path="' + path + '"'));
+    assert.ok(registration?.includes('isFeatureEnabled("' + flag + '")') && registration.includes(": <NotFoundPage />"), path);
+  }
 });

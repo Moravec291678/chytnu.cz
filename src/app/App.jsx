@@ -186,7 +186,7 @@ function App() {
         <Route path="/waters/new" element={<PageSuspense><WaterCreatePage /></PageSuspense>} />
         <Route path="/waters/:waterId/edit" element={<PageSuspense><WaterCreatePage /></PageSuspense>} />
         <Route path="/waters/:waterId" element={<PageSuspense><WaterDetailPage /></PageSuspense>} />
-        <Route path="/waters/:waterId/chat" element={<PageSuspense><WaterChatPage /></PageSuspense>} />
+        <Route path="/waters/:waterId/chat" element={isFeatureEnabled("waterChat") ? <PageSuspense><WaterChatPage /></PageSuspense> : <NotFoundPage />} />
         <Route path="/hotspots" element={<PageSuspense><HotspotsPage /></PageSuspense>} />
         <Route path="/friends" element={<PageSuspense><FriendsPage /></PageSuspense>} />
         <Route path="/community/post/:postId" element={<PageSuspense><CommunityPostPage /></PageSuspense>} />
@@ -194,8 +194,8 @@ function App() {
         {isFeatureEnabled("userDiscovery") && <Route path="/community/find" element={<PageSuspense><FisherDiscovery /></PageSuspense>} />}
         <Route path="/community/catch/:catchId" element={<PageSuspense><CommunityCatchDetailPage /></PageSuspense>} />
         <Route path="/community/:postId/report" element={<PageSuspense><CommunityReportPage /></PageSuspense>} />
-        <Route path="/nearby" element={<PageSuspense><NearbyPage /></PageSuspense>} />
-        <Route path="/crew" element={<PageSuspense><CrewPage /></PageSuspense>} />
+        <Route path="/nearby" element={isFeatureEnabled("nearby") ? <PageSuspense><NearbyPage /></PageSuspense> : <NotFoundPage />} />
+        <Route path="/crew" element={isFeatureEnabled("crew") ? <PageSuspense><CrewPage /></PageSuspense> : <NotFoundPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </>

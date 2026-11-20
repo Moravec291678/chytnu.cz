@@ -23,3 +23,33 @@ test("provider errors never leak their messages, stack or credentials", async ()
   const res = await request({ method: "POST", body: { action: "view", identity: "user" } }, async () => { throw new Error("Secret API key/provider URL"); });
   assert.deepEqual(res.body, { error: "social_unavailable" });
 });
+
+test("closed location modules deny reads and new presence for every bearer context", async () => {
+  const cases = [
+    { action: "nearby.join", latitude: 50, longitude: 14 },
+    { action: "nearby.consent", accepted: true },
+    { action: "nearby.discover" }, { action: "nearby.status" },
+    { action: "nearby.waterActivity", catalogueId: "fixture" },
+    { action: "waterPresence.status" }, { action: "waterPresence.join", confirmed: true },
+    { action: "waterPresence.refresh", sessionId: "fixture" },
+  ];
+  for (const authorization of [undefined, "Bearer ordinary", "Bearer owner"]) {
+    for (const body of cases) {
+      const res = await request({ method: "POST", headers: { authorization }, body }, () => assert.fail("disabled action reached service"));
+      assert.equal(res.statusCode, 404, body.action);
+    }
+  }
+});
+test("release closure preserves authenticated opt out and denies unfinished API namespaces", async () => {
+  for (const body of [{ action: "nearby.consent", accepted: false }, { action: "nearby.leave" }, { action: "waterPresence.leave", sessionId: "fixture" }]) {
+    const res = await request({ method: "POST", headers: { authorization: "Bearer fixture" }, body }, async (action, _payload, token) => {
+      assert.equal(action, body.action);
+      assert.equal(token, "fixture");
+      return { active: false };
+    });
+    assert.equal(res.statusCode, 200);
+  }
+  for (const action of ["crew.join", "waterChat.send", "dm.send"]) {
+    assert.equal((await request({ method: "POST", body: { action } })).statusCode, 400);
+  }
+});

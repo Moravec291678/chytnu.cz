@@ -104,7 +104,9 @@ Preference jsou uživatelsky nastavitelné: morningFishActivity (default ON), to
 | waters | Ne |
 | community | Ano |
 | friends | Ano |
-| nearby | Ano |
+| nearby | Ne |
+| waterPresence | Ne |
+| waterChat | Ne |
 | crew | Ne |
 | notifications | Ne |
 | supporter | Ne |
