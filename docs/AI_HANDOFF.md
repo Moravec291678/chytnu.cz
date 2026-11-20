@@ -251,3 +251,7 @@ Stage 9 in-app notifications: released in `1a83e11fbdb2cd9d513af119fec8ecd0582c8
 - Vydaná sada 1 177/1 177, lint/build PASS. Stage 12 navíc 22 testovacích kontrol Auth/Firestore, navazujících 83 kontrol Nearby a skutečný přihlášený tok Chromium 390 px PASS.
 - Etapa 13 PARTIAL. waterRoomMessageService.js má ověřené členství, ohraničené stránkování, uložení zprávy bez duplicit, blokování a manifest pro mazání účtu. Dva cílené jednotkové testy a lint prošly. Zbývá napojit autentizované API s limity, reporty a moderaci, zachovat místní zprávy při úpravě WaterChatPage a ověřit více účtů před vydáním.
 - Původní worktree chytnu-terminology zachovává všechny dříve rozpracované soubory. V této větvi pokračovat od posledního produkčního commitu a nezaměnit původní kopie již vydaných změn za nové funkce.
+
+## Stav úplného auditu · 20. listopadu 2026
+
+Pracovní větev codex/chytnu-release-continuation v chytnu-terminology-ux-checkpoint. Původní chytnu-terminology na 208baf2 obsahuje 27 zachovaných rozpracovaných souborů. Nasazeno 81406e2, 951ac12 a 0fe9d8a. Následuje lokální analýza, odkazy v Deníku a zpráva v AI_FULL_AUDIT.md. Prošlo 1 184 jednotkových testů, Chromium 180 kombinací a offline znovuotevření po restartu procesu. Navázat ověřením autentizovaných webových toků, živých fotografií, fyzických zařízení a nativních buildů. Windows ponechán zapnutý kvůli nezavřeným bodům auditu.

@@ -62,3 +62,7 @@ Real localhost handlers and Auth/Firestore emulators: A chose public profile wit
 390px checks showed no horizontal overflow on catch/revoked-post screens. Production build guest Quick Catch accepted a non-private carp JPEG fixture, saved one incomplete catch and rendered the locally read-back image. No species AI control appeared. Local Cloudinary delivery was unavailable by design; media revocation/derivative privacy was tested in the emulator, not falsely claimed as a browser upload PASS.
 
 Offline close/reopen in the integrated browser showed an empty app; cause remains unverified. Online reopening was initiated but not completed before computer-use ended. Native Chrome inspection was stopped by the tool because it could not confidently determine the current browser URL. No further UI input was attempted. Physical-device/PWA acceptance and full responsive authenticated coverage remain UNVERIFIED. Original visual identity retained.
+
+## Browser QA · 20. listopadu 2026
+
+Chromium ověřilo 18 tras při šířkách 320, 360, 375, 390, 430, 768, 1024, 1280, 1440 a 1920 px v hostovském režimu. Kontroly ověřily trasu, aktivní sekci a vodorovné přetečení bez nálezu. Při 390 px skutečným kliknutím prošly všechny tři odkazy z rozbalovací skupiny přehledů v Deníku. Tato sada nepokrývá všechny přihlášené obrazovky, vizuální regresi všech komponent ani hardwarové safe areas.

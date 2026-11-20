@@ -1,6 +1,6 @@
 import { DEFAULT_SPECIES } from "../../shared/constants/speciesCatalog.js";
 
-export const PERSONAL_ANALYSIS_VERSION = "personal-fishing-v1";
+export const PERSONAL_ANALYSIS_VERSION = "personal-fishing-v2";
 export const personalRecordCountLabel = count => `${count} ${count === 1 ? "záznam" : count >= 2 && count <= 4 ? "záznamy" : "záznamů"}`;
 const DAY = 86_400_000;
 const text = value => typeof value === "string" ? value.trim().slice(0, 120) : "";
@@ -10,6 +10,7 @@ const positiveLength = value => typeof value === "number" && Number.isFinite(val
 const sorted = values => [...new Set(values)].sort();
 const mean = rows => rows.reduce((sum, row) => sum + row.length, 0) / rows.length;
 const speciesNames = new Map(DEFAULT_SPECIES.map(item => [item.key, item.label]));
+const methodTitle = row => row.methodLabel || "Zapsaná metoda";
 const limitation = "Četnost úlovků není úspěšnost za hodinu. Neznáme všechny neúspěšné vycházky ani vliv ostatních podmínek.";
 const validCatchDate = value => {
   if (typeof value !== "string" || !Number.isFinite(Date.parse(value))) return false;
@@ -68,7 +69,7 @@ function cleanRows(catches, now, formatter) {
       }));
       return { id: record.id, timestamp: Date.parse(record.caughtAt), day: `${parts.year}-${parts.month}-${parts.day}`,
         month: `${parts.year}-${parts.month}`, season, bucket, speciesKey: confirmed ? key : "", species: speciesNames.get(key) || text(record.species) || "Neurčený druh",
-        method: text(record.method?.key), methodLabel: text(record.method?.label) || "zapsaná metoda",
+        method: text(record.method?.key), methodLabel: text(record.method?.label),
         baits: sorted((Array.isArray(record.baits) ? record.baits : []).map(bait => text(bait?.key)).filter(Boolean)).slice(0, 12),
         baitLabels: Object.fromEntries((Array.isArray(record.baits) ? record.baits : []).filter(item => text(item?.key)).slice(0, 12).map(item => [text(item.key), text(item.label) || "zapsaná nástraha"])),
         water: text(record.waterId) ? `id:${text(record.waterId)}` : text(record.locationName) ? `name:${text(record.locationName)}` : "",
@@ -87,8 +88,8 @@ export function buildPersonalFishingAnalysis(catches = [], { trips = [], waters 
       end: Date.parse(trip.endedAt), method: text(trip.methodKey), waterId: text(trip.waterId), baitKey: text(trip.baitKey) }));
   const waterNames = new Map((Array.isArray(waters) ? waters : []).filter(water => water && !water.deleted).map(water => [water.id, text(water.name)]));
   for (const row of rows) row.waterLabel = waterNames.get(row.water.slice(3)) || row.waterLabel || "zapsaná voda";
-  const fingerprint = checksum([PERSONAL_ANALYSIS_VERSION, timeZone, rows.map(({ species, methodLabel, baitLabels, waterLabel, ...row }) => {
-    void species; void methodLabel; void baitLabels; void waterLabel; return row;
+  const fingerprint = checksum([PERSONAL_ANALYSIS_VERSION, timeZone, rows.map(({ species, baitLabels, waterLabel, ...row }) => {
+    void species; void baitLabels; void waterLabel; return row;
   }), cleanTrips.map(trip => ({ ...trip, start: Number.isFinite(trip.start) ? trip.start : null, end: Number.isFinite(trip.end) ? trip.end : null }))]);
   const candidates = [];
   const add = ({ family, key, title, observation, numbers, interpretation, experiment, uncertainty = limitation, evidence, strength = 0 }) => {
@@ -111,7 +112,7 @@ export function buildPersonalFishingAnalysis(catches = [], { trips = [], waters 
         const difference = matches.length / knownA.length - otherMatches.length / knownB.length;
         if (difference < 0.25) continue;
         add({ family: "species-time-method", key: [speciesKey, window, method], title: `${species}: ${window} se pojí s jinou metodou`,
-          observation: `V okně ${window} máš ${a.length} z ${speciesRows.length} zapsaných úlovků tohoto druhu. ${matches[0].methodLabel} je u ${matches.length} z ${knownA.length} úlovků se známou metodou v tomto okně, mimo něj u ${otherMatches.length} z ${knownB.length}.`,
+          observation: `V okně ${window} máš ${a.length} z ${speciesRows.length} zapsaných úlovků tohoto druhu. ${methodTitle(matches[0])} je u ${matches.length} z ${knownA.length} úlovků se známou metodou v tomto okně, mimo něj u ${otherMatches.length} z ${knownB.length}.`,
           numbers: { windowCatches: a.length, speciesCatches: speciesRows.length, methodInWindow: matches.length, knownInWindow: knownA.length, methodOutside: otherMatches.length, knownOutside: knownB.length, shareDifferencePoints: round(difference * 100) },
           interpretation: "Čas a metoda se v tvém deníku překrývají. Samotné počty proto neumějí oddělit vliv denní doby od volby metody.",
           experiment: `Při další vycházce se stejnou metodou porovnej okno ${window} s jiným časem na stejné vodě. Zapiš dobu obou částí i část bez úlovku.`, evidence: speciesRows, strength: 12 + difference * 10 });
@@ -145,7 +146,7 @@ export function buildPersonalFishingAnalysis(catches = [], { trips = [], waters 
     for (const [method, a] of groups(lengths.filter(row => row.method), row => row.method)) {
       const b = lengths.filter(row => row.method && row.method !== method);
       compareLengths(a, b, "species-method-length", method, `${species}: rozdíl v délce stojí za ověření`,
-        [a[0].methodLabel, "Ostatní zapsané metody"], "Porovnej obě metody na stejné vodě v podobném čase. Změř každý úlovek stejného druhu a zapiš i lov bez ryby.");
+        [methodTitle(a[0]), "Ostatní zapsané metody"], "Porovnej obě metody na stejné vodě v podobném čase. Změř každý úlovek stejného druhu a zapiš i lov bez ryby.");
       // Weather comparisons hold species and method constant, use actual
       // recorded values only, and never substitute air/water temperatures.
       const fields = [
@@ -158,7 +159,7 @@ export function buildPersonalFishingAnalysis(catches = [], { trips = [], waters 
         for (const [range, weatherA] of groups(measured, row => bin(row.conditions[field]))) {
           const weatherB = measured.filter(row => bin(row.conditions[field]) !== range);
           compareLengths(weatherA, weatherB, "species-method-weather-length", [method, field, range], `${species}: jiná délka při stejné metodě a jiné hodnotě ${label}`,
-            [`${a[0].methodLabel}, ${range}`, "Stejná metoda, ostatní zapsané hodnoty"],
+            [`${methodTitle(a[0])}, ${range}`, "Stejná metoda, ostatní zapsané hodnoty"],
             "Při dalších vycházkách stejnou metodou na stejné vodě změř všechny ryby tohoto druhu a uchovej skutečné počasí i dobu lovu.",
             "Počasí může být ručně zapsané nebo odvozené z meteorologického modelu, nikoli přímo naměřené na místě.");
         }
@@ -191,7 +192,7 @@ export function buildPersonalFishingAnalysis(catches = [], { trips = [], waters 
         const oldMatches = oldRows.filter(row => row.method === method), difference = matches.length / newRows.length - oldMatches.length / oldRows.length;
         if (matches.length < 3 || difference < 0.3) continue;
         add({ family, key: [speciesKey, method, newMonth], title: `${species}: mezi ${periodLabel} se změnila skladba metod`,
-          observation: `${matches[0].methodLabel} je v období ${newMonth} u ${matches.length} z ${newRows.length} záznamů se známou metodou, v ${oldMonth} u ${oldMatches.length} z ${oldRows.length}.`,
+          observation: `${methodTitle(matches[0])} je v období ${newMonth} u ${matches.length} z ${newRows.length} záznamů se známou metodou, v ${oldMonth} u ${oldMatches.length} z ${oldRows.length}.`,
           numbers: { currentCount: matches.length, currentTotal: newRows.length, previousCount: oldMatches.length, previousTotal: oldRows.length, shareDifferencePoints: round(difference * 100) },
           interpretation: "Změna může odrážet tvé rozhodování, sezónu nebo jiné vody. Nejde o důkaz, že se účinnost metody změnila.",
           experiment: "V příštím měsíci porovnej obě metody na stejné vodě se zapsanou dobou lovu. Odděl tak změnu svého výběru od změny zaznamenaných výsledků.", evidence: [...oldRows, ...newRows], strength: 10 });
@@ -233,7 +234,7 @@ export function buildPersonalFishingAnalysis(catches = [], { trips = [], waters 
   }
   if (!diverse.length) {
     const latest = rows[0], measured = rows.filter(row => row.length !== null);
-    const reference = rows.find(row => row.speciesKey && row.methodKey) ?? rows.find(row => row.speciesKey) ?? latest;
+    const reference = rows.find(row => row.speciesKey && row.method && row.methodLabel) ?? rows.find(row => row.speciesKey) ?? latest;
     const species = reference?.speciesKey ? `při lovu druhu „${reference.species}“` : "při lovu stejného druhu";
     add({ family: "specific-next-step", key: [latest?.id ?? "empty", rows.length], title: latest ? "Z další vycházky udělej malé vlastní srovnání" : "První záznam může založit užitečné srovnání",
       observation: latest ? `V dostupném deníku máš ${personalRecordCountLabel(rows.length)}, z toho ${measured.length} s délkou. V porovnávaných kombinacích zatím nevychází dostatečně podložený rozdíl z více dnů.` : "Deník zatím neobsahuje platný datovaný úlovek; osobní vzorec z něj nelze odvodit.",

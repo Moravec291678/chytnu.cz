@@ -28,6 +28,16 @@ test("a single day and insufficient comparison group never masquerade as a suppo
   assert.equal(Object.hasOwn(result, "providerSummary"), false);
   assert.match(result.strongest.experiment, /dvě stejně dlouhé části/);
 });
+
+test("sparse diary fallback names a real method only when the diary provides its label", () => {
+  const without = record("newest", 20, 10, { method: null });
+  assert.match(build([without]).strongest.experiment, /se stejnou metodou/);
+  assert.doesNotMatch(build([without]).strongest.experiment, /zapsaná metoda/i);
+  const known = record("earlier", 19, 10);
+  assert.match(build([without, known]).strongest.experiment, /„Feeder“/);
+  const renamed = { ...known, method: { ...known.method, label: "Lehký feeder" } };
+  assert.notEqual(build([known]).fingerprint, build([renamed]).fingerprint);
+});
 test("method-length and weather-length comparisons hold species constant and use valid recorded weather only", () => {
   const records = [
     ...Array.from({ length: 4 }, (_, i) => record(`cold${i}`, i + 1, 10, { lengthCm: 70, conditions: { airTempC: 8 } })),

@@ -32,3 +32,7 @@ Audit baseline: 2026-11-20. This map reflects `src/app/App.jsx` and navigation l
 This is a source-based route and link audit. The local Home page was opened in the browser and showed all four destinations plus Quick Catch. Structural tests verify Community navigation, active-route grouping, Journal destinations, and safe-area/flexible-width CSS constraints. In the isolated UX checkout, 22 targeted tests and all 1,166 unit tests passed. Lint, build, Cloudinary client-secret scan and diff check passed. An existing Vite chunk-size warning remains.
 
 Headless Chromium verified 66 guest route and viewport combinations at 320, 360, 375, 390, 430 and 1280 CSS pixels. Checks covered the active section, Journal links and grid, horizontal overflow, navigation placement and 56/64 px catch-button sizes. Safe-area CSS was checked structurally. Authenticated navigation and physical-device safe areas remain outside this verification.
+
+## Audit odkazů z Deníku · 20. listopadu 2026
+
+Deník zpřístupňuje /insights, /season-story a /year-summary ve skupině Příběhy a přehledy. Tyto stránky aktivují Deník, /fish-activity aktivuje Domů a /notifications aktivuje Komunitu. Trasy a existující odkazy zůstávají dostupné.

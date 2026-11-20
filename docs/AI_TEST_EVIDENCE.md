@@ -86,3 +86,9 @@ Výchozí produkce i main byly 6587d4518125949851d42bb725b99ecc41d08850. Práce 
 - Chromium: 180 přechodů na 18 trasách při 320, 360, 375, 390, 430, 768, 1024, 1280, 1440 a 1920 px. Bez zjištěného vodorovného přetečení v těchto kontrolách. Po odpojení serveru prošlo šest navigací a offline Quick Catch se skutečným čtením fotografie v detailu po novém načtení. Fyzická PWA a restart celého prohlížeče jsou neověřené.
 - Android wrapper deklaruje polohu v popředí, iOS popisuje účel kamery a polohy při používání aplikace. XML a tři platformní testy prošly. Android target/compile SDK je 36 a applicationId/bundle ID je cz.chytnu.app. Android SDK a Xcode v tomto prostředí nejsou k dispozici. Podpisy, fyzické testy a store balíčky zůstávají otevřené.
 - Prošlo 1 183 jednotkových testů, lint, build, produktový inventář, kontrola Cloudinary klientských secret markerů a npm audit produkčních závislostí bez nálezů. Firebase Rules, Auth, Sync a Photos prošly v lokálním testovacím prostředí.
+
+## Závěrečná verifikace webového milníku · 20. listopadu 2026
+
+- 1 184/1 184 jednotkových testů po úpravách Deníku a analýzy. Lint, build a product PASS. Build ověřil 154 souborů offline manifestu a 162 klientských assetů kontrolou Cloudinary secret markerů.
+- Chromium na lokálním produkčním buildu a s testovací fotografií. Po odpojení serveru šest úspěšných navigací a čtení fotografie Quick Catch. Ukončení celého procesu přes Browser.close, nové spuštění se stejným testovacím profilem a stále odpojeným serverem, detail znovu načetl fotografii s nenulovou skutečnou šířkou.
+- Fyzická instalovaná PWA, iOS/Android podepsané buildy a Cloudinary v produkci zůstávají neověřené.

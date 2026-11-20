@@ -105,3 +105,7 @@ Release gate and production result are recorded in the final release checkpoint.
 - Etapa 12: přihlášený rybář může v katalogovém detailu potvrdit přítomnost na 30 minut, načíst stav, prodloužit nebo ukončit relaci. Backend ověřuje skutečný katalogový identifikátor, účet a platnost serverové relace. GPS se nevyžaduje ani neukládá. Stav je určený pro vlastní účet. Změny používají rotační ID relace, aby starší zařízení nepřepsalo novější volbu. Expiraci ověřuje každý autorizační dotaz.
 - Přístupová pravidla a indexy Firebase zůstaly stejné. Denní úklid využívá existující úlohu. Emulátor 22 kontrol přítomnosti u revíru a 83 kontrol Nearby PASS. Chromium při 390 px s přihlášeným syntetickým účtem ověřilo potvrzení, zapnutí, prodloužení a ukončení.
 - Další sociální milník je etapa 13. Napojit živý chat na existující serverovou autorizaci revíru, bezpečné stránkování a moderaci a zachovat staré místní zprávy.
+
+## Audit vydání · 20. listopadu 2026
+
+Milníky PWA, navigace a nativních oprávnění 81406e2, 951ac12 a 0fe9d8a jsou na main a ověřené ve Vercel. Odkazy na osobní přehledy jsou v Deníku a lokální analýza pracuje se skutečným názvem metody. Úplný stav a otevřené ověření jsou v AI_FULL_AUDIT.md.
