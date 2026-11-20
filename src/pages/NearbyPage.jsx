@@ -1,7 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { useDataScope } from "../features/auth/context/dataScopeContextValue.js";
 import { DEFAULT_PRIVACY_SETTINGS } from "../features/privacy/data/privacyModel.js";
 import { privacyRepository } from "../features/privacy/data/privacyRepository.js";
+import { socialRequest } from "../features/social/data/socialClient.js";
+import NearbyCatalogueWaters from "../features/waters/components/NearbyCatalogueWaters.jsx";
 import Layout from "../shared/layout/Layout";
 import "./NearbyPage.css";
 
@@ -20,11 +23,24 @@ function positionErrorMessage(error) {
 
 function NearbyPage() {
   const scope = useDataScope();
+  return <NearbyForScope key={`${scope.scopeKey}:${scope.status}`} scope={scope} />;
+}
+
+function NearbyForScope({ scope }) {
+  const attempt = useRef(0);
   const [settings, setSettings] = useState(DEFAULT_PRIVACY_SETTINGS);
   const [settingsStatus, setSettingsStatus] = useState("loading");
   const [settingsMessage, setSettingsMessage] = useState("");
   const [positionStatus, setPositionStatus] = useState("idle");
   const [positionMessage, setPositionMessage] = useState("");
+  const [presenceConsent, setPresenceConsent] = useState(false);
+  const [consentSaving, setConsentSaving] = useState(false);
+  const [consentOwnerKey, setConsentOwnerKey] = useState(null);
+  const [presenceCount, setPresenceCount] = useState(null);
+  const [presenceExpiresAt, setPresenceExpiresAt] = useState(null);
+  const [presenceOwnerKey, setPresenceOwnerKey] = useState(null);
+  const [showProfile, setShowProfile] = useState(false);
+  const [discovery, setDiscovery] = useState({ status: "idle" });
 
   useEffect(() => {
     let active = true;
@@ -36,11 +52,57 @@ function NearbyPage() {
     }).catch(() => {
       if (active) setSettingsStatus("error");
     });
-    return () => { active = false; };
+    return () => { active = false; attempt.current += 1; };
   }, [scope]);
 
+  useEffect(() => {
+    if (scope.status !== "ready" || !scope.ownerId) return undefined;
+    const controller = new AbortController();
+    const request = attempt.current;
+    socialRequest("nearby.status", {}, { signal: controller.signal, expectedUid: scope.ownerId }).then(({ accepted, showProfile: profileAllowed, expiresAt }) => {
+      if (controller.signal.aborted || request !== attempt.current) return;
+      setPresenceConsent(accepted);
+      setShowProfile(profileAllowed);
+      setConsentOwnerKey(scope.scopeKey);
+      if (expiresAt) {
+        setPresenceOwnerKey(scope.scopeKey);
+        setPresenceExpiresAt(expiresAt);
+        setPositionStatus("ready");
+        setPositionMessage("Přítomnost je aktivní. Kdykoli ji můžeš vypnout.");
+      }
+    }).catch(() => {
+      if (!controller.signal.aborted && request === attempt.current) setSettingsMessage("Aktuální stav sdílení se nepodařilo ověřit.");
+    });
+    return () => controller.abort();
+  }, [scope.ownerId, scope.scopeKey, scope.status]);
+
+  useEffect(() => {
+    if (!presenceExpiresAt) return undefined;
+    const timer = setTimeout(() => {
+      setPresenceCount(null);
+      setPresenceExpiresAt(null);
+      setPositionStatus("idle");
+      setDiscovery({ status: "idle" });
+      setPositionMessage("Anonymní přítomnost vypršela.");
+    }, Math.max(0, presenceExpiresAt - Date.now()));
+    return () => clearTimeout(timer);
+  }, [presenceExpiresAt]);
+
+  useEffect(() => {
+    if (discovery.status !== "ready" || !discovery.profiles.length) return undefined;
+    const timer = setTimeout(() => setDiscovery({ status: "idle" }), 30_000);
+    return () => clearTimeout(timer);
+  }, [discovery]);
+
   const saveSetting = async (key, value) => {
-    if (scope.status !== "ready" || settingsStatus === "saving") return;
+    if (scope.status !== "ready" || settingsStatus === "saving" || consentSaving) return;
+    const disabling = (key === "nearbyOptIn" && value === false)
+      || (key === "nearbyLocationPrecision" && value === "none");
+    const request = disabling ? ++attempt.current : attempt.current;
+    if (disabling) {
+      setDiscovery({ status: "idle" });
+      if (positionStatus === "loading") setPositionStatus("idle");
+    }
     const previous = settings;
     const next = { ...settings, [key]: value };
     setSettings(next);
@@ -48,9 +110,21 @@ function NearbyPage() {
     setSettingsMessage("");
     try {
       const persisted = await privacyRepository.put(next, scope);
+      if (request !== attempt.current) return;
       setSettings(persisted);
       setSettingsStatus("ready");
-      setSettingsMessage("Nastavení Okolí bylo uloženo jen pro tento profil.");
+      if (disabling && scope.ownerId) {
+        try {
+          await socialRequest("nearby.consent", { accepted: false }, { expectedUid: scope.ownerId });
+          if (request !== attempt.current) return;
+          setPresenceConsent(false); setPresenceCount(null); setPresenceExpiresAt(null); setPresenceOwnerKey(null); setConsentOwnerKey(scope.scopeKey);
+          setShowProfile(false);
+          setSettingsMessage("Nastavení uloženo a sdílení přítomnosti vypnuto.");
+        } catch {
+          setSettingsStatus("error");
+          setSettingsMessage("Vypnuto na tomto zařízení. Vzdálená přítomnost nejpozději sama vyprší za 20 minut.");
+        }
+      } else setSettingsMessage("Nastavení Okolí bylo uloženo jen pro tento profil.");
     } catch {
       setSettings(previous);
       setSettingsStatus("error");
@@ -58,8 +132,40 @@ function NearbyPage() {
     }
   };
 
-  const checkOwnPosition = () => {
+  const updatePresenceConsent = async (accepted, shareProfile = false) => {
+    if (scope.status !== "ready" || consentSaving) return;
+    const ownerKey = scope.scopeKey;
+    const request = ++attempt.current;
+    setConsentSaving(true);
     setPositionMessage("");
+    setDiscovery({ status: "idle" });
+    try {
+      await socialRequest("nearby.consent", { accepted, showProfile: shareProfile }, { expectedUid: scope.ownerId });
+      if (request !== attempt.current) return;
+      setPresenceConsent(accepted);
+      setShowProfile(shareProfile);
+      setConsentOwnerKey(ownerKey);
+      if (!accepted) {
+        setPresenceCount(null); setPresenceExpiresAt(null); setPresenceOwnerKey(null);
+        setPositionStatus("idle"); setPositionMessage("Souhlas byl odvolán a přítomnost vypnuta.");
+      }
+    } catch (error) {
+      if (request === attempt.current) { setPositionStatus("error"); setPositionMessage(error.message || "Souhlas se nepodařilo změnit."); }
+    } finally { setConsentSaving(false); }
+  };
+
+  const joinNearby = () => {
+    setPositionMessage("");
+    if (!settings.nearbyOptIn || settings.nearbyLocationPrecision !== "approximate" || !presenceConsent || consentOwnerKey !== scope.scopeKey || consentSaving) {
+      setPositionStatus("error");
+      setPositionMessage("Nejdřív zapni Okolí, zvol hrubou oblast (ne „Bez polohy“) a potvrď souhlas.");
+      return;
+    }
+    const request = ++attempt.current;
+    setPresenceOwnerKey(scope.scopeKey);
+    setDiscovery({ status: "idle" });
+    setPresenceCount(null);
+    setPresenceExpiresAt(null);
     if (!navigator.geolocation) {
       setPositionStatus("error");
       setPositionMessage("Toto zařízení nepodporuje zjištění polohy.");
@@ -67,11 +173,23 @@ function NearbyPage() {
     }
     setPositionStatus("loading");
     navigator.geolocation.getCurrentPosition(
-      () => {
-        setPositionStatus("ready");
-        setPositionMessage("Poloha byla ověřena pouze v této relaci. Souřadnice se neuložily ani nepublikovaly.");
+      async position => {
+        if (request !== attempt.current) return;
+        try {
+          const result = await socialRequest("nearby.join", { latitude: position.coords.latitude, longitude: position.coords.longitude }, { expectedUid: scope.ownerId });
+          if (request !== attempt.current) return;
+          setPresenceCount(result.nearbyCount);
+          setPresenceExpiresAt(result.expiresAt);
+          setPositionStatus("ready");
+          setPositionMessage(`Sdílená je pouze hrubá oblast. Přítomnost vyprší za 20 minut.${result.nearbyCount ? ` V oblasti je alespoň ${result.nearbyCount} účastníků.` : " Počet účastníků se zobrazí až od pěti lidí."}`);
+        } catch (error) {
+          if (request !== attempt.current) return;
+          setPositionStatus("error");
+          setPositionMessage(error.message || "Přítomnost se nepodařilo zapnout.");
+        }
       },
       (error) => {
+        if (request !== attempt.current) return;
         setPositionStatus("error");
         setPositionMessage(positionErrorMessage(error));
       },
@@ -80,6 +198,22 @@ function NearbyPage() {
   };
 
   const unavailable = scope.status !== "ready" || settingsStatus === "loading";
+  const ownPresence = presenceOwnerKey === scope.scopeKey;
+  const currentConsent = presenceConsent && consentOwnerKey === scope.scopeKey;
+  const visiblePresenceCount = ownPresence ? presenceCount : null;
+  const visiblePositionStatus = ownPresence ? positionStatus : "idle";
+  const visiblePositionMessage = ownPresence ? positionMessage : "Není uložena ani sdílena.";
+
+  async function discoverProfiles() {
+    const request = attempt.current;
+    setDiscovery({ status: "loading" });
+    try {
+      const { active, profiles } = await socialRequest("nearby.discover", {}, { expectedUid: scope.ownerId });
+      if (request === attempt.current && Date.now() < presenceExpiresAt) setDiscovery({ status: "ready", active, profiles });
+    } catch (error) {
+      if (request === attempt.current && Date.now() < presenceExpiresAt) setDiscovery({ status: "error", message: error.message });
+    }
+  }
 
   return (
     <Layout>
@@ -89,15 +223,15 @@ function NearbyPage() {
             <h1 id="nearby-title">Okolí</h1>
             <p>Anonymizovaný přehled bez přesné polohy a jmen</p>
           </div>
-          <span className="nearby-backend-badge">Zatím nedostupné</span>
+          <span className="nearby-backend-badge">Dobrovolné a anonymní</span>
         </header>
 
         <section className="nearby-map-empty" aria-labelledby="nearby-map-title">
           <div className="nearby-map-mark" aria-hidden="true">
             <svg viewBox="0 0 24 24"><path d="M12 21s7-6.1 7-12a7 7 0 1 0-14 0c0 5.9 7 12 7 12Z" /><circle cx="12" cy="9" r="2.2" /></svg>
           </div>
-          <strong id="nearby-map-title">Anonymizované body nejsou dostupné</strong>
-          <p>Přehled okolí zatím není dostupný. Cizí polohy ani odhadované počty nezobrazujeme.</p>
+          <strong id="nearby-map-title">{visiblePresenceCount ? `V hrubé oblasti je alespoň ${visiblePresenceCount} rybářů` : "Přesné polohy se nezobrazují"}</strong>
+          <p>Souhrnný počet se ukáže od pěti účastníků. Sdílení přítomnosti se automaticky ukončí po 20 minutách.</p>
         </section>
 
         <section className="nearby-settings" aria-labelledby="nearby-settings-title">
@@ -107,19 +241,19 @@ function NearbyPage() {
               <input
                 type="checkbox"
                 checked={settings.nearbyOptIn}
-                disabled={unavailable || settingsStatus === "saving"}
+                disabled={unavailable || settingsStatus === "saving" || consentSaving}
                 onChange={(event) => saveSetting("nearbyOptIn", event.target.checked)}
               />
               <span aria-hidden="true" />
               <b>{settings.nearbyOptIn ? "Zapnuto" : "Vypnuto"}</b>
             </label>
           </div>
-          <p>Volba se uloží do tvého profilu. Dokud nebude přehled okolí připravený, nic se neodesílá ani nezveřejňuje.</p>
+          <p>Zapnutí této volby samo o sobě polohu neodesílá. Přítomnost spustíš až samostatným potvrzením a povolením polohy.</p>
           <label className="nearby-precision">
             Požadovaná přesnost zveřejnění
             <select
               value={settings.nearbyLocationPrecision}
-              disabled={unavailable || settingsStatus === "saving" || !settings.nearbyOptIn}
+              disabled={unavailable || settingsStatus === "saving" || consentSaving || !settings.nearbyOptIn}
               onChange={(event) => saveSetting("nearbyLocationPrecision", event.target.value)}
             >
               <option value="approximate">Pouze hrubá oblast</option>
@@ -133,24 +267,43 @@ function NearbyPage() {
 
         <section className="nearby-local-position" aria-labelledby="nearby-position-title">
           <div>
-            <span>Jen toto zařízení</span>
+            <span>Dočasné sdílení</span>
             <h2 id="nearby-position-title">Moje aktuální poloha</h2>
           </div>
-          <p>Jednorázově ověří dostupnost polohy. Hodnota zůstane pouze v paměti této otevřené stránky a nikde se nezobrazí jako souřadnice.</p>
-          <div className={`nearby-position-state nearby-position-state-${positionStatus}`}>
-            <strong>{positionStatus === "ready" ? "Poloha ověřena lokálně" : positionStatus === "loading" ? "Zjišťuji polohu…" : "Poloha není načtená"}</strong>
-            <span>{positionMessage || "Není uložena ani sdílena."}</span>
+          <p>Při zapnutí odešle zařízení souřadnice zabezpečenému serveru, který je ihned převede na hrubou oblast. Přesné souřadnice se neukládají ani nevracejí.</p>
+          <label className="nearby-consent">
+            <input type="checkbox" checked={currentConsent} disabled={consentSaving || unavailable || !scope.ownerId || settingsStatus === "saving" || (!currentConsent && !settings.nearbyOptIn)} onChange={event => updatePresenceConsent(event.target.checked)} />
+            <span>Souhlasím s dočasným sdílením hrubé oblasti pro souhrnný počet od pěti rybářů.</span>
+          </label>
+          <label className="nearby-consent">
+            <input type="checkbox" checked={currentConsent && showProfile} disabled={!currentConsent || consentSaving || settingsStatus === "saving" || visiblePositionStatus === "loading"} onChange={event => updatePresenceConsent(true, event.target.checked)} />
+            <span>Dovoluji zobrazit odkaz na svůj dohledatelný veřejný profil účastníkům ve stejné hrubé oblasti po dobu mé přítomnosti.</span>
+          </label>
+          <div className={`nearby-position-state nearby-position-state-${visiblePositionStatus}`}>
+            <strong>{visiblePositionStatus === "ready" ? "Anonymní přítomnost zapnuta" : visiblePositionStatus === "loading" ? "Zjišťuji polohu…" : "Poloha není načtená"}</strong>
+            <span>{visiblePositionMessage || "Není uložena ani sdílena."}</span>
           </div>
-          <button className="nearby-check-in" type="button" onClick={checkOwnPosition} disabled={positionStatus === "loading"}>
-            {positionStatus === "loading" ? "Ověřuji…" : "Jsem tady"}
-          </button>
-          <small>Tlačítko polohu nikam neposílá ani nezveřejňuje.</small>
+          <div className="nearby-actions">
+            <button className="nearby-check-in" type="button" onClick={joinNearby} disabled={visiblePositionStatus === "loading" || consentSaving || !currentConsent || !settings.nearbyOptIn || settings.nearbyLocationPrecision !== "approximate"}>
+              {visiblePositionStatus === "loading" ? "Zapínám…" : "Zapnout anonymní přítomnost"}
+            </button>
+            <button className="nearby-stop" type="button" disabled={consentSaving || unavailable || !scope.ownerId || settingsStatus === "saving"} onClick={() => updatePresenceConsent(false)}>Vypnout moje sdílení</button>
+          </div>
+          <small>Server dostává pouze přechodně souřadnice nutné k výpočtu hrubé oblasti.</small>
         </section>
 
-        <section className="nearby-remote-grid" aria-label="Stav vzdálených dat v okolí">
-          <article><span>Poslední úlovky poblíž</span><strong>Data nejsou dostupná</strong><p>Žádné vzdálenosti ani cizí úlovky bez bezpečné agregace.</p></article>
-          <article><span>Druhy v okolí</span><strong>Data nejsou dostupná</strong><p>Žádné počty druhů nejsou dopočítané nebo vymyšlené.</p></article>
+        <section className="nearby-settings" aria-labelledby="nearby-fishers-title">
+          <h2 id="nearby-fishers-title">Rybáři v okolí</h2>
+          <p>Zobrazí se pouze veřejné profily rybářů, kteří s tím výslovně souhlasili. Jejich přesnou polohu nevidíš.</p>
+          <button className="nearby-check-in" type="button" onClick={discoverProfiles} disabled={visiblePositionStatus !== "ready" || discovery.status === "loading" || consentSaving}>Načíst rybáře</button>
+          {visiblePositionStatus !== "ready" && <p>Pro hledání nejdřív zapni přítomnost.</p>}
+          {discovery.status === "loading" && <p role="status">Načítám rybáře…</p>}
+          {discovery.status === "error" && <p className="nearby-error" role="alert">{discovery.message}</p>}
+          {discovery.status === "ready" && (discovery.profiles.length ? <ul className="nearby-catalogue-list">
+            {discovery.profiles.map(profile => <li key={profile.handle}><Link to={`/u/${encodeURIComponent(profile.handle)}`}>{profile.displayName} · @{profile.handle}</Link></li>)}
+          </ul> : <p role="status">{discovery.active ? "V této oblasti nyní nejsou dostupné žádné profily." : "Přítomnost už není aktivní."}</p>)}
         </section>
+        <NearbyCatalogueWaters ownerId={scope.ownerId} />
       </section>
     </Layout>
   );

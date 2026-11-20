@@ -74,6 +74,28 @@ export function createPublicationService({ db, media, cursors, env = {}, now = (
     ...(audience === "owner" ? { ...(row.sourceEntryId?{sourceEntryId:row.sourceEntryId}:{}),sourceCatchId:row.sourceCatchId,sourcePhotoId:row.sourcePhotoId,fields:row.fields } : {}) };
   }
   return {
+    async nearbyWaterActivity(uid, catalogueId) {
+      if (!waters.has(catalogueId)) throw new Error("invalid_request");
+      return db.runTransaction(async tx => {
+        await guard(tx, uid, "feed");
+        // Equality uses Firestore's existing single-field index. Bound source validation to one page.
+        const candidates = await tx.get(db.collection("socialPosts").where("content.catalogueId", "==", catalogueId).limit(20));
+        const visible = [];
+        for (const snapshot of candidates.docs) {
+          const row = snapshot.data();
+          if (row.id !== snapshot.id || row.visibility !== "public" || row.fields?.water !== true
+            || (row.kind && row.kind !== "catch") || !Number.isSafeInteger(row.createdAt)) continue;
+          const allowed = await permitted(tx, uid, row, row.ownerUid === uid ? { previewAudience: "stranger" } : {});
+          if (!allowed || allowed.profile.visibility !== "public" || allowed.profile.sections?.[section(row)] !== "public") continue;
+          visible.push({
+            id: row.id, species: row.content.species, month: row.content.caughtAt?.slice(0, 7),
+            displayName: allowed.profile.displayName, createdAt: row.createdAt,
+          });
+        }
+        return { posts: visible.sort((a, b) => b.createdAt - a.createdAt).slice(0, 6)
+          .map(({ id, species, month, displayName }) => ({ id, species, ...(month ? { month } : {}), displayName })) };
+      });
+    },
     async saveEntry(uid,payload) { return {post:dto(await entries.save(uid,payload))}; },
     async view(uid,{postId}) {
       if (!/^[a-f0-9]{64}$/.test(postId??"")) fail();

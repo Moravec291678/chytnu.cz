@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { getAccountDeletionAdminContext } from "../../../server/cloudinaryApi.js";
 import { configuredOwnerUid } from "./adminAccess.js";
+import { cleanupExpiredNearbyPresence } from "../../social/server/nearbyPresenceService.js";
 
 // Reuses the existing authorized daily cron. Date-based suspensions are restored
 // at the next successful daily run, not by pretending a revoked Auth login works.
@@ -33,5 +34,8 @@ export async function restoreExpiredSuspensions({ db, auth, ownerUid = "", now =
 }
 export async function restoreProductionExpiredSuspensions() {
   const env = globalThis.process?.env ?? {}, context = await getAccountDeletionAdminContext(env);
-  return restoreExpiredSuspensions({ ...context, ownerUid: configuredOwnerUid(env) });
+  const now = Date.now();
+  const suspensions = await restoreExpiredSuspensions({ ...context, ownerUid: configuredOwnerUid(env), now });
+  const nearbyPresence = await cleanupExpiredNearbyPresence({ db: context.db, now: () => now });
+  return { ...suspensions, nearbyPresence };
 }

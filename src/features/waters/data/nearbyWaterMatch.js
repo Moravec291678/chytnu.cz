@@ -34,3 +34,13 @@ export function findNearestSavedWater(coordinates, waters, maxDistanceMeters = S
   }, null);
   return nearest ? { ...nearest, distanceMeters: Math.round(nearest.distanceMeters) } : null;
 }
+
+export function findNearbyCatalogueWaters(coordinates, waters) {
+  return waters.flatMap(water => {
+    const distance = distanceBetweenCoordinatesMeters(coordinates, water.coordinates);
+    if (distance === null || distance > 25_000) return [];
+    return [{ id: water.id, name: water.name, number: water.number, distance }];
+  }).sort((a, b) => a.distance - b.distance || a.id.localeCompare(b.id))
+    .slice(0, 8)
+    .map(({ distance, ...water }) => ({ ...water, approximateKm: Math.round(distance / 1000) }));
+}

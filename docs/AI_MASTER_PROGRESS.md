@@ -90,3 +90,11 @@ Release gate and production result are recorded in the final release checkpoint.
 - Code commit `1a83e11fbdb2cd9d513af119fec8ecd0582c8cd4` is on `main`; Vercel production reached READY for that SHA. Live homepage returned HTTP 200 and the deployed notification bundle contains the new social preference UI and honest push status.
 - Optional browser push sending remains inactive. Physical mobile and authenticated live browser validation remain unverified.
 - Next: Stage 10 Nearby privacy and presence. Do not start later stages before review and verification.
+
+## Sociální síť 10/18 – Okolí
+
+- Zapnutí přítomnosti vyžaduje přihlášení a výslovný souhlas. Server uchovává jedinou hrubou oblast na účet po dobu 20 minut. API nevrací souřadnice ani oblast. U úplného vypnutí se serverový souhlas odvolá a přítomnost odstraní společně.
+- Profil se ve stejné oblasti zobrazí jen s dalším souhlasem, veřejnou dohledatelností, aktivní přítomností, nejméně pěti účastníky v oblasti a bez oboustranného blokování. Zobrazené výsledky se po 30 sekundách odstraní z paměti obrazovky.
+- Poloha pro hledání katalogových revírů zůstává v zařízení. Návrhy měří vzdálenost k referenčnímu bodu RIS a vyžadují výběr. Aktivita zvoleného revíru čte pouze schválené veřejné publikace obsahující daný katalogový revír. Odpověď vynechává fotografie a soukromé údaje.
+- Server přestane počítat relaci při expiraci. Uložené záznamy odstraňuje stávající denní úklid po nejvýše 200 položkách. Před smazáním znovu ověří expiraci. Firebase TTL a placené služby nejsou potřeba.
+- Ověření: 1 173 jednotkových testů, lint, build a kontrola tajných klíčů PASS. 83 kontrol Nearby v emulátoru Auth/Firestore se šesti syntetickými účty PASS. Přihlášený průchod Chromium 390 px se syntetickou polohou a skutečným lokálním API PASS. Fyzické zařízení zůstává neověřené.

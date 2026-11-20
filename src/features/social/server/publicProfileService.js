@@ -19,6 +19,7 @@ import { projectPublicProgression,publicProgressionFromSummary } from "./publicP
 import { createSocialFeedService } from "./socialFeedService.js";
 import { createSocialInteractionService } from "./socialInteractionService.js";
 import { publicationConsentPath } from "./publicationConsent.js";
+import { createNearbyPresenceService } from "./nearbyPresenceService.js";
 export const profileError = (code, status = 400) => Object.assign(new Error(code), { code, status });
 export function createPublicProfileService({ db, auth, avatar, socialPhoto, env = {}, cursorSecret, now = () => Date.now() }) {
   const repository = createSocialRepository({ db, auth, now, profilesEnabled: true });
@@ -27,6 +28,7 @@ export function createPublicProfileService({ db, auth, avatar, socialPhoto, env 
   const publications = createPublicationService({db,media,cursors:createSocialCursor({env,secret:cursorSecret,now}),env,now});
   const feed=createSocialFeedService({db,publications,cursors:createSocialCursor({env,secret:cursorSecret,now})});
   const interactions=createSocialInteractionService({db,publications,cursors:createSocialCursor({env,secret:cursorSecret,now}),env,now});
+  const nearby=createNearbyPresenceService({db,now});
   async function identity(token) {
     if (!token) throw profileError("authentication_required", 401);
     try { return (await auth.verifyIdToken(token, true)).uid; } catch { throw profileError("authentication_required", 401); }
@@ -41,6 +43,10 @@ export function createPublicProfileService({ db, auth, avatar, socialPhoto, env 
         [`social-search-day-${createHash("sha256").update(uid).digest("hex")}`, day, 150]);
       if (action === "progression.compare") limits.push([`social-comparison-${createHash("sha256").update(uid).digest("hex")}`,minute,5]);
       if (action === "entries.save") limits.push([`social-entry-minute-${createHash("sha256").update(uid).digest("hex")}`,minute,5],[`social-entry-day-${createHash("sha256").update(uid).digest("hex")}`,day,20]);
+      if (["nearby.join", "nearby.consent", "nearby.discover", "nearby.waterActivity"].includes(action)) {
+        const key = createHash("sha256").update(uid).digest("hex");
+        limits.push([`social-nearby-${action}-minute-${key}`, minute, 4], [`social-nearby-${action}-day-${key}`, day, 12]);
+      }
       const rows = await Promise.all(limits.map(([key]) => tx.get(db.doc(`serverRateLimits/${key}`))));
       limits.forEach(([key, window, limit], i) => {
         const old = rows[i].data(), count = old?.window === window ? old.count : 0;
@@ -87,8 +93,16 @@ export function createPublicProfileService({ db, auth, avatar, socialPhoto, env 
   return { async execute(action, payload, token) {
     const uid = token ? await identity(token) : null;
     if (!uid && !["view", "image", "posts.list", "posts.image","posts.view"].includes(action)) throw profileError("authentication_required", 401);
+    // A full stop is idempotent and must work after exhausting the join/change budget.
+    if (action === "nearby.consent" && payload.accepted === false) return nearby.setConsent(uid, false, payload.showProfile);
     await limited(uid, action);
     if (action === "feed.list") return feed.list(uid,payload);
+    if (action === "nearby.join") return nearby.join(uid,payload);
+    if (action === "nearby.leave") return nearby.leave(uid);
+    if (action === "nearby.consent") return nearby.setConsent(uid,payload.accepted,payload.showProfile);
+    if (action === "nearby.status") return nearby.status(uid);
+    if (action === "nearby.discover") return nearby.discover(uid);
+    if (action === "nearby.waterActivity") return publications.nearbyWaterActivity(uid,payload.catalogueId);
     if (action === "interactions.list") return interactions.list(uid,payload);
     if (action === "reactions.set") return interactions.setReaction(uid,payload);
     if (action === "comments.save") return interactions.saveComment(uid,payload);

@@ -10,7 +10,7 @@ export const FEATURES = Object.freeze({
   waters: false,
   community: true,
   friends: true,
-  nearby: false,
+  nearby: true,
   crew: false,
   notifications: false,
   supporter: false,

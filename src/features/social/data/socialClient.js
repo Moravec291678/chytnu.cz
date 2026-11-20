@@ -20,10 +20,12 @@ const messages = {
   invalid_interaction: "Údaje reakce nebo komentáře nejsou platné.", interaction_conflict: "Reakce se mezitím změnila. Načti příspěvek znovu.",
   comment_unavailable: "Komentář již není dostupný nebo ho nemůžeš upravit.", comment_conflict: "Komentář se mezitím změnil. Načti jej znovu.",
   comment_duplicate: "Tento komentář byl nedávno odeslán. Počkej před dalším pokusem.",
+  consent_required: "Před zapnutím Okolí potvrď výslovný souhlas se sdílením pouze hrubé oblasti.",
 };
-export async function socialRequest(action, payload = {}, { signal } = {}) {
+export async function socialRequest(action, payload = {}, { signal, expectedUid } = {}) {
   if (globalThis.navigator?.onLine === false) throw new Error(messages.offline);
   const uid = firebaseAuth.currentUserId(), controller = new AbortController();
+  if (expectedUid !== undefined && uid !== expectedUid) throw new Error("Aktivní účet se změnil. Načti profil znovu.");
   const abort = () => controller.abort();
   if (signal?.aborted) controller.abort(); else signal?.addEventListener("abort", abort, { once: true });
   const timer = setTimeout(abort, 25_000);
