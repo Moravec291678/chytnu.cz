@@ -140,6 +140,8 @@
 
 - **24 · BLOCKED · 21. listopadu 2026.** Izolovaný Capacitor sync Android PASS (178 assetů), platform/release 15 PASS. Gradle wrapper funkční, online assembleDebug zastavilo SDK location not found. Offline pokus nepoužil necachované AGP závislosti. Android origin preflight na živém Cloudinary sign 405 bez CORS; native cloud větev vyžaduje samostatnou akceptaci. [Android build a podpis](ANDROID_NATIVE_BUILD_EVIDENCE.md). APK/AAB, podpis a fyzické ověření čekají. Dokumentační commit a vývojový push, produkce 68fbf04. Další Prompt 25.
 
+- **25 · BLOCKED · 21. listopadu 2026.** [Google Play balíček](GOOGLE_PLAY_SUBMISSION_PACK.md) obsahuje aktuální API 36, 16KiB, testovací program, data, výmaz, označení oprávnění, návrhy listing a OWNER-ONLY postup. Zdroj targetSdk 36 ověřen v 24, AAB/podpis/Play účet a skutečný track chybí. Žádný upload ani platba. Dokumentační commit a vývojový push, produkce 68fbf04. Další Prompt 26.
+
 ## Přesný bod pokračování
 
-**Prompt 25** · připravit Google Play podklady podle aktuálních oficiálních požadavků, označit přesné chybějící podmínky.
+**Prompt 26** · ověřit iOS zdrojovou konfiguraci, instalovatelné nástroje a přiložit reprodukovatelný Mac postup.
