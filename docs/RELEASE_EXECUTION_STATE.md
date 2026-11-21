@@ -110,6 +110,8 @@
 
 - **09 · PARTIAL · 21. listopadu 2026.** Přihlášené Chromium 390 px a 75 cílených kontrol PASS. Revír bez diakritiky, zakázaná GPS, nedostupné dlaždice, úprava a ukončení vycházky a historie po reloadu ověřeny. [Protokol revírů a map](QA_TRIPS_WATERS_MAPS.md). Vlastník potvrzuje podmínky redistribuce; fyzické uspání neověřené. Samostatný dokumentační commit na vývojové větvi; produkce 68fbf04. Další Prompt 10.
 
+- **10 · PASS · 21. listopadu 2026.** 244 cílených kontrol PASS. Přihlášené Chromium potvrdilo shodu 270 XP Domů/Profil a rekord 53 cm v Detailu, Profilu, Statistikách i ročním příběhu. Jeden záznam vedl k označenému lokálnímu experimentu bez inference. [Protokol XP a statistik](QA_PROGRESSION_STATISTICS.md). Samostatný dokumentační commit na vývojové větvi, produkce 68fbf04. Další Prompt 11.
+
 ## Přesný bod pokračování
 
-**Prompt 10** · ověřit jednotný výpočet XP, statistik a rekordů a hranice volitelných příběhů a tipů.
+**Prompt 11** · doložit fyzickou Android PWA nebo připravit předatelný scénář s lokálním důkazem.
