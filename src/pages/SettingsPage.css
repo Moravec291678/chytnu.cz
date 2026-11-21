@@ -138,7 +138,7 @@
 .settings-danger button,
 .settings-delete-confirm {
   background: var(--accent-red);
-  color: #fff;
+  color: var(--text-on-accent);
 }
 
 .settings-message,
