@@ -13,9 +13,11 @@ test("photo cleanup cron requires a configured secret and exact bearer value", (
 test("protected maintenance endpoint runs only for the scheduler and reports retryable failures", async () => {
   const secret = "a-very-long-test-secret";
   let runs = 0;
-  const handler = createCleanupHandler({ getSecret: () => secret, runCleanup: async () => {
+  const logs = [];
+  const handler = createCleanupHandler({ getSecret: () => secret, logRun: (event) => logs.push(event), runCleanup: async () => {
     runs += 1;
-    return { scanned: 1, deleted: 0, failed: 1 };
+    if (runs === 2) throw new Error("Sensitive synthetic provider details");
+    return { scanned: 1, deleted: 0, failed: 1, account: "fixture-private-owner" };
   } });
   const request = async (method, authorization) => {
     const response = { statusCode: 200, headers: {},
@@ -32,8 +34,16 @@ test("protected maintenance endpoint runs only for the scheduler and reports ret
   assert.equal(unauthorized.statusCode, 401);
   assert.equal(unauthorized.headers["Cache-Control"], "no-store");
   assert.equal(runs, 0);
+  assert.deepEqual(logs, []);
   const result = await request("GET", `Bearer ${secret}`);
   assert.equal(result.statusCode, 207);
   assert.equal(result.headers["Cache-Control"], "no-store");
   assert.equal(runs, 1);
+  const failure = await request("GET", `Bearer ${secret}`);
+  assert.equal(failure.statusCode, 503);
+  assert.equal(failure.headers["Cache-Control"], "no-store");
+  assert.deepEqual(logs, [
+    { event: "cloud_cleanup", status: "partial_failure", deleted: 0, failed: 1 },
+    { event: "cloud_cleanup", status: "unavailable" },
+  ]);
 });

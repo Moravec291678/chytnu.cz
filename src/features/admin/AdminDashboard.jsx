@@ -266,6 +266,12 @@ function MonitoringPanel({ client, ai, access }) {
       ["Úspěšné odpovědi AI", metric(data.ai?.providerSuccesses)], ["Chyby AI", metric(data.ai?.providerErrors)], ["Poslední bezpečný kód chyby", data.ai?.lastErrorCode],
       ["Poslední požadavek", timestamp(data.ai?.lastRequestAt)], ["Rezervované neurony dnes", metric(data.quota?.reservedNeurons)], ["Rezervace textu dnes", metric(data.quota?.textReservedNeurons)],
       ["Odložené úlohy na zařízeních", "Nedostupné — zůstávají v soukromém místním úložišti"], ["Chyby synchronizace uživatelů", metric(data.syncErrors)], ["Selhání nahrávání fotografií", metric(data.photoUploadFailures)]]} />
+    {!ai && <>
+      <h3>Cloudový úklid</h3>
+      {(data.cleanup?.photosBlocked > 0 || data.cleanup?.accountsBlocked > 0) && <p role="alert" className="admin-note">Některé úlohy úklidu vyžadují kontrolu.</p>}
+      <Facts items={[["Fotografie ve frontě", metric(data.cleanup?.photosPending)], ["Fotografie k prověření", metric(data.cleanup?.photosBlocked)],
+        ["Účty ve frontě výmazu", metric(data.cleanup?.accountsPending)], ["Výmazy účtů k prověření", metric(data.cleanup?.accountsBlocked)]]} />
+    </>}
     <p className="admin-note">Konfigurace poskytovatele nepotvrzuje aktuální dostupnost modelu. Otevření této stránky nespouští inferenci ani nespotřebovává AI kvótu. Nezobrazuje fotografie, raw prompty ani přihlašovací údaje.</p>
     {access.role === "OWNER" && <div className="admin-actions"><Link to="/admin/limits">Upravit interní limity</Link><Link to="/admin/features">Spravovat AI funkce</Link></div>}
   </>}</section>;

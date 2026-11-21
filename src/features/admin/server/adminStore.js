@@ -197,14 +197,13 @@ export function createAdminService({ db, auth, ownerUid = "", env = {}, now = ()
       tx.delete(taskRef); audit("task.delete", input.id); return { deleted: true };
     });
   }
-  async function boundedCount(field, value) {
-    let query = db.collection("adminAccounts");
-    if (field) query = query.where(field, "==", value);
+  async function boundedCount(query) {
     const count = (await query.limit(COUNT_BOUND + 1).count().get()).data().count;
     return Number.isSafeInteger(count) && count <= COUNT_BOUND ? count : null;
   }
   async function overview(access) {
-    const counts = hasAdminPermission(access, "users.read") ? await Promise.all([boundedCount(), boundedCount("role", "TESTER"), boundedCount("suspended", true)]) : [null, null, null];
+    const accounts = db.collection("adminAccounts");
+    const counts = hasAdminPermission(access, "users.read") ? await Promise.all([boundedCount(accounts), boundedCount(accounts.where("role", "==", "TESTER")), boundedCount(accounts.where("suspended", "==", true))]) : [null, null, null];
     const tasks = hasAdminPermission(access, "tasks") ? (await db.collection("adminTasks").where("status", "in", ["New", "Planned", "In Progress", "Testing"]).limit(COUNT_BOUND + 1).count().get()).data().count : null;
     return { registeredUsers: null, managedUsers: counts[0], testers: counts[1], suspended: counts[2], openTasks: Number.isSafeInteger(tasks) && tasks <= COUNT_BOUND ? tasks : null, countsBounded: true,
       countNote: "Celkový počet registrací není dostupný. Provozní počty zahrnují spravované účty, nejvýše 1000.", version,
@@ -212,7 +211,16 @@ export function createAdminService({ db, auth, ownerUid = "", env = {}, now = ()
   }
   async function monitoring() {
     const earliest = new Date(now() - 29 * 86400000).toISOString().slice(0, 10);
-    const [diagnostics, quota] = await Promise.all([db.collection("adminAiDiagnostics").where("dayUtc", ">=", earliest).orderBy("dayUtc", "desc").limit(30).get(), db.doc("serverRateLimits/ai-free-cloudflare-global").get()]);
+    const mediaJobs = db.collectionGroup("photoDeletionJobs");
+    const deletion = db.collection("accountDeletions");
+    const [diagnostics, quota, photosPending, photosBlocked, accountsPending, accountsBlocked] = await Promise.all([
+      db.collection("adminAiDiagnostics").where("dayUtc", ">=", earliest).orderBy("dayUtc", "desc").limit(30).get(),
+      db.doc("serverRateLimits/ai-free-cloudflare-global").get(),
+      boundedCount(mediaJobs.where("status", "in", ["pending", "retry", "deleting"])).catch(() => null),
+      boundedCount(mediaJobs.where("status", "in", ["blocked-reference", "permanent-failure"])).catch(() => null),
+      boundedCount(deletion.where("status", "in", ["requested", "processing", "retry", "cleanup-pending"])).catch(() => null),
+      boundedCount(deletion.where("status", "==", "partial-failure")).catch(() => null),
+    ]);
     const ai = { providerRequests: 0, providerSuccesses: 0, providerErrors: 0, days: diagnostics.docs.length, lastErrorCode: null, lastRequestAt: null };
     for (const document of diagnostics.docs) {
       const data = document.data();
@@ -227,6 +235,7 @@ export function createAdminService({ db, auth, ownerUid = "", env = {}, now = ()
     const currentDay = Math.floor(now() / 86400000);
     const currentQuota = safeQuota && safeQuota.dayUtc === currentDay ? safeQuota : null;
     return { ai, quota: currentQuota, version, provider: { configured, zeroCostConfirmed: null, model, status: configured ? "configured" : "unavailable", connection: "not_probed" },
+      cleanup: { photosPending, photosBlocked, accountsPending, accountsBlocked },
       syncErrors: null, photoUploadFailures: null, deferredJobs: null, serviceHealth: "available" };
   }
   const support = createAdminSupportService({db, auth, ownerUid: trustedOwner, actor, permit, transaction, now, at, recent, photoProxy});

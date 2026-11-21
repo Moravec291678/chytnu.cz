@@ -12,7 +12,13 @@ function validCronAuthorization(header, secret) {
 }
 
 export function createCleanupHandler({ runCleanup = runProductionCloudinaryPhotoCleanup,
-  runMaintenance = null, getSecret = () => globalThis.process?.env?.CRON_SECRET } = {}) {
+  runMaintenance = null, getSecret = () => globalThis.process?.env?.CRON_SECRET,
+  logRun = (event) => console.info(JSON.stringify(event)) } = {}) {
+  function record(status, summary = {}) {
+    const counts = Object.fromEntries(["deleted", "failed", "deferred"].filter((key) =>
+      Number.isSafeInteger(summary[key]) && summary[key] >= 0).map((key) => [key, summary[key]]));
+    try { logRun({ event: "cloud_cleanup", status, ...counts }); } catch { /* Logging must not affect cleanup. */ }
+  }
   return async function handler(req, res) {
     res.setHeader?.("Cache-Control", "no-store");
     if (req.method !== "GET") {
@@ -26,8 +32,10 @@ export function createCleanupHandler({ runCleanup = runProductionCloudinaryPhoto
     try {
       const result = await runCleanup();
       if (runMaintenance) result.suspensions = await runMaintenance();
+      record(result.failed ? "partial_failure" : "completed", result);
       return res.status(result.failed ? 207 : 200).json(result);
     } catch {
+      record("unavailable");
       return res.status(503).json({ error: "photo_cleanup_unavailable" });
     }
   };

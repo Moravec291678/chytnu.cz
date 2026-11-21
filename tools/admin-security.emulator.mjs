@@ -45,6 +45,7 @@ try {
   const ordinary = await request("user", "self");
   assert.equal(ordinary.access.role, "USER"); assert.equal(ordinary.identity, null);
   await request("user", "overview", {}, 403);
+  await request("user", "monitoring", {}, 403);
   await request("user", "users.update", { uid: uids.user, patch: { role: "ADMIN" }, expectedRevision: 0 }, 403);
   await request("owner", "users.update", { uid: uids.tester, patch: { role: "TESTER" }, expectedRevision: 0 });
   await request("tester", "overview", {}, 403);
@@ -76,7 +77,21 @@ try {
   assert.ok(audit.entries.length >= 8); assert.ok(audit.entries.every(row => row.actorUid && row.action && row.createdAt));
   assert.equal(JSON.stringify(audit).includes("Synthetic integration task"), false);
   const directory = await request("owner", "users.list"); assert.ok(directory.users.some(row => row.uid === uids.owner && row.role === "OWNER"));
+  const previousCleanup = (await request("owner", "monitoring")).cleanup;
+  await Promise.all([
+    db.doc(`users/${uids.user}/photoDeletionJobs/pending`).set({ status: "retry", objectKey: "private-fixture-path" }),
+    db.doc(`users/${uids.user}/photoDeletionJobs/blocked`).set({ status: "permanent-failure", objectKey: "private-fixture-path" }),
+    db.doc(`accountDeletions/${uids.tester}`).set({ status: "cleanup-pending", ownerId: uids.tester }),
+    db.doc(`accountDeletions/${uids.admin}`).set({ status: "partial-failure", ownerId: uids.admin }),
+  ]);
   const monitoring = await request("owner", "monitoring"); assert.equal(monitoring.syncErrors, null);
+  assert.deepEqual(monitoring.cleanup, {
+    photosPending: previousCleanup.photosPending + 1, photosBlocked: previousCleanup.photosBlocked + 1,
+    accountsPending: previousCleanup.accountsPending + 1, accountsBlocked: previousCleanup.accountsBlocked + 1,
+  });
+  assert.doesNotMatch(JSON.stringify(monitoring), /private-fixture-path|admin-test-/);
+  assert.deepEqual((await request("co", "monitoring")).cleanup, monitoring.cleanup);
+  await request("anonymous", "monitoring", {}, 401);
   await request("owner", "users.get", { uid: uids.user, privateCatch: true }, 400);
   console.log(`Admin security integration passed: ${checks} authenticated/unauthorized API checks; real emulator Auth, roles, revocation, suspension, limits, feature policy, task CRUD and audit.`);
 } finally { await deleteApp(app); }

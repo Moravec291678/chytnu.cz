@@ -128,6 +128,8 @@
 
 - **18 · PARTIAL · 21. listopadu 2026.** Opraven zastaralý popis AI v Podmínkách, doplněno dobrovolné sdílení, omezení exportu a technické úložiště v zásadách. 10 cílených testů a čtyři scénáře právních tras v Chromium PASS. [Právní podklady a kroky vlastníka](LEGAL_OWNER_SIGNOFF.md). Chybí podpis, licence RIS a potvrzení živé konfigurace. Vývojový commit a push, produkce 68fbf04. Preview 17 READY 79a695bbb81f066604da8f0f5e8bfd39c69b6d02. Další Prompt 19.
 
+- **19 · PARTIAL · 21. listopadu 2026.** Administrace ukazuje ohraničené počty výmazů účtů a fotografií a upozornění na blokované položky. Cron loguje jen stav a počty. Simulovaný 207/503, 43 multi-account admin kontrol, 11 cílených testů, 1 192 Node, lint/build PASS. [Provoz](OPERATIONS_RUNBOOK.md), [incident](INCIDENT_RESPONSE.md), [rollback](RELEASE_ROLLBACK.md). Read-only potvrzen vypnutý PITR i delete protection. Vercel předchozí READY 65b7f62 a aktuální 68fbf04. Potvrzení provozního kontaktu, alertu a živého rollback cvičení otevřené. Vývojový commit a push. Další Prompt 20.
+
 ## Přesný bod pokračování
 
-**Prompt 19** · inventář monitoringu, bezpečný syntetický incident a nedestruktivní ověření rollbacku.
+**Prompt 20** · ověřit tarify dostupné read-only, spočítat kapacitní model a omezit provoz bez billingu.
