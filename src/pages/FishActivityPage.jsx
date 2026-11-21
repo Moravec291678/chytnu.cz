@@ -14,7 +14,7 @@ export default function FishActivityPage() {
       <Link className="fish-activity-page-back" to="/">← Domů</Link>
       <header>
         <span>Podmínky u vody</span>
-        <h1>Fish Activity</h1>
+        <h1>Aktivita ryb</h1>
         <p>Orientační skóre se počítá z aktuálních místních podmínek. Jeho výpočet je vysvětlený a nikdy se nepoužívá jako předpověď úlovků.</p>
       </header>
       <FishActivity detailed />

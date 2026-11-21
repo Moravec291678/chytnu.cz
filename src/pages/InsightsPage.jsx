@@ -110,7 +110,7 @@ function InsightsPage() {
         </details>
 
         <InsightSection title="Předpověď" className="insights-weather">
-          <p>Orientační Fish Activity používá aktuální počasí a dostupné místní předpovědi. Výsledek je vysvětlený odhad, ne předpověď úlovků.</p>
+          <p>Orientační skóre aktivity ryb vychází z aktuálního počasí a místní předpovědi. U výsledku najdeš vysvětlení výpočtu.</p>
           <FishActivity detailed />
         </InsightSection>
 

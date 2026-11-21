@@ -116,6 +116,8 @@
 
 - **12 · BLOCKED DEVICE TEST · 21. listopadu 2026.** Připojený iPhone ani macOS pro inspektor nebyly k dispozici. Apple touch ikona a manifest ověřeny z buildu, desktopový důkaz použit jen pro shell. [iOS protokol](DEVICE_IOS_PWA_ACCEPTANCE.md). Safari instalace, HEIC, klávesnice, fyzický restart a update s frontou čekají na zařízení. Dokumentační commit a push na vývojovou větev, produkce 68fbf04. Další Prompt 13.
 
+- **13 · PARTIAL · 21. listopadu 2026.** Načtení 56 tras ve dvou šířkách (112 kombinací + 26 opakování), lint, build a 7 testů navigace PASS. Český nadpis aktivity ryb ověřen v Chromiu. [Matice tras](QA_ROUTE_INTERACTION_MATRIX.md). Zbývají úplné načtené a offline varianty sociálních cest. Vývojový commit a push, produkce 68fbf04. Preview 09–12 READY na odpovídajících SHA. Další Prompt 14.
+
 ## Přesný bod pokračování
 
-**Prompt 13** · ověřit katalog 56 tras, výslovně rozlišit běžné, parametrické a uzavřené scénáře.
+**Prompt 14** · srovnat vizuální základ, prověřit hlavní obrazovky a napravit potvrzené odchylky bez redesignu.
