@@ -14,6 +14,8 @@ const actions = { friends: ["tab", "cursor"], "friends.status": ["targetUid"], s
   "waterPresence.refresh": ["sessionId"], "waterPresence.leave": ["sessionId"],
   "waterChat.send": ["waterId", "sessionId", "text", "operationId"], "waterChat.list": ["waterId", "sessionId", "cursor"],
   "waterChat.report": ["waterId", "sessionId", "messageId", "reason"],
+  "dm.send": ["targetUid", "text", "operationId"], "dm.list": ["targetUid", "cursor"], "dm.conversations": ["cursor"],
+  "dm.read": ["targetUid", "revision"], "dm.delete": ["targetUid", "messageId"], "dm.report": ["targetUid", "messageId", "reason"],
   "entries.save":["entryId","kind","visibility","expectedRevision","title","description","achievementId"],
   "avatar.set": ["jpegBase64"], "avatar.remove": [], image: ["identity", "kind", "catchId", "photoId"] };
 const errors = { unauthenticated: 401, authentication_required: 401, account_unavailable: 403, forbidden: 403,
@@ -30,6 +32,7 @@ function isAvailable(action, payload, features) {
   if (action.startsWith("nearby.")) return features.nearby === true;
   if (action.startsWith("waterPresence.")) return features.waterPresence === true;
   if (action.startsWith("waterChat.")) return features.waterPresence === true && features.waterChat === true;
+  if (action.startsWith("dm.")) return features.directMessages === true;
   return true;
 }
 export function createSocialHandler({ service, features = FEATURES }) {

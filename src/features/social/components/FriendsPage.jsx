@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { isFeatureEnabled } from "../../../shared/config/featureFlags.js";
 import Layout from "../../../shared/layout/Layout.jsx";
 import { useAuth } from "../../auth/context/authContextValue.js";
 import CollaboratorBadge from "../../admin/CollaboratorBadge.jsx";
@@ -54,7 +55,7 @@ export default function FriendsPage() {
   return <Layout><div className="social-page friends-page"><div className="social-topline"><Link to="/profile">← Můj profil</Link><button onClick={() => setRevision(value => value + 1)} disabled={busy}>Obnovit</button></div>
     <header><p className="social-eyebrow">Spojení mezi účty</p><h1>Přátelé</h1><p className="social-help">Přátelství platí až po potvrzení serverem. Stav se při otevřené stránce průběžně obnovuje.</p></header>
     {!uid ? <section className="social-panel"><p>Přátelé vyžadují přihlášení. Místní deník zůstává dostupný.</p><Link className="social-primary" to="/login">Přihlásit se</Link></section> : <>
-      <div className="social-button-row"><Link className="social-primary" to="/community/find">Najít přátele</Link></div>
+      <div className="social-button-row"><Link className="social-primary" to="/community/find">Najít přátele</Link>{isFeatureEnabled("directMessages") && <Link to="/messages">Soukromé zprávy</Link>}</div>
       <p className="social-help">Další rybáře můžeš objevit podle veřejných zájmů nebo v přehledu nových členů.</p>
       <nav className="social-tabs" aria-label="Přehled přátelství">{Object.entries(tabs).map(([id, title]) => <button key={id} aria-pressed={tab === id} onClick={() => setTab(id)}>{title}</button>)}</nav>
       {action?.key === key && action.message && <p role="status" className="social-success">{action.message}</p>}{action?.key === key && action.error && <p role="alert" className="social-error">{action.error}</p>}
@@ -62,7 +63,7 @@ export default function FriendsPage() {
       {online && !current && <p role="status" className="social-panel">Načítám propojení…</p>}
       {current?.error && <p role="alert" className="social-error">{current.error}</p>}
       {current?.users && <section aria-label={tabs[tab]}><p className="social-help">{current.users.length ? `Načteno ${current.users.length} propojení${current.nextCursor ? "; další lze načíst níže" : ""}.` : "V tomto přehledu zatím žádné propojení není."}</p>
-        <ul className="fisher-results">{current.users.map(profile => <li className="fisher-result" key={profile.uid}><Link className="fisher-result-avatar" to={`/u/${profile.uid}`} aria-label={`Otevřít profil ${profile.displayName}`}>{profile.avatarVersion ? <SharedImage profile={profile} avatar /> : <span>{profile.displayName?.charAt(0) || "🎣"}</span>}</Link><div className="fisher-result-body"><Link className="fisher-result-name" to={`/u/${profile.uid}`}>{profile.displayName || "Rybář"}</Link><p className="social-handle">{profile.handle ? `@${profile.handle}` : ""}</p><CollaboratorBadge access={profile.badgeRole ? { role: profile.badgeRole } : null} /><FriendshipActions relationship={profile.relationship} busy={busy} onAction={operation => perform(profile, operation)} /></div></li>)}</ul>
+        <ul className="fisher-results">{current.users.map(profile => <li className="fisher-result" key={profile.uid}><Link className="fisher-result-avatar" to={`/u/${profile.uid}`} aria-label={`Otevřít profil ${profile.displayName}`}>{profile.avatarVersion ? <SharedImage profile={profile} avatar /> : <span>{profile.displayName?.charAt(0) || "🎣"}</span>}</Link><div className="fisher-result-body"><Link className="fisher-result-name" to={`/u/${profile.uid}`}>{profile.displayName || "Rybář"}</Link><p className="social-handle">{profile.handle ? `@${profile.handle}` : ""}</p><CollaboratorBadge access={profile.badgeRole ? { role: profile.badgeRole } : null} /><FriendshipActions relationship={profile.relationship} busy={busy} onAction={operation => perform(profile, operation)} />{isFeatureEnabled("directMessages") && tab === "friends" && <Link to={`/messages/${encodeURIComponent(profile.uid)}`} aria-label={`Napsat zprávu · ${profile.displayName || "Přítel"}`}>Napsat zprávu</Link>}</div></li>)}</ul>
         {current.pageError && <><p role="alert" className="social-error">{current.pageError}</p><button onClick={() => setRevision(value => value + 1)}>Obnovit přehled</button></>}{current.nextCursor && current.users.length < 100 && <button className="fisher-load-more" disabled={paging?.key === key} onClick={more}>{paging?.key === key ? "Načítám…" : "Načíst další"}</button>}
       </section>}
     </>}

@@ -34,6 +34,7 @@ const ProfilePage = lazy(() => import("../pages/ProfilePage"));
 const SocialProfileSettings = lazy(() => import("../features/social/components/SocialProfileSettings.jsx"));
 const PublicFishingProfile = lazy(() => import("../features/social/components/PublicFishingProfile.jsx"));
 const FriendsPage = lazy(() => import("../features/social/components/FriendsPage.jsx"));
+const DirectMessagesPage = lazy(() => import("../features/social/components/DirectMessagesPage.jsx"));
 const FisherDiscovery = lazy(() => import("../features/social/components/FisherDiscovery.jsx"));
 const AdminDashboard = lazy(() => import("../features/admin/AdminDashboard.jsx"));
 const WaterCataloguePage = lazy(() => import("../pages/WaterCataloguePage.jsx"));
@@ -189,6 +190,7 @@ function App() {
         <Route path="/waters/:waterId/chat" element={isFeatureEnabled("waterChat") ? <PageSuspense><WaterChatPage /></PageSuspense> : <NotFoundPage />} />
         <Route path="/hotspots" element={<PageSuspense><HotspotsPage /></PageSuspense>} />
         <Route path="/friends" element={<PageSuspense><FriendsPage /></PageSuspense>} />
+        {isFeatureEnabled("directMessages") && <Route path="/messages/:targetUid?" element={<PageSuspense><DirectMessagesPage /></PageSuspense>} />}
         <Route path="/community/post/:postId" element={<PageSuspense><CommunityPostPage /></PageSuspense>} />
         <Route path="/community" element={<PageSuspense><CommunityPage /></PageSuspense>} />
         {isFeatureEnabled("userDiscovery") && <Route path="/community/find" element={<PageSuspense><FisherDiscovery /></PageSuspense>} />}

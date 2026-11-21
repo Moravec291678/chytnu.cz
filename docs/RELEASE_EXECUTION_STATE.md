@@ -169,6 +169,11 @@
 - Autorizovaný chat pro potvrzený revír, stránkování, potvrzované odeslání, soukromé hlášení, moderace a úklid při smazání účtu. 56 skutečných emulátorových kontrol, 6 cílených testů, lint/build a dva browser účty na 390 px PASS.
 - Veřejně vypnuto. Fyzická retence, moderace v produkci a fyzický offline/reconnect čekají.
 
+### 32A — PARTIAL
+
+- Soukromé zprávy přátel, seznam/počty nepřečtených, hlášení, moderace a dávkové mazání. 67 Auth/Firestore kontrol, Chromium 390 px se dvěma účty, lint, build a diff PASS.
+- Trasa a API jsou produkčně vypnuté. Zbývá fyzický mobil, schválená moderace a retence.
+
 ## Přesný bod pokračování
 
-**Prompt 32A** — soukromé zprávy s účastnickými právy. Potom samostatné milníky 32B Crew a 32C obsah revírů.
+**Prompt 32B** — odděleně Crew: skutečné členství, pozvání, role, předání a absence veřejného lokálního UI.

@@ -13,6 +13,7 @@ export const FEATURES = Object.freeze({
   nearby: false,
   waterPresence: false,
   waterChat: false,
+  directMessages: false,
   crew: false,
   notifications: false,
   supporter: false,

@@ -22,6 +22,7 @@ import { publicationConsentPath } from "./publicationConsent.js";
 import { createNearbyPresenceService } from "./nearbyPresenceService.js";
 import { createWaterPresenceService } from "./waterPresenceService.js";
 import { createWaterRoomMessageService } from "./waterRoomMessageService.js";
+import { createDirectMessageService } from "./directMessageService.js";
 export const profileError = (code, status = 400) => Object.assign(new Error(code), { code, status });
 export function createPublicProfileService({ db, auth, avatar, socialPhoto, env = {}, cursorSecret, now = () => Date.now() }) {
   const repository = createSocialRepository({ db, auth, now, profilesEnabled: true });
@@ -33,6 +34,7 @@ export function createPublicProfileService({ db, auth, avatar, socialPhoto, env 
   const nearby=createNearbyPresenceService({db,now});
   const waterPresence = createWaterPresenceService({ db, now });
   const waterChat = createWaterRoomMessageService({ db, waterPresence, cursors: createSocialCursor({ env, secret: cursorSecret, now }), now });
+  const dm = createDirectMessageService({ db, cursors: createSocialCursor({ env, secret: cursorSecret, now }), now });
   async function identity(token) {
     if (!token) throw profileError("authentication_required", 401);
     try { return (await auth.verifyIdToken(token, true)).uid; } catch { throw profileError("authentication_required", 401); }
@@ -62,6 +64,10 @@ export function createPublicProfileService({ db, auth, avatar, socialPhoto, env 
       if (action === "waterChat.report") {
         const key = createHash("sha256").update(uid).digest("hex");
         limits.push([`social-water-chat-report-day-${key}`, day, 10]);
+      }
+      if (action === "dm.send" || action === "dm.report") {
+        const key = createHash("sha256").update(uid).digest("hex");
+        limits.push([`social-${action}-minute-${key}`, minute, 8], [`social-${action}-day-${key}`, day, action === "dm.send" ? 40 : 10]);
       }
       const rows = await Promise.all(limits.map(([key]) => tx.get(db.doc(`serverRateLimits/${key}`))));
       limits.forEach(([key, window, limit], i) => {
@@ -126,6 +132,12 @@ export function createPublicProfileService({ db, auth, avatar, socialPhoto, env 
     if (action === "waterChat.send") return waterChat.send(uid, payload);
     if (action === "waterChat.list") return waterChat.list(uid, payload);
     if (action === "waterChat.report") return waterChat.report(uid, payload);
+    if (action === "dm.conversations") return dm.conversations(uid, payload);
+    if (action === "dm.list") return dm.list(uid, payload);
+    if (action === "dm.send") return dm.send(uid, payload);
+    if (action === "dm.read") return dm.markRead(uid, payload);
+    if (action === "dm.delete") return dm.remove(uid, payload);
+    if (action === "dm.report") return dm.report(uid, payload);
     if (action === "interactions.list") return interactions.list(uid,payload);
     if (action === "reactions.set") return interactions.setReaction(uid,payload);
     if (action === "comments.save") return interactions.saveComment(uid,payload);

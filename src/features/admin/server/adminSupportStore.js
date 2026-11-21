@@ -5,6 +5,8 @@ import { adminError } from "./adminValidation.js";
 import { summaryForXp } from "../../progression/data/progressionSummary.js";
 import { createNotificationRecord } from "../../notifications/data/notificationModel.js";
 import { changeInteractionCounts } from "../../social/server/socialInteractionCounters.js";
+import { canonicalPair } from "../../social/data/socialModel.js";
+import { removeDirectMessageText } from "../../social/server/directMessageService.js";
 
 const check = (valid, code = "support_access_required", status = 403) => { if (!valid) throw adminError(code, status); };
 const row = doc => doc.exists ? doc.data() : null;
@@ -236,7 +238,14 @@ export function createAdminSupportService({ db, auth, ownerUid, actor, permit, t
         check(reportDoc.exists, "report_unavailable", 404);
         const report = reportDoc.data();
         if (input.hide) {
-          if (report.messageId) {
+          if (report.conversationId) {
+            check(report.conversationId === canonicalPair(report.reporterUid, report.targetUid) && /^[a-f0-9]{64}$/.test(report.messageId), "report_unavailable", 404);
+            const conversationRef = db.doc(`privateConversations/${report.conversationId}`);
+            const messageRef = conversationRef.collection("messages").doc(report.messageId);
+            const [conversation, message] = await Promise.all([tx.get(conversationRef), tx.get(messageRef)]);
+            check(conversation.exists && message.exists && message.data().ownerUid === report.targetUid, "report_unavailable", 404);
+            removeDirectMessageText(tx, conversationRef, conversation.data(), messageRef, message.data(), report.reporterUid, now());
+          } else if (report.messageId) {
             check(/^ris-[a-f0-9]{24}$/.test(report.waterId ?? "") && /^[a-f0-9]{64}$/.test(report.messageId), "report_unavailable", 404);
             const messageRef = db.doc(`waterRooms/${report.waterId}/messages/${report.messageId}`);
             const message = await tx.get(messageRef);

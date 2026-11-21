@@ -23,13 +23,18 @@ export async function deleteSocialPage(db, uid, pageSize = 50, deleteAvatar) {
     ["socialPosts", "ownerUid", "=="], ["nearbyPresence", "ownerUid", "=="], ["waterPresence", "ownerUid", "=="],
     ["privateConversations", "memberUids", "array-contains"], ["crews", "ownerUid", "=="]]) {
     const page = await db.collection(collection).where(field, op, uid).limit(pageSize).get();
-    for (const entry of page.docs) {
-      if (collection === "socialPosts") {
-        await db.recursiveDelete(entry.ref);
-      } else {
-        await db.recursiveDelete(entry.ref);
+    if (collection === "privateConversations" && page.size) {
+      const conversation = page.docs[0].ref;
+      const messages = await conversation.collection("messages").limit(pageSize).get();
+      if (messages.empty) await conversation.delete();
+      else {
+        const batch = db.batch();
+        for (const message of messages.docs) batch.delete(message.ref);
+        await batch.commit();
       }
+      return true;
     }
+    for (const entry of page.docs) await db.recursiveDelete(entry.ref);
     if (page.size) return true;
   }
   // A former member must not remain discoverable in another user's crew.
