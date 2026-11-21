@@ -144,6 +144,11 @@
 
 - **26 · BLOCKED XCODE/DEVICE · 21. listopadu 2026.** Izolované Capacitor copy a sync iOS PASS na Windows. Doplněn PrivacyInfo pro Filesystem C617.1 a App resources, 16 testů, parsování plist a lint PASS. iOS origin živý preflight 405 bez CORS. [Důkaz a Mac kroky](IOS_NATIVE_BUILD_EVIDENCE.md). Xcode/SDK, podpis, skutečný archiv a iPhone čekají. Vývojový commit a push, produkce 68fbf04. Další Prompt 27.
 
+### 27 — BLOCKED
+
+- Připraven český App Store záznam, review checklist podle aktuálních požadavků Apple a plán interního a externího TestFlight.
+- Ověření dokumentace a `git diff --check` PASS. Od 26 beze změny aplikace. Podepsaný archiv, nativní login a fotografie, beta účty a fyzický iPhone NOT TESTED. Bez uploadu či platby. Vercel produkce beze změny.
+
 ## Přesný bod pokračování
 
-**Prompt 27** · připravit App Store a TestFlight podle aktuálních oficiálních požadavků a přesně odlišit schválení vlastníkem.
+**Prompt 28** — ověřit existující sociální jádro v izolovaných Firebase účtech. Produkční syntetické identity a živé Cloudinary čekají na autorizaci.
