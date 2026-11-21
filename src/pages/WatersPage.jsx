@@ -132,8 +132,8 @@ function WatersPage() {
       <div className="waters-page">
         <header className="waters-header">
           <div>
-            <h1>Revíry</h1>
-            <p>Databáze revírů</p>
+            <h1>Moje revíry</h1>
+            <p>Uložené revíry a oblíbené vody</p>
           </div>
           <Link to="/waters/new" className="waters-add-btn" aria-label="Přidat revír">+</Link>
         </header>

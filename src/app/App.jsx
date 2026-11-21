@@ -35,7 +35,6 @@ const SocialProfileSettings = lazy(() => import("../features/social/components/S
 const PublicFishingProfile = lazy(() => import("../features/social/components/PublicFishingProfile.jsx"));
 const FriendsPage = lazy(() => import("../features/social/components/FriendsPage.jsx"));
 const DirectMessagesPage = lazy(() => import("../features/social/components/DirectMessagesPage.jsx"));
-const FisherDiscovery = lazy(() => import("../features/social/components/FisherDiscovery.jsx"));
 const AdminDashboard = lazy(() => import("../features/admin/AdminDashboard.jsx"));
 const WaterCataloguePage = lazy(() => import("../pages/WaterCataloguePage.jsx"));
 const CatalogueWaterDetail = lazy(() => import("../pages/WaterCataloguePage.jsx").then(module => ({default:module.CatalogueWaterDetail})));
@@ -80,6 +79,11 @@ const DevelopmentDataIntegrityCheck = import.meta.env.DEV
 
 function PageSuspense({ children }) {
   return <Suspense fallback={<Layout><p className="loading-state" role="status">Načítám obrazovku…</p></Layout>}>{children}</Suspense>;
+}
+
+function LegacyRouteRedirect({ pathname, fallbackHash }) {
+  const { search, hash, state } = useLocation();
+  return <Navigate to={{ pathname, search, hash: hash || fallbackHash }} state={state} replace />;
 }
 
 function NotFoundPage() {
@@ -156,7 +160,7 @@ function App() {
         <Route path="/species/:speciesKey/mastery" element={<PageSuspense><SpeciesMasteryPage /></PageSuspense>} />
         <Route path="/species/:speciesKey" element={<PageSuspense><SpeciesDetailPage /></PageSuspense>} />
         <Route path="/album" element={<PageSuspense><SpeciesAlbumPage /></PageSuspense>} />
-        <Route path="/map" element={<Suspense fallback={<Layout><p className="loading-state" role="status">Načítám mapu…</p></Layout>}><MapPage /></Suspense>} />
+        <Route path="/map" element={<LegacyRouteRedirect pathname="/journal/map" />} />
         <Route path="/add" element={<PageSuspense><AddCatchPage /></PageSuspense>} />
         <Route path="/catch/:id/reward" element={<PageSuspense><CatchRewardPage /></PageSuspense>} />
         <Route path="/catch/:id/share" element={isFeatureEnabled("publicSharing") ? <PageSuspense><CatchSharePage /></PageSuspense> : <NotFoundPage />} />
@@ -193,7 +197,7 @@ function App() {
         {isFeatureEnabled("directMessages") && <Route path="/messages/:targetUid?" element={<PageSuspense><DirectMessagesPage /></PageSuspense>} />}
         <Route path="/community/post/:postId" element={isFeatureEnabled("community") ? <PageSuspense><CommunityPostPage /></PageSuspense> : <NotFoundPage />} />
         <Route path="/community" element={isFeatureEnabled("community") ? <PageSuspense><CommunityPage /></PageSuspense> : <NotFoundPage />} />
-        {isFeatureEnabled("userDiscovery") && <Route path="/community/find" element={<PageSuspense><FisherDiscovery /></PageSuspense>} />}
+        {isFeatureEnabled("community") && isFeatureEnabled("userDiscovery") && <Route path="/community/find" element={<LegacyRouteRedirect pathname="/community" fallbackHash="#fisher-search" />} />}
         <Route path="/community/catch/:catchId" element={isFeatureEnabled("community") ? <PageSuspense><CommunityCatchDetailPage /></PageSuspense> : <NotFoundPage />} />
         <Route path="/community/:postId/report" element={isFeatureEnabled("community") ? <PageSuspense><CommunityReportPage /></PageSuspense> : <NotFoundPage />} />
         <Route path="/nearby" element={isFeatureEnabled("nearby") ? <PageSuspense><NearbyPage /></PageSuspense> : <NotFoundPage />} />

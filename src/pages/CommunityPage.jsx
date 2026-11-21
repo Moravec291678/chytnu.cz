@@ -3,7 +3,9 @@ import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import CommunityEntryComposer from "../features/social/components/CommunityEntryComposer.jsx";
 import SocialFeed from "../features/social/components/SocialFeed.jsx";
+import FisherDiscovery from "../features/social/components/FisherDiscovery.jsx";
 import { FEATURES } from "../product/config/featureFlags.js";
+import { isFeatureEnabled } from "../shared/config/featureFlags.js";
 import { useAuth } from "../features/auth/context/authContextValue.js";
 import { useCatches } from "../features/catches/context/useCatches.js";
 import { buildLocalCommunityFeed } from "../features/community/data/communityFeed.js";
@@ -12,7 +14,7 @@ import "./CommunityPage.css";
 
 const FEED_TABS = [
   { id: "global", label: "Pro všechny" },
-  { id: "friends", label: "Přátelé" },
+  { id: "friends", label: "Od přátel" },
   { id: "local", label: "Místní náhled" },
 ];
 
@@ -50,13 +52,14 @@ function CommunityPage() {
             <h1 id="community-title">Komunita</h1>
             <p>Úlovky sdílené rybáři</p>
           </div>
-          <Link className="community-search" to="/community/find" aria-label="Najít rybáře">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8" /><path d="m16 16 5 5" /></svg>
-          </Link>
         </header>
-        <Link className="community-discovery-link" to="/friends">Přátelé a pozvání <span aria-hidden="true">→</span></Link>
-        {FEATURES.crew && <Link className="community-discovery-link" to="/crew">Rybářské skupiny <span aria-hidden="true">→</span></Link>}
-        {FEATURES.nearby && <Link className="community-discovery-link" to="/nearby">Dobrovolné Okolí <span aria-hidden="true">→</span></Link>}
+        <nav className="community-links" aria-label="Nástroje komunity">
+          {isFeatureEnabled("friends") && <Link className="community-discovery-link" to="/friends">Přátelé a pozvání</Link>}
+          <Link className="community-discovery-link" to="/notifications" state={{ from: "/community" }}>Oznámení</Link>
+          {isFeatureEnabled("crew") && <Link className="community-discovery-link" to="/crew">Rybářské skupiny</Link>}
+          {isFeatureEnabled("nearby") && <Link className="community-discovery-link" to="/nearby">Dobrovolné Okolí</Link>}
+        </nav>
+        {isFeatureEnabled("userDiscovery") && <FisherDiscovery key={auth.user?.uid ?? "anonymous"} />}
 
         {FEATURES.community && <CommunityEntryComposer key={auth.user?.uid ?? "anonymous"} onPublished={() => setFeedRefresh(value => value + 1)} />}
 

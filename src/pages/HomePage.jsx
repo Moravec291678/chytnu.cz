@@ -204,7 +204,7 @@ function HomePage() {
             </p>
           </div>
           <div className="dashboard-header-actions">
-            <Link className="dashboard-icon-button dashboard-notification-button" to="/notifications" aria-label={unreadCount ? `Oznámení, ${unreadCount} nepřečtených` : "Oznámení"}>
+            <Link className="dashboard-icon-button dashboard-notification-button" to="/notifications" aria-label={unreadCount ? `Oznámení, ${unreadCount} nepřečtených` : "Oznámení"} state={{ from: "/" }}>
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></svg>
               {unreadCount > 0 && <span className="dashboard-notification-badge" aria-hidden="true">{unreadCount > 99 ? "99+" : unreadCount}</span>}
             </Link>

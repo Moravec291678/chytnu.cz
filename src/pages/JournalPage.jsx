@@ -4,6 +4,7 @@ import Layout from "../shared/layout/Layout";
 import { EmptyState, ErrorState, LoadingSkeleton, NoResultsState } from "../shared/components/UIStates.jsx";
 import { DEFAULT_METHODS } from "../shared/constants/constants";
 import CatchCard from "../features/catches/components/CatchCard";
+import JournalNavigation from "../features/catches/components/JournalNavigation.jsx";
 import { useCatches } from "../features/catches/context/useCatches";
 import { useTrips } from "../features/trips/context/useTrips";
 import { filterAndSortCatches, hasActiveJournalFilters, JOURNAL_SORTS } from "../features/catches/utils/catchJournal";
@@ -45,17 +46,11 @@ function JournalPage() {
           <p>{state.catches.length} {pluralize(state.catches.length, ["úlovek", "úlovky", "úlovků"])} · {species.length} {pluralize(species.length, ["druh", "druhy", "druhů"])}</p>
         </div>
       </div>
-      <nav className="journal-tabs" aria-label="Části deníku">
-        <span className="journal-tab journal-tab-active" aria-current="page">Úlovky</span>
-        <Link className="journal-tab" to="/journal/map">Mapa</Link>
-        <Link className="journal-tab" to="/journal/calendar">Kalendář</Link>
-        <Link className="journal-tab" to="/trips">Vycházky</Link>
-        <Link className="journal-tab" to="/gallery">Galerie</Link>
-        <Link className="journal-tab" to="/stats">Statistiky</Link>
-      </nav>
+      <JournalNavigation />
       <details className="journal-reports">
-        <summary>Příběhy a přehledy</summary>
-        <nav aria-label="Příběhy a přehledy deníku">
+        <summary>Mapa, příběhy a přehledy</summary>
+        <nav aria-label="Mapa, příběhy a přehledy deníku">
+          <Link to="/journal/map">Soukromá mapa</Link>
           <Link to="/insights">Tipy a rady z deníku</Link>
           <Link to="/season-story">Příběh sezóny</Link>
           <Link to="/year-summary">Roční souhrn</Link>

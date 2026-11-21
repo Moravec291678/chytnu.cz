@@ -1,8 +1,8 @@
 const sections = {
   home: ["fish-activity"],
-  journal: ["journal", "catch", "species", "gallery", "album", "map", "stats", "insights", "season-story", "year-summary", "trips", "hotspots"],
-  community: ["community", "u", "friends", "nearby", "crew", "notifications"],
-  profile: ["profile", "waters", "settings", "privacy", "privacy-policy", "terms", "achievements", "levels", "challenges", "streak", "supporter", "admin"],
+  journal: ["journal", "catch", "gallery", "map", "stats", "insights", "season-story", "year-summary", "trips", "waters", "hotspots"],
+  community: ["community", "u", "friends", "nearby", "crew", "messages", "notifications"],
+  profile: ["profile", "species", "album", "settings", "privacy", "privacy-policy", "terms", "achievements", "levels", "challenges", "streak", "supporter", "admin"],
 };
 
 export function navigationSection(pathname) {

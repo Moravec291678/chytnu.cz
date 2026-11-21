@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { isFeatureEnabled } from "../../../shared/config/featureFlags.js";
 import Layout from "../../../shared/layout/Layout.jsx";
 import { useAuth } from "../../auth/context/authContextValue.js";
@@ -15,7 +15,10 @@ const unique = rows => [...new Map(rows.map(row => [row.uid, row])).values()];
 export default function FriendsPage() {
   const { user } = useAuth(), uid = user?.uid;
   const online = useSocialConnection();
-  const [tab, setTab] = useState("friends"), [revision, setRevision] = useState(0), [result, setResult] = useState(null), [action, setAction] = useState(null), [paging, setPaging] = useState(null);
+  const [params, setParams] = useSearchParams();
+  const selectedTab = params.get("tab");
+  const tab = Object.hasOwn(tabs, selectedTab) ? selectedTab : "friends";
+  const [revision, setRevision] = useState(0), [result, setResult] = useState(null), [action, setAction] = useState(null), [paging, setPaging] = useState(null);
   const mutation = useRef(null), pageRequest = useRef(null), operations = useRef(new Map()), sequence = useRef(0);
   const key = `${uid ?? "guest"}:${tab}:${online}`, current = result?.key === key ? result : null, busy = action?.key === key && action.busy;
   useEffect(() => {
@@ -52,12 +55,17 @@ export default function FriendsPage() {
     } catch (error) { if (!controller.signal.aborted) setResult(old => old?.key === key ? { ...old, pageError: error.message } : old); }
     finally { setPaging(active => active?.id === id ? null : active); }
   }
-  return <Layout><div className="social-page friends-page"><div className="social-topline"><Link to="/profile">← Můj profil</Link><button onClick={() => setRevision(value => value + 1)} disabled={busy}>Obnovit</button></div>
+  return <Layout><div className="social-page friends-page"><div className="social-topline"><Link to="/community">← Komunita</Link><button onClick={() => setRevision(value => value + 1)} disabled={busy}>Obnovit</button></div>
     <header><p className="social-eyebrow">Spojení mezi účty</p><h1>Přátelé</h1><p className="social-help">Přátelství platí až po potvrzení serverem. Stav se při otevřené stránce průběžně obnovuje.</p></header>
     {!uid ? <section className="social-panel"><p>Přátelé vyžadují přihlášení. Místní deník zůstává dostupný.</p><Link className="social-primary" to="/login">Přihlásit se</Link></section> : <>
-      <div className="social-button-row"><Link className="social-primary" to="/community/find">Najít přátele</Link>{isFeatureEnabled("directMessages") && <Link to="/messages">Soukromé zprávy</Link>}</div>
+      <div className="social-button-row">{isFeatureEnabled("userDiscovery") && <Link className="social-primary" to="/community#fisher-search">Najít přátele</Link>}{isFeatureEnabled("directMessages") && <Link to="/messages">Soukromé zprávy</Link>}</div>
       <p className="social-help">Další rybáře můžeš objevit podle veřejných zájmů nebo v přehledu nových členů.</p>
-      <nav className="social-tabs" aria-label="Přehled přátelství">{Object.entries(tabs).map(([id, title]) => <button key={id} aria-pressed={tab === id} onClick={() => setTab(id)}>{title}</button>)}</nav>
+      <nav className="social-tabs" aria-label="Přehled přátelství">{Object.entries(tabs).map(([id, title]) => <button type="button" key={id} aria-pressed={tab === id} onClick={() => setParams(current => {
+        const next = new URLSearchParams(current);
+        if (id === "friends") next.delete("tab");
+        else next.set("tab", id);
+        return next;
+      }, { replace: true })}>{title}</button>)}</nav>
       {action?.key === key && action.message && <p role="status" className="social-success">{action.message}</p>}{action?.key === key && action.error && <p role="alert" className="social-error">{action.error}</p>}
       {!online && <p role="status" className="social-panel">Přátelé jsou dostupní online. Poslední stav teď nelze ověřit; soukromý deník funguje dál.</p>}
       {online && !current && <p role="status" className="social-panel">Načítám propojení…</p>}

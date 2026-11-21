@@ -254,7 +254,8 @@ export function createSocialRepository({ db, auth, now = () => Date.now(), profi
             if (!existingNotification.exists) {
               const notification = createNotificationRecord({ id, type: "social",
                 title: transition.eventType === "requested" ? "Nová žádost o přátelství" : "Žádost o přátelství byla přijata",
-                body: "Aktuální propojení s rybáři najdeš v přehledu Přátelé.", deepLink: "/friends" },
+                body: "Aktuální propojení s rybáři najdeš v přehledu Přátelé.",
+                deepLink: transition.eventType === "requested" ? "/friends?tab=incoming" : "/friends" },
               { ownerId: recipient, scopeKey: `account:${recipient}` }, { now: new Date(stamp) });
               notificationRecord = { ...notification }; delete notificationRecord.scopeKey;
             }

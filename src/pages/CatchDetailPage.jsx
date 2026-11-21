@@ -272,7 +272,7 @@ function CatchDetailPage() {
           ["Soukromé místo", privacy.privateSpot ? "Ano" : "Ne"]].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
       </dl></details>
       <CatchAiAssistance key={`${scope.scopeKey}:${item.id}`} record={item} />
-      {hasMapLocation && <Link className="catch-detail-map-link" to={`/map?catch=${encodeURIComponent(item.id)}`}>Zobrazit úlovek na soukromé mapě</Link>}
+      {hasMapLocation && <Link className="catch-detail-map-link" to={`/journal/map?catch=${encodeURIComponent(item.id)}`}>Zobrazit úlovek na soukromé mapě</Link>}
       <div className="catch-detail-actions">
         {isFeatureEnabled("publicSharing") && <Link className="save-catch-button" to={`/catch/${item.id}/share`}>Sdílet úlovek</Link>}
         <button className="photo-action-button" type="button" onClick={() => setConfirmingDelete(true)} disabled={deleting}>{deleting ? "Mažu…" : "Smazat úlovek"}</button>

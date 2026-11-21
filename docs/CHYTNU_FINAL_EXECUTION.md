@@ -55,3 +55,26 @@ SOC-01 až SOC-18 odpovídají původním číslům v [matici QA](QA_COVERAGE_MA
 
 - 1 202 Node testů včetně nové kontroly úplnosti a jediného vlastníka každé trasy. Lint, build, produktová validace a kontrola diffu. Z posledního kandidáta se přebírá 1 919 integračních kontrol a 26 nativních HTTP/Firebase kontrol. V této etapě se neměnil kód služeb. Prohlížečové důkazy výše pocházejí z nové relace se syntetickými daty.
 - Další krok je **Prompt 01 · odstranění zbytečných kliků a jednotná informační architektura**. Vzít zde změřené cesty jako výchozí stav, sjednotit vstupy při zachování deep linků a potvrzení a zopakovat stejná měření. Prompt 01 čeká na další zadání vlastníka.
+
+## Prompt 01 · PASS · 21. listopadu 2026
+
+- **Výchozí stav.** Větev `codex/public-launch-readiness-audit` a vzdálené `main` začínaly na `75d7384ded85e3cb9cd2441b34f0dc447cf421bd`. Původní worktree `chytnu-terminology` má zachovaných 27 rozpracovaných změn.
+- **Deník.** Stejné hlavní odkazy v Deníku a Kalendáři. Moje revíry vedou do katalogu ČRS/RIS, mapa a retrospektivy jsou ve skupině Mapa, příběhy a přehledy. Úlovky a vycházky nadále používají stávající volič a identifikátory. Starý odkaz `/map` přesměruje na `/journal/map` s parametry a fragmentem.
+- **Komunita.** Přímé hledání na obrazovce feedu, vedle něj Přátelé a Oznámení. Starý `/community/find` vede do vyhledávacího pole. Nové oznámení o pozvání otevře příchozí žádosti. Vyhledávání a uzavřené sociální trasy respektují konfiguraci pilotu.
+- **Profil.** Deset duplicitních odkazů odstraněno z navigace Profilu a vstup Moje revíry přesunut do Deníku. Jedna duplicitní akce místního exportu odstraněna z Nastavení. Odtud odkaz otevře přesně `/profile#local-backup`. Stávající stažení, obnova, potvrzení nahrazení, synchronizace a samostatný cloudový export zůstávají dostupné.
+
+### Přeměření v Chromiu při 390 px
+
+- Quick Catch s fotkou **2 → 2**. Ruční zápis **1 → 1**. Editor úlovku s vykreslenou fotkou **3 → 3**.
+- Galerie **2 → 2**. Statistiky **2 → 2**. Zahájení vycházky **2 → 2**.
+- Detail RIS **6 → 5** a jedno zadání. Vyhledávací pole v katalogu je z Domů viditelné po třech kliknutích místo čtyř.
+- Vyhledání rybáře a otevření jeho profilu **4 → 3** a jedno zadání. Test zahrnul vyhledání zveřejněného jména bez diakritiky.
+- Oznámení **1 → 1**. Místní JSON záloha **3 → 3**. Kontextový odkaz z Nastavení vede ke stejnému exportu.
+
+### Důkazy a další krok
+
+- 1 203 Node testů a 1 919 Auth/Firestore kontrol. Samostatné Auth, Sync a Photos, lint, build, produktová validace a kontrola diffu. Testy zahrnují počet 57 deklarací tras, kanonické cíle a pravidla pro aktivní navigaci.
+- Host a soukromý pilot při 320, 360, 390, 430 a 1 280 px. Host 95, pilot 80 zobrazení, v obou režimech 6 offline kontrol včetně opětovného zobrazení fotografie. V pilotu jsou přímé sociální odkazy uzavřené.
+- Přihlášený běh v izolovaném Firebase Auth/Firestore pokryl všech 57 adres včetně očekávaných přesměrování, vypnutých tras a bezpečného stavu nenalezeného soukromého revíru. Dále 55 zobrazení napříč pěti šířkami a 25 skutečných kliknutí ověřených podle prvku pod ukazatelem. Dva účty potvrdily hledání se souhlasem, žádost, otevření oznámení do příchozí záložky a přijetí. Ověřeno uložení revíru RIS, přiřazení k vycházce a předvyplnění téhož revíru v úlovku, návraty, aktivní navigace, účetní záloha a otevření starých adres se zachováním parametrů.
+- Vývojový commit této etapy uvádí `git log -1 --format=%H -- docs/CHYTNU_FINAL_EXECUTION.md`. Nasazení patří na vývojovou větev do Vercel Preview. Produkční commit etapy 00 je `75d7384ded85e3cb9cd2441b34f0dc447cf421bd`. Kontrola živého Cloudinary a fyzických telefonů zůstává v samostatných release úkolech.
+- Po dokončení následuje **Prompt 02 · jednotný design systém, typografie a vizuální kompaktnost**. Navázat na nové hlavní vstupy a ověřit hustotu, hierarchii a dotykové cíle bez změny tmavé a zelené identity.

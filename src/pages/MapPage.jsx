@@ -111,12 +111,10 @@ function MapPage() {
 
   return <Layout><div className="catch-map-page">
     <header className="catch-map-header">
-      <h1>Deník</h1>
+      <h1>Soukromá mapa</h1>
       <p>{state.loading ? "Načítám úlovky…" : catchCountLabel(markers.length)}</p>
-      <nav className="catch-map-tabs" aria-label="Zobrazení deníku">
-        <Link to="/journal">Seznam</Link>
-        <Link to="/journal/map" aria-current="page">Mapa</Link>
-        <Link to="/journal/calendar">Kalendář</Link>
+      <nav className="catch-map-tabs" aria-label="Návrat do deníku">
+        <Link to="/journal">← Deník</Link>
       </nav>
       <p className="catch-map-privacy">Soukromá mapa — zobrazuje jen tvoje úlovky s uloženou GPS polohou. Souřadnice nejsou veřejné.</p>
     </header>

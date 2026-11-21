@@ -18,11 +18,11 @@ Výchozí stav 21. listopadu 2026, vývojový SHA `dcdc595883ee0563694326d5245d4
 - `/catch/:id/share` · 05 · Sdílení z detailu se souhlasem, mimo soukromý pilot.
 - `/journal` · 06 · Kanonický seznam s filtry.
 - `/journal/calendar` · 06 · Kalendář z Deníku.
-- `/journal/map` · 07 · Vstup z Deníku na soukromou mapu, stejná stránka jako /map.
-- `/map` · 07 · Kompatibilní hluboký odkaz užívaný také detailem úlovku.
+- `/journal/map` · 07 · Kanonická soukromá mapa, vstup ze skupiny Mapa, příběhy a přehledy v Deníku.
+- `/map` · 07 · Kompatibilní přesměrování na kanonickou mapu se zachováním parametrů a fragmentu.
 - `/hotspots` · 07 · Soukromý odvozený přehled míst.
-- `/gallery` · 06 · Kanonická vlastní galerie z Deníku i Profilu.
-- `/stats` · 06 · Kanonické statistiky z Deníku i Profilu.
+- `/gallery` · 06 · Kanonická vlastní galerie z Deníku.
+- `/stats` · 06 · Kanonické statistiky z Deníku.
 - `/insights` · 06 · Tipy z deníku s případnou dobrovolnou externí AI.
 - `/season-story` · 06 · Příběh sezóny s případným opt-in.
 - `/year-summary` · 06 · Roční retrospektiva.
@@ -30,7 +30,7 @@ Výchozí stav 21. listopadu 2026, vývojový SHA `dcdc595883ee0563694326d5245d4
 - `/trips/new` · 07 · Jeden formulář z Domů a seznamu vycházek.
 - `/trips/:id` · 07 · Detail vycházky a její úlovky.
 - `/trips/:id/edit` · 07 · Úprava vycházky.
-- `/waters` · 07 · Soukromé revíry, aktuální odkaz z Profilu, cílově sekundární vstup z Deníku.
+- `/waters` · 07 · Moje revíry z Deníku, vstup do katalogu.
 - `/waters/catalogue` · 07 · Kanonický katalog RIS.
 - `/waters/catalogue/:catalogueId` · 07 · Detail RIS s přiznanou přesností.
 - `/waters/new` · 07 · Přidání soukromého revíru.
@@ -39,9 +39,9 @@ Výchozí stav 21. listopadu 2026, vývojový SHA `dcdc595883ee0563694326d5245d4
 
 ## Profil, účet a postup
 
-- `/profile` · 09 · Kanonický vlastní profil, správa identity a místní záloha.
+- `/profile` · 09 · Kanonický vlastní profil, správa identity a místní záloha s obnovou v sekci Účet a místní data (`#local-backup`).
 - `/profile/social` · 09 · Veřejná identita a souhlas, v soukromém pilotu zavřeno.
-- `/settings` · 15 · Účet, cloudový export a výmaz. Druhý vstup do místní zálohy.
+- `/settings` · 15 · Účet, cloudový export a výmaz. Odkaz vede do kanonické sekce místní zálohy.
 - `/privacy` · 15 · Soukromí a poloha.
 - `/privacy-policy` · 19 · Veřejné zásady zpracování.
 - `/terms` · 19 · Veřejné podmínky.
@@ -57,14 +57,14 @@ Výchozí stav 21. listopadu 2026, vývojový SHA `dcdc595883ee0563694326d5245d4
 
 ## Komunita
 
-- `/community` · 10 · Kanonický feed, v soukromém pilotu zavřeno.
+- `/community` · 10 · Kanonický feed a přímo vložené vyhledávání rybářů, v soukromém pilotu zavřeno.
 - `/community/post/:postId` · 10 · Kanonický autorizovaný detail příspěvku.
 - `/community/catch/:catchId` · 10 · Kompatibilní odkaz na místní náhled.
 - `/community/:postId/report` · 10 · Zachovaný vstup hlášení.
 - `/u/:identity` · 09 · Kanonický veřejný profil.
-- `/community/find` · 11 · Kanonické hledání rybáře.
+- `/community/find` · 11 · Kompatibilní přesměrování na hledání v Komunitě (`#fisher-search`).
 - `/friends` · 11 · Přátelé a žádosti.
-- `/notifications` · 11 · Kanonická oznámení v aplikaci z Domů i Profilu.
+- `/notifications` · 11 · Kanonická oznámení z Domů, Komunity a nastavení.
 - `/messages/:targetUid?` · 12 · Konverzace přátel, výchozí stav zavřeno.
 - `/crew` · 13 · Skupiny a role, výchozí stav zavřeno.
 - `/waters/:waterId/chat` · 13 · Chat potvrzeného členství, výchozí stav zavřeno.
@@ -74,5 +74,5 @@ Výchozí stav 21. listopadu 2026, vývojový SHA `dcdc595883ee0563694326d5245d4
 ## Kanonické vstupy a hranice
 
 - Běžný klient má Domů, Deník, přidání úlovku, Komunitu a Profil. Soukromý pilot uzavírá sociální trasy i API a externí AI. Privilegované akce zůstávají chráněné serverem.
-- Prompt 01 zvolí hlavní vstup k místní záloze. Stávající cloudový export a obnova mají samostatný účel. Detail z notifikace, mapy nebo feedu podléhá stejné autorizaci jako detail z hlavní navigace.
-- Sjednocení dvou adres soukromé mapy, zvýraznění aktivní sekce u hlubokých odkazů a omezení duplicitních vstupů patří do Promptu 01.
+- Místní záloha a obnova mají jedinou obrazovku v Profilu. Cloudový export zůstává v Nastavení. Detail z oznámení, mapy nebo feedu podléhá stejné autorizaci jako detail z hlavní navigace.
+- Soukromé revíry, mapa a vycházky zvýrazňují Deník. Chat revíru, povolené konverzace a veřejné profily zvýrazňují Komunitu. Druhové album, postup, soukromí a nastavení zvýrazňují Profil.

@@ -177,25 +177,25 @@ test("gallery has a separate longest sort based on catch length", () => {
   assert.equal(sorted[0].catchId, "long-light");
 });
 
-test("gallery route is grouped with profile reports without changing bottom navigation", async () => {
+test("gallery has one primary entry in Journal without changing bottom navigation", async () => {
   const [app, profile, layout] = await Promise.all([
     readFile(new URL("../../../app/App.jsx", import.meta.url), "utf8"),
     readFile(new URL("../../../pages/ProfilePage.jsx", import.meta.url), "utf8"),
     readFile(new URL("../../../shared/layout/Layout.jsx", import.meta.url), "utf8"),
   ]);
   assert.match(app, /path="\/gallery"/);
-  assert.match(profile, /id="profile-reports"[\s\S]*?to="\/gallery" title="Galerie"/);
+  assert.doesNotMatch(profile, /to="\/gallery"/);
   assert.match(layout, /aria-label="Hlavní navigace"/);
   assert.match(layout, /nav-label">Domů[\s\S]*nav-label">Deník[\s\S]*nav-label">Komunita[\s\S]*nav-label">Profil/);
   assert.match(layout, /to="\/community" className=\{itemClass\(communityActive\)\}/);
   assert.match(layout, /navigationSection\(pathname\)/);
   const [journal, journalCss] = await Promise.all([
-    readFile(new URL("../../../pages/JournalPage.jsx", import.meta.url), "utf8"),
-    readFile(new URL("../../../pages/JournalPage.css", import.meta.url), "utf8"),
+    readFile(new URL("../components/JournalNavigation.jsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/JournalNavigation.css", import.meta.url), "utf8"),
   ]);
-  assert.match(journal, /to="\/trips">Vycházky/);
-  assert.match(journal, /to="\/gallery">Galerie/);
-  assert.match(journal, /to="\/stats">Statistiky/);
+  assert.match(journal, /\["\/trips", "Vycházky"\]/);
+  assert.match(journal, /\["\/gallery", "Galerie"\]/);
+  assert.match(journal, /\["\/stats", "Statistiky"\]/);
   assert.match(journalCss, /\.journal-tabs\s*\{[^}]*grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\)/);
   assert.doesNotMatch(layout, /to="\/gallery"/);
 });
@@ -203,7 +203,7 @@ test("gallery route is grouped with profile reports without changing bottom navi
 test("profile groups progression items and settings instead of listing them separately", async () => {
   const profile = await readFile(new URL("../../../pages/ProfilePage.jsx", import.meta.url), "utf8");
   assert.match(profile, /id="profile-goals"[\s\S]*?to="\/levels"[\s\S]*?to="\/achievements"[\s\S]*?to="\/challenges"[\s\S]*?to="\/streak"/);
-  assert.match(profile, /id="profile-settings"[\s\S]*?to="\/settings"[\s\S]*?to="\/privacy"[\s\S]*?to="\/notifications"/);
+  assert.match(profile, /id="profile-settings"[\s\S]*?to="\/settings"[\s\S]*?to="\/privacy"/);
   assert.doesNotMatch(profile, /className="profile-preferences"|className="profile-progress"/);
 });
 

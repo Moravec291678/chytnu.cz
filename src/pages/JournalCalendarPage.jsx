@@ -1,3 +1,4 @@
+import JournalNavigation from "../features/catches/components/JournalNavigation.jsx";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import Layout from "../shared/layout/Layout";
@@ -66,14 +67,10 @@ export default function JournalCalendarPage() {
 
   return <Layout><main className="journal-calendar">
     <header className="journal-calendar-header">
-      <h1>Deník</h1>
+      <h1>Kalendář</h1>
       <p>{monthLabel(month)} · {countLabel(monthSummary.catchCount, ["úlovek", "úlovky", "úlovků"])} · {countLabel(monthSummary.tripCount, ["vycházka", "vycházky", "vycházek"])}</p>
     </header>
-    <nav className="journal-tabs" aria-label="Zobrazení deníku">
-      <Link className="journal-tab" to="/journal">Seznam</Link>
-      <Link className="journal-tab" to="/journal/map">Mapa</Link>
-      <span className="journal-tab journal-tab-active" aria-current="page">Kalendář</span>
-    </nav>
+    <JournalNavigation />
     <nav className="journal-calendar-view-toggle" aria-label="Rozsah kalendáře">
       <button type="button" aria-pressed={calendarView === "month"} onClick={() => setCalendarView("month")}>Měsíc</button>
       <button type="button" aria-pressed={calendarView === "year"} onClick={() => setCalendarView("year")}>Rok</button>

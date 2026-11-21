@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
-import Layout from "../../../shared/layout/Layout.jsx";
+import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../../auth/context/authContextValue.js";
 import CollaboratorBadge from "../../admin/CollaboratorBadge.jsx";
 import { socialRequest } from "../data/socialClient.js";
@@ -13,6 +12,8 @@ const uniqueUsers = users => [...new Map(users.map(user => [user.uid, user])).va
 
 export default function FisherDiscovery() {
   const { user } = useAuth(), uid = user?.uid;
+  const { hash, key: locationKey } = useLocation();
+  const searchRef = useRef(null);
   const online = useSocialConnection();
   const [query, setQuery] = useState("");
   const [field, setField] = useState("all");
@@ -24,6 +25,9 @@ export default function FisherDiscovery() {
   const pageController = useRef(null), mutationController = useRef(null), sequence = useRef(0), attempts = useRef(new Map());
   const text = query.trim();
   const key = JSON.stringify([uid ?? null, mode, field, text, online]);
+  useEffect(() => {
+    if (hash === "#fisher-search") searchRef.current?.focus();
+  }, [hash, locationKey]);
   const searchable = Boolean(uid && online && (mode === "new" || text.length >= 2));
   const current = result?.key === key ? result : null;
   const loading = searchable && !current;
@@ -74,21 +78,23 @@ export default function FisherDiscovery() {
   }
   function changeSearch(value) { setQuery(value); setMode("search"); }
 
-  return <Layout><div className="social-page fisher-discovery">
-    <div className="social-topline"><Link to="/community">← Komunita</Link><Link to="/profile/social">Moje dohledatelnost</Link></div>
-    <header><p className="social-eyebrow">Rybářská komunita</p><h1>Najít rybáře</h1><p className="social-help">Vyhledej veřejné rybářské profily. Poloha zařízení ani GPS se nepoužívá.</p></header>
-    {!uid ? <section className="social-panel"><h2>Najdi další rybáře</h2><p>Vyhledávání a pozvání vyžadují přihlášení. Tvůj místní deník zůstává zachovaný.</p><Link className="social-primary" to="/login">Přihlásit se</Link></section> : <>
-      <section className="social-panel fisher-search-panel" aria-label="Vyhledat rybáře">
-        <label htmlFor="fisher-search">Jméno, uživatelské jméno nebo veřejný zájem<input id="fisher-search" type="search" autoComplete="off" autoCapitalize="none" maxLength={40} placeholder="Například Petr, privlac nebo Morava" value={query} onChange={event => changeSearch(event.target.value)} aria-describedby="fisher-search-help" /></label>
-        <label htmlFor="fisher-search-field">Hledat v<select id="fisher-search-field" value={field} onChange={event => { setField(event.target.value); setMode("search"); }}><option value="all">Jméno a veřejné údaje</option><option value="interests">Veřejné rybářské zájmy</option><option value="region">Dobrovolně zveřejněný region</option></select></label>
-        <p id="fisher-search-help" className="social-help">Zadej alespoň 2 znaky. Stačí začátek jména nebo slova, bez diakritiky a bez rozlišení velikosti písmen.</p>
-        <button type="button" aria-pressed={mode === "new"} onClick={() => { setMode("new"); setField("all"); setQuery(""); }}>Noví veřejní rybáři</button>
-      </section>
+  return <section className="social-page fisher-discovery" aria-label="Najít rybáře">
+    {!uid ? <Link ref={searchRef} id="fisher-search" className="community-discovery-link" to="/login">Přihlásit se a najít rybáře</Link> : <>
+      <div className="social-panel fisher-search-panel">
+        <label htmlFor="fisher-search">Najít rybáře<input ref={searchRef} id="fisher-search" type="search" autoComplete="off" autoCapitalize="none" maxLength={40} placeholder="Jméno, zájem nebo region" value={query} onChange={event => changeSearch(event.target.value)} aria-describedby="fisher-search-help" /></label>
+        <p id="fisher-search-help" className="visually-hidden">Zadej alespoň 2 znaky. Stačí začátek jména nebo slova, bez diakritiky.</p>
+        <details className="fisher-search-options">
+          <summary>Možnosti hledání</summary>
+          <label htmlFor="fisher-search-field">Hledat v<select id="fisher-search-field" value={field} onChange={event => { setField(event.target.value); setMode("search"); }}><option value="all">Jméno a veřejné údaje</option><option value="interests">Veřejné rybářské zájmy</option><option value="region">Dobrovolně zveřejněný region</option></select></label>
+          <button type="button" aria-pressed={mode === "new"} onClick={() => { setMode("new"); setField("all"); setQuery(""); }}>Noví veřejní rybáři</button>
+          <Link to="/profile/social">Moje dohledatelnost</Link>
+        </details>
+      </div>
       {action?.key === key && action.message && <p role="status" className="social-success">{action.message}</p>}
       {action?.key === key && action.error && <p role="alert" className="social-error">{action.error}</p>}
       {loading && <p role="status" className="social-panel">Hledám rybáře…</p>}
       {!online && <p className="social-panel social-empty" role="status">Hledání a přátelství vyžadují připojení. Soukromý deník funguje dál offline.</p>}
-      {online && !searchable && <p className="social-panel social-empty">Zkus jméno, společný rybářský zájem nebo dobrovolně sdílený region. Přehled nových členů načteš tlačítkem nahoře.</p>}
+      {online && text.length > 0 && !searchable && <p className="social-help">Zadej alespoň 2 znaky.</p>}
       {current?.error && <section className="social-panel"><p role="alert" className="social-error">{current.error}</p><button type="button" onClick={() => setRetry(value => value + 1)}>Zkusit znovu</button></section>}
       {current && !current.error && <section aria-label={mode === "new" ? "Noví veřejní rybáři" : "Výsledky vyhledávání"} aria-live="polite">
         {!current.users.length && <div className="social-panel"><h2>Žádné dostupné profily</h2><p className="social-empty">Zkus jiné jméno nebo začátek slova. Soukromé, skryté a blokované účty do výsledků nezařazujeme.</p></div>}
@@ -107,5 +113,5 @@ export default function FisherDiscovery() {
         {current.nextCursor && current.users.length >= 100 && <p className="social-help">Pro další výsledky upřesni hledání.</p>}
       </section>}
     </>}
-  </div></Layout>;
+  </section>;
 }

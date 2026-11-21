@@ -21,6 +21,6 @@ test("Home keeps one Journal entry and avoids repeating its section tabs", async
   const journal = await readFile(new URL("./JournalPage.jsx", import.meta.url), "utf8");
   assert.match(source, /<Link to="\/journal">Vše/);
   assert.doesNotMatch(source, /dashboard-view-tabs|dashboard-view-tab/);
-  assert.match(journal, /to="\/journal\/map">Mapa/);
-  assert.match(journal, /to="\/journal\/calendar">Kalendář/);
+  assert.match(journal, /to="\/journal\/map">Soukromá mapa/);
+  assert.match(journal, /<JournalNavigation \/>/);
 });

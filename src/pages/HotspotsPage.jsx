@@ -74,7 +74,7 @@ function HotspotsPage() {
           <section className="hotspots-section" aria-labelledby="local-heatmap-title">
             <div className="hotspots-section-heading">
               <div><span>VLASTNÍ GPS AGREGACE</span><h2 id="local-heatmap-title">Lokální heatmapa</h2></div>
-              <Link to="/map">Soukromá mapa →</Link>
+              <Link to="/journal/map">Soukromá mapa →</Link>
             </div>
             <p className="hotspots-explanation">Blízké GPS body jsou sloučené do oblastí. Přesné souřadnice se zde nezobrazují.</p>
             {heatCells.length === 0 ? (

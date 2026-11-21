@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useDataScope } from "../features/auth/context/dataScopeContextValue.js";
 import { useNotifications } from "../features/notifications/context/notificationContextValue.js";
 import { useOptionalSync } from "../features/sync/context/syncContextValue.js";
@@ -10,9 +10,11 @@ import { getNotificationAdapter } from "../platform/notifications/index.js";
 import { NOTIFICATION_PREFERENCES, NOTIFICATION_TYPE_PRESENTATION, SOCIAL_NOTIFICATION_PREFERENCES } from "../product/config/notifications.js";
 import Layout from "../shared/layout/Layout";
 import { getSyncDetailMessage } from "../shared/layout/syncStatusView.js";
+import { isFeatureEnabled } from "../shared/config/featureFlags.js";
 import "./NotificationsPage.css";
 
 const TYPE_ICONS = Object.freeze(Object.fromEntries(Object.entries(NOTIFICATION_TYPE_PRESENTATION).map(([key, value]) => [key, value.icon])));
+const INBOX_RETURN_LABELS = new Map([["/", "Domů"], ["/community", "Komunita"], ["/settings", "Nastavení"]]);
 
 function formatNotificationDate(value) {
   const date = new Date(value);
@@ -33,10 +35,14 @@ function initialPushState() {
 export default function NotificationsPage() {
   const scope = useDataScope();
   const navigate = useNavigate();
+  const { state } = useLocation();
+  const from = state?.from;
+  const backTo = INBOX_RETURN_LABELS.has(from) && (from !== "/community" || isFeatureEnabled("community")) ? from : "/profile";
   const { notifications, unreadCount, loading, error: inboxError, markAsRead, markAllAsRead } = useNotifications();
   const sync = useOptionalSync();
   const [preferenceOverride, setPreferenceOverride] = useState({ scopeKey: null, value: null });
   const [preferenceError, setPreferenceError] = useState("");
+  const [destinationUnavailable, setDestinationUnavailable] = useState(false);
   const [socialPreferenceState, setSocialPreferenceState] = useState({ scopeKey: null, value: null, saving: false, loadError: false });
   const [pushState, setPushState] = useState(initialPushState);
   const preferences = preferenceOverride.value && preferenceOverride.scopeKey === scope.scopeKey
@@ -117,6 +123,11 @@ export default function NotificationsPage() {
   async function openNotification(notification) {
     const destination = normalizeNotificationDeepLink(notification.deepLink) ?? "/notifications";
     if (!notification.readAt) await markAsRead(notification.id).catch(() => {});
+    if ((/^\/community(?:[/#?]|$)/i.test(destination) && !isFeatureEnabled("community"))
+      || (/^\/friends(?:[/#?]|$)/i.test(destination) && !isFeatureEnabled("friends"))) {
+      setDestinationUnavailable(true);
+      return;
+    }
     navigate(destination);
   }
 
@@ -128,7 +139,7 @@ export default function NotificationsPage() {
     <Layout>
       <section className="notifications-page">
         <header className="notifications-header">
-          <Link to="/profile">← Profil</Link>
+          <Link to={backTo}>← {INBOX_RETURN_LABELS.get(backTo) ?? "Profil"}</Link>
           <div className="notifications-heading-row">
             <div>
               <h1>Oznámení</h1>
@@ -149,6 +160,7 @@ export default function NotificationsPage() {
           </button>
         </details>}
 
+        {destinationUnavailable && <p className="notifications-inbox-status" role="status">Toto oznámení odkazuje na sekci, která v tomto režimu není dostupná.</p>}
         {inboxError && <p className="notifications-error" role="alert">{inboxError}</p>}
         {loading ? <p className="notifications-inbox-status" role="status" aria-live="polite">Načítám oznámení…</p>
           : notifications.length === 0 ? <div className="notifications-empty">

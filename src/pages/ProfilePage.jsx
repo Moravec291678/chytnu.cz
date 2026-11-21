@@ -73,6 +73,7 @@ function ProfilePage() {
   const location = useLocation();
   const fileInput = useRef(null);
   const trophyEditorRef = useRef(null);
+  const dataToolsRef = useRef(null);
   const [exporting, setExporting] = useState(false);
   const [reading, setReading] = useState(false);
   const [restoring, setRestoring] = useState(false);
@@ -120,6 +121,14 @@ function ProfilePage() {
     editor.open = true;
     requestAnimationFrame(() => editor.scrollIntoView({ block: "center", behavior: "smooth" }));
   }, [location.hash, trophyCatches.length]);
+  useEffect(() => {
+    if (location.hash !== "#local-backup") return;
+    const tools = dataToolsRef.current;
+    if (!tools) return;
+    tools.open = true;
+    const heading = tools.querySelector("#local-backup");
+    heading?.focus();
+  }, [location.hash, location.key]);
   const trophySelectionLoaded = dataScope.status === "ready";
   const savedTrophyIds = trophySelection.scopeKey === dataScope.scopeKey
     ? trophySelection.ids
@@ -398,28 +407,12 @@ function ProfilePage() {
           <ProfileSectionLink to="/streak" title="Týdenní série" description="Aktivita, odměny a zmrazení série" />
         </ProfileSectionGroup>
 
-        <ProfileSectionGroup id="profile-reports" icon="📊" title="Přehledy a revíry" description="Statistiky, sezóna, mapa a uložené vody">
-          <ProfileSectionLink to="/stats" title="Statistiky" description="Souhrn úlovků a vycházek" />
-          <ProfileSectionLink to="/gallery" title="Galerie" description="Fotografie uložených úlovků" />
-          <ProfileSectionLink to="/insights" title="Osobní přehledy" description="Vzorce a doporučení z deníku" />
-          <ProfileSectionLink to="/season-story" title="Příběh sezóny" description="Nejzajímavější okamžiky sezóny" />
-          <ProfileSectionLink to="/year-summary" title="Roční souhrn" description="Rok v úlovcích a vycházkách" />
-          <ProfileSectionLink to="/waters" title="Moje revíry" description="Uložené revíry a oblíbené vody" />
-          <ProfileSectionLink to="/map" title="Soukromá mapa" description="Místa z tvého soukromého deníku" />
-        </ProfileSectionGroup>
-
-        {(isFeatureEnabled("friends") || isFeatureEnabled("community") || isFeatureEnabled("supporter")) && <ProfileSectionGroup id="profile-community" icon="👥" title="Komunita" description="Přátelé, sdílení a rybářský profil">
-          {isFeatureEnabled("friends") && <ProfileSectionLink to="/friends" title="Přátelé" description="Přátelé a pozvání mezi účty" />}
-          {isFeatureEnabled("userDiscovery") && <ProfileSectionLink to="/community/find" title="Najít rybáře" description="Veřejné profily a rybářské zájmy" />}
-          {isFeatureEnabled("community") && <ProfileSectionLink to="/community" title="Komunita" description="Sdílené úlovky a příspěvky přátel" />}
-          {isFeatureEnabled("supporter") && <ProfileSectionLink to="/supporter" title="Supporter" description="Podpora projektu a výhody" />}
-        </ProfileSectionGroup>}
+        {isFeatureEnabled("supporter") && <ProfileSectionLink to="/supporter" title="Supporter" description="Podpora projektu a výhody" />}
 
         <ProfileSectionGroup id="profile-settings" icon="⚙️" title="Nastavení" description="Předvolby, soukromí, oznámení a data">
           <ProfileSectionLink to="/settings" title="Nastavení aplikace" description="Zobrazení, místní funkce, export a účet" />
           <ProfileSectionLink to="/privacy" title="Soukromí a viditelnost" description="GPS, deník, sdílení a osobní údaje" />
           {isFeatureEnabled("publicProfiles") && <ProfileSectionLink to="/profile/social" title="Veřejný rybářský profil" description="Jméno, fotografie a dohledatelnost" />}
-          <ProfileSectionLink to="/notifications" title="Oznámení" description="Přehled upozornění a jejich nastavení" />
         </ProfileSectionGroup>
       </nav>
 
@@ -464,15 +457,15 @@ function ProfilePage() {
         </div>
       </section>
 
-      <details className="profile-data-tools">
+      <details className="profile-data-tools" ref={dataToolsRef}>
         <summary>
           <span className="profile-section-icon" aria-hidden="true">💾</span>
           <span className="profile-section-copy"><strong>Účet a místní data</strong><small>Přihlášení, synchronizace, záloha a obnova</small></span>
           <span className="profile-section-chevron" aria-hidden="true">⌄</span>
         </summary>
         <div className="profile-data-tools-content">
-      <section className="profile-panel" aria-labelledby="local-backup-title">
-        <h2 id="local-backup-title">Místní data</h2>
+      <section className="profile-panel" aria-labelledby="local-backup">
+        <h2 id="local-backup" tabIndex={-1}>Místní záloha a obnova</h2>
         <p>Úlovky, vycházky a jejich fotografie jsou uložené v tomto prohlížeči. Export vytvoří kopii pro bezpečné uložení nebo budoucí obnovu.</p>
         <p className="profile-privacy-note">Soubor může obsahovat přesné lokality, poznámky a fotografie. Ulož ho na bezpečné místo.</p>
         <button className="profile-backup-button" type="button" onClick={exportBackup} disabled={exporting || reading || restoring}>

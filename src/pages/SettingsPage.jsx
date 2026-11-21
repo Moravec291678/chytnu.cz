@@ -6,8 +6,7 @@ import ConfirmDialog from "../shared/components/ConfirmDialog";
 import { readPreferences, savePreferences } from "../features/preferences/data/preferences.js";
 import { useDataScope } from "../features/auth/context/dataScopeContextValue.js";
 import { useAuth } from "../features/auth/context/authContextValue.js";
-import { getLocalBackupFileName, serializeLocalBackupJson } from "../features/backup/data/backupFormat.js";
-import { readCloudExportDeviceSupplement, readLocalBackupSnapshot } from "../features/backup/data/localBackupRepository.js";
+import { readCloudExportDeviceSupplement } from "../features/backup/data/localBackupRepository.js";
 import { cloudAccountExportService } from "../features/backup/data/cloudAccountExport.js";
 import { deleteLocalScopeData } from "../features/settings/data/localDataDeletion.js";
 import { deleteCloudAccount } from "../features/settings/data/deleteCloudAccount.js";
@@ -37,7 +36,6 @@ export default function SettingsPage() {
   const [fishActivity, setFishActivity] = useState(() => {
     try { return localStorage.getItem("fishActivityEnabled") === "true"; } catch { return false; }
   });
-  const [exporting, setExporting] = useState(false);
   const [exportingCloud, setExportingCloud] = useState(false);
   const [cloudExportProgress, setCloudExportProgress] = useState("");
   const [deleting, setDeleting] = useState(false);
@@ -94,29 +92,6 @@ export default function SettingsPage() {
       setError("");
     } catch (saveError) {
       setError(saveError.message || "Preferenci se nepodařilo uložit.");
-    }
-  };
-
-  const exportJournal = async () => {
-    if (scope.status !== "ready" || exporting) return;
-    setExporting(true);
-    setMessage("");
-    setError("");
-    try {
-      const json = await serializeLocalBackupJson(await readLocalBackupSnapshot(scope));
-      const url = URL.createObjectURL(new Blob([json], { type: "application/json;charset=utf-8" }));
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = getLocalBackupFileName();
-      document.body.append(link);
-      link.click();
-      link.remove();
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-      setMessage("Místní JSON záloha byla předána prohlížeči ke stažení.");
-    } catch (exportError) {
-      setError(exportError?.message || "Zálohu se nepodařilo vytvořit.");
-    } finally {
-      setExporting(false);
     }
   };
 
@@ -295,16 +270,13 @@ export default function SettingsPage() {
         {scope.ownerId ? <>
           <p>Stáhne kopii dat uložených k vašemu účtu. Zahrnuje synchronizované úlovky, Vycházky, vody, dostupné fotografie a postup; přidá také profilová nastavení z tohoto zařízení. Export nezahrnuje nesynchronizovaná data z jiných zařízení ani příspěvky, komentáře a reakce z Komunity. O kopii dalších údajů můžeš požádat přes kontakt v zásadách ochrany osobních údajů.</p>
           <p>Soubor může obsahovat přesnou polohu a fotografie. Uchovávej ho bezpečně.</p>
-          <button className="settings-primary-button" type="button" onClick={exportCloudAccount} disabled={scope.status !== "ready" || exportingCloud || exporting || deleting}>
+          <button className="settings-primary-button" type="button" onClick={exportCloudAccount} disabled={scope.status !== "ready" || exportingCloud || deleting}>
             {exportingCloud ? "Připravuji export účtu…" : "Exportovat moje data"}
           </button>
           {cloudExportProgress && <p role="status" aria-live="polite">{cloudExportProgress}</p>}
         </> : <p>Cloudový export je dostupný po přihlášení k účtu.</p>}
         <p><strong>Místní záloha</strong> obsahuje pouze data uložená v tomto zařízení a může se lišit od dat účtu.</p>
-        <button className="settings-secondary-button" type="button" onClick={exportJournal} disabled={scope.status !== "ready" || exporting || exportingCloud || deleting}>
-          {exporting ? "Připravuji místní zálohu…" : "Stáhnout místní zálohu"}
-        </button>
-        <Link className="settings-link" to="/profile">Obnova ze zálohy <span aria-hidden="true">→</span></Link>
+        <Link className="settings-link" to="/profile#local-backup">Místní záloha a obnova <span aria-hidden="true">→</span></Link>
       </section>
 
       <section className="settings-card" aria-labelledby="settings-more-title">
@@ -312,7 +284,7 @@ export default function SettingsPage() {
         <Link className="settings-link" to="/privacy">Soukromí a viditelnost <span aria-hidden="true">→</span></Link>
         <Link className="settings-link" to="/privacy-policy">Zásady ochrany osobních údajů <span aria-hidden="true">→</span></Link>
         <Link className="settings-link" to="/terms">Podmínky používání <span aria-hidden="true">→</span></Link>
-        <Link className="settings-link" to="/notifications">Oznámení <span aria-hidden="true">→</span></Link>
+        <Link className="settings-link" to="/notifications" state={{ from: "/settings" }}>Oznámení <span aria-hidden="true">→</span></Link>
       </section>
 
       <section className="settings-card" aria-labelledby="settings-feedback-title">
@@ -325,7 +297,7 @@ export default function SettingsPage() {
         <h2 id="settings-delete-title">Smazat místní data</h2>
         <p>Smaže data aktivního profilu uložená v tomto zařízení. Data ostatních profilů zůstanou zachována.</p>
         {auth.user && <p>Tato akce nesmaže účet ani data uložená online.</p>}
-        <button type="button" onClick={() => setConfirmingDelete(true)} disabled={scope.status !== "ready" || exporting || deleting}>
+        <button type="button" onClick={() => setConfirmingDelete(true)} disabled={scope.status !== "ready" || exportingCloud || deleting}>
           Smazat místní data tohoto profilu
         </button>
       </section>

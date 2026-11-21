@@ -76,7 +76,7 @@ try {
   equal((await pairRef.get()).data().status, "pending");
   const requestNotifications = await db.collection(`users/${ids.b}/notifications`).where("type", "==", "social").get();
   equal(requestNotifications.size, 1);
-  const notice = requestNotifications.docs[0].data(); equal(notice.ownerId, ids.b); equal(notice.deepLink, "/friends");
+  const notice = requestNotifications.docs[0].data(); equal(notice.ownerId, ids.b); equal(notice.deepLink, "/friends?tab=incoming");
   assert.doesNotMatch(`${notice.title} ${notice.body}`, new RegExp(`${ids.a}|Synthetic friend|@example`)); checks++;
   const notificationPath = `users/${ids.b}/notifications/${requestNotifications.docs[0].id}`;
   equal((await direct("b", notificationPath)).status, 200);
