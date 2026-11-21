@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { getSyncPendingCount, getSyncStatusView, runManualSync, runSyncRetry, SYNC_STATUS_COMPACT_DELAY_MS } from "./syncStatusView.js";
+import { getSyncDetailMessage, getSyncPendingCount, getSyncStatusView, runManualSync, runSyncRetry, SYNC_STATUS_COMPACT_DELAY_MS } from "./syncStatusView.js";
 import SyncStatus from "./SyncStatus.js";
 
 test("short, offline, retrying and completed sync never show a global banner", () => {
@@ -31,4 +31,13 @@ test("manual sync remains available in detail", () => {
   let retries = 0;
   assert.equal(runManualSync({ syncNow: () => ++manualRuns }), 1);
   assert.equal(runSyncRetry({ retry: () => ++retries }), 1);
+});
+
+test("detail distinguishes pending, syncing, synchronized and failed without treating an unknown state as complete", () => {
+  assert.match(getSyncDetailMessage("local-pending"), /čekají/);
+  assert.match(getSyncDetailMessage("syncing"), /Probíhá/);
+  assert.match(getSyncDetailMessage("synced"), /synchronizované/);
+  assert.match(getSyncDetailMessage("retry-wait"), /nepodařila/);
+  assert.match(getSyncDetailMessage("user-action-required"), /pomoc/);
+  assert.match(getSyncDetailMessage("idle"), /nebyla ověřena/);
 });

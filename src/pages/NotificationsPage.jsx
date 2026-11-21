@@ -9,6 +9,7 @@ import { readPreferences, savePreferences } from "../features/preferences/data/p
 import { getNotificationAdapter } from "../platform/notifications/index.js";
 import { NOTIFICATION_PREFERENCES, NOTIFICATION_TYPE_PRESENTATION, SOCIAL_NOTIFICATION_PREFERENCES } from "../product/config/notifications.js";
 import Layout from "../shared/layout/Layout";
+import { getSyncDetailMessage } from "../shared/layout/syncStatusView.js";
 import "./NotificationsPage.css";
 
 const TYPE_ICONS = Object.freeze(Object.fromEntries(Object.entries(NOTIFICATION_TYPE_PRESENTATION).map(([key, value]) => [key, value.icon])));
@@ -140,13 +141,7 @@ export default function NotificationsPage() {
         {sync?.syncEnabled && <details className="notifications-preferences">
           <summary>Synchronizace</summary>
           <p className="notifications-preferences-intro">
-            {sync.status === "user-action-required" && sync.nextRetryAt
-              ? "Další pokus o synchronizaci proběhne automaticky."
-              : sync.status === "user-action-required"
-              ? "Synchronizace potřebuje tvou pomoc. Zkontroluj přihlášení nebo místní fotografii."
-              : sync.status === "retry-wait" || sync.status === "local-pending"
-                ? "Změny jsou uložené v zařízení. Odeslání dokončíme automaticky, až to bude možné."
-                : sync.status === "syncing" ? "Změny se právě odesílají." : "Změny jsou synchronizované."}
+            {getSyncDetailMessage(sync.status)}
           </p>
           {(sync.pending > 0 || sync.pullPending > 0) && <p className="notifications-preferences-intro">Čekající záznamy: {sync.pending + sync.pullPending}</p>}
           <button type="button" className="notifications-mark-all" disabled={sync.status === "syncing"} onClick={() => sync.syncNow()}>

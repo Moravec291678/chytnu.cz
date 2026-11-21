@@ -11,6 +11,17 @@ export function getSyncStatusView(sync, isOnline = true, delayed = false) {
   return { kind: "syncing" };
 }
 
+export function getSyncDetailMessage(status) {
+  switch (status) {
+    case "local-pending": return "Změny čekají v tomto zařízení na synchronizaci.";
+    case "syncing": return "Probíhá synchronizace změn.";
+    case "retry-wait": return "Synchronizace se zatím nepodařila. Změny zůstávají uložené, další pokus proběhne automaticky.";
+    case "user-action-required": return "Některé změny potřebují tvou pomoc. Zkontroluj konflikty v Profilu, přihlášení nebo místní fotografii.";
+    case "synced": return "Změny jsou synchronizované.";
+    default: return "Synchronizace zatím nebyla ověřena.";
+  }
+}
+
 export function runManualSync(sync) {
   return sync?.syncNow?.();
 }
