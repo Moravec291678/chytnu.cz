@@ -1,6 +1,6 @@
 export const PRIVACY_POLICY = Object.freeze({
   title: "Zásady ochrany osobních údajů",
-  lastUpdated: "10. listopadu 2026",
+  lastUpdated: "21. listopadu 2026",
   sections: [
     {
       heading: "1. Správce osobních údajů",
@@ -44,6 +44,7 @@ export const PRIVACY_POLICY = Object.freeze({
       heading: "5. Kde jsou údaje uloženy",
       paragraphs: [
         "Aplikace používá místní úložiště zařízení, například IndexedDB. Podle zvolené funkce a konfigurace nasazení mohou být údaje také synchronizovány do cloudových služeb uvedených níže.",
+        "Prohlížeč ukládá také technické údaje potřebné k přihlášení, zapamatování nastavení a opětovnému otevření aplikace bez sítě. Aplikace nepoužívá toto úložiště ke sledování pro reklamu.",
         "Místní JSON záloha obsahuje pouze údaje dostupné na daném zařízení. Nejde o úplný export všech dat uložených v cloudu. Záloha není šifrovaná; chraň ji stejně jako jiné soubory obsahující fotografie nebo polohu.",
       ],
     },
@@ -121,7 +122,7 @@ export const PRIVACY_POLICY = Object.freeze({
 
 export const TERMS_OF_USE = Object.freeze({
   title: "Podmínky používání",
-  lastUpdated: "5. listopadu 2026",
+  lastUpdated: "21. listopadu 2026",
   sections: [
     { heading: "1. Provozovatel", paragraphs: ["ChytnuCz provozuje David Moravec, fyzická osoba – nepodnikatel. Kontakt: David.Moravec2@seznam.cz."] },
     { heading: "2. Charakter služby", paragraphs: ["ChytnuCz je bezplatná aplikace určená především pro osobní rybářský deník. Může obsahovat evidenci úlovků, fotografie, mapy a GPS, vycházky, statistiky, výzvy, achievementy, XP, počasí, revíry, zálohu a synchronizaci mezi zařízeními. V současné verzi nejsou aktivní placené funkce ani reklamy."] },
@@ -130,15 +131,15 @@ export const TERMS_OF_USE = Object.freeze({
     { heading: "5. Rybářské předpisy", paragraphs: ["Aplikace nenahrazuje rybářský řád, právní předpisy, podmínky povolenky, místní pravidla revíru ani rozhodnutí příslušných orgánů. Odpovídáš za lov v souladu s aktuálně platnými pravidly. Informace o revíru mohou být neúplné, orientační nebo neaktuální; před lovem ověř aktuální pravidla u oficiálního zdroje."] },
     { heading: "6. Počasí a aktivita ryb", paragraphs: ["Počasí, tlak, vítr, srážky, fáze měsíce a odhad aktivity ryb mají informační a orientační charakter. Odhad aktivity nezaručuje úspěšný lov. Dostupnost a přesnost meteorologických údajů třetích stran nejsou garantovány."] },
     { heading: "7. Mapy a GPS", paragraphs: ["GPS a mapové informace mohou být nepřesné. Nepoužívej aplikaci jako jediný zdroj navigace, bezpečnostních informací, hranic revíru ani oprávnění k lovu. V terénu odpovídáš za vlastní bezpečnost."] },
-    { heading: "8. Fotografie a obsah uživatele", paragraphs: ["Práva k fotografiím, poznámkám a dalšímu obsahu zůstávají tobě. Provozovateli poskytuješ oprávnění nezbytné k technickému uložení, synchronizaci, zpracování, zobrazení a doručení obsahu zpět tobě. Obsah nesmí být používán k prodeji fotografií ani reklamě. Odpovídáš za to, že máš právo vložený obsah použít."] },
+    { heading: "8. Fotografie a obsah uživatele", paragraphs: ["Práva k fotografiím, poznámkám a dalšímu obsahu zůstávají tobě. Provozovateli poskytuješ oprávnění nezbytné k technickému uložení, synchronizaci, zpracování, zobrazení a doručení obsahu. Pokud obsah výslovně sdílíš, aplikace ho zobrazí lidem podle zvolené viditelnosti. Sdílení můžeš odvolat, ale aplikace nemůže odstranit kopie, které si už jiní lidé stáhli. Obsah nesmí být používán k prodeji fotografií ani reklamě. Odpovídáš za to, že máš právo vložený obsah použít."] },
     { heading: "9. Zakázané použití", items: ["neoprávněný přístup k cizím účtům;", "obcházení bezpečnostních mechanismů nebo úmyslné zahlcování serverů;", "automatizované zneužívání API;", "nahrávání nezákonného obsahu nebo porušování práv třetích osob;", "pokusy získat neveřejné údaje jiných uživatelů."] },
-    { heading: "10. Synchronizace a offline režim", paragraphs: ["Aplikace může částečně fungovat offline. Změny se nemusí odeslat okamžitě a synchronizace může pokračovat později. Dočasný výpadek může vyžadovat opakování synchronizace; Catch uložený místně nezmizí pouze kvůli čekajícímu odeslání."] },
-    { heading: "11. Zálohování", paragraphs: ["Nastavení nabízí export údajů přihlášeného cloudového účtu a samostatnou místní JSON zálohu dat dostupných na používaném zařízení. Export upozorní na fotografie bez dostupné cloudové kopie. Údaje uložené pouze na jiném zařízení, včetně místních rozepsaných úlovků, nemusí být v cloudovém exportu. Exportované soubory nejsou šifrované; uchovávej je bezpečně. Nelze zaručit, že online služba nikdy neztratí data."] },
+    { heading: "10. Synchronizace a offline režim", paragraphs: ["Aplikace může částečně fungovat offline. Změny se nemusí odeslat okamžitě a synchronizace může pokračovat později. Dočasný výpadek může vyžadovat opakování synchronizace. Úlovek čekající na odeslání zůstává uložený v tomto zařízení."] },
+    { heading: "11. Zálohování", paragraphs: ["Nastavení nabízí export údajů přihlášeného cloudového účtu a samostatnou místní JSON zálohu dat dostupných na používaném zařízení. Export upozorní na fotografie bez dostupné cloudové kopie. Údaje uložené pouze na jiném zařízení, včetně místních rozepsaných úlovků, nemusí být v cloudovém exportu. O kopii příspěvků, komentářů a reakcí z Komunity požádej provozovatele e-mailem. Exportované soubory nejsou šifrované a je potřeba je bezpečně uchovávat."] },
     { heading: "12. Smazání úlovku a fotografie", paragraphs: ["Smazaný obsah přestane být v aplikaci aktivně zobrazován. U synchronizované fotografie může aplikace zařadit odstranění vzdáleného objektu do fronty; dokončení závisí na synchronizaci a dostupnosti poskytovatele a nemá garantovanou lhůtu 24 hodin. Minimální technické synchronizační záznamy mohou zůstat po dobu nutnou k dokončení synchronizace."] },
     { heading: "13. Smazání účtu", paragraphs: ["Smazání účtu můžeš zahájit v Nastavení po opětovném ověření přihlášení. Související cloudové záznamy a fotografie se odstraňují postupně; dokončení závisí na dostupnosti poskytovatelů a nemá garantovanou lhůtu 24 hodin. Místní údaje na jiných zařízeních a starší nepřiřazené místní záznamy mohou vyžadovat samostatné odstranění. Při potížích kontaktuj provozovatele e-mailem."] },
     { heading: "14. Dostupnost služby", paragraphs: ["ChytnuCz je poskytováno bezplatně a bez záruky nepřetržité dostupnosti. Může dojít k údržbě, výpadku serveru nebo služby třetí strany, změně API, technické chybě či dočasnému omezení funkce."] },
-    { heading: "15. Služby třetích stran", paragraphs: ["Aplikace může využívat Google Firebase, Cloudinary, Vercel, Open-Meteo a OpenStreetMap nebo jiné poskytovatele mapových dlaždic. Volitelné externí funkce AI využívají po souhlasu Cloudflare Workers AI a model Google Gemma 4. Tyto služby mají vlastní podmínky, pravidla dostupnosti a zásady ochrany osobních údajů."] },
-    { heading: "15a. Návrhy umělé inteligence", paragraphs: ["AI funkce jsou dobrovolné a mohou být omezené bezplatnou kapacitou. Návrh druhu není potvrzené určení ryby, číselné skóre modelu není ověřená pravděpodobnost a doporučení nezaručuje úspěšný lov. Model neodvozuje délku nebo hmotnost z běžné fotografie. Vyprávění před uložením zkontroluj; AI nesmí bez tvého schválení přepsat poznámky ani automaticky publikovat obsah. Uložení úlovku a používání deníku zůstává dostupné bez externí AI."] },
+    { heading: "15. Služby třetích stran", paragraphs: ["Aplikace může využívat Google Firebase, Cloudinary, Vercel, Open-Meteo a OpenStreetMap nebo jiné poskytovatele mapových dlaždic. Volitelné externí funkce AI využívají po souhlasu Cloudflare Workers AI, pokud je služba dostupná v dané konfiguraci. Tyto služby mají vlastní podmínky, pravidla dostupnosti a zásady ochrany osobních údajů."] },
+    { heading: "15a. Návrhy umělé inteligence", paragraphs: ["Externí AI nabízí pouze dobrovolné návrhy rybářských příběhů a rady z deníku. Dostupnost může omezit bezplatná kapacita. Doporučení nezaručuje úspěšný lov. Vyprávění před uložením zkontroluj. AI bez tvého schválení nepřepíše poznámky ani nezveřejní obsah. Uložení úlovku a používání deníku zůstává dostupné bez externí AI."] },
     { heading: "16. Změny a ukončení funkcí", paragraphs: ["Funkce aplikace mohou být upraveny, přidány, dočasně vypnuty nebo odstraněny. Pokud změna ovlivní nakládání s osobními údaji, aktualizujeme také zásady ochrany osobních údajů."] },
     { heading: "17. Odpovědnost za rozhodnutí", paragraphs: ["ChytnuCz je pomocný nástroj. Informace o počasí, aktivitě ryb, GPS, mapách a revírech mohou být orientační nebo neaktuální. Nezakládej na nich rozhodnutí bez ověření u vhodného zdroje. Tím nejsou dotčena práva ani odpovědnost, které nelze podle práva vyloučit."] },
     { heading: "18. Ochrana osobních údajů", paragraphs: ["Zpracování osobních údajů popisují samostatné Zásady ochrany osobních údajů ChytnuCz, dostupné přímo v aplikaci a před vytvořením účtu."] },

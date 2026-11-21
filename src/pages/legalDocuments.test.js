@@ -52,12 +52,12 @@ test("AI privacy notice names actual processor, data minimization, opt-in, revoc
   assert.doesNotMatch(text, /generování příběhů nejsou aktivované/);
 });
 
-test("AI terms require review and preserve ordinary journal without guarantees or invented measurements", () => {
+test("AI terms describe only enabled features and preserve ordinary journal without external AI", () => {
   const text = flatten(TERMS_OF_USE);
   assert.match(text, /dobrovolné/);
-  assert.match(text, /není ověřená pravděpodobnost/);
+  assert.match(text, /pouze dobrovolné návrhy rybářských příběhů a rady z deníku/);
   assert.match(text, /nezaručuje úspěšný lov/);
-  assert.match(text, /neodvozuje délku nebo hmotnost/);
-  assert.match(text, /bez tvého schválení přepsat poznámky/);
+  assert.doesNotMatch(text, /Návrh druhu|model Google Gemma|odvozuje délku nebo hmotnost/);
+  assert.match(text, /bez tvého schválení nepřepíše poznámky/);
   assert.match(text, /bez externí AI/);
 });

@@ -126,6 +126,8 @@
 
 - **17 · PARTIAL · 21. listopadu 2026.** Pozastavené/mazané účty zastavené v obou XP transakcích a cleanup no-store i na chybách. 1 192 Node, 40 cílených API, 1 673 plných emulator kontrol a 10 dodatečných, Auth/Sync/Photos/product/lint/build PASS. Runtime audit 0, development 14 moderate. Živé Firebase Rules, 12 indexů a 2 field overrides shodné read-only. [Bezpečnostní brána](SECURITY_RELEASE_GATE.md). Preview 16 READY 4c9410648d0bba7cc9e02daec4ed8091701542eb. Vývojový commit a push, produkce 68fbf04. Živé externí brány zůstávají otevřené. Další Prompt 18.
 
+- **18 · PARTIAL · 21. listopadu 2026.** Opraven zastaralý popis AI v Podmínkách, doplněno dobrovolné sdílení, omezení exportu a technické úložiště v zásadách. 10 cílených testů a čtyři scénáře právních tras v Chromium PASS. [Právní podklady a kroky vlastníka](LEGAL_OWNER_SIGNOFF.md). Chybí podpis, licence RIS a potvrzení živé konfigurace. Vývojový commit a push, produkce 68fbf04. Preview 17 READY 79a695bbb81f066604da8f0f5e8bfd39c69b6d02. Další Prompt 19.
+
 ## Přesný bod pokračování
 
-**Prompt 18** · ověřit právní texty proti skutečnému chování a zdrojům, připravit podklady k potvrzení vlastníkem.
+**Prompt 19** · inventář monitoringu, bezpečný syntetický incident a nedestruktivní ověření rollbacku.
