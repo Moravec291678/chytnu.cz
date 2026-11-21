@@ -2,6 +2,8 @@
 
 Audit baseline: 2026-11-20. This map reflects `src/app/App.jsx` and navigation links in the current source. Feature-flagged routes are explicitly marked; legacy URLs remain supported.
 
+Novější produktový kontrakt a aktuální vlastnictví všech tras jsou v [mapě finálního balíku 00–23](CHYTNU_FINAL_ROUTE_MAP.md).
+
 ## Primary navigation
 
 | Section | Entry route | Related routes |
