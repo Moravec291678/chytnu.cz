@@ -112,6 +112,8 @@
 
 - **10 · PASS · 21. listopadu 2026.** 244 cílených kontrol PASS. Přihlášené Chromium potvrdilo shodu 270 XP Domů/Profil a rekord 53 cm v Detailu, Profilu, Statistikách i ročním příběhu. Jeden záznam vedl k označenému lokálnímu experimentu bez inference. [Protokol XP a statistik](QA_PROGRESSION_STATISTICS.md). Samostatný dokumentační commit na vývojové větvi, produkce 68fbf04. Další Prompt 11.
 
+- **11 · BLOCKED DEVICE TEST · 21. listopadu 2026.** Android není připojen. Manifest, ikony, cache namespace a SHA-256 startup asset ověřeny lokálně, znovu použita desktopová obnova z Promptu 08. [Android protokol](DEVICE_ANDROID_PWA_ACCEPTANCE.md). Fyzická kamera, restart, update s frontou a živý druhý klient čekají na zařízení a izolované preview. Dokumentační commit a push na vývojovou větev, produkce 68fbf04. Další Prompt 12.
+
 ## Přesný bod pokračování
 
-**Prompt 11** · doložit fyzickou Android PWA nebo připravit předatelný scénář s lokálním důkazem.
+**Prompt 12** · připravit fyzickou iOS PWA akceptaci a zaznamenat dostupné technické důkazy.
