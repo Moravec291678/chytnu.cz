@@ -25,6 +25,7 @@ const messages = {
   water_presence_required: "Pro chat nejdřív potvrď přítomnost na tomto revíru.",
   message_conflict: "Zpráva se mezitím změnila nebo už není dostupná. Načti chat znovu.",
   message_unavailable: "Zpráva už není dostupná nebo ji nemůžeš nahlásit.",
+  crew_conflict: "Skupina se mezitím změnila nebo dosáhla limitu. Obnov přehled.",
 };
 export async function socialRequest(action, payload = {}, { signal, expectedUid } = {}) {
   if (globalThis.navigator?.onLine === false) throw new Error(messages.offline);

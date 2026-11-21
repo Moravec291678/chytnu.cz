@@ -38,12 +38,18 @@ export async function deleteSocialPage(db, uid, pageSize = 50, deleteAvatar) {
     if (page.size) return true;
   }
   // A former member must not remain discoverable in another user's crew.
-  const memberships = await db.collection("crews").where("memberUids", "array-contains", uid).limit(pageSize).get();
-  for (const entry of memberships.docs) await db.runTransaction(async tx => {
-    const current = await tx.get(entry.ref);
-    if (current.exists) tx.update(entry.ref, { memberUids: current.data().memberUids.filter(member => member !== uid) });
-  });
-  if (memberships.size) return true;
+  for (const field of ["memberUids", "inviteUids"]) {
+    const memberships = await db.collection("crews").where(field, "array-contains", uid).limit(pageSize).get();
+    for (const entry of memberships.docs) await db.runTransaction(async tx => {
+      const current = (await tx.get(entry.ref)).data();
+      if (!current || !current[field]?.includes(uid)) return;
+      const update = { [field]: current[field].filter(member => member !== uid) };
+      if (Array.isArray(current.moderatorUids)) update.moderatorUids = current.moderatorUids.filter(member => member !== uid);
+      if (Number.isSafeInteger(current.revision)) update.revision = current.revision + 1;
+      tx.update(entry.ref, update);
+    });
+    if (memberships.size) return true;
+  }
   const profile = await db.doc(`publicProfiles/${uid}`).get();
   if (deleteAvatar && await deleteAvatar(uid, pageSize)) return true;
   if (profile.data()?.avatarVersion && !deleteAvatar) throw new Error("social_avatar_cleanup_unavailable");

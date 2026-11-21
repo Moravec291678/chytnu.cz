@@ -1,0 +1,8 @@
+# Akceptace rybářských skupin
+
+**PARTIAL · 21. 11. 2026.** Nový online provoz je ověřen pouze v izolovaném nastavení. `/crew` i všechny akce `crew.*` závisejí na vypnutém výchozím příznaku `crew` a explicitním serverovém `adminConfig/social.crewEnabled === true`. Trasa už při případném povolení nepoužívá lokální koncept. Dosavadní lokální skupiny zůstaly v úložišti a do online skupin se nepřenášejí.
+
+- Skupina vzniká jako soukromá. Správce nebo pověřený člen pozve potvrzeného přítele. Pozvaný může pozvání přijmout nebo odmítnout. Správce přiděluje roli, odebere člena nebo převede správu na aktivního člena; další členové mohou odejít. Zastaralou revizi server odmítne. Při mazání účtu se odstraní jeho vlastněné skupiny a členství, role i pozvánky v cizích skupinách. Pro zachování skupiny správce před smazáním účtu předává správu.
+- Správce může zpřístupnit název a počet členů ostatním přihlášeným. Přímé doklady Firestore jsou uzavřené. Soukromý seznam členů je dostupný správci a pověřené roli s kontrolou bloků. Hlášení je soukromé pro existující moderaci, která může skupinu skrýt. Změny členství mají serverový záznam bez veřejných nebo citlivých údajů.
+- 60 kontrol Auth/Firestore PASS. Tři účty, výchozí vypnutí, pozvání, zastaralá revize, role, pokus o eskalaci, blokace, moderace, rate limiting a odstranění účtu. Chromium 390 px se dvěma účty ověřil vytvoření, pozvání, přijetí a odchod. Lint, build a diff PASS.
+- Před veřejným spuštěním zbývá schválit proces moderace, prokázat fyzickou klávesnici/mobil a ověřit live syntetické účty. Skupinový obsah, pozvánkové notifikace, skupinový chat a migrace legacy dat zůstávají mimo ověřený rozsah této verze.

@@ -23,6 +23,7 @@ import { createNearbyPresenceService } from "./nearbyPresenceService.js";
 import { createWaterPresenceService } from "./waterPresenceService.js";
 import { createWaterRoomMessageService } from "./waterRoomMessageService.js";
 import { createDirectMessageService } from "./directMessageService.js";
+import { createOnlineCrewService } from "./onlineCrewService.js";
 export const profileError = (code, status = 400) => Object.assign(new Error(code), { code, status });
 export function createPublicProfileService({ db, auth, avatar, socialPhoto, env = {}, cursorSecret, now = () => Date.now() }) {
   const repository = createSocialRepository({ db, auth, now, profilesEnabled: true });
@@ -35,6 +36,7 @@ export function createPublicProfileService({ db, auth, avatar, socialPhoto, env 
   const waterPresence = createWaterPresenceService({ db, now });
   const waterChat = createWaterRoomMessageService({ db, waterPresence, cursors: createSocialCursor({ env, secret: cursorSecret, now }), now });
   const dm = createDirectMessageService({ db, cursors: createSocialCursor({ env, secret: cursorSecret, now }), now });
+  const crew = createOnlineCrewService({ db, cursors: createSocialCursor({ env, secret: cursorSecret, now }), now });
   async function identity(token) {
     if (!token) throw profileError("authentication_required", 401);
     try { return (await auth.verifyIdToken(token, true)).uid; } catch { throw profileError("authentication_required", 401); }
@@ -68,6 +70,10 @@ export function createPublicProfileService({ db, auth, avatar, socialPhoto, env 
       if (action === "dm.send" || action === "dm.report") {
         const key = createHash("sha256").update(uid).digest("hex");
         limits.push([`social-${action}-minute-${key}`, minute, 8], [`social-${action}-day-${key}`, day, action === "dm.send" ? 40 : 10]);
+      }
+      if (action.startsWith("crew.") && action !== "crew.list") {
+        const key = createHash("sha256").update(uid).digest("hex");
+        limits.push([`social-crew-minute-${key}`, minute, 8], [`social-crew-day-${key}`, day, 30]);
       }
       const rows = await Promise.all(limits.map(([key]) => tx.get(db.doc(`serverRateLimits/${key}`))));
       limits.forEach(([key, window, limit], i) => {
@@ -138,6 +144,11 @@ export function createPublicProfileService({ db, auth, avatar, socialPhoto, env 
     if (action === "dm.read") return dm.markRead(uid, payload);
     if (action === "dm.delete") return dm.remove(uid, payload);
     if (action === "dm.report") return dm.report(uid, payload);
+    if (action === "crew.create") return crew.create(uid, payload);
+    if (action === "crew.list") return crew.list(uid, payload);
+    if (action === "crew.view") return crew.view(uid, payload.crewId);
+    if (action === "crew.change") return crew.change(uid, payload);
+    if (action === "crew.report") return crew.report(uid, payload);
     if (action === "interactions.list") return interactions.list(uid,payload);
     if (action === "reactions.set") return interactions.setReaction(uid,payload);
     if (action === "comments.save") return interactions.saveComment(uid,payload);

@@ -62,7 +62,7 @@ const CommunityPage = lazy(() => import("../pages/CommunityPage"));
 const CommunityCatchDetailPage = lazy(() => import("../pages/CommunityCatchDetailPage"));
 const CommunityReportPage = lazy(() => import("../pages/CommunityReportPage"));
 const NearbyPage = lazy(() => import("../pages/NearbyPage"));
-const CrewPage = lazy(() => import("../pages/CrewPage"));
+const CrewPage = lazy(() => import("../features/social/components/OnlineCrewPage.jsx"));
 const PrivacyPage = lazy(() => import("../pages/PrivacyPage"));
 const PrivacyPolicyPage = lazy(() => import("../pages/PrivacyPolicyPage"));
 const TermsPage = lazy(() => import("../pages/TermsPage"));

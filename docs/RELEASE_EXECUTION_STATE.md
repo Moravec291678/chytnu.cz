@@ -174,6 +174,11 @@
 - Soukromé zprávy přátel, seznam/počty nepřečtených, hlášení, moderace a dávkové mazání. 67 Auth/Firestore kontrol, Chromium 390 px se dvěma účty, lint, build a diff PASS.
 - Trasa a API jsou produkčně vypnuté. Zbývá fyzický mobil, schválená moderace a retence.
 
+### 32B — PARTIAL
+
+- Online Crew za vypnutým rolloutem, soukromé pozvánky, role, revize, předání správy, bezpečný veřejný přehled, audit, hlášení a cleanup. 60 emulátorových kontrol a dva browser účty při šířce 390 px PASS. Lint/build PASS.
+- Skupinový obsah a fyzický živý pilot zbývají. Dosavadní soukromé místní Crew údaje jsou zachovány.
+
 ## Přesný bod pokračování
 
-**Prompt 32B** — odděleně Crew: skutečné členství, pozvání, role, předání a absence veřejného lokálního UI.
+**Prompt 32C** — bezpečné stránkování explicitně sdíleného obsahu navázaného na potvrzený RIS revír.

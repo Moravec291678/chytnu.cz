@@ -238,7 +238,13 @@ export function createAdminSupportService({ db, auth, ownerUid, actor, permit, t
         check(reportDoc.exists, "report_unavailable", 404);
         const report = reportDoc.data();
         if (input.hide) {
-          if (report.conversationId) {
+          if (report.crewId) {
+            check(/^[a-f0-9]{64}$/.test(report.crewId), "report_unavailable", 404);
+            const crewRef = db.doc(`crews/${report.crewId}`);
+            const crew = await tx.get(crewRef);
+            check(crew.exists && crew.data().ownerUid === report.targetUid, "report_unavailable", 404);
+            tx.update(crewRef, { moderationState: "hidden", updatedAt: now(), revision: rev(crew.data()) + 1 });
+          } else if (report.conversationId) {
             check(report.conversationId === canonicalPair(report.reporterUid, report.targetUid) && /^[a-f0-9]{64}$/.test(report.messageId), "report_unavailable", 404);
             const conversationRef = db.doc(`privateConversations/${report.conversationId}`);
             const messageRef = conversationRef.collection("messages").doc(report.messageId);

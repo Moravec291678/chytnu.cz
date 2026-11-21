@@ -55,6 +55,7 @@ function CommunityPage() {
           </Link>
         </header>
         <Link className="community-discovery-link" to="/friends">Přátelé a pozvání <span aria-hidden="true">→</span></Link>
+        {FEATURES.crew && <Link className="community-discovery-link" to="/crew">Rybářské skupiny <span aria-hidden="true">→</span></Link>}
         {FEATURES.nearby && <Link className="community-discovery-link" to="/nearby">Dobrovolné Okolí <span aria-hidden="true">→</span></Link>}
 
         {FEATURES.community && <CommunityEntryComposer key={auth.user?.uid ?? "anonymous"} onPublished={() => setFeedRefresh(value => value + 1)} />}
