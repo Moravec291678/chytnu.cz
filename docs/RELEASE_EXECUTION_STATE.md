@@ -159,6 +159,11 @@
 - Zachovaná původní Stage 10/12 porovnána s release větví. 10 cílených testů a 86 čerstvých emulátorových kontrol PASS, včetně hrubého prahu, neplatných souřadnic, odvolání a zavřeného handleru.
 - Nearby zůstává vypnuté. Fyzické GPS a mobilní mapa čekají na ověření.
 
+### 30 — PARTIAL
+
+- 1451 skutečných RIS ID a detailů, 1263 shodných bodů, 188 bez bodu, žádná ověřená hranice. 23 cílených testů, 22 emulátorových kontrol v promptu 29 PASS. Ruční potvrzené členství je serverové, bez GPS.
+- Licence RIS, fyzické ověření a veřejné otevření čekají. Členství ani chat se veřejně nezapínají.
+
 ## Přesný bod pokračování
 
-**Prompt 30** — ověřit skutečný RIS katalog, ručně potvrzované členství a hranici autorizace kanálu. Nepoužívat katalogový bod jako geofence.
+**Prompt 31** — ověřit a bezpečně rozšířit serverový základ chatu za vypnutou funkcí, se skutečnou kontrolou relací a moderace.
