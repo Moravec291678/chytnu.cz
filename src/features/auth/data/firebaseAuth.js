@@ -69,7 +69,7 @@ async function getAuthInstance() {
 export function initializeBrowserAuth(app, authApi) {
   try {
     return authApi.initializeAuth(app, {
-      persistence: authApi.browserLocalPersistence,
+      persistence: [authApi.browserLocalPersistence, authApi.browserSessionPersistence],
       popupRedirectResolver: authApi.browserPopupRedirectResolver,
     });
   } catch (error) {

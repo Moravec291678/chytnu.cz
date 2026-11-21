@@ -21,3 +21,10 @@ test("only non-local auth configuration errors are reported as unavailable", () 
   assert.equal(isInvalidAuthConfiguration({ code: "auth/backend-config-required" }), true);
   assert.equal(isInvalidAuthConfiguration({ code: "auth/network-request-failed" }), false);
 });
+
+test("login rejects unknown and wrong credentials with the same message", () => {
+  const unknown = getAuthErrorMessage({ code: "auth/user-not-found" });
+  assert.equal(unknown, getAuthErrorMessage({ code: "auth/wrong-password" }));
+  assert.equal(unknown, getAuthErrorMessage({ code: "auth/invalid-credential" }));
+  assert.match(getAuthErrorMessage({ code: "auth/popup-closed-by-user" }), /zrušeno/);
+});

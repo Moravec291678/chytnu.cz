@@ -16,12 +16,14 @@ function authApi(overrides = {}) {
 
 test("browser Auth initialization includes the resolver required by Google popup and redirect", () => {
   const app = {};
-  const persistence = {};
+  const localPersistence = {};
+  const sessionPersistence = {};
   const resolver = {};
   let receivedOptions = null;
   const initialized = {};
   const api = {
-    browserLocalPersistence: persistence,
+    browserLocalPersistence: localPersistence,
+    browserSessionPersistence: sessionPersistence,
     browserPopupRedirectResolver: resolver,
     initializeAuth(receivedApp, options) {
       assert.equal(receivedApp, app);
@@ -32,7 +34,7 @@ test("browser Auth initialization includes the resolver required by Google popup
 
   assert.equal(initializeBrowserAuth(app, api), initialized);
   assert.deepEqual(receivedOptions, {
-    persistence,
+    persistence: [localPersistence, sessionPersistence],
     popupRedirectResolver: resolver,
   });
 });
