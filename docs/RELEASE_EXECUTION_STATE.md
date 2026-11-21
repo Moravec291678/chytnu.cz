@@ -138,6 +138,8 @@
 
 - **23 · BLOCKED / NO-GO · 21. listopadu 2026.** Kandidát fbb87cc88b43735417c7cf55fb175761b62a11e0 Vercel preview READY, remote větev shodná. Čerstvý lint, 1 192 Node testů, build, 1 689 Rules/integrací, Auth, Sync, Photos, product a diff check PASS. Dva přihlášené Chromium profily 360/390 px zopakovaly Quick Catch foto, detail, úpravu, vazbu na vycházku, hledání a výmaz. Osm hostovských kroků na produkci PASS bez skutečné registrace, produkce dpl_excxrvWSUebVCKKQxXMXLP4dEv24 READY 68fbf04b70e123b226bac90ee83f12dde1dc352b. [Web sign-off a changelog](PUBLIC_WEB_RELEASE_SIGNOFF.md). Pilot, fyzická zařízení, živá média, izolace a finální GO otevřené, žádný release tag. Dokumentační commit a push pouze na vývojovou větev. Další Prompt 24.
 
+- **24 · BLOCKED · 21. listopadu 2026.** Izolovaný Capacitor sync Android PASS (178 assetů), platform/release 15 PASS. Gradle wrapper funkční, online assembleDebug zastavilo SDK location not found. Offline pokus nepoužil necachované AGP závislosti. Android origin preflight na živém Cloudinary sign 405 bez CORS; native cloud větev vyžaduje samostatnou akceptaci. [Android build a podpis](ANDROID_NATIVE_BUILD_EVIDENCE.md). APK/AAB, podpis a fyzické ověření čekají. Dokumentační commit a vývojový push, produkce 68fbf04. Další Prompt 25.
+
 ## Přesný bod pokračování
 
-**Prompt 24** · ověřit bezpečně dostupnou nativní Android část a přesně doložit SDK, podpis a fyzický build.
+**Prompt 25** · připravit Google Play podklady podle aktuálních oficiálních požadavků, označit přesné chybějící podmínky.
