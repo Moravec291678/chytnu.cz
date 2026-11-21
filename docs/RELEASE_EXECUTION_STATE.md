@@ -136,6 +136,8 @@
 
 - **22 · BLOCKED WAITING FOR PILOT · 21. listopadu 2026.** [Výsledky](PILOT_RESULTS.md) a [evidence závad](PILOT_ISSUE_LOG.md) připraveny. Žádní pozvaní testeři ani zaznamenané dny. Testy z předchozích promptů zůstávají oddělené. Dokumentační commit a vývojový push, produkce 68fbf04. Veřejný web NO-GO. Další Prompt 23.
 
+- **23 · BLOCKED / NO-GO · 21. listopadu 2026.** Kandidát fbb87cc88b43735417c7cf55fb175761b62a11e0 Vercel preview READY, remote větev shodná. Čerstvý lint, 1 192 Node testů, build, 1 689 Rules/integrací, Auth, Sync, Photos, product a diff check PASS. Dva přihlášené Chromium profily 360/390 px zopakovaly Quick Catch foto, detail, úpravu, vazbu na vycházku, hledání a výmaz. Osm hostovských kroků na produkci PASS bez skutečné registrace, produkce dpl_excxrvWSUebVCKKQxXMXLP4dEv24 READY 68fbf04b70e123b226bac90ee83f12dde1dc352b. [Web sign-off a changelog](PUBLIC_WEB_RELEASE_SIGNOFF.md). Pilot, fyzická zařízení, živá média, izolace a finální GO otevřené, žádný release tag. Dokumentační commit a push pouze na vývojovou větev. Další Prompt 24.
+
 ## Přesný bod pokračování
 
-**Prompt 23** · ověřit release kandidáta úplnou sadou a read-only produkční smoke, nepřesouvat alias před pilotem a podpisem.
+**Prompt 24** · ověřit bezpečně dostupnou nativní Android část a přesně doložit SDK, podpis a fyzický build.
