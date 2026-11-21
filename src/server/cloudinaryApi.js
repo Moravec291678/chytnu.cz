@@ -565,10 +565,10 @@ export async function verifyFirebaseIdToken(auth, token) {
   }
 }
 
-export async function ensurePhotoAccountActive(db, uid) {
+export async function ensureAccountActive(db, uid, read = (ref) => ref.get()) {
   const [deletion, suspension] = await Promise.all([
-    db.doc(`accountDeletions/${uid}`).get(),
-    db.doc(`accountSuspensions/${uid}`).get(),
+    read(db.doc(`accountDeletions/${uid}`)),
+    read(db.doc(`accountSuspensions/${uid}`)),
   ]);
   if (deletion.exists) throw Object.assign(new Error("Account access is unavailable."), { code: "account_deletion_started" });
   if (suspension.exists) throw Object.assign(new Error("Account access is unavailable."), { code: "account_suspended" });
@@ -615,7 +615,7 @@ export function createProductionCloudinaryApi({ env = globalThis.process?.env ??
     verifyToken: async (token, _action, serviceAccount) => {
       const { auth, db } = await getAdminContext(env, serviceAccount);
       const identity = await verifyFirebaseIdToken(auth, token);
-      await ensurePhotoAccountActive(db, identity.uid);
+      await ensureAccountActive(db, identity.uid);
       return identity;
     },
     getPhotoAccess: (uid, catchId, photoId) => getPhotoAccess(env, uid, catchId, photoId),

@@ -124,6 +124,8 @@
 
 - **16 · PARTIAL · 21. listopadu 2026.** Lazy profil a samostatná komponenta obrázků ušetřily 3,9–6,4 kB přenosu v pěti trasách při 4× CPU a 1,6 Mbit/s. Časový přínos nebyl průkazný. 1 191 testů, lint/build, 158 offline položek, 180 hostovských kombinací a 6 offline navigací PASS; osobní profil a náhled ověřeny na přihlášeném emulátoru. [Výkon a rozpočet](QA_PERFORMANCE_BUDGET.md). Fyzický low-end a účtovaná čtení otevřené. Vývojový commit a push, produkce 68fbf04. Další Prompt 17.
 
+- **17 · PARTIAL · 21. listopadu 2026.** Pozastavené/mazané účty zastavené v obou XP transakcích a cleanup no-store i na chybách. 1 192 Node, 40 cílených API, 1 673 plných emulator kontrol a 10 dodatečných, Auth/Sync/Photos/product/lint/build PASS. Runtime audit 0, development 14 moderate. Živé Firebase Rules, 12 indexů a 2 field overrides shodné read-only. [Bezpečnostní brána](SECURITY_RELEASE_GATE.md). Preview 16 READY 4c9410648d0bba7cc9e02daec4ed8091701542eb. Vývojový commit a push, produkce 68fbf04. Živé externí brány zůstávají otevřené. Další Prompt 18.
+
 ## Přesný bod pokračování
 
-**Prompt 17** · kompletní lokální bezpečnostní sada a read-only shoda živých pravidel a indexů, bez produkčních testovacích zápisů.
+**Prompt 18** · ověřit právní texty proti skutečnému chování a zdrojům, připravit podklady k potvrzení vlastníkem.

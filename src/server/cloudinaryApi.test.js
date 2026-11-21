@@ -3,7 +3,7 @@ import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 import { Writable } from "node:stream";
 import test from "node:test";
-import { classifyFirebaseAuthFailure, cloudinaryPublicId, createCloudinaryApi, createEnabledTestEnvironment, ensurePhotoAccountActive, initializeFirebaseAdminContext, MAX_PHOTO_BYTES, readFirebaseServiceAccount, verifyFirebaseIdToken } from "./cloudinaryApi.js";
+import { classifyFirebaseAuthFailure, cloudinaryPublicId, createCloudinaryApi, createEnabledTestEnvironment, ensureAccountActive, initializeFirebaseAdminContext, MAX_PHOTO_BYTES, readFirebaseServiceAccount, verifyFirebaseIdToken } from "./cloudinaryApi.js";
 
 const ownerId = "owner-a";
 const otherOwnerId = "owner-b";
@@ -133,7 +133,7 @@ test("photo endpoints deny valid tokens for accounts being deleted or suspended"
     const api = createCloudinaryApi({
       env: createEnabledTestEnvironment(),
       verifyToken: async () => {
-        await ensurePhotoAccountActive(db, ownerId);
+        await ensureAccountActive(db, ownerId);
         return { uid: ownerId };
       },
       getPhotoAccess: async () => { photoReads += 1; return makePhotoAccess(); },

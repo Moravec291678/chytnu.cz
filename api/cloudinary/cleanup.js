@@ -14,6 +14,7 @@ function validCronAuthorization(header, secret) {
 export function createCleanupHandler({ runCleanup = runProductionCloudinaryPhotoCleanup,
   runMaintenance = null, getSecret = () => globalThis.process?.env?.CRON_SECRET } = {}) {
   return async function handler(req, res) {
+    res.setHeader?.("Cache-Control", "no-store");
     if (req.method !== "GET") {
       res.setHeader?.("Allow", "GET");
       return res.status(405).json({ error: "method_not_allowed" });
@@ -25,7 +26,6 @@ export function createCleanupHandler({ runCleanup = runProductionCloudinaryPhoto
     try {
       const result = await runCleanup();
       if (runMaintenance) result.suspensions = await runMaintenance();
-      res.setHeader?.("Cache-Control", "no-store");
       return res.status(result.failed ? 207 : 200).json(result);
     } catch {
       return res.status(503).json({ error: "photo_cleanup_unavailable" });

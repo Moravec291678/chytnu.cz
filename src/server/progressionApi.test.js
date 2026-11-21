@@ -141,6 +141,29 @@ function makeFakeFirestore() {
   return db;
 }
 
+test("shadow progression refuses suspended or deleting accounts inside both write transactions", async () => {
+  const db = makeFakeFirestore();
+  const { api } = await apiFixture({
+    claimCatch: createAdminClaimer(db, () => "SERVER_TIMESTAMP"),
+    reconcileTotals: createAdminProgressionReconciler(db, () => "SERVER_TIMESTAMP"),
+  });
+  const headers = { authorization: "Bearer valid" };
+  for (const collection of ["accountSuspensions", "accountDeletions"]) {
+    const marker = `${collection}/owner-1`;
+    db.documents.set(marker, {});
+    const claim = response();
+    await api.claim({ method: "POST", headers, body: { catchId: "catch-1" } }, claim);
+    assert.equal(claim.statusCode, 403);
+    assert.deepEqual(claim.body, { error: "account_unavailable" });
+    const reconcile = response();
+    await api.reconcile({ method: "POST", headers, body: { localProgressionXp: 100, pendingCatchXp: 0 } }, reconcile);
+    assert.equal(reconcile.statusCode, 403);
+    assert.deepEqual(reconcile.body, { error: "account_unavailable" });
+    assert.deepEqual([...db.documents.keys()], [marker]);
+    db.documents.delete(marker);
+  }
+});
+
 test("Admin transaction writes stable owner-scoped events once and supports later evidence upgrades", async () => {
   const ownerId = "owner-1";
   const catchId = "catch-1";

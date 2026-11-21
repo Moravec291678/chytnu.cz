@@ -7,7 +7,8 @@ import { getAuth } from "firebase-admin/auth";
 import { getFirestore, Timestamp, FieldValue } from "firebase-admin/firestore";
 import { createPublicProfileService } from "../src/features/social/server/publicProfileService.js";
 import { createSocialHandler } from "../src/features/social/server/socialApi.js";
-import { createAdminProgressionReconciler } from "../src/server/progressionApi.js";
+import { createAdminClaimer, createAdminProgressionReconciler, createServerProgressionApi } from "../src/server/progressionApi.js";
+import { createEnabledTestEnvironment } from "../src/server/cloudinaryApi.js";
 import { canonicalPair } from "../src/features/social/data/socialModel.js";
 import { summaryForXp } from "../src/features/progression/data/progressionSummary.js";
 import { moderationKey } from "../src/features/admin/server/adminSupportStore.js";
@@ -154,6 +155,22 @@ try {
   await save("a", { visibility: "private" }); equal(await view("anonymous"), null);
   await save("a", { visibility: "public" });
   await db.doc(`accountDeletions/${ids.a}`).set({ ownerUid: ids.a, status: "requested" }); equal(await view("anonymous"), null);
+  const shadow = await createServerProgressionApi({
+    env: { ...createEnabledTestEnvironment(), SERVER_PROGRESSION_SHADOW: "true" },
+    verifyToken: (token) => auth.verifyIdToken(token, true),
+    claimCatch: createAdminClaimer(db, FieldValue.serverTimestamp),
+    reconcileTotals: reconcile,
+  });
+  await db.doc(`accountSuspensions/${ids.b}`).set({ uid: ids.b, suspended: true });
+  for (const role of ["a", "b"]) {
+    for (const [operation, body] of [["claim", { catchId: "private" }], ["reconcile", { localProgressionXp: 500, pendingCatchXp: 0 }]]) {
+      const res = { status(code) { this.statusCode = code; return this; }, json(value) { this.body = value; return this; } };
+      await shadow[operation]({ method: "POST", headers: { authorization: `Bearer ${tokens[role]}` }, body }, res);
+      equal(res.statusCode, 403);
+      equal(res.body, { error: "account_unavailable" });
+    }
+    equal((await db.doc(`users/${ids[role]}/serverProgressionCatchState/private`).get()).exists, false);
+  }
   equal((await summaryRef.get()).data(), historicalSummary); equal((await events.get()).docs.map(row => ({ id: row.id, ...row.data() })), historicalEvents);
   equal((await db.doc(`users/${ids.a}/catches/private`).get()).data().notes, "SECRET-NOTE");
   console.log(`Social progression: ${checks} real Auth/Firestore visibility, XP authority, unverified local claims, comparison and historical-integrity checks PASS; 5 accounts`);

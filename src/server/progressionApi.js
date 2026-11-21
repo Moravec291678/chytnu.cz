@@ -1,4 +1,4 @@
-import { readFirebaseServiceAccount, initializeFirebaseAdminContext, verifyFirebaseIdToken } from "./cloudinaryApi.js";
+import { ensureAccountActive, readFirebaseServiceAccount, initializeFirebaseAdminContext, verifyFirebaseIdToken } from "./cloudinaryApi.js";
 import { calculateServerCatchReward, getServerSyncedPhotoHashes } from "./serverRewardCalculator.js";
 import { FieldValue } from "firebase-admin/firestore";
 import { reconcileProgressionTotals } from "../features/progression/data/progressionReconciliation.js";
@@ -10,6 +10,10 @@ const RATE_WINDOW_MS = 60_000;
 function send(res, status, payload) {
   res.setHeader?.("Cache-Control", "no-store");
   return res.status(status).json(payload);
+}
+
+function accountUnavailable(error) {
+  return error?.code === "account_deletion_started" || error?.code === "account_suspended";
 }
 
 function parseRequest(req) {
@@ -64,7 +68,10 @@ export async function createServerProgressionApi({
     if (!bearer) return send(res, 401, { error: "authentication_required" });
     let identity;
     try { identity = await verifyToken(bearer[1], serviceAccount); }
-    catch { return send(res, 401, { error: "authentication_required" }); }
+    catch (error) {
+      if (accountUnavailable(error)) return send(res, 403, { error: "account_unavailable" });
+      return send(res, 401, { error: "authentication_required" });
+    }
     if (typeof identity?.uid !== "string" || !identity.uid || identity.uid.includes("/") || identity.uid.length > 128) {
       return send(res, 401, { error: "authentication_required" });
     }
@@ -79,6 +86,7 @@ export async function createServerProgressionApi({
       if (!result) return send(res, 404, { error: "catch_not_found" });
       return send(res, 200, { mode: "shadow", ...result });
     } catch (error) {
+      if (accountUnavailable(error)) return send(res, 403, { error: "account_unavailable" });
       const status = error?.statusCode === 404 ? 404 : 503;
       return send(res, status, { error: status === 404 ? "catch_not_found" : "server_progression_unavailable" });
     }
@@ -97,7 +105,10 @@ export async function createServerProgressionApi({
     if (!bearer) return send(res, 401, { error: "authentication_required" });
     let identity;
     try { identity = await verifyToken(bearer[1], serviceAccount); }
-    catch { return send(res, 401, { error: "authentication_required" }); }
+    catch (error) {
+      if (accountUnavailable(error)) return send(res, 403, { error: "account_unavailable" });
+      return send(res, 401, { error: "authentication_required" });
+    }
     if (typeof identity?.uid !== "string" || !identity.uid || identity.uid.includes("/") || identity.uid.length > 128) {
       return send(res, 401, { error: "authentication_required" });
     }
@@ -111,7 +122,10 @@ export async function createServerProgressionApi({
     try {
       const result = await reconcileTotals(identity.uid, body, now());
       return send(res, 200, { mode: "shadow", ...result });
-    } catch { return send(res, 503, { error: "server_progression_unavailable" }); }
+    } catch (error) {
+      if (accountUnavailable(error)) return send(res, 403, { error: "account_unavailable" });
+      return send(res, 503, { error: "server_progression_unavailable" });
+    }
   }
   return { claim, reconcile };
 }
@@ -122,6 +136,7 @@ export function createAdminProgressionReconciler(db, serverTimestamp) {
     const eventsQuery = userRef.collection("serverProgressionEvents");
     const stateRef = userRef.collection("serverProgressionState").doc("summary");
     return db.runTransaction(async (transaction) => {
+      await ensureAccountActive(db, ownerId, (ref) => transaction.get(ref));
       const [stateSnapshot, eventsSnapshot] = await Promise.all([
         transaction.get(stateRef), transaction.get(eventsQuery),
       ]);
@@ -150,6 +165,7 @@ export function createAdminClaimer(db, serverTimestamp) {
     const userRef = db.doc(`users/${ownerId}`);
     const catchRef = userRef.collection("catches").doc(catchId);
     return db.runTransaction(async (transaction) => {
+      await ensureAccountActive(db, ownerId, (ref) => transaction.get(ref));
       const catchSnapshot = await transaction.get(catchRef);
       if (!catchSnapshot.exists || catchSnapshot.data()?.deleted || catchSnapshot.data()?.ownerId !== ownerId) return null;
       const catchRecord = { ...catchSnapshot.data(), id: catchSnapshot.id };
@@ -261,7 +277,7 @@ export async function createProductionServerProgressionApi({ env = globalThis.pr
     verifyToken: async (token) => {
       const { auth, db } = await productionAdmin(env);
       const identity = await verifyFirebaseIdToken(auth, token);
-      if ((await db.doc(`accountDeletions/${identity.uid}`).get()).exists) throw new Error("account_deletion_started");
+      await ensureAccountActive(db, identity.uid);
       return identity;
     },
     consumeRateLimit: async (uid, timestamp) => {

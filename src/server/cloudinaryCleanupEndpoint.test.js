@@ -25,8 +25,12 @@ test("protected maintenance endpoint runs only for the scheduler and reports ret
     await handler({ method, headers: { authorization } }, response);
     return response;
   };
-  assert.equal((await request("POST", `Bearer ${secret}`)).statusCode, 405);
-  assert.equal((await request("GET", "Bearer wrong")).statusCode, 401);
+  const wrongMethod = await request("POST", `Bearer ${secret}`);
+  assert.equal(wrongMethod.statusCode, 405);
+  assert.equal(wrongMethod.headers["Cache-Control"], "no-store");
+  const unauthorized = await request("GET", "Bearer wrong");
+  assert.equal(unauthorized.statusCode, 401);
+  assert.equal(unauthorized.headers["Cache-Control"], "no-store");
   assert.equal(runs, 0);
   const result = await request("GET", `Bearer ${secret}`);
   assert.equal(result.statusCode, 207);
