@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import CollaboratorBadge from "../../admin/CollaboratorBadge.jsx";
-import { SharedImage } from "./PublicFishingProfile.jsx";
+import { SharedImage } from "./SharedImage.jsx";
 import SocialEntryDetails from "./SocialEntryDetails.jsx";
 import SocialInteractions from "./SocialInteractions.jsx";
 import { PostImage } from "./SocialGallery.jsx";

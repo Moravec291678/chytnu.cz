@@ -122,6 +122,8 @@
 
 - **15 · PARTIAL · 21. listopadu 2026.** Kontrast smazání 3,41 → 5,49 : 1. Chrome axe 187 dílčích PASS, 0 potvrzených závad a 7 ručních kontrol. Klávesnice, fokus dialogu a 9 zkrácených viewportů PASS. Deník 421 úlovků, filtrovaný jeden a skutečně stažený export se 421 položkami. 11 backup testů, lint a diff check PASS. [QA přístupnosti a velkých dat](QA_A11Y_LARGE_DATA.md). Fyzické čtečky a 200% systémové písmo otevřené. Vývojový commit a push, produkce 68fbf04. Preview 14 READY 01738c5cf516e5d2bbc0defc8d61e36cb9582a7a. Další Prompt 16.
 
+- **16 · PARTIAL · 21. listopadu 2026.** Lazy profil a samostatná komponenta obrázků ušetřily 3,9–6,4 kB přenosu v pěti trasách při 4× CPU a 1,6 Mbit/s. Časový přínos nebyl průkazný. 1 191 testů, lint/build, 158 offline položek, 180 hostovských kombinací a 6 offline navigací PASS; osobní profil a náhled ověřeny na přihlášeném emulátoru. [Výkon a rozpočet](QA_PERFORMANCE_BUDGET.md). Fyzický low-end a účtovaná čtení otevřené. Vývojový commit a push, produkce 68fbf04. Další Prompt 17.
+
 ## Přesný bod pokračování
 
-**Prompt 16** · změřit produkční build při omezené síti a CPU, doložit skutečný přínos před optimalizací a zachovat offline start.
+**Prompt 17** · kompletní lokální bezpečnostní sada a read-only shoda živých pravidel a indexů, bez produkčních testovacích zápisů.

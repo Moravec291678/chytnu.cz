@@ -4,7 +4,7 @@ import Layout from "../../../shared/layout/Layout.jsx";
 import { useAuth } from "../../auth/context/authContextValue.js";
 import CollaboratorBadge from "../../admin/CollaboratorBadge.jsx";
 import { socialRequest } from "../data/socialClient.js";
-import { SharedImage } from "./PublicFishingProfile.jsx";
+import { SharedImage } from "./SharedImage.jsx";
 import FriendshipActions from "./FriendshipActions.jsx";
 import { useSocialConnection } from "./useSocialConnection.js";
 import "./socialProfiles.css";

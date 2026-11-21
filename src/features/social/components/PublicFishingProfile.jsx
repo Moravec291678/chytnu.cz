@@ -6,24 +6,10 @@ import CollaboratorBadge from "../../admin/CollaboratorBadge.jsx";
 import { socialRequest } from "../data/socialClient.js";
 import ProfileFriendship from "./ProfileFriendship.jsx";
 import SocialGallery from "./SocialGallery.jsx";
+import { SharedImage } from "./SharedImage.jsx";
 import { PublicAchievements, PublicStatistics, PublicTrophies } from "./PublicProgression.jsx";
 import { FEATURES } from "../../../product/config/featureFlags.js";
 import "./socialProfiles.css";
-
-export function SharedImage({ profile, photo, avatar = false }) {
-  const key = `${profile.uid}:${profile.avatarVersion ?? ""}:${avatar ? "avatar" : `${photo.catchId}:${photo.photoId}`}`;
-  const [loaded, setLoaded] = useState(null);
-  useEffect(() => {
-    const controller = new AbortController();
-    socialRequest("image", { identity: profile.uid, kind: avatar ? "avatar" : "catch", ...(!avatar ? photo : {}) }, { signal: controller.signal })
-      .then(value => { if (!controller.signal.aborted) setLoaded({ key, data: value.jpegBase64 }); })
-      .catch(() => { if (!controller.signal.aborted) setLoaded({ key, data: null }); });
-    return () => controller.abort();
-  }, [key, profile.uid, avatar, photo]);
-  return loaded?.key === key && loaded.data
-    ? <img src={`data:image/jpeg;base64,${loaded.data}`} alt={avatar ? `Avatar rybáře ${profile.displayName}` : "Výslovně sdílená fotografie úlovku"} />
-    : <span className="social-image-placeholder" aria-label={avatar ? "Profilová fotografie" : "Fotografie není dostupná"}>{avatar ? profile.displayName?.charAt(0) || "🎣" : "▧"}</span>;
-}
 
 export function FishingProfileView({ profile, preview = false, previewAudience }) {
   const [tab, setTab] = useState("catches");

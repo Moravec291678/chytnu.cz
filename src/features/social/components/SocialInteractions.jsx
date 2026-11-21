@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../../auth/context/authContextValue.js";
 import CollaboratorBadge from "../../admin/CollaboratorBadge.jsx";
 import { socialRequest } from "../data/socialClient.js";
-import { SharedImage } from "./PublicFishingProfile.jsx";
+import { SharedImage } from "./SharedImage.jsx";
 import { useSocialConnection } from "./useSocialConnection.js";
 import "./socialInteractions.css";
 
