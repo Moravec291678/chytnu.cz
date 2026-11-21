@@ -154,6 +154,11 @@
 - Čerstvý izolovaný Chromium + Auth/Firestore ve třech účtech: skutečné ID příspěvku, B přidal reakci a komentář, A dostal obě oznámení, C ztratil přístup po odstranění. Doloženy dřívější 1689 kontrol a rozsah rolí, změn soukromí a mazání. Samostatný úplný běh čeká v 33.
 - Produkční účty, skutečný Cloudinary derivát a jeho odvolání BLOCKED. Žádné přepnutí veřejných funkcí.
 
+### 29 — PARTIAL
+
+- Zachovaná původní Stage 10/12 porovnána s release větví. 10 cílených testů a 86 čerstvých emulátorových kontrol PASS, včetně hrubého prahu, neplatných souřadnic, odvolání a zavřeného handleru.
+- Nearby zůstává vypnuté. Fyzické GPS a mobilní mapa čekají na ověření.
+
 ## Přesný bod pokračování
 
-**Prompt 29** — porovnat původní Nearby s release větví a ověřit soukromí, expiraci, odvolání a vypnutý rollout.
+**Prompt 30** — ověřit skutečný RIS katalog, ručně potvrzované členství a hranici autorizace kanálu. Nepoužívat katalogový bod jako geofence.

@@ -35,6 +35,9 @@ try {
   await call(0, "nearby.consent", { accepted: "yes" }, 400);
   await call(0, "nearby.join", { latitude: 50.087, longitude: 14.421 }, 403);
   await call(0, "nearby.consent", { accepted: true });
+  await call(0, "nearby.join", { latitude: 91, longitude: 14.421 }, 400);
+  await call(0, "nearby.join", { latitude: 50.087, longitude: -181 }, 400);
+  time += 60_000;
   await call(0, "nearby.join", { latitude: 50.087, longitude: 14.421 });
   const ownConsent = await fetch(`http://127.0.0.1:8080/v1/projects/demo-chytnucz-local/databases/(default)/documents/users/${ids[0]}/socialPreferences/nearby`, { headers: { Authorization: `Bearer ${tokens[0]}` } });
   assert.equal(ownConsent.status, 403); checks++;
@@ -100,6 +103,10 @@ try {
   await call(5, "nearby.consent", { accepted: false });
   assert.deepEqual(await call(5, "nearby.discover"), { active: false, profiles: [] }); checks++;
   assert.deepEqual(await call(5, "nearby.status"), { accepted: false, showProfile: false, expiresAt: null }); checks++;
+  const disabled = createSocialHandler({ service: { execute() { throw new Error("Disabled feature reached service"); } } });
+  const unavailable = { statusCode: 200, status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; } };
+  await disabled({ method: "POST", headers: { authorization: `Bearer ${tokens[0]}` }, body: { action: "nearby.discover" } }, unavailable);
+  assert.equal(unavailable.statusCode, 404); checks++;
   console.log(`Nearby emulator: ${checks} checks PASS`);
   const previousChecks = checks;
   const waterId = catalogue[0].id;
