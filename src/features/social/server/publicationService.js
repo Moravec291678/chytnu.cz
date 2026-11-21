@@ -57,14 +57,22 @@ export function createPublicationService({ db, media, cursors, env = {}, now = (
       if (!sectionAllowed(profile.visibility,audience) || !sectionAllowed(row.visibility,audience)
         || !sectionAllowed(profile.sections?.[section(row)] ?? "private",audience)) return null;
     }
-    if (row.kind && row.kind !== "catch") return await entries.approved({tx,profile,row}) ? {row,profile,audience} : null;
+    if (row.kind && row.kind !== "catch") {
+      if (!await entries.approved({ tx, profile, row })) return null;
+      const { title, description, achievement, progression } = row.content;
+      const content = { title, description };
+      if (row.kind === "achievement") content.achievement = achievement;
+      if (row.kind === "milestone") content.progression = progression;
+      return { row: { ...row, content }, profile, audience };
+    }
     const moderation = await tx.get(db.doc(`adminPublicModeration/${moderationKey(row.ownerUid,row.sourceCatchId)}`));
     if (moderation.data()?.hidden === true) return null;
     let src;
     try { src = await source(tx,row.ownerUid,row.sourceCatchId,row.sourcePhotoId); }
     catch { return null; }
     if (fingerprint(src,row) !== row.sourceFingerprint) return null;
-    return { row,src,profile,audience };
+    const content = publicationContent(src.parent, row, src.water);
+    return { row: { ...row, content }, src, profile, audience };
   }
   function dto({ row,profile,audience }) {
     return { id:row.id,kind:row.kind??"catch",author:{uid:row.ownerUid,handle:profile.handle,displayName:profile.displayName,
@@ -88,7 +96,7 @@ export function createPublicationService({ db, media, cursors, env = {}, now = (
           const allowed = await permitted(tx, uid, row, row.ownerUid === uid ? { previewAudience: "stranger" } : {});
           if (!allowed || allowed.profile.visibility !== "public" || allowed.profile.sections?.[section(row)] !== "public") continue;
           visible.push({
-            id: row.id, species: row.content.species, month: row.content.caughtAt?.slice(0, 7),
+            id: row.id, species: allowed.row.content.species, month: allowed.row.content.caughtAt?.slice(0, 7),
             displayName: allowed.profile.displayName, createdAt: row.createdAt,
           });
         }
@@ -132,7 +140,7 @@ export function createPublicationService({ db, media, cursors, env = {}, now = (
         if (moderation.data()?.hidden === true) continue;
         let src; try {src=await source(tx,row.ownerUid,row.sourceCatchId,row.sourcePhotoId);} catch {continue;}
         if (fingerprint(src,row) !== row.sourceFingerprint) continue;
-        records.push({sourceId:row.sourceCatchId,id:row.id,...row.content});
+        records.push({sourceId:row.sourceCatchId,id:row.id,...publicationContent(src.parent, row, src.water)});
       }
       // Always label the bounded selection; never reveal counts of hidden rows
       // through a has-more/partial signal derived from private documents.

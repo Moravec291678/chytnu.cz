@@ -124,6 +124,11 @@ try {
   const experience = (await entry("experience", entryIds[0], { title: "Ráno u vody" })).post;
   const highlight = (await entry("achievement", entryIds[1], { achievementId: achievement.id })).post;
   const milestone = (await entry("milestone", entryIds[2])).post;
+  const experienceRef = db.doc(`socialPosts/${experience.id}`);
+  await experienceRef.update({ "content.privateNote": "SYNTHETIC_LEGACY_PRIVATE_FIELD" });
+  const projectedExperience = (await call("b", "posts.view", { postId: experience.id })).post;
+  equal(projectedExperience.content, experience.content);
+  await experienceRef.update({ content: experience.content });
   equal(experience.kind, "experience"); equal(highlight.content.achievement.source, "unverified"); equal(highlight.content.achievement.rewardGranted, false);
   equal(milestone.content.progression.xp, 120); safe(await feed());
   const has = async id => (await feed()).posts.some(row => row.id === id);

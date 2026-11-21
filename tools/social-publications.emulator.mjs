@@ -127,6 +127,10 @@ try {
   equal(saved.id, postId); equal(saved.revision, 1); equal(preparations, 1);
   let publicPosts = await list("anonymous"); equal(publicPosts.length, 1); safe(publicPosts);
   equal(publicPosts[0].content, { species: "Kapr", description: basic.description });
+  await postRef.update({ "content.privateNote": "SYNTHETIC_LEGACY_PRIVATE_FIELD", "content.lengthCm": 499 });
+  equal((await call("anonymous", "posts.view", { postId })).post.content, { species: "Kapr", description: basic.description });
+  equal((await list("b"))[0].content, { species: "Kapr", description: basic.description });
+  await postRef.update({ content: { species: "Kapr", description: basic.description } });
   const changeGallery = value => call("a", "save", { profile: { handle: `a_${suffix}`, displayName: "Synthetic a", visibility: "public", sections: { gallery: value, catches: "public" } } });
   await changeGallery("private"); equal((await list("anonymous")).length, 0);
   await call("anonymous", "posts.image", { postId }, 404);

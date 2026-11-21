@@ -31,6 +31,7 @@ export function createSocialEntryService({ db, guard, now = () => Date.now() }) 
   }
   async function approved({ tx, profile, row }) {
     if (!profile || profile.uid !== row?.ownerUid || !kinds.includes(row.kind) || row.deleted || row.moderationState !== "visible") return false;
+    if (!text(row.content?.title, 100, true) || !text(row.content?.description, 1000, true)) return false;
     if (row.kind === "experience") return true;
     if (row.kind === "achievement") {
       const achievement = selectedPublicAchievements(profile.sharedAchievementIds).find(item => item.id === row.content?.achievement?.id);
