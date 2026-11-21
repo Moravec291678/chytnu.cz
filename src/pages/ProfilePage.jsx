@@ -408,12 +408,12 @@ function ProfilePage() {
           <ProfileSectionLink to="/map" title="Soukromá mapa" description="Místa z tvého soukromého deníku" />
         </ProfileSectionGroup>
 
-        <ProfileSectionGroup id="profile-community" icon="👥" title="Komunita" description="Přátelé, sdílení a rybářský profil">
-          <ProfileSectionLink to="/friends" title="Přátelé" description="Přátelé a pozvání mezi účty" />
+        {(isFeatureEnabled("friends") || isFeatureEnabled("community") || isFeatureEnabled("supporter")) && <ProfileSectionGroup id="profile-community" icon="👥" title="Komunita" description="Přátelé, sdílení a rybářský profil">
+          {isFeatureEnabled("friends") && <ProfileSectionLink to="/friends" title="Přátelé" description="Přátelé a pozvání mezi účty" />}
           {isFeatureEnabled("userDiscovery") && <ProfileSectionLink to="/community/find" title="Najít rybáře" description="Veřejné profily a rybářské zájmy" />}
           {isFeatureEnabled("community") && <ProfileSectionLink to="/community" title="Komunita" description="Sdílené úlovky a příspěvky přátel" />}
           {isFeatureEnabled("supporter") && <ProfileSectionLink to="/supporter" title="Supporter" description="Podpora projektu a výhody" />}
-        </ProfileSectionGroup>
+        </ProfileSectionGroup>}
 
         <ProfileSectionGroup id="profile-settings" icon="⚙️" title="Nastavení" description="Předvolby, soukromí, oznámení a data">
           <ProfileSectionLink to="/settings" title="Nastavení aplikace" description="Zobrazení, místní funkce, export a účet" />

@@ -159,7 +159,7 @@ function App() {
         <Route path="/map" element={<Suspense fallback={<Layout><p className="loading-state" role="status">Načítám mapu…</p></Layout>}><MapPage /></Suspense>} />
         <Route path="/add" element={<PageSuspense><AddCatchPage /></PageSuspense>} />
         <Route path="/catch/:id/reward" element={<PageSuspense><CatchRewardPage /></PageSuspense>} />
-        <Route path="/catch/:id/share" element={<PageSuspense><CatchSharePage /></PageSuspense>} />
+        <Route path="/catch/:id/share" element={isFeatureEnabled("publicSharing") ? <PageSuspense><CatchSharePage /></PageSuspense> : <NotFoundPage />} />
         <Route path="/catch/:id" element={<PageSuspense><CatchDetailPage /></PageSuspense>} />
         <Route path="/catch/:id/edit" element={<PageSuspense><AddCatchPage /></PageSuspense>} />
         <Route path="/gallery" element={<PageSuspense><GalleryPage /></PageSuspense>} />
@@ -189,13 +189,13 @@ function App() {
         <Route path="/waters/:waterId" element={<PageSuspense><WaterDetailPage /></PageSuspense>} />
         <Route path="/waters/:waterId/chat" element={isFeatureEnabled("waterChat") ? <PageSuspense><WaterChatPage /></PageSuspense> : <NotFoundPage />} />
         <Route path="/hotspots" element={<PageSuspense><HotspotsPage /></PageSuspense>} />
-        <Route path="/friends" element={<PageSuspense><FriendsPage /></PageSuspense>} />
+        <Route path="/friends" element={isFeatureEnabled("friends") ? <PageSuspense><FriendsPage /></PageSuspense> : <NotFoundPage />} />
         {isFeatureEnabled("directMessages") && <Route path="/messages/:targetUid?" element={<PageSuspense><DirectMessagesPage /></PageSuspense>} />}
-        <Route path="/community/post/:postId" element={<PageSuspense><CommunityPostPage /></PageSuspense>} />
-        <Route path="/community" element={<PageSuspense><CommunityPage /></PageSuspense>} />
+        <Route path="/community/post/:postId" element={isFeatureEnabled("community") ? <PageSuspense><CommunityPostPage /></PageSuspense> : <NotFoundPage />} />
+        <Route path="/community" element={isFeatureEnabled("community") ? <PageSuspense><CommunityPage /></PageSuspense> : <NotFoundPage />} />
         {isFeatureEnabled("userDiscovery") && <Route path="/community/find" element={<PageSuspense><FisherDiscovery /></PageSuspense>} />}
-        <Route path="/community/catch/:catchId" element={<PageSuspense><CommunityCatchDetailPage /></PageSuspense>} />
-        <Route path="/community/:postId/report" element={<PageSuspense><CommunityReportPage /></PageSuspense>} />
+        <Route path="/community/catch/:catchId" element={isFeatureEnabled("community") ? <PageSuspense><CommunityCatchDetailPage /></PageSuspense> : <NotFoundPage />} />
+        <Route path="/community/:postId/report" element={isFeatureEnabled("community") ? <PageSuspense><CommunityReportPage /></PageSuspense> : <NotFoundPage />} />
         <Route path="/nearby" element={isFeatureEnabled("nearby") ? <PageSuspense><NearbyPage /></PageSuspense> : <NotFoundPage />} />
         <Route path="/crew" element={isFeatureEnabled("crew") ? <PageSuspense><CrewPage /></PageSuspense> : <NotFoundPage />} />
         <Route path="*" element={<NotFoundPage />} />

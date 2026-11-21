@@ -1,5 +1,7 @@
+import { PRIVATE_JOURNAL_PILOT } from "../../product/config/featureFlags.js";
+
 // Deliberately independent: no capability becomes active through another flag.
-export const AI_FEATURES = Object.freeze({ species: false, diary: false, recommendations: true, stories: true });
+export const AI_FEATURES = Object.freeze({ species: false, diary: false, recommendations: !PRIVATE_JOURNAL_PILOT, stories: !PRIVATE_JOURNAL_PILOT });
 export const AI_CONSENT_VERSION = 1;
 
 export function hasAiConsent(consent, capability, provider) {

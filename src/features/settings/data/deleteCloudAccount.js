@@ -21,6 +21,7 @@ export async function deleteCloudAccount(scope, password, {
   if (!completed) return { redirected: true };
   checkOwner();
   const token = await idToken(true);
+  checkOwner();
   if (!token) throw new Error("Ověření účtu se nepodařilo. Zkus to znovu.");
   let localCleanupError = false;
   try { await cancelNativeUploads({ ownerId: scope.ownerId }); } catch { localCleanupError = true; }

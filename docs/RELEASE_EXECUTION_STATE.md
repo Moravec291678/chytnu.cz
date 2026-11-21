@@ -191,6 +191,13 @@
 - Aktuální Chromium 57 tras × 2 šířky; 180 hostovských průchodů, 6 offline, zachovaná skutečná JPEG po studeném restartu, 14 hostovských a 5 přihlášených přímých zákazů. Větev release push; původní worktree má 27 zachovaných změn.
 - [Závěrečný report](FINAL_PRODUCT_RELEASE_REPORT.md) a [matice](FINAL_ACCEPTANCE_MATRIX.md). Hlavní otevřené brány jsou schválený pilot, izolované živé účty a média, fyzická zařízení, provozní a právní schválení, nativní síťová akceptace a podpisy. Rozšíření sociální sítě zůstává zavřené.
 
+### Pokračování po 33 · PARTIAL · NO-GO
+
+- REL-04 a nativní kompatibilita · `8b7421f74c473aa8ba37a971edd237ff6cb2d9fa` ověřeno na GitHubu a Vercel preview READY. Nový CORS preflight na `/api/cloudinary/sign` vrací 204 pro Android/iOS a 403 pro cizí origin. Na preview bez izolované živé foto konfigurace vrací POST `photo_cloud_unavailable`. 26 lokálních HTTP/Firebase kontrol potvrdilo oddělené účty, platný i neplatný bearer, rozsah metadat a blokaci. Opraveno riziko nesprávného výmazu po přepnutí účtu a opakování foto požadavku s cizí relací. Původní produkční kód zůstává před opravou.
+- REL-01 · zvolený režim `VITE_PRIVATE_JOURNAL_PILOT=1` uzavře sociální klientské trasy, serverové rozhraní i externí AI. Lokálně 150 hostovských kontrol a 26 přímých odmítnutí, běžný web 180 a 14. Šest offline průchodů pro každou variantu, běžný web i JPEG po úplném restartu Chromium. Izolace živého projektu čeká na schválení.
+- Závěrečná sada 1 201 Node, 1 919 Auth/Firestore kontrol a 26 nativních HTTP/Firebase kontrol. Auth, Sync, Photos, lint, build, product a diff PASS. Firebase Rules a indexy se nezměnily. Produkce READY na `68fbf04b70e123b226bac90ee83f12dde1dc352b`, původní worktree má zachovaných 27 změn.
+- [Zbývající P0/P1 podle rozsahu](FINAL_ACCEPTANCE_MATRIX.md), [izolovaná A/B akceptace](QA_CLOUDINARY_LIVE.md), [odpovědnosti vlastníka](OWNER_LAUNCH_ACTIONS.md).
+
 ## Přesný bod pokračování
 
-**Po promptu 33** — David potvrdí izolaci a přístup ke dvěma syntetickým účtům, schválí test živého Cloudinary a zajistí fyzický Android/iPhone. Potom provést REL-03/04/06 podle [webového sign-off](PUBLIC_WEB_RELEASE_SIGNOFF.md). Výběr rozsahu, licence, moderace a pilot následují před schválením `main`. Android/iOS postupují vlastním podpisovým a store checklistem.
+**REL-02 → REL-03/04/06.** Po schválení Davida ověř samostatné Firebase/Cloudinary projekty, cílový Vercel Preview SHA a dva syntetické účty. Proveď živý lifecycle účtu a fotografií, fyzický Android/iPhone a obnovovací cvičení. Po potvrzení licencí, podpory a provozní odpovědnosti uzavři rozhodnutí REL-10. Sociální beta a obchody mají samostatné akceptace.

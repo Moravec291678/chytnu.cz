@@ -67,9 +67,9 @@ export default function SettingsPage() {
   const photoDiagnosticRows = photoDiagnostics.scopeKey === scope.scopeKey ? photoDiagnostics.rows : [];
 
   const checkPhotoDelivery = async (photo) => {
-    const key = `${photo.catchId}/${photo.photoId}`;
+    const key = `${scope.scopeKey}/${photo.catchId}/${photo.photoId}`;
     setPhotoChecks((current) => ({ ...current, [key]: { checking: true } }));
-    const result = await inspectPhotoDelivery({ catchId: photo.catchId, photoId: photo.photoId });
+    const result = await inspectPhotoDelivery({ catchId: photo.catchId, photoId: photo.photoId, expectedUid: scope.ownerId });
     setPhotoChecks((current) => ({ ...current, [key]: { checking: false, ...result } }));
   };
 
@@ -242,11 +242,11 @@ export default function SettingsPage() {
           local {photo.blobPresent ? "available" : "missing"} · job {photo.jobState} · attempts {photo.attempts} · error {photo.errorClass} · cloud {photo.cloudState} · ready {photo.ready ? "yes" : "no"}
           {photo.catchId && <>
             <br />Firestore photo metadata (lokální synced kopie): provider {photo.cloudProvider} · object key {photo.cloudObjectKey ?? "none"}
-            <br /><button type="button" disabled={photoChecks[`${photo.catchId}/${photo.photoId}`]?.checking} onClick={() => checkPhotoDelivery(photo)}>
-              {photoChecks[`${photo.catchId}/${photo.photoId}`]?.checking ? "Kontroluji…" : "Zkontrolovat delivery"}
+            <br /><button type="button" disabled={photoChecks[`${scope.scopeKey}/${photo.catchId}/${photo.photoId}`]?.checking} onClick={() => checkPhotoDelivery(photo)}>
+              {photoChecks[`${scope.scopeKey}/${photo.catchId}/${photo.photoId}`]?.checking ? "Kontroluji…" : "Zkontrolovat delivery"}
             </button>
-            {photoChecks[`${photo.catchId}/${photo.photoId}`] && !photoChecks[`${photo.catchId}/${photo.photoId}`].checking && <>
-              {" "}metadata HTTP {photoChecks[`${photo.catchId}/${photo.photoId}`].metadataStatus ?? "network/error"} · delivery HTTP {photoChecks[`${photo.catchId}/${photo.photoId}`].deliveryStatus ?? "network/error"} · provider HTTP {photoChecks[`${photo.catchId}/${photo.photoId}`].providerStatus ?? "n/a"} · error {photoChecks[`${photo.catchId}/${photo.photoId}`].errorCode ?? "none"} · {photoChecks[`${photo.catchId}/${photo.photoId}`].timestamp}
+            {photoChecks[`${scope.scopeKey}/${photo.catchId}/${photo.photoId}`] && !photoChecks[`${scope.scopeKey}/${photo.catchId}/${photo.photoId}`].checking && <>
+              {" "}metadata HTTP {photoChecks[`${scope.scopeKey}/${photo.catchId}/${photo.photoId}`].metadataStatus ?? "network/error"} · delivery HTTP {photoChecks[`${scope.scopeKey}/${photo.catchId}/${photo.photoId}`].deliveryStatus ?? "network/error"} · provider HTTP {photoChecks[`${scope.scopeKey}/${photo.catchId}/${photo.photoId}`].providerStatus ?? "n/a"} · error {photoChecks[`${scope.scopeKey}/${photo.catchId}/${photo.photoId}`].errorCode ?? "none"} · {photoChecks[`${scope.scopeKey}/${photo.catchId}/${photo.photoId}`].timestamp}
             </>}
           </>}
         </li>)}</ul> : <p>Žádné místní photo záznamy pro tento profil.</p>}

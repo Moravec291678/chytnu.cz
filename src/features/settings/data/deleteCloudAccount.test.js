@@ -54,14 +54,16 @@ test("account deletion cancels native uploads only for the authenticated scope",
 
 test("switching accounts before transport stops deletion without touching either account", async () => {
   let uid = "A";
+  let cancelled = false;
   await assert.rejects(() => deleteCloudAccount(scope, "", {
     currentUserId: () => uid,
     reauthenticate: async () => true,
     idToken: async () => { uid = "B"; return "account-b-token"; },
-    cancelNativeUploads: async () => {},
+    cancelNativeUploads: async () => { cancelled = true; },
     request: async () => assert.fail("must not send the new account token"),
     clearLocal: async () => assert.fail("must not clear local data"),
   }), /účet se změnil/);
+  assert.equal(cancelled, false);
 });
 
 test("accepted deletion clears its original scope and leaves a newly active account signed in", async () => {

@@ -11,12 +11,12 @@ Stav k 21. 11. 2026. Kódový kandidát `e45f963f4d4433d5542b1209beaf2574e523d84
 
 ## ANDROID · GATED
 
-- **PASS částečně** · Capacitor synchronizace, app ID `cz.chytnu.app`, místní konfigurace API 36. Gradle skončil před kompilací kvůli chybějícímu Android SDK. API vrací 405 na preflight nativního WebView. Neověřený APK/AAB, podpis, fyzický Android, přihlášení, fotky a Play.
+- **PASS částečně** · Capacitor synchronizace, app ID `cz.chytnu.app`, místní konfigurace API 36. Gradle skončil před kompilací kvůli chybějícímu Android SDK. Původní produkční preflight 405 je na vývojovém preview opraven na 204. Neověřený APK/AAB, podpis, fyzický Android, přihlášení, fotky a Play.
 - [Android build](ANDROID_NATIVE_BUILD_EVIDENCE.md) · [PWA na Androidu](DEVICE_ANDROID_PWA_ACCEPTANCE.md) · [Google Play](GOOGLE_PLAY_SUBMISSION_PACK.md)
 
 ## IOS · GATED
 
-- **PASS částečně** · Capacitor iOS sync na Windows a ověření PrivacyInfo.xcprivacy v projektu. Archiv, podpis, fyzický iPhone, WebView přihlášení/doručení fotek a TestFlight vyžadují Mac, nástroje a oprávnění. Preflight nativního WebView také vrací 405.
+- **PASS částečně** · Capacitor iOS sync na Windows a ověření PrivacyInfo.xcprivacy v projektu. Vývojové preview odpovídá na iOS preflight 204. Archiv, podpis, fyzický iPhone, WebView přihlášení/doručení fotek a TestFlight vyžadují Mac, nástroje a oprávnění.
 - [iOS build](IOS_NATIVE_BUILD_EVIDENCE.md) · [PWA na iOS](DEVICE_IOS_PWA_ACCEPTANCE.md) · [App Store](APPLE_STORE_SUBMISSION_PACK.md)
 
 ## SOCIAL · GATED
@@ -29,3 +29,24 @@ Stav k 21. 11. 2026. Kódový kandidát `e45f963f4d4433d5542b1209beaf2574e523d84
 ## Vstupní podmínky vydání
 
 Živý end-to-end na schválených syntetických účtech a schválená kapacita, fyzické telefony, izolované preview, licence a provozní povinnosti, obnovovací zkouška, rozhodnutí vlastníka a týdenní pilot. [Kroky vlastníka](OWNER_LAUNCH_ACTIONS.md) · [Výstupní kritéria pilotu](PILOT_EXIT_CRITERIA.md)
+
+## Zbývající brány po pokračování
+
+V kandidátovi jsou opravené chyby nativního preflightu a závod změny účtu při výmazu v REL-04. Živá produkce je stále na původním SHA. Soukromý pilot může použít sestavení s `VITE_PRIVATE_JOURNAL_PILOT=1`. Povolí deník, autorizované fotky, synchronizaci, výlety, export a účet. Sdílení, přátelé, další sociální moduly a externí AI jsou zavřené. RIS a mapové zdroje zůstávají součástí současného sestavení a podléhají REL-08.
+
+| ID | Co zbývá a co lze udělat samostatně | Vlastník | Služba | Hardware | Rozsah |
+| --- | --- | --- | --- | --- | --- |
+| REL-01 | Režim pilotu ověřen lokálně. Zbývá potvrdit rozsah a sestavit zvolený režim v izolovaném prostředí. | Rozsah | Vercel Preview | – | První pilot |
+| REL-02 | Shoda pravidel ověřena. Zbývá potvrdit skutečnou izolaci a kompatibilní rollback. | Schválit projekty a práva | Vercel, Firebase, Cloudinary | – | První pilot |
+| REL-03 | Lokální HTTP/Auth/Firestore průchod připraven. Zbývá skutečné A/B doručení a úklid. | Schválit sandbox a zápis | Cloudinary, Firebase | HEIC a nativní průchod | První pilot s cloudovými fotkami |
+| REL-04 | Opraven přechod mezi účty. Zbývá živé přihlášení, e-mail nebo Google, obnova exportu a výmaz A s kontrolou B. | Dva syntetické účty a mailbox | Firebase, Cloudinary | Mobilní export ve fyzické akceptaci | První pilot |
+| REL-05 | Serverové revokace prošly v emulátoru. Živá CDN a moderace čekají. | Souhlas a proces moderace | Cloudinary, Firebase | – | Pozdější sociální beta |
+| REL-06 | Chromium offline a readback ověřeny. Zbývá nativní kamera, restart a update PWA s frontou. | Domluvit testery a rozsah | Služby pro dosynchronizování | Android a iPhone | První pilot |
+| REL-07 | Kritické rozměry, navigace a prohlížečová klávesnice ověřeny. Zbývá fyzická čtečka a systémová klávesnice. | Zajistit přístup k zařízení | – | Android a iPhone | První pilot pro kritické toky |
+| REL-08 | Texty a zdroje připravené. Zbývá potvrdit kontakty, retenci, licence RIS a podmínky map a počasí. | Schválení a případná právní revize | Potvrzení zdrojů | – | První pilot, DSA podle pozdějšího rozsahu |
+| REL-09 | Diagnostika, návrat a agregovaný přehled mají příručku. Zbývá skutečný příjem alertu a obnovovací zkouška. | Určit příjemce a aprobační odpovědnost | Vercel, Firebase, Cloudinary | – | První pilot |
+| REL-10 | Kritéria a průvodce jsou připravené. Potvrdit datum, schválené testery a výstupní rozhodnutí. | Výslovný GO | Ověřený testovací provoz | Podle rozsahu pilotu | První pilot |
+| RISK-01 | Nepovolený formát a nadlimitní metadata server lokálně odmítl. Zbývá doložit tvrdý provider limit a životnost grantů. | Povolit omezený test | Cloudinary | – | První pilot s cloudovými fotkami |
+| MOB-01 | CORS serverový kandidát připraven. Zbývá SDK, podepsané AAB a živé zařízení v Play. | Podpis a Play Console | Google Play | Android, SDK | Pouze obchod |
+| MOB-02 | CORS serverový kandidát připraven. Zbývá Xcode, podepsaný archiv, nativní přihlášení a živé fotky v TestFlight. | Podpis a Apple tým | App Store Connect | Mac a iPhone | Pouze obchod |
+| MOB-03 | Store podklady připravené. Zbývají deklarace a skutečná cesta výmazu podle požadavků obchodu. | Schválit deklarace a podání | Play a App Store Connect | Podle podpory klienta | Pouze obchody |

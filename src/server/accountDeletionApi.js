@@ -17,7 +17,8 @@ export function createAccountDeletionHandler({ verifyToken, service, protectedOw
       || ("expectedUid" in body && (typeof body.expectedUid !== "string" || !/^[^/]{1,128}$/.test(body.expectedUid)))) {
       return res.status(400).json({ error: "invalid_request" });
     }
-    const bearer = req.headers?.authorization?.match(/^Bearer ([^\s]+)$/);
+    const authorization = req.headers?.authorization;
+    const bearer = typeof authorization === "string" ? authorization.match(/^Bearer ([^\s]+)$/) : null;
     if (!bearer) return res.status(401).json({ error: "authentication_required" });
     let identity;
     try { identity = await verifyToken(bearer[1]); }

@@ -189,11 +189,12 @@ function safeDiagnosticCode(code) {
 }
 
 /** Runs the same authenticated metadata and binary delivery checks used by the app, but never returns or logs photo bytes. */
-export async function inspectPhotoDelivery({ catchId, photoId, authenticatedRequest = callAuthenticatedPhotoEndpoint, now = () => Date.now() }) {
+export async function inspectPhotoDelivery({ catchId, photoId, expectedUid = firebaseAuth.currentUserId(),
+  authenticatedRequest = callAuthenticatedPhotoEndpoint, now = () => Date.now() }) {
   const timestamp = new Date(now()).toISOString();
   const result = { timestamp, metadataStatus: null, deliveryStatus: null, providerStatus: null, errorCode: null };
   try {
-    await authenticatedRequest("/api/cloudinary/metadata", { catchId, photoId });
+    await authenticatedRequest("/api/cloudinary/metadata", { catchId, photoId }, { expectedUid });
     result.metadataStatus = 200;
   } catch (error) {
     result.metadataStatus = Number.isInteger(error?.status) ? error.status : null;
@@ -201,7 +202,7 @@ export async function inspectPhotoDelivery({ catchId, photoId, authenticatedRequ
     result.errorCode = safeDiagnosticCode(error?.code);
   }
   try {
-    await authenticatedRequest("/api/cloudinary/export", { catchId, photoId }, { responseType: "blob" });
+    await authenticatedRequest("/api/cloudinary/export", { catchId, photoId }, { responseType: "blob", expectedUid });
     result.deliveryStatus = 200;
   } catch (error) {
     result.deliveryStatus = Number.isInteger(error?.status) ? error.status : null;

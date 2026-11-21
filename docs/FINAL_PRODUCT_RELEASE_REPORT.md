@@ -2,6 +2,17 @@
 
 **Prompt 33 · PARTIAL · veřejné rozšíření NO-GO · 21. 11. 2026**
 
+## Pokračování po 33 · další kandidát na vývojové větvi
+
+- **WEB/PWA · PARTIAL.** Rozsah soukromého pilotu má pod jedním nastavením navázané klientské a serverové brány. Lokálně jsou dostupné deník, autorizované fotky, synchronizace, výlety, export a účet. Produkční sociální sdílení a externí AI lze v pilotu společně zavřít. Preview s tímto režimem bude možné závazně potvrdit až po schválení a izolaci prostředí. [Zbývající brány podle ID](FINAL_ACCEPTANCE_MATRIX.md)
+- **REL-04 · oprava rizika výmazu po přepnutí účtu.** Klient ověří identitu před reautentizací i před odesláním. Server porovná očekávaný účet s Firebase tokenem. Starý klient může dál poslat původní prázdné tělo. Po přijetí se čistí původní scope a nová relace zůstává přihlášená. Foto retry nebo export po přepnutí účtu nepoužije token nového účtu a klient nepřevezme starou odpověď. Produkční verze je stále před opravou.
+- **ANDROID / iOS · BLOCKED.** Opraven preflight na kandidátovi `8b7421f74c473aa8ba37a971edd237ff6cb2d9fa`. Ověřeno na chráněném Vercel preview s 204 pro oba přesné native originy a 403 pro neschválený origin. POST bez Firebase bearer skončil 503 před plnou akceptací kvůli nedostupnému backendu na preview. Na lokálním nakonfigurovaném emulátoru bez beareru i s neplatným bearerem 401. Nativní přihlášení, reálný upload a doručení, fyzická zařízení, podpisy a obchody zůstávají otevřené. [Nativní a živá akceptace](QA_CLOUDINARY_LIVE.md)
+- **SOCIAL · BLOCKED pro rozšíření.** Zůstává oddělená beta po ověření skutečných živých médií, souhlasů, CDN revokace a moderace. Nové sociální moduly se nezapínaly.
+- **Testy.** 1 201 jednotkových, 1 919 Auth/Firestore kontrol, 26 nativních HTTP/Firebase kontrol. Auth, Sync, Photos, lint, build, product a diff PASS. Chromium běžný web 180 zobrazení a 14 uzavřených přímých vstupů, pilot 150 zobrazení a 26 uzavřených vstupů. Obě varianty mají šest offline navigací s viditelným JPEG. Běžná varianta načetla JPEG i po novém spuštění procesu. Fyzické a živé Cloudinary chybějí.
+- **Produkce.** Vercel alias stále READY na `68fbf04b70e123b226bac90ee83f12dde1dc352b`. Firebase Rules a indexy nebyly změněny. Další krok je izolovaná akceptace REL-02/03/04/06 se schválenými účty a telefony, potom rozhodnutí o pilotu REL-10. [Kroky vlastníka](OWNER_LAUNCH_ACTIONS.md)
+
+## Evidence k závěru Promptu 33
+
 Web a PWA prošly lokální regresí včetně offline deníku. Android a iOS mají ověřený základ Capacitoru. Sociální moduly prošly izolovanými A/B/C scénáři. Podmínky pro širší webový release, obchody a nové sociální funkce zůstávají otevřené. [Matice akceptace](FINAL_ACCEPTANCE_MATRIX.md)
 
 ## Kandidát a ověření

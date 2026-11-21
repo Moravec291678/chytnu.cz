@@ -11,7 +11,8 @@ import { createAiOperationalDiagnostics } from "./aiOperationalDiagnostics.js";
 
 export function createProductionAiApplication({ env = globalThis.process?.env ?? {} } = {}) {
   const features = AI_FEATURES;
-  const enabled = Object.values(features).some(value => value === true) && env.AI_PROVIDER === "cloudflare"
+  const enabled = env.VITE_PRIVATE_JOURNAL_PILOT !== "1"
+    && Object.values(features).some(value => value === true) && env.AI_PROVIDER === "cloudflare"
     && env.AI_ZERO_COST_CONFIRMED === "true" && env.AI_CLOUDFLARE_MODEL === CLOUDFLARE_ZERO_COST_MODEL;
   if (!enabled) return createAiApplicationApi();
   try {

@@ -7,6 +7,7 @@ import "./Layout.css";
 import "./SyncStatus.css";
 import { SYNC_STATUS_COMPACT_DELAY_MS } from "./syncStatusView.js";
 import { navigationSection } from "./navigationSection.js";
+import { isFeatureEnabled } from "../config/featureFlags.js";
 
 function NavIcon({ name }) {
   const common = {
@@ -48,7 +49,8 @@ function Layout({ children }) {
   const homeActive = section === "home";
   const journalActive = section === "journal";
   const communityActive = section === "community";
-  const profileActive = section === "profile";
+  const communityEnabled = isFeatureEnabled("community");
+  const profileActive = section === "profile" || (!communityEnabled && pathname === "/notifications");
   return (
         <div className={adminRoute ? "layout layout-admin" : pathname === "/gallery" ? "layout layout-gallery" : "layout"}>
       <SyncStatus sync={sync} isOnline={isOnline} compact={sync?.status === "syncing" && sync?.showSyncStatus && compactSyncId === syncPresentationId} />
@@ -66,10 +68,10 @@ function Layout({ children }) {
         <Link to="/add" className="nav-fab" aria-label="Přidat úlovek" aria-current={section === "capture" ? "page" : undefined}>
           +
         </Link>
-        <Link to="/community" className={itemClass(communityActive)} aria-current={communityActive ? "page" : undefined}>
+        {communityEnabled && <Link to="/community" className={itemClass(communityActive)} aria-current={communityActive ? "page" : undefined}>
           <span className="nav-icon" aria-hidden="true"><NavIcon name="community" /></span>
           <span className="nav-label">Komunita</span>
-        </Link>
+        </Link>}
         <Link to="/profile" className={itemClass(profileActive)} aria-current={profileActive ? "page" : undefined}>
           <span className="nav-icon" aria-hidden="true"><NavIcon name="profile" /></span>
           <span className="nav-label">Profil</span>

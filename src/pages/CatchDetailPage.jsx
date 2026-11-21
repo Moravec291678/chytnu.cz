@@ -16,6 +16,7 @@ import { DEFAULT_SPECIES } from "../shared/constants/constants.js";
 import { getCatchRarity } from "../features/catches/utils/rarity.js";
 import { getVerificationPresentation } from "../features/catches/data/verificationPresentation.js";
 import { useModalFocusTrap } from "../shared/hooks/useModalFocusTrap.js";
+import { isFeatureEnabled } from "../shared/config/featureFlags.js";
 import { formatCatchWeight } from "../features/catches/data/catchWeight.js";
 import ConfirmDialog from "../shared/components/ConfirmDialog";
 import "../features/catches/components/PhotoSyncStatus.css";
@@ -273,7 +274,7 @@ function CatchDetailPage() {
       <CatchAiAssistance key={`${scope.scopeKey}:${item.id}`} record={item} />
       {hasMapLocation && <Link className="catch-detail-map-link" to={`/map?catch=${encodeURIComponent(item.id)}`}>Zobrazit úlovek na soukromé mapě</Link>}
       <div className="catch-detail-actions">
-        <Link className="save-catch-button" to={`/catch/${item.id}/share`}>Sdílet úlovek</Link>
+        {isFeatureEnabled("publicSharing") && <Link className="save-catch-button" to={`/catch/${item.id}/share`}>Sdílet úlovek</Link>}
         <button className="photo-action-button" type="button" onClick={() => setConfirmingDelete(true)} disabled={deleting}>{deleting ? "Mažu…" : "Smazat úlovek"}</button>
       </div>
       {confirmingDelete && <ConfirmDialog titleId="delete-catch-title" descriptionId="delete-catch-description" title="Smazat úlovek?" description="Tato akce smaže úlovek i jeho lokálně uloženou fotografii. Nelze ji vrátit." busy={deleting} confirmLabel="Smazat úlovek" busyLabel="Mažu…" confirmClassName="catch-delete-confirm" onCancel={closeDeleteDialog} onConfirm={handleDelete} />}

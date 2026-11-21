@@ -18,6 +18,7 @@ test("account deletion requires verified recent identity and ignores client owne
   });
   for (const request of [
     { method: "POST", headers: {} },
+    { method: "POST", headers: { authorization: ["Bearer good"] } },
     { method: "POST", headers: { authorization: "Bearer bad" } },
   ]) {
     const res = response(); await handler(request, res); assert.equal(res.statusCode, 401);

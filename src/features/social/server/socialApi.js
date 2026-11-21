@@ -1,4 +1,4 @@
-import { FEATURES } from "../../../product/config/featureFlags.js";
+import { FEATURES, PRIVATE_JOURNAL_PILOT } from "../../../product/config/featureFlags.js";
 import { createPublicProfileService } from "./publicProfileService.js";
 import { createSocialAvatarService } from "./socialAvatar.js";
 import { createSocialPhotoService } from "./socialPhoto.js";
@@ -41,10 +41,11 @@ function isAvailable(action, payload, features) {
   if (action.startsWith("waterCommunity.")) return features.waterCommunity === true;
   return true;
 }
-export function createSocialHandler({ service, features = FEATURES }) {
+export function createSocialHandler({ service, features = FEATURES, privateJournalPilot = PRIVATE_JOURNAL_PILOT }) {
   return async (req, res) => {
     res.setHeader?.("Cache-Control", "private, no-store, max-age=0");
     res.setHeader?.("X-Content-Type-Options", "nosniff");
+    if (privateJournalPilot) return res.status(404).json({ error: "social_unavailable" });
     if (req.method !== "POST") return res.status(405).json({ error: "method_not_allowed" });
     try {
       if (JSON.stringify(req.body ?? null).length > 280_000) return res.status(413).json({ error: "request_too_large" });
@@ -66,6 +67,7 @@ export function createSocialHandler({ service, features = FEATURES }) {
   };
 }
 export async function createProductionSocialHandler({ env = globalThis.process?.env ?? {} } = {}) {
+  if (env.VITE_PRIVATE_JOURNAL_PILOT === "1") return createSocialHandler({ privateJournalPilot: true });
   const { db, auth } = await getAccountDeletionAdminContext(env);
   return createSocialHandler({ service: createPublicProfileService({ db, auth, env,
     avatar: createSocialAvatarService({ env }), socialPhoto: createSocialPhotoService({ env }) }) });

@@ -18,13 +18,14 @@ const fixedNow = Date.parse("2026-10-21T12:00:00.000Z");
 
 test("photo delivery diagnostics report metadata and provider HTTP statuses without returning photo bytes", async () => {
   const calls = [];
-  const result = await inspectPhotoDelivery({ catchId: "catch-a", photoId: "photo-a", now: () => fixedNow,
+  const result = await inspectPhotoDelivery({ catchId: "catch-a", photoId: "photo-a", expectedUid: "owner-a", now: () => fixedNow,
     authenticatedRequest: async (path, payload, options) => {
       calls.push({ path, payload, options });
       if (path.endsWith("/metadata")) return { bytes: 12345, format: "jpg", width: 10, height: 10 };
       throw Object.assign(new Error("hidden"), { status: 502, providerStatus: 404, code: "cloudinary_asset_missing" });
     } });
   assert.deepEqual(calls.map((call) => call.path), ["/api/cloudinary/metadata", "/api/cloudinary/export"]);
+  assert.deepEqual(calls.map((call) => call.options.expectedUid), ["owner-a", "owner-a"]);
   assert.deepEqual(result, { timestamp: new Date(fixedNow).toISOString(), metadataStatus: 200, deliveryStatus: 502,
     providerStatus: 404, errorCode: "cloudinary_asset_missing" });
   assert.equal("bytes" in result, false);
