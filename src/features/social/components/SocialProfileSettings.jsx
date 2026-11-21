@@ -59,6 +59,9 @@ export default function SocialProfileSettings() {
   const error = feedback?.uid === uid ? feedback.error : "";
   const ready = loaded?.uid === uid && !loaded.error && form?.uid === uid;
   const profile = ready ? form.value : null;
+  const initialMode = loaded?.publicationConsent?.mode ?? (!loaded?.profile || loaded.profile.visibility === "public" ? "public" : "private");
+  const unsaved = ready && (form.mode !== initialMode || publicConsent ||
+    JSON.stringify(profile) !== JSON.stringify(editableProfile(loaded.profile, { newProfile: !loaded.profile })));
   const unlocked = new Set((ledger.events ?? []).filter(event => event.ownerId === uid && event.scopeKey === `account:${uid}` && event.type === "achievement.unlocked")
     .map(event => event.reasonKey?.slice("achievement.unlocked:".length)));
   const achievementChoices = ready ? (loaded.achievementChoices ?? []).filter(item => unlocked.has(item.id) || loaded.profile?.sharedAchievementIds?.includes(item.id)) : [];
@@ -111,7 +114,7 @@ export default function SocialProfileSettings() {
     const exists = selectedPhotos.some(photo => photo.catchId === catchId && photo.photoId === photoId);
     patch("sharedPhotos", exists ? selectedPhotos.filter(photo => photo.catchId !== catchId || photo.photoId !== photoId) : [...selectedPhotos, { catchId, photoId }].slice(0, 6));
   }
-  return <Layout><div className="social-page social-settings"><Link to="/profile">← Můj profil</Link><header><p className="social-eyebrow">Rybářská identita</p><h1>Můj rybářský profil</h1><p>Ty rozhoduješ, co uvidí ostatní. Tvůj osobní deník, přesná místa a poznámky zůstávají soukromé.</p></header>
+  return <Layout back={{ unsaved, disabled: busy }}><div className="social-page social-settings"><header><p className="social-eyebrow">Rybářská identita</p><h1>Můj rybářský profil</h1><p>Ty rozhoduješ, co uvidí ostatní. Tvůj osobní deník, přesná místa a poznámky zůstávají soukromé.</p></header>
     {!uid && <section className="social-panel"><h2>Propojit profil s účtem</h2><p>Rybářský profil vyžaduje přihlášení. Místní deník tím neztratíš.</p><Link to="/login" className="social-primary">Přihlásit se</Link></section>}
     {uid && loaded?.uid !== uid && <p role="status">Načítám nastavení…</p>}
     {loaded?.uid === uid && loaded.error && <p role="alert" className="social-error">{loaded.error}<button onClick={() => setRevision(value => value + 1)}>Zkusit znovu</button></p>}

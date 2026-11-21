@@ -34,7 +34,6 @@ export default function YearSummaryPage() {
   return <Layout>
     <main className="year-summary-page">
       <header className="year-summary-header">
-        <Link to="/profile">← Profil</Link>
         <h1>Tvůj rok {year}</h1>
         <p>Roční přehled podle uložených vycházek a úlovků.</p>
       </header>

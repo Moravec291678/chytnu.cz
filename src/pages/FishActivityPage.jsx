@@ -1,4 +1,3 @@
-import { Link } from "react-router-dom";
 import Layout from "../shared/layout/Layout";
 import FishActivity from "../features/home/components/FishActivity";
 import { useCatches } from "../features/catches/context/useCatches";
@@ -11,7 +10,6 @@ export default function FishActivityPage() {
 
   return <Layout>
     <div className="fish-activity-page">
-      <Link className="fish-activity-page-back" to="/">← Domů</Link>
       <header>
         <span>Podmínky u vody</span>
         <h1>Aktivita ryb</h1>

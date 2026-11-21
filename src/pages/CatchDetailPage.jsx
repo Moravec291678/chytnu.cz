@@ -97,7 +97,6 @@ function CatchDetailPage() {
       setDeleting(false);
     }
   };
-  const handleBack = () => navigate(location.key === "default" ? "/journal" : -1);
   const closeDeleteDialog = useCallback(() => setConfirmingDelete(false), []);
   const handleToggleFavorite = async () => {
     if (savingFavoriteRef.current) return;
@@ -116,7 +115,7 @@ function CatchDetailPage() {
 
   if (state.loading) return <Layout><p className="loading-state" role="status">Načítám úlovek…</p></Layout>;
   if (state.error) return <Layout><section className="add-catch-section" role="alert"><h1>Úlovek se nepodařilo načíst</h1><p>{state.error}</p><button type="button" onClick={refresh}>Zkusit znovu</button></section></Layout>;
-  if (!item) return <Layout><section className="add-catch-section"><h1>Úlovek nenalezen</h1><p>Mohl být smazán nebo uložené místní úložiště není dostupné.</p><Link to="/journal">Zpět do deníku</Link></section></Layout>;
+  if (!item) return <Layout back={{ to: "/journal", useHistory: false }}><section className="add-catch-section"><h1>Úlovek nenalezen</h1><p>Mohl být smazán nebo uložené místní úložiště není dostupné.</p></section></Layout>;
 
   const placeFacts = [
     ["Revír", item.locationName],
@@ -158,7 +157,6 @@ function CatchDetailPage() {
     <div className="add-catch-page catch-detail-page">
       <section className="catch-detail-hero">
         <header className="catch-detail-toolbar">
-          <button className="catch-detail-back" type="button" onClick={handleBack} aria-label="Zpět">←</button>
           <div>
             <button
               className={item.isFavorite ? "catch-detail-icon-button catch-detail-favorite catch-detail-favorite--active" : "catch-detail-icon-button catch-detail-favorite"}

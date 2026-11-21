@@ -328,7 +328,7 @@
   outline-offset: 2px;
 }
 
-.profile-page > .profile-stats-link {
+.profile-page .profile-stats-link {
   display: flex;
   min-width: 0;
   min-height: 58px;
@@ -343,22 +343,22 @@
   text-decoration: none;
 }
 
-.profile-page > .profile-stats-link > span {
+.profile-page .profile-stats-link > span {
   display: grid;
   gap: var(--space-0-5);
 }
 
-.profile-page > .profile-stats-link strong {
+.profile-page .profile-stats-link strong {
   color: var(--accent-green);
   font-size: var(--font-size-13);
 }
 
-.profile-page > .profile-stats-link small {
+.profile-page .profile-stats-link small {
   color: var(--text-secondary);
   font-size: var(--font-size-10);
 }
 
-.profile-page > .profile-stats-link b {
+.profile-page .profile-stats-link b {
   color: var(--accent-green);
   font-size: var(--font-size-15);
 }

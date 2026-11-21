@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { useAuth } from "../features/auth/context/authContextValue.js";
 import { useDataScope } from "../features/auth/context/dataScopeContextValue.js";
 import { WATER_CHAT_MAX_LENGTH, waterRepository } from "../features/waters/data/waterRepository.js";
@@ -91,7 +91,6 @@ function WaterChatSession() {
   return (
     <main className="water-chat-page">
       <header className="water-chat-header">
-        <Link to={`/waters/${waterId}`} aria-label="Zpět na detail revíru">←</Link>
         <div>
           <h1>{water?.name || "Chat revíru"}</h1>
           <p><span className="water-chat-presence-dot" aria-hidden="true" />Moje revíry</p>
@@ -107,7 +106,7 @@ function WaterChatSession() {
       {loadError && <p className="water-chat-error" role="alert">{loadError}</p>}
 
       {loading ? <p role="status">Načítám místní zprávy…</p> : !water ? (
-        <section className="water-chat-empty"><h2>Revír není dostupný</h2><Link to="/waters">Zpět na revíry</Link></section>
+        <section className="water-chat-empty"><h2>Revír není dostupný</h2></section>
       ) : messages.length === 0 ? (
         <section className="water-chat-empty" aria-labelledby="water-chat-empty-title">
           <h2 id="water-chat-empty-title">Zatím žádné zprávy</h2>

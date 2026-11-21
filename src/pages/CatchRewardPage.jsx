@@ -61,7 +61,7 @@ export default function CatchRewardPage() {
 
   if (state.loading || progression.loading || !rewardClaimed) return <Layout><div className="progression-page"><p className="loading-state" role="status">Načítám odměnu…</p></div></Layout>;
   if (state.error || progression.error) return <Layout><div className="progression-page"><p className="progression-item" role="alert">{state.error || progression.error}</p></div></Layout>;
-  if (!record) return <Layout><div className="progression-page"><h1>Úlovek nenalezen</h1><Link to="/journal">Zpět do deníku</Link></div></Layout>;
+  if (!record) return <Layout back={{ to: "/journal", useHistory: false }}><div className="progression-page"><h1>Úlovek nenalezen</h1></div></Layout>;
 
   const rewardRows = Object.entries(reward?.breakdown ?? {})
     .filter(([, xp]) => xp > 0)

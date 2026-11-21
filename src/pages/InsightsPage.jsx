@@ -83,7 +83,6 @@ function InsightsPage() {
   return <Layout>
     <main className="insights-page">
       <header className="insights-header">
-        <Link to="/profile">← Profil</Link>
         <h1>Tipy a postřehy</h1>
         <p>Z tvého deníku</p>
       </header>

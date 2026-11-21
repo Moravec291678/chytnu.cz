@@ -1,3 +1,4 @@
+import { useRouteMemory } from "../shared/layout/navigationMemory.js";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import Layout from "../shared/layout/Layout.jsx";
@@ -25,11 +26,11 @@ function SourceNotice() {
 }
 export default function WaterCataloguePage() {
   const resource = useCatalogueResource(risCatalogue.list,"index");
-  const [query,setQuery] = useState(""),[fisheryType,setFisheryType] = useState(""),[union,setUnion] = useState(""),[withCoordinates,setWithCoordinates] = useState(false),[page,setPage] = useState(0);
+  const [query,setQuery] = useRouteMemory("query", ""),[fisheryType,setFisheryType] = useRouteMemory("fisheryType", ""),[union,setUnion] = useRouteMemory("union", ""),[withCoordinates,setWithCoordinates] = useRouteMemory("withCoordinates", false),[page,setPage] = useRouteMemory("page", 0);
   const unions = useMemo(()=>[...new Set((resource.data ?? []).map(row=>row.union).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"cs")),[resource.data]);
   const filtered = useMemo(()=>filterCatalogue(resource.data ?? [],{query,fisheryType,union,withCoordinates}),[resource.data,query,fisheryType,union,withCoordinates]);
   const update = setter => event => { setter(event.target.type === "checkbox" ? event.target.checked : event.target.value); setPage(0); };
-  return <Layout><div className="catalogue-page"><header><Link to="/waters">← Moje revíry</Link><h1>Katalog revírů RIS</h1><p>{RIS_MANIFEST.count.toLocaleString("cs-CZ")} revírů · veřejný katalog oddělený od tvého deníku</p></header><SourceNotice />
+  return <Layout><div className="catalogue-page"><header><h1>Katalog revírů RIS</h1><p>{RIS_MANIFEST.count.toLocaleString("cs-CZ")} revírů · veřejný katalog oddělený od tvého deníku</p></header><SourceNotice />
     <div className="catalogue-filters"><label>Hledat revír<input type="search" value={query} onChange={update(setQuery)} placeholder="Název, číslo nebo oblast…" /></label>
       <label>Druh revíru<select value={fisheryType} onChange={update(setFisheryType)}><option value="">Všechny druhy</option><option>Mimopstruhový</option><option>Pstruhový</option></select></label>
       <label>Územní svaz<select value={union} onChange={update(setUnion)}><option value="">Všechny svazy</option>{unions.map(value=><option key={value}>{value}</option>)}</select></label>
@@ -60,7 +61,7 @@ export function CatalogueWaterDetail() {
     finally { if(scopeRef.current === requested)setBusy(false); }
   };
   const row = resource.data, detail = row?.detail;
-  return <Layout><div className="catalogue-page"><Link to="/waters/catalogue">← Katalog revírů</Link>
+  return <Layout><div className="catalogue-page">
     {resource.loading ? <p role="status">Načítám detail revíru…</p> : resource.error ? <p role="alert">{resource.error} <button onClick={resource.retry}>Zkusit znovu</button></p> : !row ? <h1>Revír v katalogu nenalezen</h1> : <>
       <header><p>{row.number} · {row.fisheryType || "Druh neuveden"}</p><h1>{row.name}</h1><p>{row.union}</p></header><SourceNotice />
       <button className="catalogue-save" onClick={select} disabled={busy || scope.status !== "ready"}>{busy ? "Ukládám…" : "Uložit do mých revírů"}</button><p>Uloží soukromý revír pro úlovky a vycházky. Opakovaná volba otevře existující záznam a zachová vlastní poznámky i úpravy.</p>{error && <p role="alert">{error}</p>}

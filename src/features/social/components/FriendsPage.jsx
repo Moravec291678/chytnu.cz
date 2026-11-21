@@ -55,7 +55,7 @@ export default function FriendsPage() {
     } catch (error) { if (!controller.signal.aborted) setResult(old => old?.key === key ? { ...old, pageError: error.message } : old); }
     finally { setPaging(active => active?.id === id ? null : active); }
   }
-  return <Layout><div className="social-page friends-page"><div className="social-topline"><Link to="/community">← Komunita</Link><button onClick={() => setRevision(value => value + 1)} disabled={busy}>Obnovit</button></div>
+  return <Layout><div className="social-page friends-page"><div className="social-topline"><button onClick={() => setRevision(value => value + 1)} disabled={busy}>Obnovit</button></div>
     <header><p className="social-eyebrow">Spojení mezi účty</p><h1>Přátelé</h1><p className="social-help">Přátelství platí až po potvrzení serverem. Stav se při otevřené stránce průběžně obnovuje.</p></header>
     {!uid ? <section className="social-panel"><p>Přátelé vyžadují přihlášení. Místní deník zůstává dostupný.</p><Link className="social-primary" to="/login">Přihlásit se</Link></section> : <>
       <div className="social-button-row">{isFeatureEnabled("userDiscovery") && <Link className="social-primary" to="/community#fisher-search">Najít přátele</Link>}{isFeatureEnabled("directMessages") && <Link to="/messages">Soukromé zprávy</Link>}</div>

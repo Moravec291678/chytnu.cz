@@ -34,10 +34,10 @@ const permitted = (access, permission) => !permission || (permission === "owner"
 
 export default function AdminDashboard() {
   const session = useAdminSession();
-  if (session.loading) return <Layout><section className="admin-page"><h1>Administrace ChytnuCz</h1><p role="status">Ověřuji oprávnění…</p><Link to="/profile">Zpět do aplikace</Link></section></Layout>;
+  if (session.loading) return <Layout><section className="admin-page"><h1>Administrace ChytnuCz</h1><p role="status">Ověřuji oprávnění…</p></section></Layout>;
   if (!canOpenAdmin(session.access)) return <Layout><section className="admin-page"><h1>Administrace ChytnuCz</h1>
     <p role="alert">{session.error || (session.ownerId ? "K administraci nemáš oprávnění." : "Pro přístup do administrace se přihlas pověřeným účtem.")}</p>
-    {session.ownerId && <button type="button" onClick={session.refresh}>Ověřit znovu</button>}<Link to="/profile">Zpět do aplikace</Link>
+    {session.ownerId && <button type="button" onClick={session.refresh}>Ověřit znovu</button>}
   </section></Layout>;
   return <AdminWorkspace key={session.ownerId} session={session} />;
 }
@@ -61,7 +61,7 @@ export function AdminWorkspace({ session }) {
     if (description) setConfirmation({ action, payload, saved, description }); else void mutate({ action, payload, saved });
   };
   return <Layout><div className="admin-page">
-    <header className="admin-header"><div><p className="admin-kicker">{ADMIN_ROLE_LABELS[access.role] ?? access.role}</p><h1>Administrace ChytnuCz</h1></div><Link to="/profile">← Zpět do aplikace</Link></header>
+    <header className="admin-header"><div><p className="admin-kicker">{ADMIN_ROLE_LABELS[access.role] ?? access.role}</p><h1>Administrace ChytnuCz</h1></div></header>
     <div className="admin-workspace">
     <nav className="admin-nav" aria-label="Sekce administrace">{NAVIGATION_GROUPS.map(([group, paths]) => {
       const entries = NAVIGATION.filter(([path, , permission]) => paths.includes(path) && permitted(access, permission));

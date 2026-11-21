@@ -1,3 +1,4 @@
+import { useSectionLink } from "../shared/layout/useSectionLink.js";
 import { useState } from "react";
 import Layout from "../shared/layout/Layout";
 import CatchCard from "../features/catches/components/CatchCard";
@@ -79,6 +80,7 @@ function SpeciesRanking({ items }) {
 }
 
 function StatsPage() {
+  useSectionLink();
   const { state: catchState, refresh: refreshCatches } = useCatches();
   const { state: tripState, refresh: refreshTrips } = useTrips();
   const [period, setPeriod] = useState("season");
@@ -105,7 +107,7 @@ function StatsPage() {
 
   return <Layout>
     <div className="stats-page">
-      <header className="stats-header">
+      <header className="stats-header" id="personal-records">
         <h1>Statistiky</h1>
         <p>{getPeriodLabel(period, now)} · podle tvých uložených záznamů</p>
       </header>

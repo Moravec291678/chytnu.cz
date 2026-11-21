@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import Layout from "../shared/layout/Layout";
 import { createTripRecord, tripToForm } from "../features/trips/data/tripModel";
 import { useTrips } from "../features/trips/context/useTrips";
@@ -10,7 +10,8 @@ import { applyWaterToFishingForm } from "../features/waters/data/waterSelection.
 function TripCreatePage() {
   const navigate = useNavigate();
   const { state, startTrip, refresh } = useTrips();
-  const [values, setValues] = useState(() => tripToForm({ startedAt: new Date().toISOString() }));
+  const [initial] = useState(() => tripToForm({ startedAt: new Date().toISOString() }));
+  const [values, setValues] = useState(initial);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
@@ -31,8 +32,7 @@ function TripCreatePage() {
       setSaving(false);
     }
   };
-  return <Layout><div className="trip-form-page">
-    <Link to="/trips" className="trip-back-link">← Vycházky</Link>
+  return <Layout back={{ unsaved: values !== initial, disabled: saving }}><div className="trip-form-page">
     <header><h1>Nová vycházka</h1><p>Začátek se uloží do tohoto zařízení.</p></header>
     {state.error && <p className="trip-form-error" role="alert">{state.error} <button type="button" onClick={refresh}>Zkusit znovu</button></p>}
     {state.trips.some((trip) => !trip.endedAt) && <p className="trip-form-notice">Nejprve ukonči aktivní vycházku, potom můžeš zahájit další.</p>}

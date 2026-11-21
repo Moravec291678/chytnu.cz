@@ -69,7 +69,6 @@ function SpeciesAlbumPage() {
 
   return <Layout><div className="album-page">
     <header className="album-header">
-      <Link to="/profile">← Profil</Link>
       <div className="album-heading">
         <div><p className="album-eyebrow">TVŮJ RYBÁŘSKÝ DENÍK</p><h1>Sbírky</h1></div>
         <span className="album-total">{discovered}<span>/{album.length}</span></span>

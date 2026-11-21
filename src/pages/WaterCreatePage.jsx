@@ -32,6 +32,7 @@ function WaterCreatePage() {
   });
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
+  const [dirty, setDirty] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [existingWater, setExistingWater] = useState(null);
   const [loadingWater, setLoadingWater] = useState(Boolean(waterId));
@@ -66,6 +67,7 @@ function WaterCreatePage() {
   }, [waterId, scope]);
 
   const updateField = (key, value) => {
+    setDirty(true);
     dirtyFields.current.add(key);
     setFormData((prev) => ({ ...prev, [key]: value }));
     if (errors[key]) {
@@ -74,6 +76,7 @@ function WaterCreatePage() {
   };
 
   const toggleFish = (fish) => {
+    setDirty(true);
     dirtyFields.current.add("targetFish");
     setFormData((prev) => {
       const exists = prev.targetFish.includes(fish);
@@ -107,7 +110,7 @@ function WaterCreatePage() {
       if (!waterId && returnToAddCatch) {
         navigate("/add", { replace: true, state: { preselectedWaterId: record.id } });
       } else {
-        navigate(`/waters/${record.id}`);
+        navigate(`/waters/${record.id}`, { replace: true });
       }
     } catch (err) {
       setSubmitError(err?.message || "Revír se nepodařilo uložit. Pokud už byl záznam uložen, můžeš akci bezpečně zkusit znovu.");
@@ -126,14 +129,18 @@ function WaterCreatePage() {
     return <Layout><div className="water-create-page"><p className="loading-state" role="status">Načítám uložený revír…</p></div></Layout>;
   }
   if (editorView === "not-found") {
-    return <Layout><div className="water-create-page"><EmptyState title="Revír nenalezen" description="Záznam mohl být smazán nebo patří do jiného profilu." action={<Link className="water-create-back" to={returnToAddCatch ? "/add" : "/waters"}>Zpět</Link>} /></div></Layout>;
+    return <Layout back={{ to: "/waters", useHistory: false }}><div className="water-create-page"><EmptyState title="Revír nenalezen" description="Záznam mohl být smazán nebo patří do jiného profilu." /></div></Layout>;
   }
   if (editorView === "error") {
     return <Layout><div className="water-create-page"><ErrorState title="Revír se nepodařilo načíst" message={loadError} /></div></Layout>;
   }
 
   return (
-    <Layout>
+    <Layout back={{
+      to: returnToAddCatch ? "/add" : undefined,
+      unsaved: dirty || Boolean(!waterId && existingWater),
+      disabled: saving,
+    }}>
       <div className="water-create-page">
         <header className="water-create-header">
           <h1>{waterId ? "Upravit revír" : "Přidat revír"}</h1>
@@ -240,7 +247,6 @@ function WaterCreatePage() {
         {!waterId && <p className="water-create-note">
           Revír se uloží lokálně se stavem „čeká na schválení“. Veřejná moderace zatím není připojená a za lokální uložení se neuděluje XP.
         </p>}
-        <Link className="water-create-back" to={returnToAddCatch ? "/add" : "/waters"}>Zpět{returnToAddCatch ? " k úlovku" : " na revíry"}</Link>
 
         <div className="water-create-submit">
           <button type="submit" form="water-create-form" disabled={saving || loadingWater || scope.status !== "ready" || Boolean(waterId && !existingWater)}>

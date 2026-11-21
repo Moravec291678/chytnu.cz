@@ -1,3 +1,4 @@
+import { useRouteMemory } from "../shared/layout/navigationMemory.js";
 import { useOwnModeration } from "../features/community/useOwnModeration.js";
 import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
@@ -37,15 +38,16 @@ function CommunityUnavailable({ title, children }) {
 function CommunityPage() {
   const auth = useAuth();
   const [feedRefresh, setFeedRefresh] = useState(0);
+  const [unsaved, setUnsaved] = useState(false);
   const { state: catchState } = useCatches();
   const [params] = useSearchParams();
-  const [tab, setTab] = useState(() => FEATURES.community ? params.get("feed") === "friends" ? "friends" : "global" : "local");
+  const [tab, setTab] = useRouteMemory("tab", () => FEATURES.community ? params.get("feed") === "friends" ? "friends" : "global" : "local");
   const moderation = useOwnModeration();
   const localFeed = useMemo(() => buildLocalCommunityFeed(catchState.catches,moderation), [catchState.catches,moderation]);
   const profileName = auth.user?.displayName?.trim() || (auth.user ? "Můj profil" : "Místní profil");
 
   return (
-    <Layout>
+    <Layout back={{ unsaved }}>
       <section className="community-page" aria-labelledby="community-title">
         <header className="community-header">
           <div>
@@ -61,7 +63,7 @@ function CommunityPage() {
         </nav>
         {isFeatureEnabled("userDiscovery") && <FisherDiscovery key={auth.user?.uid ?? "anonymous"} />}
 
-        {FEATURES.community && <CommunityEntryComposer key={auth.user?.uid ?? "anonymous"} onPublished={() => setFeedRefresh(value => value + 1)} />}
+        {FEATURES.community && <CommunityEntryComposer key={auth.user?.uid ?? "anonymous"} onDraftChange={setUnsaved} onPublished={() => setFeedRefresh(value => value + 1)} />}
 
         <nav className="community-tabs"  aria-label="Filtr komunitního přehledu">
           {FEED_TABS.filter(item => FEATURES.community || item.id === "local").map((item) => (

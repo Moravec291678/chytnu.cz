@@ -6,7 +6,7 @@ import { useSocialConnection } from "./useSocialConnection.js";
 import { DEFAULT_NEW_ENTRY_VISIBILITY, entryComposerPayload } from "../data/entryComposerModel.js";
 import { canShareWithAudience } from "../data/profileSettingsModel.js";
 
-export default function CommunityEntryComposer({ onPublished, initialPost, onOpenChange }) {
+export default function CommunityEntryComposer({ onPublished, initialPost, onOpenChange, onDraftChange }) {
   const { user } = useAuth();
   const uid = user?.uid;
   const online = useSocialConnection();
@@ -32,6 +32,13 @@ export default function CommunityEntryComposer({ onPublished, initialPost, onOpe
   }, [open, uid, online, retry]);
   const current = options?.uid === uid ? options : null;
   const busy = Boolean(uid && action?.uid === uid && action.busy);
+  const unsaved = Boolean(uid && (
+    title !== (initialPost?.content.title ?? "") || description !== (initialPost?.content.description ?? "") ||
+    achievementId !== (initialPost?.content.achievement?.id ?? "") || kind !== (initialPost?.kind ?? "experience") ||
+    visibility !== (initialPost?.visibility ?? DEFAULT_NEW_ENTRY_VISIBILITY)
+  ));
+  useEffect(() => { onDraftChange?.(unsaved); }, [onDraftChange, unsaved]);
+  useEffect(() => () => onDraftChange?.(false), [onDraftChange]);
   async function submit(event) {
     event.preventDefault();
     if (busy || !online || !uid) return;
@@ -45,7 +52,7 @@ export default function CommunityEntryComposer({ onPublished, initialPost, onOpe
       const saved = await socialRequest("entries.save", entryComposerPayload({ entryId, kind, visibility, title, description, achievementId }, initialPost), { signal: controller.signal });
       if (controller.signal.aborted) return;
       setAction({ uid, postId: saved.post.id, message: visibility === "private" ? "Příspěvek je uložený pouze pro tebe. Najdeš ho ve své sdílené galerii na profilu." : "Příspěvek je uložený pro vybraný okruh čtenářů." });
-      if (!initialPost) { setDescription(""); setTitle(""); setVisibility("public"); setAchievementId(""); setEntryId(crypto.randomUUID()); }
+      if (!initialPost) { setDescription(""); setTitle(""); setVisibility(DEFAULT_NEW_ENTRY_VISIBILITY); setKind("experience"); setAchievementId(""); setEntryId(crypto.randomUUID()); }
       onPublished();
     } catch (error) { if (!controller.signal.aborted) setAction({ uid, error: error.message }); }
   }

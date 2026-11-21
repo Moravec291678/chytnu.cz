@@ -1,6 +1,6 @@
 import { useOwnModeration } from "../features/community/useOwnModeration.js";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import CollaboratorBadge from "../features/admin/CollaboratorBadge.jsx";
 import { useAdminSession } from "../features/admin/useAdminSession.js";
 import { useAuth } from "../features/auth/context/authContextValue.js";
@@ -153,8 +153,8 @@ function CommunityCatchDetailPage() {
   }
 
   if (state.loading) return <Layout><main className="community-detail-page"><p className="loading-state" role="status">Načítám bezpečný náhled…</p></main></Layout>;
-  if (state.error) return <Layout><main className="community-detail-page"><section className="community-detail-state" role="alert"><h1>Úlovek se nepodařilo načíst</h1><p>{state.error}</p><Link to="/community">Zpět do komunity</Link></section></main></Layout>;
-  if (!record || !projection) return <Layout><main className="community-detail-page"><section className="community-detail-state"><h1>Veřejný náhled není dostupný</h1><p>Úlovek neexistuje nebo už není označený jako veřejný.</p><Link to="/community">Zpět do komunity</Link></section></main></Layout>;
+  if (state.error) return <Layout><main className="community-detail-page"><section className="community-detail-state" role="alert"><h1>Úlovek se nepodařilo načíst</h1><p>{state.error}</p></section></main></Layout>;
+  if (!record || !projection) return <Layout><main className="community-detail-page"><section className="community-detail-state"><h1>Veřejný náhled není dostupný</h1><p>Úlovek neexistuje nebo už není označený jako veřejný.</p></section></main></Layout>;
 
   const formattedDate = formatDateTime(projection.caughtAt);
   const storedReasonLabel = COMMUNITY_REPORT_REASONS.find((item) => item.id === storedReport?.reason)?.label;
@@ -163,7 +163,6 @@ function CommunityCatchDetailPage() {
     <Layout>
       <main className="community-detail-page">
         <header className="community-detail-header">
-          <Link to="/community">← Komunita</Link>
           <span>MÍSTNÍ VEŘEJNÝ NÁHLED</span>
           <div className="community-detail-title-row"><h1>{projection.species}</h1>{rarity && <b>{rarity.label}</b>}</div>
           <p>{profileName} <CollaboratorBadge access={collaboratorAccess} /></p>

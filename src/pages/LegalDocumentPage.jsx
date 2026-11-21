@@ -1,4 +1,6 @@
 import { Link } from "react-router-dom";
+import PageBackLink from "../shared/layout/PageBackLink.jsx";
+import { useAuth } from "../features/auth/context/authContextValue.js";
 import "./LegalDocumentPage.css";
 
 function Paragraphs({ paragraphs = [] }) {
@@ -10,9 +12,10 @@ function Items({ items = [] }) {
 }
 
 export default function LegalDocumentPage({ document }) {
+  const { user } = useAuth();
   return <main className="legal-page">
     <header className="legal-page-header">
-      <Link className="legal-back-link" to="/login">← Zpět do aplikace</Link>
+      <PageBackLink to={user ? "/settings" : "/login"} />
       <p className="legal-eyebrow">ChytnuCz</p>
       <h1>{document.title}</h1>
       <p className="legal-updated">Poslední aktualizace: {document.lastUpdated}</p>

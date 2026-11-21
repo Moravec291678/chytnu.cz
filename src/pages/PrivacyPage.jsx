@@ -1,3 +1,4 @@
+import { useSectionLink } from "../shared/layout/useSectionLink.js";
 import UserSupportPanel from "../features/admin/UserSupportPanel.jsx";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
@@ -46,6 +47,7 @@ export function ProfileSharingSettingsLink() {
 }
 
 export default function PrivacyPage() {
+  useSectionLink();
   const scope = useDataScope();
   const { state: catchState } = useCatches();
   const [settings, setSettings] = useState(DEFAULT_PRIVACY_SETTINGS);
@@ -131,7 +133,6 @@ export default function PrivacyPage() {
   return <Layout>
     <main className="privacy-page">
       <header className="privacy-header">
-        <Link className="privacy-back" to="/profile" aria-label="Zpět na profil">‹</Link>
         <div><h1>Soukromí a poloha</h1><p>Ty rozhoduješ, co zůstane jen u tebe.</p></div>
       </header>
 

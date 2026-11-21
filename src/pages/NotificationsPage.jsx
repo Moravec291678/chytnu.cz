@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useDataScope } from "../features/auth/context/dataScopeContextValue.js";
 import { useNotifications } from "../features/notifications/context/notificationContextValue.js";
 import { useOptionalSync } from "../features/sync/context/syncContextValue.js";
@@ -11,10 +11,11 @@ import { NOTIFICATION_PREFERENCES, NOTIFICATION_TYPE_PRESENTATION, SOCIAL_NOTIFI
 import Layout from "../shared/layout/Layout";
 import { getSyncDetailMessage } from "../shared/layout/syncStatusView.js";
 import { isFeatureEnabled } from "../shared/config/featureFlags.js";
+import { useSectionLink } from "../shared/layout/useSectionLink.js";
 import "./NotificationsPage.css";
 
 const TYPE_ICONS = Object.freeze(Object.fromEntries(Object.entries(NOTIFICATION_TYPE_PRESENTATION).map(([key, value]) => [key, value.icon])));
-const INBOX_RETURN_LABELS = new Map([["/", "Domů"], ["/community", "Komunita"], ["/settings", "Nastavení"]]);
+const INBOX_RETURN_PATHS = new Set(["/", "/community", "/settings"]);
 
 function formatNotificationDate(value) {
   const date = new Date(value);
@@ -33,11 +34,12 @@ function initialPushState() {
 }
 
 export default function NotificationsPage() {
+  useSectionLink();
   const scope = useDataScope();
   const navigate = useNavigate();
   const { state } = useLocation();
   const from = state?.from;
-  const backTo = INBOX_RETURN_LABELS.has(from) && (from !== "/community" || isFeatureEnabled("community")) ? from : "/profile";
+  const backTo = INBOX_RETURN_PATHS.has(from) && (from !== "/community" || isFeatureEnabled("community")) ? from : "/profile";
   const { notifications, unreadCount, loading, error: inboxError, markAsRead, markAllAsRead } = useNotifications();
   const sync = useOptionalSync();
   const [preferenceOverride, setPreferenceOverride] = useState({ scopeKey: null, value: null });
@@ -136,10 +138,9 @@ export default function NotificationsPage() {
   }
 
   return (
-    <Layout>
+    <Layout back={{ to: backTo }}>
       <section className="notifications-page">
         <header className="notifications-header">
-          <Link to={backTo}>← {INBOX_RETURN_LABELS.get(backTo) ?? "Profil"}</Link>
           <div className="notifications-heading-row">
             <div>
               <h1>Oznámení</h1>

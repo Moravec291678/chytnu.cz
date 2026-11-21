@@ -26,7 +26,7 @@ function TripDetailPage() {
   const closeDeleteDialog = useCallback(() => setConfirmingDelete(false), []);
   if (tripState.loading) return <Layout><div className="trip-form-page"><p className="loading-state" role="status">Načítám vycházku…</p></div></Layout>;
   if (tripState.error) return <Layout><div className="trip-form-page"><p className="trip-form-error" role="alert">{tripState.error}</p><button type="button" onClick={refreshTrips}>Zkusit znovu</button></div></Layout>;
-  if (!trip) return <Layout><div className="trip-form-page"><h1>Vycházka nenalezena</h1><p>Místní záznam se nenašel nebo úložiště není dostupné.</p><Link to="/trips">Zpět na vycházky</Link></div></Layout>;
+  if (!trip) return <Layout><div className="trip-form-page"><h1>Vycházka nenalezena</h1><p>Místní záznam se nenašel nebo úložiště není dostupné.</p></div></Layout>;
   const tripCatches = catchState.catches.filter((item) => item.tripId === trip.id).sort((a, b) => Date.parse(b.caughtAt) - Date.parse(a.caughtAt));
   const method = DEFAULT_METHODS.find((item) => item.key === trip.methodKey)?.label;
   const handleEnd = async () => {
@@ -46,7 +46,6 @@ function TripDetailPage() {
     catch (deleteError) { setError(deleteError.message || "Vycházku se nepodařilo smazat."); deletingRef.current = false; setDeleting(false); }
   };
   return <Layout><div className="trip-form-page">
-    <Link to="/trips" className="trip-back-link">← Vycházky</Link>
     <header><p className={trip.endedAt ? "trip-status-complete" : "trip-status-active"}>{trip.endedAt ? "Dokončená vycházka" : "Aktivní vycházka"}</p><h1>{trip.title}</h1><p>{trip.locationName || "Lokalita neuvedena"}{method ? ` · ${method}` : ""}</p></header>
     <section className="trip-detail-summary"><div><span>Začátek</span><strong>{new Date(trip.startedAt).toLocaleString("cs-CZ")}</strong></div><div><span>Konec</span><strong>{trip.endedAt ? new Date(trip.endedAt).toLocaleString("cs-CZ") : "Vycházka probíhá"}</strong></div><div><span>Trvání</span><strong>{formatTripDuration(getTripDurationMs(trip))}</strong></div><div><span>Úlovky</span><strong>{catchState.loading || catchState.error ? "—" : tripCatches.length}</strong></div></section>
     {error && <p role="alert" className="trip-form-error">{error}</p>}

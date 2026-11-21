@@ -1,3 +1,4 @@
+import { useRouteMemory } from "../shared/layout/navigationMemory.js";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import WaterSelector from "../features/waters/components/WaterSelector.jsx";
@@ -41,8 +42,8 @@ function WatersPage() {
   const [error, setError] = useState("");
   const [actionError, setActionError] = useState("");
   const [favoriteSavingId, setFavoriteSavingId] = useState(null);
-  const [search, setSearch] = useState("");
-  const [tab, setTab] = useState("favorites");
+  const [search, setSearch] = useRouteMemory("search", "");
+  const [tab, setTab] = useRouteMemory("tab", "favorites");
   const [position, setPosition] = useState(null);
   const [positionStatus, setPositionStatus] = useState("idle");
   const [positionError, setPositionError] = useState("");

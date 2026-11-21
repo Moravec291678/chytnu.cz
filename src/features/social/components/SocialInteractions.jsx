@@ -43,13 +43,14 @@ export function SocialInteractionsPanel({ data, uid, online = true, loading, err
   </section>;
 }
 
-function SocialInteractionsSession({ postId, revision, uid, onDraftChange }) {
+function SocialInteractionsSession({ postId, revision, uid, onDraftChange, reportOpen }) {
   const online = useSocialConnection();
-  const [visible, setVisible] = useState(typeof IntersectionObserver === "undefined");
+  const [visible, setVisible] = useState(reportOpen || typeof IntersectionObserver === "undefined");
   const [result, setResult] = useState(null), [refresh, setRefresh] = useState(0);
   const [action, setAction] = useState(null);
   const [commentsOpen, setCommentsOpen] = useState(false);
-  const [text, setText] = useState(""), [editing, setEditing] = useState(null), [report, setReport] = useState(null);
+  const [text, setText] = useState(""), [editing, setEditing] = useState(null);
+  const [report, setReport] = useState(() => reportOpen && uid ? { commentId: null, reason: "", details: "" } : null);
   const [commentId, setCommentId] = useState(() => crypto.randomUUID());
   const ref = useRef(null), loadRef = useRef(null), actionRef = useRef(null), reactionOperationRef = useRef(null);
   const busy = Boolean(action?.busy);
@@ -76,7 +77,9 @@ function SocialInteractionsSession({ postId, revision, uid, onDraftChange }) {
     window.addEventListener("offline", disconnect); window.addEventListener("online", reload);
     return () => { if (timer) clearInterval(timer); window.removeEventListener("focus", revalidate); document.removeEventListener("visibilitychange", revalidate); window.removeEventListener("offline", disconnect); window.removeEventListener("online", reload); };
   }, [reload, visible, uid, online]);
-  useEffect(() => { onDraftChange?.(Boolean(text.trim() || editing || report)); }, [text, editing, report, onDraftChange]);
+  useEffect(() => {
+    onDraftChange?.(Boolean(text.trim() || report?.reason || report?.details.trim()));
+  }, [text, report, onDraftChange]);
   useEffect(() => () => onDraftChange?.(false), [onDraftChange]);
   async function mutate(name, payload, success) {
     if (!uid || !online || busy || !current || current.error) return;
@@ -110,8 +113,8 @@ function SocialInteractionsSession({ postId, revision, uid, onDraftChange }) {
   return <div ref={ref}><SocialInteractionsPanel data={current && !current.error ? current : null} uid={uid} online={online} loading={Boolean(uid && visible && !current)} error={current?.error} busy={busy} actionError={action?.error} message={action?.message} text={text} editing={editing} report={report} commentsOpen={commentsOpen} onCommentsToggle={setCommentsOpen} onReaction={react} onText={setText} onSave={save} onEdit={comment => { setEditing(comment); setText(comment.text); }} onCancelEdit={() => { setEditing(null); setText(""); }} onDelete={comment => mutate("comments.delete", { commentId: comment.id, expectedRevision: comment.revision }, () => { if (editing?.id === comment.id) { setEditing(null); setText(""); } })} onMore={more} onReload={reload} onReport={id => setReport({ commentId: id, reason: "", details: "" })} onReportChange={setReport} onReportClose={() => setReport(null)} onReportSubmit={event => { event.preventDefault(); if (report?.reason) mutate("reports.create", { ...(report.commentId ? { commentId: report.commentId } : {}), reason: report.reason, ...(report.details.trim() ? { details: report.details.trim() } : {}) }, () => setReport(null)); }} /></div>;
 }
 
-export default function SocialInteractions({ post, onDraftChange }) {
+export default function SocialInteractions({ post, onDraftChange, reportOpen = false }) {
   const { user } = useAuth();
   const uid = user?.uid;
-  return <SocialInteractionsSession key={`${uid ?? "anonymous"}:${post.id}:${post.revision}`} postId={post.id} revision={post.revision} uid={uid} onDraftChange={onDraftChange} />;
+  return <SocialInteractionsSession key={`${uid ?? "anonymous"}:${post.id}:${post.revision}:${reportOpen}`} postId={post.id} revision={post.revision} uid={uid} onDraftChange={onDraftChange} reportOpen={reportOpen} />;
 }

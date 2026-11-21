@@ -1,4 +1,4 @@
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import Layout from "../shared/layout/Layout";
 import { useCatches } from "../features/catches/context/useCatches";
 import { MASTERY_LEVELS } from "../features/progression/data/progression";
@@ -26,14 +26,13 @@ export default function SpeciesMasteryPage() {
     return <Layout><main className="progression-page"><p className="progression-item" role="alert">{state.error || ledger.error}</p></main></Layout>;
   }
   if (!species) {
-    return <Layout><main className="progression-page"><h1>Druh nebyl nalezen</h1><Link to="/album">Zpět do alba</Link></main></Layout>;
+    return <Layout><main className="progression-page"><h1>Druh nebyl nalezen</h1></main></Layout>;
   }
 
   return (
     <Layout>
       <main className="progression-page species-mastery-page">
         <header>
-          <Link className="progression-back" to={`/species/${speciesKey}`}>← Detail druhu</Link>
           <h1>{species.label}</h1>
           <p>Mistrovství {currentLevel} / 5 · {catchCount} {catchCount === 1 ? "úlovek v historii" : "úlovků v historii"}</p>
         </header>

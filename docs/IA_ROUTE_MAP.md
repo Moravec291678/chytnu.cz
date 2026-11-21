@@ -2,7 +2,7 @@
 
 Audit baseline: 2026-11-20. This map reflects `src/app/App.jsx` and navigation links in the current source. Feature-flagged routes are explicitly marked; legacy URLs remain supported.
 
-Novější produktový kontrakt a aktuální vlastnictví všech tras jsou v [mapě finálního balíku 00–23](CHYTNU_FINAL_ROUTE_MAP.md).
+Novější produktový kontrakt a aktuální vlastnictví všech tras jsou v [mapě finálního balíku 00–23](CHYTNU_FINAL_ROUTE_MAP.md). Pro aktuální profilové vstupy, návraty, podmínky a offline chování platí [inventura Promptu 01B](CHYTNU_FEATURE_DISCOVERABILITY.md). Níže je historický stav auditu.
 
 ## Primary navigation
 

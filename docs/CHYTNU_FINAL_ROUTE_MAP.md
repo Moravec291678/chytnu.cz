@@ -76,3 +76,5 @@ Výchozí stav 21. listopadu 2026, vývojový SHA `dcdc595883ee0563694326d5245d4
 - Běžný klient má Domů, Deník, přidání úlovku, Komunitu a Profil. Soukromý pilot uzavírá sociální trasy i API a externí AI. Privilegované akce zůstávají chráněné serverem.
 - Místní záloha a obnova mají jedinou obrazovku v Profilu. Cloudový export zůstává v Nastavení. Detail z oznámení, mapy nebo feedu podléhá stejné autorizaci jako detail z hlavní navigace.
 - Soukromé revíry, mapa a vycházky zvýrazňují Deník. Chat revíru, povolené konverzace a veřejné profily zvýrazňují Komunitu. Druhové album, postup, soukromí a nastavení zvýrazňují Profil.
+- Profil zpřístupňuje stejné kanonické stránky prostřednictvím šesti rozbalovacích skupin. Přehled všech vstupů, podmínek, výchozích návratů a kontextových akcí je v [inventuře dohledatelnosti](CHYTNU_FEATURE_DISCOVERABILITY.md).
+- Sdílený návrat používá skutečnou historii aktuální relace nebo výchozí návrat z inventury. Starý odkaz na hlášení vede na formulář u příslušného příspěvku a zachová bezpečnostní kontrolu serveru.

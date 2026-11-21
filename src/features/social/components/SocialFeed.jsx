@@ -16,7 +16,7 @@ function displayPostDate(value) {
   return Number.isFinite(date.getTime()) ? date.toLocaleDateString("cs-CZ") : null;
 }
 
-export function SocialPostCard({ post, refreshKey, compact = false, detail = false }) {
+export function SocialPostCard({ post, refreshKey, compact = false, detail = false, reportOpen = false, onDraftChange }) {
   const { content, author } = post;
   const title = content.title || content.species || "Příspěvek";
   const caughtDate = displayPostDate(content.caughtAt);
@@ -34,7 +34,7 @@ export function SocialPostCard({ post, refreshKey, compact = false, detail = fal
       {!compact && <>{content.description && <p className="online-post-description">{content.description}</p>}{(content.method || content.waterName) && <p className="online-post-context">{[content.method, content.waterName].filter(Boolean).join(" · ")}</p>}</>}
       {!detail && !compact && <Link className="online-post-detail" to={path}>Detail příspěvku <span aria-hidden="true">→</span></Link>}
     </div>
-    {detail && <SocialInteractions post={post} />}
+    {detail && <SocialInteractions post={post} reportOpen={reportOpen} onDraftChange={onDraftChange} />}
     {detail && <footer className="online-post-footer"><Link to={`/u/${encodeURIComponent(author.uid)}`}>Profil a sdílená galerie rybáře →</Link></footer>}
   </article>;
 }

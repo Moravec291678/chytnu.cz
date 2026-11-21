@@ -40,6 +40,10 @@ import CollaboratorBadge from "../features/admin/CollaboratorBadge.jsx";
 import { collaboratorIdentity } from "../features/admin/collaboratorIdentity.js";
 import { useAdminSession } from "../features/admin/useAdminSession.js";
 import ProfileAdminLink from "../features/admin/ProfileAdminLink.jsx";
+import { canOpenAdmin } from "../features/admin/adminClient.js";
+import { useRouteMemory } from "../shared/layout/navigationMemory.js";
+import { useSectionLink } from "../shared/layout/useSectionLink.js";
+import PageBackLink from "../shared/layout/PageBackLink.jsx";
 
 function formatCount(count, one, few, many) {
   if (count === 1) return `${count} ${one}`;
@@ -49,7 +53,8 @@ function formatCount(count, one, few, many) {
 
 function ProfileSectionGroup({ id, icon, title, description, children }) {
   const panelId = `${id}-links`;
-  return <details className="profile-section-group" id={id}>
+  const [open, setOpen] = useRouteMemory(id, false);
+  return <details className="profile-section-group" id={id} open={open} onToggle={event => setOpen(event.currentTarget.open)}>
     <summary aria-controls={panelId}>
       <span className="profile-section-icon" aria-hidden="true">{icon}</span>
       <span className="profile-section-copy"><strong>{title}</strong><small>{description}</small></span>
@@ -73,7 +78,7 @@ function ProfilePage() {
   const location = useLocation();
   const fileInput = useRef(null);
   const trophyEditorRef = useRef(null);
-  const dataToolsRef = useRef(null);
+  useSectionLink();
   const [exporting, setExporting] = useState(false);
   const [reading, setReading] = useState(false);
   const [restoring, setRestoring] = useState(false);
@@ -121,14 +126,6 @@ function ProfilePage() {
     editor.open = true;
     requestAnimationFrame(() => editor.scrollIntoView({ block: "center", behavior: "smooth" }));
   }, [location.hash, trophyCatches.length]);
-  useEffect(() => {
-    if (location.hash !== "#local-backup") return;
-    const tools = dataToolsRef.current;
-    if (!tools) return;
-    tools.open = true;
-    const heading = tools.querySelector("#local-backup");
-    heading?.focus();
-  }, [location.hash, location.key]);
   const trophySelectionLoaded = dataScope.status === "ready";
   const savedTrophyIds = trophySelection.scopeKey === dataScope.scopeKey
     ? trophySelection.ids
@@ -405,18 +402,66 @@ function ProfilePage() {
           <ProfileSectionLink to="/achievements" title="Úspěchy" description="Odemčené i další milníky" />
           <ProfileSectionLink to="/challenges" title="Úkoly a výzvy" description="Denní, týdenní a sezónní cíle" />
           <ProfileSectionLink to="/streak" title="Týdenní série" description="Aktivita, odměny a zmrazení série" />
+          <ProfileSectionLink to="/album" title="Druhové album" description="Druhy, úlovky a dostupné mistrovství" />
+          <ProfileSectionLink to="/profile#profile-trophy-title" title="Trofejní úlovky" description="Trofeje ve tvé vitríně" />
+          <ProfileSectionLink to="/stats#personal-records" title="Osobní rekordy" description="Měření a nejlepší úlovky" />
         </ProfileSectionGroup>
 
-        {isFeatureEnabled("supporter") && <ProfileSectionLink to="/supporter" title="Supporter" description="Podpora projektu a výhody" />}
-
-        <ProfileSectionGroup id="profile-settings" icon="⚙️" title="Nastavení" description="Předvolby, soukromí, oznámení a data">
+        <ProfileSectionGroup id="profile-journal" icon="📖" title="Deník a moje úlovky" description="Úlovky, galerie, vycházky a přehledy">
+          <ProfileSectionLink to="/journal" title="Všechny úlovky" description="Soukromý deník s filtry" />
+          <ProfileSectionLink to="/gallery" title="Galerie" description="Fotografie z deníku" />
+          <ProfileSectionLink to="/journal/calendar" title="Kalendář" description="Rybářská aktivita podle data" />
+          <ProfileSectionLink to="/stats" title="Statistiky" description="Souhrn úlovků a vycházek" />
+          <ProfileSectionLink to="/trips" title="Vycházky" description="Přehled a výchozí údaje výprav" />
+          <ProfileSectionLink to="/season-story" title="Příběh sezóny" description="Výběr zážitků a dobrovolný příběh" />
+          <ProfileSectionLink to="/year-summary" title="Roční souhrn" description="Rok v úlovcích a vycházkách" />
+          <ProfileSectionLink to="/insights" title="Osobní přehledy a tipy" description="Poznatky z vlastního deníku" />
+        </ProfileSectionGroup>
+        <ProfileSectionGroup id="profile-waters" icon="🗺️" title="Revíry a mapy" description="Uložené revíry, katalog a soukromá místa">
+          <ProfileSectionLink to="/waters" title="Moje revíry" description="Uložené a oblíbené revíry" />
+          <ProfileSectionLink to="/waters/catalogue" title="Katalog revírů ČRS/RIS" description="Vyhledání revíru a jeho pravidel" />
+          <ProfileSectionLink to="/journal/map" title="Soukromá mapa" description="Vlastní úlovky s uloženou polohou" />
+          <ProfileSectionLink to="/hotspots" title="Přehled míst úlovků" description="Soukromé přehledy podle míst a revírů" />
+        </ProfileSectionGroup>
+        <ProfileSectionGroup id="profile-community" icon="👥" title={isFeatureEnabled("community") ? "Komunita a přátelé" : "Oznámení"} description={isFeatureEnabled("community") ? "Sdílení, rybáři a žádosti" : "Události z deníku"}>
+          {isFeatureEnabled("community") && <ProfileSectionLink to="/community" title="Komunitní přehled" description="Sdílené příspěvky" />}
+          {isFeatureEnabled("community") && isFeatureEnabled("userDiscovery") && <ProfileSectionLink to="/community#fisher-search" title="Najít rybáře" description="Vyhledávání podle veřejných údajů" />}
+          {isFeatureEnabled("friends") && <>
+            <ProfileSectionLink to="/friends" title="Přátelé" description="Seznam přátel" />
+            {auth.user && <ProfileSectionLink to="/friends?tab=incoming" title="Příchozí žádosti" description="Pozvání k přátelství" />}
+          </>}
+          <ProfileSectionLink to="/notifications" title="Oznámení" description="Přehled událostí" />
+          {isFeatureEnabled("publicProfiles") && auth.user && <>
+            <ProfileSectionLink to={`/u/${encodeURIComponent(auth.user.uid)}`} title="Můj veřejný rybářský profil" description="Otevřít vlastní rybářskou identitu" />
+            <ProfileSectionLink to="/profile/social" title="Správa veřejného profilu" description="Dohledatelnost, fotografie a sdílené sekce" />
+          </>}
+          {isFeatureEnabled("directMessages") && auth.user && <ProfileSectionLink to="/messages" title="Soukromé zprávy" />}
+          {isFeatureEnabled("nearby") && <ProfileSectionLink to="/nearby" title="Rybáři v okolí" />}
+          {isFeatureEnabled("crew") && auth.user && <ProfileSectionLink to="/crew" title="Rybářské skupiny Crew" />}
+          {isFeatureEnabled("waterChat") && auth.user && <ProfileSectionLink to="/waters" title="Chat u revíru" description="Otevři detail uloženého revíru" />}
+        </ProfileSectionGroup>
+        <ProfileSectionGroup id="profile-settings" icon="⚙️" title="Nastavení a soukromí" description="Předvolby, soukromí, účet a data">
           <ProfileSectionLink to="/settings" title="Nastavení aplikace" description="Zobrazení, místní funkce, export a účet" />
           <ProfileSectionLink to="/privacy" title="Soukromí a viditelnost" description="GPS, deník, sdílení a osobní údaje" />
-          {isFeatureEnabled("publicProfiles") && <ProfileSectionLink to="/profile/social" title="Veřejný rybářský profil" description="Jméno, fotografie a dohledatelnost" />}
+          <ProfileSectionLink to="/privacy#privacy-visibility-title" title="Nastavení sdílení" description="Viditelnost úlovků a výchozí předvolby" />
+          <ProfileSectionLink to="/profile#account-title" title="Správa účtu" description={auth.user ? "Přihlášení, ověření a odhlášení" : "Přihlášení a místní profil"} />
+          <ProfileSectionLink to="/notifications#preferences" title="Nastavení oznámení" description="Události a předvolby upozornění" />
+          {auth.user && <ProfileSectionLink to="/profile#sync-status" title="Synchronizace" description="Stav, fronta a ruční synchronizace" />}
+          {auth.user && <ProfileSectionLink to="/settings#settings-export-title" title="Cloudový export" description="Kopie dat účtu" />}
+          <ProfileSectionLink to="/profile#local-backup" title="Místní záloha a obnova" description="Stáhnout nebo obnovit data zařízení" />
+          <ProfileSectionLink to="/terms" title="Podmínky používání" />
+          <ProfileSectionLink to="/privacy-policy" title="Zásady ochrany osobních údajů" />
+          {auth.user && <ProfileSectionLink to="/settings#settings-account-delete-title" title="Smazání účtu" description="Podmínky a potvrzení výmazu" />}
+        </ProfileSectionGroup>
+        <ProfileSectionGroup id="profile-support" icon="🛟" title="Správa a podpora" description="Zpětná vazba a oprávněná správa">
+          <ProfileSectionLink to="/settings#settings-feedback-title" title="Nahlásit problém" description="Kontakt a zpětná vazba" />
+          {isFeatureEnabled("supporter") && <ProfileSectionLink to="/supporter" title="Podpora projektu" />}
+          <ProfileAdminLink access={adminAccess} />
+          {canOpenAdmin(adminAccess) && (adminAccess.role === "OWNER" || adminAccess.permissions?.includes("moderation")) &&
+            <ProfileSectionLink to="/admin/reports" title="Moderace" description="Přehled hlášení komunity" />}
         </ProfileSectionGroup>
       </nav>
 
-      <ProfileAdminLink access={adminAccess} />
 
       <section className="profile-showcase" aria-labelledby="profile-showcase-title">
         <div className="profile-showcase-heading">
@@ -457,7 +502,7 @@ function ProfilePage() {
         </div>
       </section>
 
-      <details className="profile-data-tools" ref={dataToolsRef}>
+      <details className="profile-data-tools">
         <summary>
           <span className="profile-section-icon" aria-hidden="true">💾</span>
           <span className="profile-section-copy"><strong>Účet a místní data</strong><small>Přihlášení, synchronizace, záloha a obnova</small></span>
@@ -466,6 +511,7 @@ function ProfilePage() {
         <div className="profile-data-tools-content">
       <section className="profile-panel" aria-labelledby="local-backup">
         <h2 id="local-backup" tabIndex={-1}>Místní záloha a obnova</h2>
+        {location.hash === "#local-backup" && <PageBackLink to="/profile" allowSamePage />}
         <p>Úlovky, vycházky a jejich fotografie jsou uložené v tomto prohlížeči. Export vytvoří kopii pro bezpečné uložení nebo budoucí obnovu.</p>
         <p className="profile-privacy-note">Soubor může obsahovat přesné lokality, poznámky a fotografie. Ulož ho na bezpečné místo.</p>
         <button className="profile-backup-button" type="button" onClick={exportBackup} disabled={exporting || reading || restoring}>
@@ -511,6 +557,7 @@ function ProfilePage() {
 
       <section className="profile-panel profile-account" aria-labelledby="account-title">
         <h2 id="account-title">Uživatelský účet</h2>
+        {["#account-title", "#sync-status"].includes(location.hash) && <PageBackLink to="/profile" allowSamePage />}
         <p>{accountEnvironment} Přihlášení nemění místní úlovky ani vycházky.</p>
         {accountDataError && <p className="profile-error" role="alert">{accountDataError}</p>}
         {auth.status === "loading" && <p className="loading-state" role="status">Ověřuji stav účtu…</p>}
@@ -586,7 +633,7 @@ function ProfilePage() {
         </form>}
         {auth.error && auth.status === "ready" && <p className="profile-error" role="alert">{auth.error}</p>}
         {authMessage && <p className="profile-feedback" role="status">{authMessage}</p>}
-        {auth.user && <div>
+        {auth.user && <div id="sync-status">
           <button className="profile-account-secondary" type="button" disabled={sync.status === "syncing"} onClick={() => runManualSync(sync)}>
             {sync.status === "syncing" ? "Synchronizuji…" : "Synchronizovat"}
           </button>

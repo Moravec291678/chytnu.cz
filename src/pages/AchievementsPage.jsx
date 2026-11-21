@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
 import Layout from "../shared/layout/Layout";
 import { useCatches } from "../features/catches/context/useCatches";
 import { useTrips } from "../features/trips/context/useTrips";
@@ -26,7 +25,6 @@ export default function AchievementsPage() {
     <Layout>
       <main className="progression-page achievements-page">
         <header>
-          <Link className="progression-back" to="/profile">← Profil</Link>
           <h1>Úspěchy</h1>
           <p>{completedVisible} z {visibleAchievements.length} splněno</p>
         </header>

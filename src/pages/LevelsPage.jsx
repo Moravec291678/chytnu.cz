@@ -43,7 +43,6 @@ export default function LevelsPage() {
     <Layout>
       <main className="progression-page levels-page">
         <header>
-          <Link className="progression-back" to="/profile">← Profil</Link>
           <h1>Úrovně a XP</h1>
           <p>Jak se rozvíjíš</p>
         </header>

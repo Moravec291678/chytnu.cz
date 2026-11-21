@@ -129,18 +129,16 @@ function WaterDetailPage() {
 
   if (error) {
     return <Layout><div className="water-detail-page"><section className="water-detail-empty" role="alert">
-      <h1>Revír se nepodařilo načíst</h1><p>{error}</p><Link to="/waters">Zpět na seznam revírů</Link>
+      <h1>Revír se nepodařilo načíst</h1><p>{error}</p>
     </section></div></Layout>;
   }
 
   if (!water) {
     return <Layout><div className="water-detail-page">
-      <header className="water-detail-actions"><Link to="/waters" aria-label="Zpět na seznam revírů">←</Link></header>
       <section className="water-detail-empty" aria-labelledby="water-detail-title">
         <p className="water-detail-kicker">REVÍR NENALEZEN</p>
         <h1 id="water-detail-title">Požadovaný revír neexistuje</h1>
         <p>Záznam revíru mohl být smazán nebo máš otevřený jiný profil.</p>
-        <Link to="/waters">Zpět na seznam revírů</Link>
       </section>
     </div></Layout>;
   }
@@ -152,9 +150,6 @@ function WaterDetailPage() {
   return <Layout>
     <div className="water-detail-page">
       <header className="water-detail-actions">
-        <Link to="/waters" aria-label="Zpět na seznam revírů" className="water-detail-icon-button">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
-        </Link>
         <button
           type="button"
           className={`water-detail-icon-button${water.isFavorite ? " is-favorite" : ""}`}

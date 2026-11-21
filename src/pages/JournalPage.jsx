@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useRouteMemory } from "../shared/layout/navigationMemory.js";
+import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import Layout from "../shared/layout/Layout";
 import { EmptyState, ErrorState, LoadingSkeleton, NoResultsState } from "../shared/components/UIStates.jsx";
@@ -25,8 +26,8 @@ function pluralize(count, forms) {
 function JournalPage() {
   const { state, refresh } = useCatches();
   const { state: tripState } = useTrips();
-  const [filters, setFilters] = useState(EMPTY_FILTERS);
-  const [filtersExpanded, setFiltersExpanded] = useState(false);
+  const [filters, setFilters] = useRouteMemory("filters", EMPTY_FILTERS);
+  const [filtersExpanded, setFiltersExpanded] = useRouteMemory("filtersExpanded", false);
   const species = useMemo(() => [...new Map(state.catches.filter(item => item.speciesKey || item.captureMode !== "quick").map((item) => [item.speciesKey, { key: item.speciesKey, label: item.species }])).values()]
     .sort((a, b) => normalizeText(a.label).localeCompare(normalizeText(b.label), "cs")), [state.catches]);
   const results = useMemo(() => filterAndSortCatches(state.catches, filters, tripState.trips), [state.catches, filters, tripState.trips]);
@@ -51,6 +52,7 @@ function JournalPage() {
         <summary>Mapa, příběhy a přehledy</summary>
         <nav aria-label="Mapa, příběhy a přehledy deníku">
           <Link to="/journal/map">Soukromá mapa</Link>
+          <Link to="/hotspots">Přehled míst úlovků</Link>
           <Link to="/insights">Tipy a rady z deníku</Link>
           <Link to="/season-story">Příběh sezóny</Link>
           <Link to="/year-summary">Roční souhrn</Link>

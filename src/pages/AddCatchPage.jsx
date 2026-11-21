@@ -93,6 +93,7 @@ function AddCatchPage() {
   const privacyDefaultsAppliedScopeRef = useRef(null);
   const [privacyDefaultsScopeKey, setPrivacyDefaultsScopeKey] = useState("");
   const draftRestoredScopeRef = useRef(null);
+  const [editBaseline, setEditBaseline] = useState(null);
   const tripManuallyEditedRef = useRef(false);
   const [draftReadyScopeKey, setDraftReadyScopeKey] = useState("");
   const [draftError, setDraftError] = useState("");
@@ -407,6 +408,7 @@ function AddCatchPage() {
         if (value !== "" && value !== null && value !== undefined && values.conditionSources?.[field] !== "auto") manualConditionFieldsRef.current.add(field);
       }
       automaticConditionsRef.current = Object.fromEntries(Object.entries(values.conditions ?? {}).filter(([field, value]) => value !== "" && value !== null && value !== undefined && values.conditionSources?.[field] === "auto"));
+      setEditBaseline(values);
       setCatchData(values);
       gpsManuallyEditedRef.current = ["manual", "manual-map", "live-gps"].includes(values.gpsSource);
       dateTimeManuallyEditedRef.current = values.catchDateTimeSource === "manual";
@@ -719,14 +721,17 @@ function AddCatchPage() {
   };
 
   if (id && !state.loading && !existingCatch) {
-    return <Layout><section className="add-catch-section"><h1>Úlovek nenalezen</h1><p>Tento úlovek mohl být smazán nebo není v místním deníku dostupný.</p><Link to="/journal">Zpět do deníku</Link></section></Layout>;
+    return <Layout back={{ to: "/journal", useHistory: false }}><section className="add-catch-section"><h1>Úlovek nenalezen</h1><p>Tento úlovek mohl být smazán nebo není v místním deníku dostupný.</p></section></Layout>;
   }
 
   return (
-    <Layout>
+    <Layout back={{
+      unsaved: Boolean(id && editBaseline && catchData !== editBaseline),
+      disabled: saving || photoProcessing,
+      beforeLeave: !id && draftReady ? () => persistDraft() : undefined,
+    }}>
       <div className="add-catch-page">
         <header className="add-catch-header">
-          <Link className="add-catch-back" to={id ? `/catch/${id}` : "/journal"} aria-label={id ? "Zpět na detail úlovku" : "Zpět do deníku"}>←</Link>
           <div>
             <h1>{id ? "Upravit úlovek" : "Nový úlovek"}</h1>
             <p>Rychlý zápis, nebo podrobnosti podle potřeby.</p>

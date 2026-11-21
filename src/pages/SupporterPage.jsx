@@ -1,4 +1,3 @@
-import { Link } from "react-router-dom";
 import Layout from "../shared/layout/Layout.jsx";
 import { getEntitlementState, hasVerifiedEntitlement } from "../features/entitlements/data/entitlementAccess.js";
 import { FREE_FEATURES, SUPPORTER_BENEFITS, SUPPORTER_COPY, SUPPORTER_COSMETICS } from "../product/config/supporter.js";
@@ -15,7 +14,6 @@ export default function SupporterPage() {
     <Layout>
       <main className="supporter-page">
         <header className="supporter-header">
-          <Link to="/profile" aria-label="Zpět na profil">← Profil</Link>
           <h1>Supporter</h1>
           <p>{SUPPORTER_COPY.plan}</p>
         </header>

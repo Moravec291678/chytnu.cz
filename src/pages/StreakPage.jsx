@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
 import Layout from "../shared/layout/Layout";
 import { useCatches } from "../features/catches/context/useCatches";
 import { useProgression } from "../features/progression/context/progressionContextValue.js";
@@ -44,7 +43,6 @@ export default function StreakPage() {
     <Layout>
       <main className="progression-page streak-page">
         <header>
-          <Link className="progression-back" to="/profile">← Profil</Link>
           <h1>Série</h1>
           <p>Alespoň 1 záznam za 7 dní.</p>
         </header>

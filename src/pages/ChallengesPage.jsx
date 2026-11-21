@@ -1,4 +1,3 @@
-import { Link } from "react-router-dom";
 import Layout from "../shared/layout/Layout";
 import { useCatches } from "../features/catches/context/useCatches";
 import { useTrips } from "../features/trips/context/useTrips";
@@ -59,7 +58,6 @@ export default function ChallengesPage() {
     <Layout>
       <main className="progression-page challenges-page">
         <header>
-          <Link className="progression-back" to="/">← Domů</Link>
           <h1>Výzvy</h1>
           <p>Denní · týdenní · sezónní</p>
         </header>

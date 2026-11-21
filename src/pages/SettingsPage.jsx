@@ -1,3 +1,4 @@
+import { useSectionLink } from "../shared/layout/useSectionLink.js";
 import PhotoUploadTracePanel from "./PhotoUploadTracePanel.jsx";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -24,6 +25,7 @@ import { AI_FEATURES } from "../features/ai/aiPolicy.js";
 const FEEDBACK_URL = "https://github.com/Moravec291678/chytnu.cz/issues/new";
 
 export default function SettingsPage() {
+  useSectionLink();
   const navigate = useNavigate();
   const scope = useDataScope();
   const auth = useAuth();
@@ -182,7 +184,6 @@ export default function SettingsPage() {
   return <Layout>
     <main className="settings-page">
       <header className="settings-header">
-        <Link to="/profile">← Profil</Link>
         <h1>Nastavení</h1>
         <p>Předvolby se ukládají pro právě aktivní profil.</p>
       </header>

@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { useContext, useEffect, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useOptionalSync } from "../../features/sync/context/syncContextValue.js";
 import SyncStatus from "./SyncStatus.js";
 import PwaUpdateNotice from "./PwaUpdateNotice.jsx";
@@ -8,6 +8,10 @@ import "./SyncStatus.css";
 import { SYNC_STATUS_COMPACT_DELAY_MS } from "./syncStatusView.js";
 import { navigationSection } from "./navigationSection.js";
 import { isFeatureEnabled } from "../config/featureFlags.js";
+import PageBackLink from "./PageBackLink.jsx";
+import { pageBackFallback } from "./pageNavigation.js";
+import { NavigationMemory } from "./navigationMemory.js";
+import LeaveDraftDialog from "./LeaveDraftDialog.jsx";
 
 function NavIcon({ name }) {
   const common = {
@@ -23,8 +27,41 @@ function NavIcon({ name }) {
   return <svg viewBox="0 0 24 24" {...common}><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></svg>;
 }
 
-function Layout({ children }) {
-  const { pathname } = useLocation();
+function Layout({ children, back }) {
+  const { pathname, key, hash } = useLocation();
+  const memory = useContext(NavigationMemory);
+  const navigate = useNavigate();
+  const [exitTarget, setExitTarget] = useState(null);
+  const unsaved = Boolean(back?.unsaved);
+  useEffect(() => {
+    if (!unsaved) return undefined;
+    const warn = event => { event.preventDefault(); event.returnValue = ""; };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [unsaved]);
+  useEffect(() => {
+    if (!memory?.needsRestore()) return undefined;
+    let frame;
+    let attempts = 0;
+    const restore = () => {
+      if (document.querySelector(".layout-main > .loading-state") && attempts++ < 30) {
+        frame = requestAnimationFrame(restore);
+        return;
+      }
+      const top = memory.restoreScroll(key);
+      if (!hash && top !== null) window.scrollTo({ top, behavior: "instant" });
+    };
+    frame = requestAnimationFrame(restore);
+    return () => cancelAnimationFrame(frame);
+  }, [hash, key, memory]);
+  const backTo = back?.to ?? pageBackFallback(pathname);
+  const protectNav = event => {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+    const link = event.target.closest("a[href]");
+    if (!link || (!unsaved && !back?.disabled)) return;
+    event.preventDefault();
+    if (!back?.disabled) setExitTarget(link.getAttribute("href"));
+  };
   const adminRoute = pathname === "/admin" || pathname.startsWith("/admin/");
   const sync = useOptionalSync();
   const [isOnline, setIsOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine !== false);
@@ -55,8 +92,11 @@ function Layout({ children }) {
         <div className={adminRoute ? "layout layout-admin" : pathname === "/gallery" ? "layout layout-gallery" : "layout"}>
       <SyncStatus sync={sync} isOnline={isOnline} compact={sync?.status === "syncing" && sync?.showSyncStatus && compactSyncId === syncPresentationId} />
       <PwaUpdateNotice syncing={sync?.status === "syncing"} />
-      <main className="layout-main">{children}</main>
-      <nav className="bottom-nav" aria-label="Hlavní navigace">
+      <main className="layout-main">
+        {backTo && <div className="layout-back"><PageBackLink {...back} to={backTo} /></div>}
+        {children}
+      </main>
+      <nav className="bottom-nav" aria-label="Hlavní navigace" onClickCapture={protectNav}>
         <Link to="/" className={itemClass(homeActive)} aria-current={homeActive ? "page" : undefined}>
           <span className="nav-icon" aria-hidden="true"><NavIcon name="home" /></span>
           <span className="nav-label">Domů</span>
@@ -77,6 +117,10 @@ function Layout({ children }) {
           <span className="nav-label">Profil</span>
         </Link>
       </nav>
+      {exitTarget && <LeaveDraftDialog onCancel={() => setExitTarget(null)} onConfirm={() => {
+        setExitTarget(null);
+        navigate(exitTarget);
+      }} />}
     </div>
   );
 }

@@ -14,6 +14,7 @@ import { configurePhotoCloudProvider } from "./features/catches/data/photoCloudP
 import { cloudinaryPhotoProvider } from "./features/catches/data/cloudinaryPhotoProvider.js";
 import { NotificationProvider } from "./features/notifications/context/NotificationProvider.jsx";
 import { Capacitor } from "@capacitor/core";
+import NavigationMemoryProvider from "./shared/layout/NavigationMemoryProvider.jsx";
 
 // Production builds may use Cloudinary only when the server-side capability endpoint enables it.
 if (import.meta.env.PROD) configurePhotoCloudProvider(cloudinaryPhotoProvider);
@@ -29,7 +30,7 @@ createRoot(document.getElementById("root")).render(
               <TripProvider>
                 <ProgressionProvider>
                   <NotificationProvider>
-                    <App />
+                    <NavigationMemoryProvider><App /></NavigationMemoryProvider>
                   </NotificationProvider>
                 </ProgressionProvider>
               </TripProvider>

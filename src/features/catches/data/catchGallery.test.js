@@ -177,14 +177,14 @@ test("gallery has a separate longest sort based on catch length", () => {
   assert.equal(sorted[0].catchId, "long-light");
 });
 
-test("gallery has one primary entry in Journal without changing bottom navigation", async () => {
+test("Journal and Profile link to the same canonical gallery", async () => {
   const [app, profile, layout] = await Promise.all([
     readFile(new URL("../../../app/App.jsx", import.meta.url), "utf8"),
     readFile(new URL("../../../pages/ProfilePage.jsx", import.meta.url), "utf8"),
     readFile(new URL("../../../shared/layout/Layout.jsx", import.meta.url), "utf8"),
   ]);
   assert.match(app, /path="\/gallery"/);
-  assert.doesNotMatch(profile, /to="\/gallery"/);
+  assert.match(profile, /id="profile-journal"[\s\S]*to="\/gallery" title="Galerie"/);
   assert.match(layout, /aria-label="Hlavní navigace"/);
   assert.match(layout, /nav-label">Domů[\s\S]*nav-label">Deník[\s\S]*nav-label">Komunita[\s\S]*nav-label">Profil/);
   assert.match(layout, /to="\/community" className=\{itemClass\(communityActive\)\}/);

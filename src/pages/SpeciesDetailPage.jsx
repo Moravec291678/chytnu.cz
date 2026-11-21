@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { useCatches } from "../features/catches/context/useCatches";
 import Layout from "../shared/layout/Layout";
 import CatchCard from "../features/catches/components/CatchCard";
@@ -20,7 +20,6 @@ function SpeciesDetailPage() {
   const species = DEFAULT_SPECIES.find((item) => item.key === speciesKey);
   const ledger = useProgression();
   const mastery = ledger.summary.mastery.find((item) => item.speciesKey === speciesKey);
-  const navigate = useNavigate();
   const handleToggleFavorite = async () => {
     if (!bestCatch || savingFavoriteRef.current) return;
     savingFavoriteRef.current = true;
@@ -36,16 +35,13 @@ function SpeciesDetailPage() {
     }
   };
   if (state.loading || ledger.loading) return <Layout><div className="species-detail-page"><p className="loading-state" role="status">Načítám úlovky tohoto druhu…</p></div></Layout>;
-  if (state.error || ledger.error) return <Layout><div className="species-detail-page"><p className="species-detail-error" role="alert">{state.error || ledger.error}</p><Link className="species-hero-back" to="/album">← Zpět do alba</Link></div></Layout>;
-  if (!selectedSpecies.length && !mastery) return <Layout><div className="species-detail-page"><Link className="species-hero-back" to="/album">← Album druhů</Link>{species?.latinName && <p className="species-latin">{species.latinName}</p>}<h1>{species?.label || "Druh nebyl nalezen"}</h1><p>{species ? "Tento druh zatím nemá zaznamenané úlovky." : "Tento druh není v katalogu."}</p>{species && <Link className="species-add-link" to="/add">Zapsat úlovek</Link>}</div></Layout>;
+  if (state.error || ledger.error) return <Layout><div className="species-detail-page"><p className="species-detail-error" role="alert">{state.error || ledger.error}</p></div></Layout>;
+  if (!selectedSpecies.length && !mastery) return <Layout><div className="species-detail-page">{species?.latinName && <p className="species-latin">{species.latinName}</p>}<h1>{species?.label || "Druh nebyl nalezen"}</h1><p>{species ? "Tento druh zatím nemá zaznamenané úlovky." : "Tento druh není v katalogu."}</p>{species && <Link className="species-add-link" to="/add">Zapsat úlovek</Link>}</div></Layout>;
   return (
     <Layout>
       <div className="species-detail-page">
       <div className="species-hero">
         <div className="species-hero-nav">
-          <button type="button" className="species-hero-back" aria-label="Zpět" onClick={() => navigate(-1)}>
-            ←
-          </button>
           {bestCatch && (
             <div className="species-hero-actions">
               <button

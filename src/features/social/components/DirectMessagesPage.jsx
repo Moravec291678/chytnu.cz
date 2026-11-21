@@ -6,12 +6,14 @@ import { socialRequest } from "../data/socialClient.js";
 import { useSocialConnection } from "./useSocialConnection.js";
 import "./socialProfiles.css";
 
-function Conversation({ uid, targetUid }) {
+function Conversation({ uid, targetUid, onDraftChange }) {
   const online = useSocialConnection();
   const [page, setPage] = useState(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [text, setText] = useState("");
+  useEffect(() => { onDraftChange(Boolean(text.trim())); }, [onDraftChange, text]);
+  useEffect(() => () => onDraftChange(false), [onDraftChange]);
   const [reportId, setReportId] = useState(null);
   const [busy, setBusy] = useState(false);
   const running = useRef(null);
@@ -83,7 +85,7 @@ function Conversation({ uid, targetUid }) {
   }
 
   return <div className="social-page">
-    <div className="social-topline"><Link to={targetUid ? "/messages" : "/friends"}>{targetUid ? "← Zprávy" : "← Přátelé"}</Link>
+    <div className="social-topline">
       <button disabled={!online || busy} onClick={() => run(signal => reload(signal))}>Obnovit</button></div>
     <h1>{targetUid ? "Soukromá konverzace" : "Soukromé zprávy"}</h1>
     {!online && <p role="status">Připoj se, abys mohl otevřít nebo odeslat soukromé zprávy.</p>}
@@ -126,5 +128,6 @@ function Conversation({ uid, targetUid }) {
 export default function DirectMessagesPage() {
   const { user } = useAuth();
   const { targetUid } = useParams();
-  return <Layout>{user?.uid ? <Conversation key={`${user.uid}:${targetUid ?? "inbox"}`} uid={user.uid} targetUid={targetUid} /> : <Link to="/login">Přihlásit se</Link>}</Layout>;
+  const [unsaved, setUnsaved] = useState(false);
+  return <Layout back={{ unsaved }}>{user?.uid ? <Conversation key={`${user.uid}:${targetUid ?? "inbox"}`} uid={user.uid} targetUid={targetUid} onDraftChange={setUnsaved} /> : <Link to="/login">Přihlásit se</Link>}</Layout>;
 }

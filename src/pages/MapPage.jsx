@@ -113,10 +113,8 @@ function MapPage() {
     <header className="catch-map-header">
       <h1>Soukromá mapa</h1>
       <p>{state.loading ? "Načítám úlovky…" : catchCountLabel(markers.length)}</p>
-      <nav className="catch-map-tabs" aria-label="Návrat do deníku">
-        <Link to="/journal">← Deník</Link>
-      </nav>
       <p className="catch-map-privacy">Soukromá mapa — zobrazuje jen tvoje úlovky s uloženou GPS polohou. Souřadnice nejsou veřejné.</p>
+      <Link to="/hotspots">Přehled míst úlovků</Link>
     </header>
     {state.loading ? <p className="loading-state" role="status">Načítám úlovky…</p> : state.error
       ? <section className="catch-map-empty" role="alert"><h2>Úlovky se nepodařilo načíst</h2><p>{state.error}</p><button type="button" onClick={refresh}>Zkusit znovu</button></section>

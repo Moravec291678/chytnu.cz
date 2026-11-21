@@ -98,7 +98,6 @@ export default function SeasonStoryPage() {
     <Layout>
       <section className="season-story-page" aria-labelledby="season-story-title">
         <header className="season-story-header">
-          <Link to="/profile">← Profil</Link>
           <span>PŘÍBĚH SEZÓNY</span>
           <h1 id="season-story-title">Příběh sezóny</h1>
           <label>Rok

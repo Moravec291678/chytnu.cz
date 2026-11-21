@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
+import PageBackLink from "../shared/layout/PageBackLink.jsx";
 import { useCatches } from "../features/catches/context/useCatches";
 import { createCatchShareData, formatCatchShareText, getCatchShareFileName, shouldIncludeCatchWater } from "../features/catches/data/catchShare.js";
 import { decodeSharePhoto, getSharePreviewFrameStyle, renderShareCard } from "../features/catches/data/catchShareCard.js";
@@ -157,16 +158,16 @@ export default function CatchSharePage() {
   };
 
   if (state.loading) return <main className="catch-share-page"><p className="loading-state" role="status">Načítám úlovek…</p></main>;
-  if (state.error) return <main className="catch-share-page"><section className="catch-share-error" role="alert"><h1>Úlovek se nepodařilo načíst</h1><p>{state.error}</p><button type="button" onClick={refresh}>Zkusit znovu</button></section></main>;
-  if (shareDataError) return <main className="catch-share-page"><section className="catch-share-error" role="alert"><p>{shareDataError}</p><Link to={`/catch/${id}`}>Zpět na úlovek</Link></section></main>;
-  if (!record) return <main className="catch-share-page"><section className="catch-share-error"><h1>Úlovek nenalezen</h1><Link to="/journal">Zpět do deníku</Link></section></main>;
+  if (state.error) return <main className="catch-share-page"><PageBackLink to="/journal" /><section className="catch-share-error" role="alert"><h1>Úlovek se nepodařilo načíst</h1><p>{state.error}</p><button type="button" onClick={refresh}>Zkusit znovu</button></section></main>;
+  if (shareDataError) return <main className="catch-share-page"><PageBackLink to={`/catch/${id}`} /><section className="catch-share-error" role="alert"><p>{shareDataError}</p></section></main>;
+  if (!record) return <main className="catch-share-page"><PageBackLink to="/journal" /><section className="catch-share-error"><h1>Úlovek nenalezen</h1></section></main>;
 
   const length = formatMetric(shareData.lengthCm, 1);
   const weight = formatMetric(shareData.weightKg, 2);
   const date = formatDate(shareData.caughtAt);
   return <main className="catch-share-page">
     <header className="catch-share-header">
-      <Link className="progression-back" to={`/catch/${record.id}`}>← Detail úlovku</Link>
+      <PageBackLink to={`/catch/${record.id}`} />
       <h1>Sdílet úlovek</h1>
       <p>Karta s tvým úlovkem</p>
     </header>

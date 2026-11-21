@@ -80,8 +80,8 @@ export default function PublicFishingProfile() {
       if (name === "block" && !payload.blocked) setRefresh(value => value + 1);
     } catch (error) { setAction({ key, busy: false, message: "", error: controller.signal.aborted ? "" : error.message }); }
   }
-  const ownProfile = Boolean(uid && uid === profile?.uid);
-  return <Layout><div className="social-page"><div className="social-topline"><Link to={ownProfile ? "/profile" : "/community"}>{ownProfile ? "← Můj profil" : "← Komunita"}</Link><button type="button" onClick={() => setRefresh(value => value + 1)}>Obnovit</button></div>
+  const ownProfile = Boolean(uid && (uid === profile?.uid || uid === identity));
+  return <Layout back={ownProfile ? { to: "/profile" } : undefined}><div className="social-page"><div className="social-topline"><button type="button" onClick={() => setRefresh(value => value + 1)}>Obnovit</button></div>
     {!current && <p role="status" className="social-panel">Načítám rybářský profil…</p>}
     {current?.error && <p role="alert" className="social-error">{current.error}</p>}
     {current && !current.error && !profile && <section className="social-panel"><h1>Profil není dostupný</h1><p className="social-empty">Rybář ho nezveřejnil, omezil viditelnost nebo není pro tento účet dostupný.</p></section>}

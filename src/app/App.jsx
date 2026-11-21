@@ -2,7 +2,6 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import HomePage from "../pages/HomePage";
 import Layout from "../shared/layout/Layout";
-import { Link } from "react-router-dom";
 import { completeOnboarding, isOnboardingComplete } from "../features/preferences/data/preferences.js";
 import { hasLegacyProfileData } from "../features/preferences/data/legacyProfile.js";
 import { useDataScope } from "../features/auth/context/dataScopeContextValue.js";
@@ -87,7 +86,7 @@ function LegacyRouteRedirect({ pathname, fallbackHash }) {
 }
 
 function NotFoundPage() {
-  return <Layout><section className="add-catch-section"><h1>Stránka nenalezena</h1><p>Požadovaná stránka neexistuje nebo byla přesunuta.</p><Link to="/journal">Zpět do deníku</Link></section></Layout>;
+  return <Layout back={{ to: "/journal", useHistory: false }}><section className="add-catch-section"><h1>Stránka nenalezena</h1><p>Požadovaná stránka neexistuje nebo byla přesunuta.</p></section></Layout>;
 }
 
 function HomeRoute() {

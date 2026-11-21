@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import Layout from "../shared/layout/Layout";
 import { tripToForm } from "../features/trips/data/tripModel";
 import { useTrips } from "../features/trips/context/useTrips";
@@ -14,13 +14,14 @@ function TripEditPage() {
   const trip = state.trips.find((item) => item.id === id);
   if (state.loading) return <Layout><div className="trip-form-page"><p className="loading-state" role="status">Načítám vycházku…</p></div></Layout>;
   if (state.error) return <Layout><div className="trip-form-page"><p className="trip-form-error" role="alert">{state.error}</p><button type="button" onClick={refresh}>Zkusit znovu</button></div></Layout>;
-  if (!trip) return <Layout><div className="trip-form-page"><h1>Vycházka nenalezena</h1><Link to="/trips">Zpět na vycházky</Link></div></Layout>;
+  if (!trip) return <Layout back={{ to: "/trips", useHistory: false }}><div className="trip-form-page"><h1>Vycházka nenalezena</h1></div></Layout>;
   return <TripEditForm key={trip.id} trip={trip} updateTrip={updateTrip} navigate={navigate} />;
 }
 
 function TripEditForm({ trip, updateTrip, navigate }) {
   const baseTrip = useRef(trip);
-  const [values, setValues] = useState(() => tripToForm(trip));
+  const [initial] = useState(() => tripToForm(trip));
+  const [values, setValues] = useState(initial);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
@@ -38,8 +39,7 @@ function TripEditForm({ trip, updateTrip, navigate }) {
       setError(saveError?.message || "Vycházku se nepodařilo upravit.");
     } finally { savingRef.current = false; setSaving(false); }
   };
-  return <Layout><div className="trip-form-page">
-    <Link to={`/trips/${trip.id}`} className="trip-back-link">← Detail vycházky</Link>
+  return <Layout back={{ unsaved: values !== initial, disabled: saving }}><div className="trip-form-page">
     <header><h1>Upravit vycházku</h1><p>Nové výchozí údaje se použijí u dalších rychlých úlovků. Dřívější záznamy se nemění.</p></header>
     <form onSubmit={submit}>
       <label>Název<input value={values.title} maxLength={80} required onChange={(event) => update("title", event.target.value)} /></label>

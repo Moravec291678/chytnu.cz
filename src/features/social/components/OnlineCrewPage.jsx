@@ -91,7 +91,7 @@ function OnlineCrew({ uid }) {
 
   const current = result?.tab === tab ? result : null;
   return <div className="social-page">
-    <div className="social-topline"><Link to="/community">← Komunita</Link><button disabled={!online || busy} onClick={() => run(signal => load(signal))}>Obnovit</button></div>
+    <div className="social-topline"><button disabled={!online || busy} onClick={() => run(signal => load(signal))}>Obnovit</button></div>
     <h1>Rybářské skupiny</h1>
     {!online && <p role="status">Rybářské skupiny jsou dostupné s připojením.</p>}
     {error && <p role="alert" className="social-error">{error}</p>}

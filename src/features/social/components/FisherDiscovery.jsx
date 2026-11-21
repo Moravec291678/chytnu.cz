@@ -1,3 +1,4 @@
+import { useRouteMemory } from "../../../shared/layout/navigationMemory.js";
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../../auth/context/authContextValue.js";
@@ -15,9 +16,9 @@ export default function FisherDiscovery() {
   const { hash, key: locationKey } = useLocation();
   const searchRef = useRef(null);
   const online = useSocialConnection();
-  const [query, setQuery] = useState("");
-  const [field, setField] = useState("all");
-  const [mode, setMode] = useState("search");
+  const [query, setQuery] = useRouteMemory("query", "");
+  const [field, setField] = useRouteMemory("field", "all");
+  const [mode, setMode] = useRouteMemory("mode", "search");
   const [result, setResult] = useState(null);
   const [retry, setRetry] = useState(0);
   const [paging, setPaging] = useState(null);
