@@ -168,7 +168,7 @@ function CommunityCatchDetailPage() {
           <p>{profileName} <CollaboratorBadge access={collaboratorAccess} /></p>
         </header>
 
-        {projection.photos[0]?.publicUrl && <img className="community-detail-photo" src={projection.photos[0].publicUrl} alt={`Veřejná fotografie úlovku ${projection.species}`} />}
+        {projection.photos.length > 0 && <p role="status">Autorizované fotografie jsou dostupné u online příspěvku nebo ve sdílené galerii.</p>}
 
         <section className="community-detail-metrics" aria-label="Údaje úlovku">
           {projection.lengthCm !== null && <div><strong>{projection.lengthCm.toLocaleString("cs-CZ")} cm</strong><span>Délka</span></div>}

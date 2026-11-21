@@ -14,6 +14,11 @@ import { getPhotoBlobForDisplay } from "../data/photoCloudService.js";
 import { getPhotoAvailability, PHOTO_AVAILABILITY } from "../data/photoAvailability.js";
 import PhotoSyncStatus from "./PhotoSyncStatus.js";
 import { Badge, Card } from "../../../shared/components/UIPrimitives.jsx";
+import { useDataScope } from "../../auth/context/dataScopeContextValue.js";
+import { focusPhotoOpener } from "../../../shared/components/photoViewerNavigation.js";
+import PhotoViewer from "../../../shared/components/PhotoViewer.jsx";
+import { buildGalleryItems } from "../data/catchGallery.js";
+import GalleryPhotoImage from "./GalleryPhotoImage.js";
 
 import "./PhotoSyncStatus.css";
 import "./CatchCard.css";
@@ -89,20 +94,29 @@ export function FishMark({ speciesKey = "" }) {
 }
 
 function CatchCard({ catchedFish, isPersonalRecord = false }) {
+  const scope = useDataScope();
+  const [preview, setPreview] = useState(null);
   const primaryPhoto = getPrimaryAvailablePhoto(catchedFish);
+  const photos = preview?.scopeKey === scope.scopeKey && preview?.catchId === catchedFish.id ? buildGalleryItems([catchedFish]) : [];
+  const index = photos.findIndex(item => item.photoId === preview?.photoId);
+  const select = photoId => setPreview({ scopeKey: scope.scopeKey, catchId: catchedFish.id, photoId });
   const weight = formatCatchWeight(catchedFish);
   const length = Number.isFinite(catchedFish.lengthCm)
     ? catchedFish.lengthCm.toLocaleString("cs-CZ", { maximumFractionDigits: 1 })
     : null;
 
   return (
-    <Link to={`/catch/${catchedFish.id}`} className={`catch-card-link${isPersonalRecord ? " catch-card-link-record" : ""}`}>
+    <div className={`catch-card-link${isPersonalRecord ? " catch-card-link-record" : ""}`}>
       <Card as="article" density="compact" interactive className={`catch-card${isPersonalRecord ? " catch-card-record" : ""}`}>
         <div className="catch-card-main">
-          {primaryPhoto ? <CatchPhoto key={JSON.stringify([catchedFish.ownerId, catchedFish.id, primaryPhoto.id, primaryPhoto.cloud?.sha256])} blob={primaryPhoto.blob} species={catchedFish.species} photo={primaryPhoto} ownerId={catchedFish.ownerId} catchId={catchedFish.id} /> : <FishMark speciesKey={catchedFish.speciesKey} />}
+          {primaryPhoto ? <button type="button" className="photo-open-button catch-card-photo-button"
+            aria-label={`Otevřít fotografii úlovku – ${catchedFish.species}`}
+            onClick={event => { focusPhotoOpener(event); select(primaryPhoto.id); }}>
+            <CatchPhoto key={JSON.stringify([catchedFish.ownerId, catchedFish.id, primaryPhoto.id, primaryPhoto.cloud?.sha256])} blob={primaryPhoto.blob} species={catchedFish.species} photo={primaryPhoto} ownerId={catchedFish.ownerId} catchId={catchedFish.id} />
+          </button> : <FishMark speciesKey={catchedFish.speciesKey} />}
 
           <div className="catch-card-info">
-            <h2>{catchedFish.species}</h2>
+            <h2><Link className="catch-card-detail-link" to={`/catch/${catchedFish.id}`}>{catchedFish.species}</Link></h2>
 
             <p>{formatCatchDateTime(catchedFish.caughtAt)}{catchedFish.locationName ? ` · ${catchedFish.locationName}` : ""}{catchedFish.method?.label ? ` · ${catchedFish.method.label}` : ""}</p>
 
@@ -132,7 +146,10 @@ function CatchCard({ catchedFish, isPersonalRecord = false }) {
 
         {catchedFish.fightMinutes != null && <div className="catch-card-footer"><span>Délka boje</span><span>{formatFightDuration(catchedFish.fightMinutes)}</span></div>}
       </Card>
-    </Link>
+      {index >= 0 && <PhotoViewer items={photos} index={index} onSelect={next => select(photos[next].photoId)} onClose={() => setPreview(null)}
+        describe={item => ({ title: item.species, description: formatCatchDateTime(item.caughtAt) })}
+        renderImage={item => <GalleryPhotoImage key={item.photoId} item={item} scope={scope} alt={`Fotografie úlovku – ${item.species}`} />} />}
+    </div>
   );
 }
 

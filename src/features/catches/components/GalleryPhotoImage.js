@@ -1,10 +1,10 @@
 import { createElement, useCallback, useEffect, useRef, useState } from "react";
-import { getGalleryMissingMessage, getGalleryPhotoLoadRequest } from "../features/catches/data/catchGallery.js";
-import { getPhotoBlobForDisplay } from "../features/catches/data/photoCloudService.js";
-import { recordPhotoUploadTrace } from "../features/catches/data/photoUploadTrace.js";
-import { getPhotoAvailability, PHOTO_AVAILABILITY } from "../features/catches/data/photoAvailability.js";
-import PhotoSyncStatus from "../features/catches/components/PhotoSyncStatus.js";
-import { startPhotoDelivery } from "../features/catches/data/photoDeliveryRetry.js";
+import { getGalleryMissingMessage, getGalleryPhotoLoadRequest } from "../data/catchGallery.js";
+import { getPhotoBlobForDisplay } from "../data/photoCloudService.js";
+import { recordPhotoUploadTrace } from "../data/photoUploadTrace.js";
+import { getPhotoAvailability, PHOTO_AVAILABILITY } from "../data/photoAvailability.js";
+import PhotoSyncStatus from "./PhotoSyncStatus.js";
+import { startPhotoDelivery } from "../data/photoDeliveryRetry.js";
 import { Link } from "react-router-dom";
 
 export function GalleryPhotoFailure({ item, tile = false, permanent = false, message = "", onRetry }) {

@@ -155,10 +155,6 @@
 .catch-detail-photo-strip img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .catch-photo-unavailable { margin: var(--space-2) var(--space-5); color: var(--text-secondary); font-size: var(--font-size-13); }
 .catch-photo-sync-status { justify-content: flex-start; margin: var(--space-2) var(--space-5); }
-.catch-photo-lightbox { position: fixed; inset: 0; z-index: var(--z-modal-media); display: grid; place-items: center; padding: var(--space-4); background: rgb(3 9 14 / 88%); }
-.catch-photo-lightbox section { width: min(100%, 900px); max-height: calc(100vh - 2 * var(--space-4)); max-height: calc(100dvh - 2 * var(--space-4)); overflow-y: auto; overscroll-behavior: contain; }
-.catch-photo-lightbox button { display: block; margin: 0 0 var(--space-2) auto; }
-.catch-photo-lightbox img { display: block; width: 100%; max-height: calc(100vh - 6 * var(--space-4)); max-height: calc(100dvh - 6 * var(--space-4)); object-fit: contain; background: var(--surface-2); }
 
 .photo-actions {
   display: flex;

@@ -15,7 +15,8 @@ import { buildPrivateCatchMarkers } from "../features/map/data/catchMap";
 import { DEFAULT_SPECIES } from "../shared/constants/constants.js";
 import { getCatchRarity } from "../features/catches/utils/rarity.js";
 import { getVerificationPresentation } from "../features/catches/data/verificationPresentation.js";
-import { useModalFocusTrap } from "../shared/hooks/useModalFocusTrap.js";
+import { focusPhotoOpener } from "../shared/components/photoViewerNavigation.js";
+import PhotoViewer, { ViewerImage } from "../shared/components/PhotoViewer.jsx";
 import { isFeatureEnabled } from "../shared/config/featureFlags.js";
 import { formatCatchWeight } from "../features/catches/data/catchWeight.js";
 import ConfirmDialog from "../shared/components/ConfirmDialog";
@@ -49,17 +50,20 @@ function CatchDetailPage() {
   const item = state.catches.find((record) => record.id === id);
   const trip = tripState.trips.find((record) => record.id === item?.tripId);
   const catchDateLabel = item ? formatDate(item.caughtAt) : null;
-  const [photos, setPhotos] = useState([]);
+  const [deliveredPhotos, setDeliveredPhotos] = useState(null);
+  const photoScope = JSON.stringify([scope.scopeKey, id]);
+  const photos = deliveredPhotos?.key === photoScope ? deliveredPhotos.items : [];
   const [photoLoadFailed, setPhotoLoadFailed] = useState(false);
   const delivery = useRef(null);
   const [missingCloudPhotoId, setMissingCloudPhotoId] = useState(null);
   const missingCloudPhoto = missingCloudPhotoId === item?.id;
-  const [previewPhoto, setPreviewPhoto] = useState(null);
-  const photoDialogRef = useRef(null);
-  const photoCloseRef = useRef(null);
-  useModalFocusTrap(photoDialogRef, { active: Boolean(previewPhoto), initialFocusRef: photoCloseRef, onEscape: () => setPreviewPhoto(null) });
+  const [preview, setPreview] = useState(null);
   const primaryPhoto = item ? getPrimaryAvailablePhoto(item) : null;
   const heroPhoto = photos.find((photo) => photo.id === primaryPhoto?.id) ?? photos[0] ?? null;
+  const viewerPhotos = heroPhoto ? [heroPhoto, ...photos.filter(photo => photo.id !== heroPhoto.id)] : [];
+  const viewerIndex = preview?.key === photoScope ? viewerPhotos.findIndex(photo => photo.id === preview.id) : -1;
+  const selectPhoto = photo => setPreview({ key: photoScope, id: photo.id });
+  const openPhoto = (event, photo) => { focusPhotoOpener(event); selectPhoto(photo); };
   const [error, setError] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [savingFavorite, setSavingFavorite] = useState(false);
@@ -69,13 +73,13 @@ function CatchDetailPage() {
 
   useEffect(() => {
     const controller = createDetailPhotoDelivery(getPhotoBlobForDisplay, (ready, errors) => {
-      setPhotos(ready);
+      setDeliveredPhotos({ key: photoScope, items: ready });
       setPhotoLoadFailed(errors.some(code => code !== "cloudinary_asset_missing"));
       setMissingCloudPhotoId(errors.includes("cloudinary_asset_missing") ? id : null);
     });
     delivery.current = controller;
     return () => { controller.close(); delivery.current = null; };
-  }, [id, scope.ownerId, scope.scopeKey]);
+  }, [id, photoScope, scope.ownerId]);
 
   const updatePhotos = useCallback((retryFailed = false) => {
     delivery.current?.update(item?.photos ?? [], { ownerId: scope.ownerId, scopeKey: scope.scopeKey, catchId: id }, retryFailed);
@@ -97,7 +101,7 @@ function CatchDetailPage() {
       setDeleting(false);
     }
   };
-  const closeDeleteDialog = useCallback(() => setConfirmingDelete(false), []);
+  const closeDeleteDialog = useCallback(() => setConfirmingDelete(false), [setConfirmingDelete]);
   const handleToggleFavorite = async () => {
     if (savingFavoriteRef.current) return;
     savingFavoriteRef.current = true;
@@ -224,8 +228,8 @@ function CatchDetailPage() {
       {tripState.error && item.tripId && <p role="alert" className="catch-form-error">Přiřazenou vycházku se nepodařilo načíst: {tripState.error}</p>}
       {tripState.loading && item.tripId && <p role="status">Načítám přiřazenou vycházku…</p>}
       {heroPhoto && <section className="catch-detail-photo-gallery" aria-label="Fotografie úlovku">
-        <figure className="photo-preview-item catch-detail-hero-photo"><img src={heroPhoto.url} style={photoFrameStyle(heroPhoto)} alt={`Hlavní fotografie úlovku – ${item.species}`} /><figcaption>Hlavní fotografie</figcaption></figure>
-        {photos.length > 1 && <div className="catch-detail-photo-strip">{photos.filter((photo) => photo.id !== heroPhoto.id).map((photo) => <button type="button" key={photo.id} onClick={() => setPreviewPhoto(photo)} aria-label={`Zobrazit fotografii ${photo.name}`}><img src={photo.url} style={photoFrameStyle(photo)} alt="" /></button>)}</div>}
+        <figure className="photo-preview-item catch-detail-hero-photo"><button type="button" className="photo-open-button" onClick={event => openPhoto(event, heroPhoto)} aria-label={`Otevřít hlavní fotografii úlovku – ${item.species}`}><img src={heroPhoto.url} style={photoFrameStyle(heroPhoto)} alt="" /></button><figcaption>Hlavní fotografie</figcaption></figure>
+        {viewerPhotos.length > 1 && <div className="catch-detail-photo-strip">{viewerPhotos.slice(1).map((photo, index) => <button type="button" key={photo.id} onClick={event => openPhoto(event, photo)} aria-label={`Zobrazit fotografii ${index + 2} – ${item.species}`}><img src={photo.url} style={photoFrameStyle(photo)} alt="" /></button>)}</div>}
       </section>}
       {(item.photos ?? []).some((photo) => photo.uploadReady === false && photo.blob instanceof Blob)
         ? <p className="catch-photo-unavailable" role="status">Původní fotografie zůstává uložená v tomto zařízení, ale není připravená k synchronizaci. Převeď ji na JPG, PNG nebo WebP a <Link to={`/catch/${item.id}/edit`}>nahraď ji</Link>.</p>
@@ -238,7 +242,9 @@ function CatchDetailPage() {
         : photoLoadFailed ? <p className="catch-photo-unavailable" role="status">{item.photos?.some((photo) => photo.localError?.code === "photo_local_blob_unreadable")
           ? "Fotografii se na tomto zařízení nepodařilo přečíst. " : "Cloudovou fotografii se nepodařilo načíst. "}<button type="button" onClick={retryPhotoLoads}>Zkusit znovu</button></p>
           : hasPendingPhotos && <PhotoSyncStatus className="photo-sync-status catch-photo-sync-status" />}
-      {previewPhoto && <div className="catch-photo-lightbox" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPreviewPhoto(null); }}><section ref={photoDialogRef} tabIndex="-1" role="dialog" aria-modal="true" aria-label="Náhled fotografie"><button ref={photoCloseRef} type="button" onClick={() => setPreviewPhoto(null)} aria-label="Zavřít náhled">Zavřít</button><img src={previewPhoto.url} style={photoFrameStyle(previewPhoto)} alt={`Fotografie úlovku – ${item.species}`} /></section></div>}
+      {viewerIndex >= 0 && <PhotoViewer items={viewerPhotos} index={viewerIndex} onSelect={index => selectPhoto(viewerPhotos[index])}
+        onClose={() => setPreview(null)} describe={() => ({ title: item.species, description: catchDateLabel })}
+        renderImage={photo => <ViewerImage key={photo.url} src={photo.url} alt={`Fotografie úlovku – ${item.species}`} />} />}
       <section className="catch-detail-measures" aria-label="Míry úlovku">
         <div><strong>{Number.isFinite(item.lengthCm) ? formatNumber(item.lengthCm) : "—"}</strong><span>cm</span><small>DÉLKA</small>{isLengthRecord && <em>Nový rekord</em>}{isPersonalBest && recognition.personalBestUnit === "cm" && <em>{recognition.personalBestDelta > 0 ? `+${formatNumber(recognition.personalBestDelta, 1)} cm rekord` : "Osobní rekord"}</em>}</div>
         <div><strong>{Number.isFinite(item.weightKg) ? formatCatchWeight(item) : "—"}</strong><span>kg</span><small>{item.weightSource === "estimated" ? "ODHAD HMOTNOSTI" : "HMOTNOST"}</small>{isPersonalBest && recognition.personalBestUnit === "kg" && <em>{recognition.personalBestDelta > 0 ? `+${formatNumber(recognition.personalBestDelta, 2)} kg rekord` : "Osobní rekord"}</em>}</div>

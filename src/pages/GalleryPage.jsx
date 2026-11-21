@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import Layout from "../shared/layout/Layout";
 import { useCatches } from "../features/catches/context/useCatches";
@@ -6,7 +6,9 @@ import { photoFrameStyle } from "../features/catches/data/photoFraming.js";
 import { buildGalleryItems, countActiveGalleryFilters, filterAndSortGallery, getGalleryOptions, resetGalleryFilters } from "../features/catches/data/catchGallery.js";
 import { useDataScope } from "../features/auth/context/dataScopeContextValue.js";
 import { useModalFocusTrap } from "../shared/hooks/useModalFocusTrap.js";
-import GalleryPhotoImage from "./GalleryPhotoImage.js";
+import GalleryPhotoImage from "../features/catches/components/GalleryPhotoImage.js";
+import { focusPhotoOpener } from "../shared/components/photoViewerNavigation.js";
+import PhotoViewer from "../shared/components/PhotoViewer.jsx";
 import CatchPublication from "../features/social/components/CatchPublication.jsx";
 import { FEATURES } from "../product/config/featureFlags.js";
 import "./GalleryPage.css";
@@ -32,40 +34,21 @@ function GalleryTile({ item, scope, onOpen }) {
   </div>;
 }
 
-function PhotoViewer({ items, index, scope, onClose, onMove, catches }) {
-  const item = items[index];
-  const location = item.locationName || (item.waterId ? "Revír" : "");
-  const closeRef = useRef(null);
-  const dialogRef = useRef(null);
-  const touchX = useRef(null);
+function GalleryViewer({ items, index, scope, onClose, onSelect, catches }) {
   const [sharingOpen, setSharingOpen] = useState(false);
-  useModalFocusTrap(dialogRef, { initialFocusRef: closeRef, onEscape: onClose });
-  useEffect(() => {
-    const onKey = (event) => {
-      if (sharingOpen || /^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName)) return;
-      if (event.key === "ArrowRight") onMove(1);
-      if (event.key === "ArrowLeft") onMove(-1);
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onMove, sharingOpen]);
-  return <div className="gallery-viewer-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <section ref={dialogRef} tabIndex="-1" className="gallery-viewer" role="dialog" aria-modal="true" aria-label="Náhled fotografie" onTouchStart={(event) => { touchX.current = event.touches[0]?.clientX ?? null; }} onTouchEnd={(event) => {
-      if (touchX.current === null || sharingOpen) return;
-      const delta = event.changedTouches[0]?.clientX - touchX.current;
-      if (Math.abs(delta) > 45) onMove(delta < 0 ? 1 : -1);
-      touchX.current = null;
-    }}>
-      <header className="gallery-viewer-header"><div><strong>{item.species}</strong><span>{item.caughtAt ? new Date(item.caughtAt).toLocaleDateString("cs-CZ") : "Datum neuvedeno"}{location ? ` · ${location}` : ""}</span></div><button ref={closeRef} type="button" onClick={onClose} aria-label="Zavřít fotografii">Zavřít</button></header>
-      {!sharingOpen && <div className="gallery-viewer-photo">
-        <GalleryPhotoImage item={item} scope={scope} style={photoFrameStyle(item)} alt={`Fotografie úlovku – ${item.species}`} />
-        <button type="button" className="gallery-viewer-arrow prev" onClick={() => onMove(-1)} aria-label="Předchozí fotografie" disabled={items.length < 2}>‹</button>
-        <button type="button" className="gallery-viewer-arrow next" onClick={() => onMove(1)} aria-label="Další fotografie" disabled={items.length < 2}>›</button>
-      </div>}
-      {FEATURES.publicSharing && sharingOpen && <div className="gallery-viewer-share"><CatchPublication key={`${item.catchId}:${item.photoId}`} record={catches.find(record => record.id === item.catchId) ?? { ...item, id: item.catchId }} photoId={item.photoId} /></div>}
-      <footer className="gallery-viewer-footer gallery-viewer-footer-sharing"><span>{index + 1} / {items.length}{item.isPrimary ? " · Hlavní" : ""}</span>{FEATURES.publicSharing && <button className="publication-toggle" type="button" aria-expanded={sharingOpen} onClick={() => setSharingOpen(value => !value)}>{sharingOpen ? "Zpět na fotografii" : "Sdílet úlovek"}</button>}<Link to={`/catch/${item.catchId}`} onClick={onClose}>Otevřít úlovek <span aria-hidden="true">→</span></Link></footer>
-    </section>
-  </div>;
+  const selected = items[index];
+  return <PhotoViewer items={items} index={index} onSelect={onSelect} onClose={onClose}
+    describe={item => ({ title: item.species, description: [
+      item.caughtAt && new Date(item.caughtAt).toLocaleDateString("cs-CZ"), item.locationName, item.isPrimary && "Hlavní fotografie",
+    ].filter(Boolean).join(" · ") })}
+    renderImage={item => <GalleryPhotoImage key={item.catchId + ":" + item.photoId} item={item} scope={scope} alt={"Fotografie úlovku – " + item.species} />}
+    panel={FEATURES.publicSharing && sharingOpen && <CatchPublication key={selected.catchId + ":" + selected.photoId}
+      record={catches.find(record => record.id === selected.catchId) ?? { ...selected, id: selected.catchId }} photoId={selected.photoId} />}
+    actions={item => <>
+      {FEATURES.publicSharing && <button className="publication-toggle" type="button" aria-expanded={sharingOpen}
+        onClick={() => setSharingOpen(value => !value)}>{sharingOpen ? "Zpět na fotografii" : "Sdílet úlovek"}</button>}
+      <Link to={"/catch/" + item.catchId} onClick={onClose}>Otevřít úlovek →</Link>
+    </>} />;
 }
 
 const INITIAL_FILTERS = { search: "", speciesKey: "", waterKey: "", period: "all", dateFrom: "", dateTo: "", favoriteOnly: false, sort: "newest" };
@@ -77,15 +60,15 @@ function GalleryPage() {
   const [filters, setFilters] = useState(INITIAL_FILTERS);
   const [filterDraft, setFilterDraft] = useState(EMPTY_FILTERS);
   const [filterPanelOpen, setFilterPanelOpen] = useState(false);
-  const [viewerIndex, setViewerIndex] = useState(-1);
+  const [selectedPhoto, setSelectedPhoto] = useState(null);
   const filterDialogRef = useRef(null);
   const filterCloseRef = useRef(null);
   useModalFocusTrap(filterDialogRef, { active: filterPanelOpen, initialFocusRef: filterCloseRef, onEscape: () => setFilterPanelOpen(false) });
   const allItems = useMemo(() => buildGalleryItems(state.catches, { ownerId: scope.ownerId }), [scope.ownerId, state.catches]);
   const options = useMemo(() => getGalleryOptions(allItems), [allItems]);
   const photos = useMemo(() => filterAndSortGallery(allItems, filters), [allItems, filters]);
-  const moveViewer = useCallback((direction) => setViewerIndex((current) => current < 0 || !photos.length ? -1 : (current + direction + photos.length) % photos.length), [photos.length]);
-  const closeViewer = useCallback(() => setViewerIndex(-1), []);
+  const viewerIndex = photos.findIndex(item => selectedPhoto?.scopeKey === scope.scopeKey && selectedPhoto.catchId === item.catchId && selectedPhoto.photoId === item.photoId);
+  const selectPhoto = item => setSelectedPhoto({ scopeKey: scope.scopeKey, catchId: item.catchId, photoId: item.photoId });
   const clearFilters = () => setFilters(resetGalleryFilters);
   const set = (key, value) => setFilters((current) => ({ ...current, [key]: value }));
   const setDraft = (key, value) => setFilterDraft((current) => ({ ...current, [key]: value }));
@@ -124,8 +107,8 @@ function GalleryPage() {
         <label className="gallery-sort-control"><span className="sr-only">Řazení fotografií</span><select value={filters.sort} onChange={(event) => set("sort", event.target.value)}><option value="newest">Nejnovější</option><option value="oldest">Nejstarší</option><option value="longest">Nejdelší úlovek</option><option value="heaviest">Nejtěžší úlovek</option></select></label>
       </div>
     </section>
-    {state.loading ? <p className="gallery-state" role="status">Načítám fotografie…</p> : state.error ? <p className="gallery-state" role="alert">{state.error}</p> : !allItems.length ? <section className="gallery-state"><p>Zatím tu nejsou žádné fotografie.</p><Link to="/add">Přidat úlovek</Link></section> : !photos.length ? <section className="gallery-state"><p>Nenalezeny žádné fotografie pro zvolené filtry.</p><button type="button" className="gallery-reset" onClick={clearFilters}>Vymazat filtry</button></section> : <div className="gallery-grid">{photos.map((item, index) => <GalleryTile key={`${item.catchId}:${item.photoId}`} item={item} scope={scope} onOpen={() => setViewerIndex(index)} />)}</div>}
-    {viewerIndex >= 0 && photos[viewerIndex] && <PhotoViewer items={photos} index={viewerIndex} scope={scope} onClose={closeViewer} onMove={moveViewer} catches={state.catches} />}
+    {state.loading ? <p className="gallery-state" role="status">Načítám fotografie…</p> : state.error ? <p className="gallery-state" role="alert">{state.error}</p> : !allItems.length ? <section className="gallery-state"><p>Zatím tu nejsou žádné fotografie.</p><Link to="/add">Přidat úlovek</Link></section> : !photos.length ? <section className="gallery-state"><p>Nenalezeny žádné fotografie pro zvolené filtry.</p><button type="button" className="gallery-reset" onClick={clearFilters}>Vymazat filtry</button></section> : <div className="gallery-grid">{photos.map(item => <GalleryTile key={`${item.catchId}:${item.photoId}`} item={item} scope={scope} onOpen={event => { focusPhotoOpener(event); selectPhoto(item); }} />)}</div>}
+    {viewerIndex >= 0 && photos[viewerIndex] && <GalleryViewer items={photos} index={viewerIndex} scope={scope} onClose={() => setSelectedPhoto(null)} onSelect={index => selectPhoto(photos[index])} catches={state.catches} />}
   </div></Layout>;
 }
 

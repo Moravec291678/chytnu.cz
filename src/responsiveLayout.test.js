@@ -27,9 +27,12 @@ test("modal panels that can grow have a viewport bound and their own scroll regi
   }
 });
 
-test("Gallery viewer height accounts for iPhone safe areas", async () => {
-  const gallery = await css("./pages/GalleryPage.css");
-  assert.match(gallery, /\.gallery-viewer\{[^}]*height:min\(900px,calc\(100dvh - env\(\s*safe-area-inset-top\s*\) - env\(\s*safe-area-inset-bottom\s*\)\)\)/);
+test("Shared viewer fits dynamic viewport and hardware safe areas", async () => {
+  const viewer = await css("./shared/components/PhotoViewer.css");
+  assert.match(viewer, /height: 100dvh/);
+  assert.match(viewer, /padding: env\(safe-area-inset-top\) env\(safe-area-inset-right\) env\(safe-area-inset-bottom\) env\(safe-area-inset-left\)/);
+  assert.match(viewer, /object-fit: contain/);
+  assert.match(viewer, /min-width: 44px;\s*min-height: 44px/);
 });
 
 test("primary navigation and Journal shortcuts have narrow-width and safe-area layout constraints", async () => {

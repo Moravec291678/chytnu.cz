@@ -9,12 +9,17 @@ import SocialGallery from "./SocialGallery.jsx";
 import { SharedImage } from "./SharedImage.jsx";
 import { PublicAchievements, PublicStatistics, PublicTrophies } from "./PublicProgression.jsx";
 import { FEATURES } from "../../../product/config/featureFlags.js";
+import { focusPhotoOpener } from "../../../shared/components/photoViewerNavigation.js";
+import PhotoViewer from "../../../shared/components/PhotoViewer.jsx";
 import "./socialProfiles.css";
 
 export function FishingProfileView({ profile, preview = false, previewAudience }) {
   const [tab, setTab] = useState("catches");
+  const [viewedPhoto, setViewedPhoto] = useState(null);
   const catches = profile.catches ?? [];
   const photos = profile.photos ?? [];
+  const photoKey = photo => `${photo.catchId}:${photo.photoId}`;
+  const photoIndex = photos.findIndex(photo => photoKey(photo) === viewedPhoto);
   const stats = profile.statistics;
   const interests = [profile.region, profile.specialization, profile.favoriteSpecies].filter(Boolean);
   return <>
@@ -31,7 +36,16 @@ export function FishingProfileView({ profile, preview = false, previewAudience }
     <nav className="social-tabs" aria-label="Obsah rybářského profilu">{[["catches", "Příspěvky"], ["gallery", "Fotografie"], ["achievements", "Úspěchy"], ["trophies", "Trofeje"]].map(([id, label]) => <button key={id} type="button" aria-pressed={tab === id} onClick={() => setTab(id)}>{label}</button>)}</nav>
     <section className="social-panel" aria-live="polite">
       {tab === "catches" && <><h2>Sdílené příspěvky</h2>{catches.length ? <div className="social-catch-list">{catches.map(catchRecord => <article key={catchRecord.id}><span aria-hidden="true">🎣</span><div><h3>{catchRecord.species || "Úlovek"}</h3><p>{catchRecord.lengthCm > 0 ? `${catchRecord.lengthCm} cm · ` : ""}{catchRecord.caughtAt && Number.isFinite(Date.parse(catchRecord.caughtAt)) ? new Date(catchRecord.caughtAt).toLocaleDateString("cs-CZ") : ""}</p></div></article>)}</div> : !FEATURES.publicSharing ? <p className="social-empty">Tento rybář zatím nesdílí žádné úlovky pro tento okruh návštěvníků.</p> : null}</>}
-      {tab === "gallery" && <><h2>Fotografie od vody</h2>{FEATURES.publicSharing && <SocialGallery identity={profile.uid} photosOnly previewAudience={previewAudience} />}{photos.length ? <><h3>Výběr na profilu</h3><div className="social-gallery">{photos.map(photo => <figure key={`${photo.catchId}:${photo.photoId}`}><SharedImage profile={profile} photo={photo} /></figure>)}</div></> : !FEATURES.publicSharing ? <p className="social-empty">Žádné zveřejněné fotografie. Soukromá galerie zůstává v osobním deníku.</p> : null}</>}
+      {tab === "gallery" && <><h2>Fotografie od vody</h2>{FEATURES.publicSharing && <SocialGallery identity={profile.uid} photosOnly previewAudience={previewAudience} />}{photos.length ? <>
+        <h3>Výběr na profilu</h3><div className="social-gallery">{photos.map((photo, index) => <figure key={photoKey(photo)}>
+          <button type="button" className="photo-open-button" aria-label={`Otevřít sdílenou fotografii ${index + 1}`} onClick={event => { focusPhotoOpener(event); setViewedPhoto(photoKey(photo)); }}>
+            <SharedImage profile={profile} photo={photo} />
+          </button>
+        </figure>)}</div>
+        {photoIndex >= 0 && <PhotoViewer items={photos} index={photoIndex} onSelect={index => setViewedPhoto(photoKey(photos[index]))}
+          onClose={() => setViewedPhoto(null)} describe={photo => ({ title: catches.find(item => item.id === photo.catchId)?.species || "Sdílený úlovek", description: profile.displayName })}
+          renderImage={photo => <SharedImage key={photoKey(photo)} profile={profile} photo={photo} full />} />}
+      </> : !FEATURES.publicSharing ? <p className="social-empty">Žádné zveřejněné fotografie. Soukromá galerie zůstává v osobním deníku.</p> : null}</>}
       {tab === "catches" && FEATURES.publicSharing && <SocialGallery identity={profile.uid} previewAudience={previewAudience} />}
       {tab === "achievements" && <PublicAchievements achievements={profile.achievements} progression={profile.progression} />}
       {tab === "trophies" && <PublicTrophies trophies={profile.trophies} />}

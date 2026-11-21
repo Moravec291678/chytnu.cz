@@ -1,17 +1,17 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../../auth/context/authContextValue.js";
-import { useModalFocusTrap } from "../../../shared/hooks/useModalFocusTrap.js";
-import SocialEntryDetails from "./SocialEntryDetails.jsx";
+import { focusPhotoOpener } from "../../../shared/components/photoViewerNavigation.js";
+import PhotoViewer, { ViewerImage } from "../../../shared/components/PhotoViewer.jsx";
 import { socialRequest } from "../data/socialClient.js";
 import "./socialGallery.css";
-import "../../../pages/GalleryPage.css";
 
 const visibilityLabels = { public: "Veřejně", friends: "Přátelé", private: "Pouze autor" };
 const normalize = value => String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("cs-CZ");
-export function PostImage({ post, refreshKey, previewAudience }) {
+export function PostImage({ post, refreshKey, previewAudience, full = false }) {
   const { user } = useAuth();
   const [image, setImage] = useState(null), [visible, setVisible] = useState(typeof IntersectionObserver === "undefined");
+  const [retry, setRetry] = useState(0);
   const ref = useRef(null), key = `${user?.uid ?? "anonymous"}:${post.id}:${post.revision}:${refreshKey}:${previewAudience ?? "normal"}`;
   useEffect(() => {
     if (!ref.current || visible || typeof IntersectionObserver === "undefined") return undefined;
@@ -19,43 +19,40 @@ export function PostImage({ post, refreshKey, previewAudience }) {
     observer.observe(ref.current); return () => observer.disconnect();
   }, [visible]);
   useEffect(() => {
-    if (!visible || !post.hasPhoto) return undefined;
+    if ((!visible && !full) || !post.hasPhoto) return undefined;
     const controller = new AbortController();
     socialRequest("posts.image", { postId: post.id, ...(previewAudience ? { previewAudience } : {}) }, { signal: controller.signal }).then(value => {
       if (!controller.signal.aborted) setImage({ key, data: value.jpegBase64 });
     }).catch(() => { if (!controller.signal.aborted) setImage({ key, error: true }); });
     return () => controller.abort();
-  }, [visible, post.id, post.hasPhoto, key, previewAudience]);
+  }, [visible, full, post.id, post.hasPhoto, key, previewAudience, retry]);
+  if (full) {
+    if (image?.key === key && image.data) return <ViewerImage src={"data:image/jpeg;base64," + image.data} alt={"Sdílený úlovek: " + postTitle(post)} />;
+    if (image?.key === key && image.error) return <div className="photo-viewer-status" role="status">
+      <p>Fotografie není dostupná.</p><button type="button" className="publication-toggle" onClick={() => { setImage(null); setRetry(value => value + 1); }}>Zkusit znovu</button>
+    </div>;
+    return <p className="photo-viewer-status" role="status">Načítám fotografii…</p>;
+  }
   return <span ref={ref} className="social-post-image">
     {image?.key === key && image.data ? <img src={`data:image/jpeg;base64,${image.data}`} alt={`Sdílený úlovek: ${(post.content.title || post.content.species || "Příspěvek")}`} loading="lazy" />
       : <span className="social-post-loading">{!post.hasPhoto ? "🎣" : image?.key === key && image.error ? "Fotografie není dostupná" : "Načítám fotografii…"}</span>}
   </span>;
 }
-function PostDetails({ post }) {
-  const content = post.content;
-  return <div className="social-post-details"><SocialEntryDetails post={post} /><p><strong>{content.title || content.species || "Příspěvek"}</strong>{content.lengthCm > 0 ? ` · ${content.lengthCm} cm` : ""}{content.weightKg > 0 ? ` · ${content.weightKg} kg` : ""}</p>
-    {content.caughtAt && <p>Datum: {content.caughtAt}</p>}{content.method && <p>Způsob lovu: {content.method}</p>}{content.waterName && <p>Revír: {content.waterName}</p>}{content.description && <p>{content.description}</p>}
-    <p className="social-post-visibility">{visibilityLabels[post.visibility] ?? "Sdíleno"}</p>
-  </div>;
-}
-function PostViewer({ post, onClose, onMove, canMove, onDelete, deleting, refreshKey, previewAudience }) {
-  const dialogRef = useRef(null), closeRef = useRef(null);
-  useModalFocusTrap(dialogRef, { initialFocusRef: closeRef, onEscape: onClose });
-  useEffect(() => {
-    const keys = event => { if (event.key === "ArrowRight") onMove(1); if (event.key === "ArrowLeft") onMove(-1); };
-    document.addEventListener("keydown", keys); return () => document.removeEventListener("keydown", keys);
-  }, [onMove]);
-  return <div className="gallery-viewer-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
-    <section ref={dialogRef} tabIndex={-1} className="gallery-viewer social-post-viewer" role="dialog" aria-modal="true" aria-label="Sdílený úlovek">
-      <header className="gallery-viewer-header"><strong>{(post.content.title || post.content.species || "Příspěvek")}</strong><button ref={closeRef} type="button" onClick={onClose}>Zavřít</button></header>
-      {post.hasPhoto && <PostImage post={post} refreshKey={refreshKey} previewAudience={previewAudience} />}
-      <PostDetails post={post} />
-      {post.kind && post.kind !== "catch" && <Link to={`/community/post/${post.id}`} onClick={onClose}>Otevřít detail příspěvku →</Link>}
-      <footer className="gallery-viewer-footer"><button type="button" disabled={!canMove} onClick={() => onMove(-1)} aria-label="Předchozí příspěvek">←</button><Link to={`/u/${post.author.uid}`} onClick={onClose}>{post.author.displayName}</Link><button type="button" disabled={!canMove} onClick={() => onMove(1)} aria-label="Další příspěvek">→</button>
-        {onDelete && <button type="button" disabled={deleting} onClick={() => onDelete(post)}>Odstranit sdílený příspěvek</button>}
-      </footer>
-    </section>
-  </div>;
+const postTitle = post => post.content.title || post.content.species || "Příspěvek";
+
+export function PostPhotoViewer({ posts, index, onSelect, onClose, refreshKey, previewAudience, onDelete, deleting }) {
+  return <PhotoViewer items={posts} index={index} onSelect={onSelect} onClose={onClose}
+    describe={post => ({ title: postTitle(post), description: [
+      post.content.lengthCm > 0 && post.content.lengthCm + " cm",
+      post.content.weightKg > 0 && post.content.weightKg + " kg",
+      post.content.caughtAt, post.content.waterName, visibilityLabels[post.visibility],
+    ].filter(Boolean).join(" · ") })}
+    renderImage={post => <PostImage key={post.id + ":" + post.revision} post={post} refreshKey={refreshKey} previewAudience={previewAudience} full />}
+    actions={post => <>
+      <Link to={"/u/" + encodeURIComponent(post.author.uid)} onClick={onClose}>{post.author.displayName}</Link>
+      <Link to={"/community/post/" + encodeURIComponent(post.id)} onClick={onClose}>Detail příspěvku →</Link>
+      {onDelete && <button className="publication-toggle" type="button" disabled={deleting} onClick={() => onDelete(post)}>Odstranit příspěvek</button>}
+    </>} />;
 }
 
 /** All rows and image bytes are permission-filtered by the server, never from private catch URLs. */
@@ -64,7 +61,7 @@ export default function SocialGallery({ identity, photosOnly = false, previewAud
   const key = `${identity}:${uid ?? "anonymous"}:${previewAudience ?? "normal"}`;
   const [result, setResult] = useState(null), [refresh, setRefresh] = useState(0);
   const [online, setOnline] = useState(globalThis.navigator?.onLine !== false);
-  const [query, setQuery] = useState(""), [viewerId, setViewerId] = useState(null);
+  const [query, setQuery] = useState(""), [viewer, setViewer] = useState(null);
   const [loadingKey, setLoadingKey] = useState(null), [action, setAction] = useState(null);
   const actionRef = useRef(null), loadRef = useRef(null);
   useEffect(() => () => { actionRef.current?.abort(); loadRef.current?.abort(); }, [key]);
@@ -86,10 +83,9 @@ export default function SocialGallery({ identity, photosOnly = false, previewAud
   }, [identity, key, online, refresh, previewAudience]);
   const current = result?.key === key ? result : null;
   const posts = useMemo(() => online ? (current?.posts ?? []).filter(post => (!photosOnly || post.hasPhoto) && normalize(`${(post.content.title || post.content.species || "Příspěvek")} ${post.content.waterName ?? ""}`).includes(normalize(query))) : [], [online, current, photosOnly, query]);
-  const viewerIndex = posts.findIndex(post => post.id === viewerId);
-  const move = useCallback(direction => {
-    setViewerId(old => { const index = posts.findIndex(post => post.id === old); return posts.length ? posts[(Math.max(0, index) + direction + posts.length) % posts.length].id : null; });
-  }, [posts]);
+  const photos = posts.filter(post => post.hasPhoto);
+  const viewerIndex = viewer?.key === key ? photos.findIndex(post => post.id === viewer.id) : -1;
+  const select = post => setViewer({ key, id: post.id });
   async function more() {
     if (!current?.nextCursor || loadingKey === key || !online) return;
     const controller = new AbortController(); loadRef.current = controller; setLoadingKey(key);
@@ -104,16 +100,26 @@ export default function SocialGallery({ identity, photosOnly = false, previewAud
     const controller = new AbortController(); actionRef.current = controller; setAction({ key, busy: true });
     try {
       await socialRequest("posts.delete", { postId: post.id, expectedRevision: post.revision }, { signal: controller.signal });
-      if (!controller.signal.aborted) { setViewerId(null); setAction({ key, message: "Příspěvek byl odstraněn. Soukromý úlovek zůstává v deníku." }); setRefresh(value => value + 1); }
+      if (!controller.signal.aborted) { setViewer(null); setAction({ key, message: "Příspěvek byl odstraněn. Soukromý úlovek zůstává v deníku." }); setRefresh(value => value + 1); }
     } catch (error) { if (!controller.signal.aborted) setAction({ key, error: error.message }); }
   }
   return <div className="social-post-gallery">
     <div className="social-gallery-tools"><label>Hledat v načtených příspěvcích<input type="search" value={query} maxLength={100} onChange={event => setQuery(event.target.value)} placeholder="Druh nebo sdílený revír" /></label><button type="button" disabled={!online} onClick={() => { setResult(null); setRefresh(value => value + 1); }}>Obnovit</button></div>
     {!online ? <p className="social-empty" role="status">Sdílená galerie vyžaduje připojení. Soukromý deník zůstává dostupný offline.</p> : !current ? <p role="status" className="social-post-loading">Načítám sdílené příspěvky…</p> : current.error ? <p role="alert" className="social-error">{current.error}</p> : <>
-      {posts.length ? <div className="social-post-grid">{posts.map(post => <article key={`${post.id}:${post.revision}`} className="social-post-tile"><button type="button" onClick={() => setViewerId(post.id)} aria-label={`Otevřít sdílený úlovek: ${(post.content.title || post.content.species || "Příspěvek")}`}><PostImage post={post} refreshKey={refresh} previewAudience={previewAudience} /><span className="social-post-caption"><strong>{(post.content.title || post.content.species || "Příspěvek")}</strong><small>{post.content.lengthCm > 0 ? `${post.content.lengthCm} cm · ` : ""}{visibilityLabels[post.visibility] ?? "Sdíleno"}</small></span></button></article>)}</div> : <p className="social-empty">{query ? "Žádné načtené příspěvky neodpovídají hledání." : photosOnly ? "Zatím žádné fotografie sdílené pro tento okruh návštěvníků." : "Zatím žádné příspěvky sdílené pro tento okruh návštěvníků."}</p>}
+      {posts.length ? <div className="social-post-grid">{posts.map(post => {
+        const caption = <span className="social-post-caption"><strong>{postTitle(post)}</strong><small>{post.content.lengthCm > 0 ? post.content.lengthCm + " cm · " : ""}{visibilityLabels[post.visibility] ?? "Sdíleno"}</small></span>;
+        return <article key={post.id + ":" + post.revision} className="social-post-tile">
+          {post.hasPhoto ? <button type="button" onClick={event => { focusPhotoOpener(event); select(post); }} aria-label={"Otevřít fotografii: " + postTitle(post)}>
+            <PostImage post={post} refreshKey={refresh} previewAudience={previewAudience} />{caption}
+          </button> : <Link className="social-post-text-link" to={"/community/post/" + encodeURIComponent(post.id)}>{caption}</Link>}
+          {!post.hasPhoto && !previewAudience && uid === post.author.uid && <button type="button" className="social-post-remove" disabled={action?.key === key && action.busy} onClick={() => remove(post)}>Odstranit příspěvek</button>}
+        </article>;
+      })}</div> : <p className="social-empty">{query ? "Žádné načtené příspěvky neodpovídají hledání." : photosOnly ? "Zatím žádné fotografie sdílené pro tento okruh návštěvníků." : "Zatím žádné příspěvky sdílené pro tento okruh návštěvníků."}</p>}
       {current.nextCursor && <button type="button" className="social-gallery-more" disabled={loadingKey === key} onClick={more}>{loadingKey === key ? "Načítám…" : "Načíst další příspěvky"}</button>}
     </>}
     {action?.key === key && (action.error || action.message) && <p role={action.error ? "alert" : "status"} className={action.error ? "social-error" : "social-success"}>{action.error || action.message}</p>}
-    {viewerIndex >= 0 && <PostViewer post={posts[viewerIndex]} onClose={() => setViewerId(null)} onMove={move} canMove={posts.length > 1} deleting={action?.key === key && action.busy} refreshKey={refresh} previewAudience={previewAudience} onDelete={!previewAudience && uid === posts[viewerIndex].author.uid ? remove : undefined} />}
+    {viewerIndex >= 0 && <PostPhotoViewer posts={photos} index={viewerIndex} onSelect={index => select(photos[index])}
+      onClose={() => setViewer(null)} deleting={action?.key === key && action.busy} refreshKey={refresh} previewAudience={previewAudience}
+      onDelete={!previewAudience && uid === photos[viewerIndex].author.uid ? remove : undefined} />}
   </div>;
 }

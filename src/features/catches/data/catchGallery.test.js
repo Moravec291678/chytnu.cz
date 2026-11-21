@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
 import { readFile } from "node:fs/promises";
 import { buildGalleryItems, countActiveGalleryFilters, filterAndSortGallery, getGalleryMissingMessage, getGalleryOptions, getGalleryPhotoLoadRequest, resetGalleryFilters } from "./catchGallery.js";
-import GalleryPhotoImage, { GalleryPhotoFailure } from "../../../pages/GalleryPhotoImage.js";
+import GalleryPhotoImage, { GalleryPhotoFailure } from "../components/GalleryPhotoImage.js";
 
 const catches = [
   { id: "c1", species: "Štika", speciesKey: "esox-lucius", caughtAt: "2026-10-02T12:00:00Z", waterId: "w1", locationName: "Labe", isFavorite: true, weightKg: 4, primaryPhotoId: "p2", photos: [{ id: "p1", blob: new Blob(["a"]) }, { id: "p2", blob: new Blob(["b"]), focalX: 0.2, focalY: 0.8, zoom: 1.4 }] },
@@ -207,22 +207,19 @@ test("profile groups progression items and settings instead of listing them sepa
   assert.doesNotMatch(profile, /className="profile-preferences"|className="profile-progress"/);
 });
 
-test("viewer supports filtered-list navigation, keyboard, swipe, Catch detail, and URL cleanup", async () => {
-  const [page, photoImage, focusTrap] = await Promise.all([
+test("the gallery passes the filtered list and authorized delivery to the shared viewer", async () => {
+  const [page, photoImage, viewer] = await Promise.all([
     readFile(new URL("../../../pages/GalleryPage.jsx", import.meta.url), "utf8"),
-    readFile(new URL("../../../pages/GalleryPhotoImage.js", import.meta.url), "utf8"),
-    readFile(new URL("../../../shared/hooks/useModalFocusTrap.js", import.meta.url), "utf8"),
+    readFile(new URL("../components/GalleryPhotoImage.js", import.meta.url), "utf8"),
+    readFile(new URL("../../../shared/components/PhotoViewer.jsx", import.meta.url), "utf8"),
   ]);
-  assert.match(page, /event\.key === "ArrowRight"/);
-  assert.match(page, /event\.key === "ArrowLeft"/);
-  assert.match(page, /useModalFocusTrap\(dialogRef/);
-  assert.match(focusTrap, /event\.key === "Escape"/);
-  assert.match(focusTrap, /event\.key !== "Tab"/);
-  assert.match(focusTrap, /last\.focus\(\)/);
-  assert.match(page, /onTouchStart/);
-  assert.match(page, /to=\{`\/catch\/\$\{item\.catchId\}`\}/);
+  assert.match(page, /<GalleryViewer items=\{photos\}/);
+  assert.match(page, /<PhotoViewer items=\{items\}/);
+  assert.match(page, /to=\{"\/catch\/" \+ item\.catchId\}/);
+  assert.match(viewer, /dialog.showModal\(\)/);
+  assert.match(viewer, /opener\.focus/);
+  assert.match(viewer, /onPointerUp/);
   assert.match(photoImage, /URL\.revokeObjectURL\(objectUrlRef\.current\)/);
-  assert.match(page, /aria-modal="true"/);
   assert.doesNotMatch(page, /item\.gps|item\.notes|syncId/);
   assert.match(page, /scope\.ownerId/);
 });

@@ -1,9 +1,14 @@
 .catch-card-link {
+  position: relative;
   display: block;
   margin: 0 var(--space-5) var(--space-2);
   color: inherit;
   text-decoration: none;
 }
+
+.catch-card-detail-link { color: inherit; text-decoration: none; }
+.catch-card-detail-link::after { content: ""; position: absolute; inset: 0; }
+.catch-card .catch-card-photo-button { position: relative; z-index: 1; width: 48px; height: 48px; flex: 0 0 48px; border-radius: var(--radius-sm-roomy); }
 
 .catch-card-link:hover .catch-card {
   background: var(--surface-hover);
