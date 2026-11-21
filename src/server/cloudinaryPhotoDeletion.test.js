@@ -136,7 +136,7 @@ test("server deletion job is owner-scoped, deterministic, and eligible for the f
       return { result: "ok" };
     } } }), derivePublicId });
   assert.deepEqual(await dueService.processDueJobs(), { scanned: 1, deleted: 1, deferred: 0, failed: 0 });
-  assert.deepEqual(destroyed, [publicId, { resource_type: "image", type: "authenticated" }]);
+  assert.deepEqual(destroyed, [publicId, { resource_type: "image", type: "authenticated", invalidate: true }]);
   assert.equal(job.status, "deleted");
   assert.equal(job.attempts, 1);
   assert.equal(job.lastAttemptAt.toMillis(), now);

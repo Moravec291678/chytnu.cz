@@ -211,7 +211,7 @@ export function createCloudinaryPhotoDeletionService({
         let result;
         try {
           result = await cloudinary.uploader.destroy(claimed.cloudinaryPublicId, {
-            resource_type: "image", type: "authenticated",
+            resource_type: "image", type: "authenticated", invalidate: true,
           });
         } catch (error) {
           if (!cloudinaryAssetMissing(error)) throw error;
