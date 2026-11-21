@@ -114,6 +114,8 @@
 
 - **11 · BLOCKED DEVICE TEST · 21. listopadu 2026.** Android není připojen. Manifest, ikony, cache namespace a SHA-256 startup asset ověřeny lokálně, znovu použita desktopová obnova z Promptu 08. [Android protokol](DEVICE_ANDROID_PWA_ACCEPTANCE.md). Fyzická kamera, restart, update s frontou a živý druhý klient čekají na zařízení a izolované preview. Dokumentační commit a push na vývojovou větev, produkce 68fbf04. Další Prompt 12.
 
+- **12 · BLOCKED DEVICE TEST · 21. listopadu 2026.** Připojený iPhone ani macOS pro inspektor nebyly k dispozici. Apple touch ikona a manifest ověřeny z buildu, desktopový důkaz použit jen pro shell. [iOS protokol](DEVICE_IOS_PWA_ACCEPTANCE.md). Safari instalace, HEIC, klávesnice, fyzický restart a update s frontou čekají na zařízení. Dokumentační commit a push na vývojovou větev, produkce 68fbf04. Další Prompt 13.
+
 ## Přesný bod pokračování
 
-**Prompt 12** · připravit fyzickou iOS PWA akceptaci a zaznamenat dostupné technické důkazy.
+**Prompt 13** · ověřit katalog 56 tras, výslovně rozlišit běžné, parametrické a uzavřené scénáře.
