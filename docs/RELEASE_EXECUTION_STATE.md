@@ -118,6 +118,8 @@
 
 - **13 · PARTIAL · 21. listopadu 2026.** Načtení 56 tras ve dvou šířkách (112 kombinací + 26 opakování), lint, build a 7 testů navigace PASS. Český nadpis aktivity ryb ověřen v Chromiu. [Matice tras](QA_ROUTE_INTERACTION_MATRIX.md). Zbývají úplné načtené a offline varianty sociálních cest. Vývojový commit a push, produkce 68fbf04. Preview 09–12 READY na odpovídajících SHA. Další Prompt 14.
 
+- **14 · PASS · 21. listopadu 2026.** Uložit revír už nepřekrývá spodní navigaci (70 → 0 px ve čtyřech šířkách). Významové tokeny pro tlačítka, 40 párů screenshotů a autentizovaný průchod Profil → uložený revír → Všechny. 76 cílených, lint a diff check PASS. [Vizuální protokol](UX_DESIGN_CONSISTENCY.md). Vývojový commit a push, produkce 68fbf04. Preview 13 READY ea9e369248d1f4fb787d9d1ba8b307fdc4382bfe. Další Prompt 15.
+
 ## Přesný bod pokračování
 
-**Prompt 14** · srovnat vizuální základ, prověřit hlavní obrazovky a napravit potvrzené odchylky bez redesignu.
+**Prompt 15** · klávesnice, fokus, čtečky a velké syntetické sady; zachovat samostatný stav fyzických kontrol.
