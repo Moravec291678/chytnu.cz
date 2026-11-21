@@ -48,10 +48,11 @@ export function SocialFeedState({ feed, mode, children }) {
   return children;
 }
 
-export default function SocialFeed({ mode = "global", compact = false }) {
-  const feed = useSocialFeed({ mode, limit: compact ? 3 : 10 });
-  return <section className={`online-feed${compact ? " online-feed--compact" : ""}`} aria-label={mode === "friends" ? "Příspěvky přátel" : "Veřejné příspěvky"}>
-    <header className="online-feed-heading"><h2>{compact ? "Od přátel" : mode === "friends" ? "Od přátel" : "Pro všechny"}</h2>{compact ? <Link to="/community?feed=friends">Vše →</Link> : <button type="button" onClick={feed.reload} disabled={!feed.online || feed.needsAuth}>Obnovit</button>}</header>
+export default function SocialFeed({ mode = "global", compact = false, catalogueId }) {
+  const feed = useSocialFeed({ mode, limit: compact ? 3 : 10, catalogueId, autoRefresh: !catalogueId });
+  const title = catalogueId ? "Sdílené úlovky z revíru" : mode === "friends" || compact ? "Od přátel" : "Pro všechny";
+  return <section className={`online-feed${compact ? " online-feed--compact" : ""}`} aria-label={catalogueId ? title : mode === "friends" ? "Příspěvky přátel" : "Veřejné příspěvky"}>
+    <header className="online-feed-heading"><h2>{title}</h2>{compact ? <Link to="/community?feed=friends">Vše →</Link> : <button type="button" onClick={feed.reload} disabled={!feed.online || feed.needsAuth}>Obnovit</button>}</header>
     <SocialFeedState feed={feed} mode={mode}><div className="online-feed-list">{feed.current?.posts?.map(post => <SocialPostCard key={`${post.id}:${post.revision}`} post={post} refreshKey={feed.refreshKey} compact={compact} />)}</div>
       {!compact && feed.current?.nextCursor && <button className="online-feed-more" type="button" disabled={feed.loadingMore} onClick={feed.more}>{feed.loadingMore ? "Načítám…" : "Načíst další příspěvky"}</button>}
       {feed.current?.moreError && <p role="alert" className="online-feed-state">{feed.current.moreError}</p>}

@@ -179,6 +179,11 @@
 - Online Crew za vypnutým rolloutem, soukromé pozvánky, role, revize, předání správy, bezpečný veřejný přehled, audit, hlášení a cleanup. 60 emulátorových kontrol a dva browser účty při šířce 390 px PASS. Lint/build PASS.
 - Skupinový obsah a fyzický živý pilot zbývají. Dosavadní soukromé místní Crew údaje jsou zachovány.
 
+### 32C — PARTIAL
+
+- Stránkované veřejně a výslovně sdílené úlovky na potvrzeném RIS revíru, se stávající moderací a bez kopie soukromých dat. 44 emulátorových ověření a dva účty v mobilním Chromium PASS. Feature flag zůstává zavřený.
+- Textové příspěvky navázané na revír, fyzický/live průchod a potvrzená práva k RIS zbývají.
+
 ## Přesný bod pokračování
 
-**Prompt 32C** — bezpečné stránkování explicitně sdíleného obsahu navázaného na potvrzený RIS revír.
+**Prompt 33** — závěrečná regresní sada, přesné ověření kandidáta, produkčního SHA, obou worktrees a všech podmínek vydání.

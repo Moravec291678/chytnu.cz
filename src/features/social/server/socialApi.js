@@ -18,6 +18,7 @@ const actions = { friends: ["tab", "cursor"], "friends.status": ["targetUid"], s
   "dm.read": ["targetUid", "revision"], "dm.delete": ["targetUid", "messageId"], "dm.report": ["targetUid", "messageId", "reason"],
   "crew.create": ["name", "operationId"], "crew.list": ["mode", "cursor"], "crew.report": ["crewId", "reason"],
   "crew.view": ["crewId"],
+  "waterCommunity.list": ["catalogueId", "cursor"],
   "crew.change": ["crewId", "operation", "targetUid", "visibility", "enabled", "expectedRevision"],
   "entries.save":["entryId","kind","visibility","expectedRevision","title","description","achievementId"],
   "avatar.set": ["jpegBase64"], "avatar.remove": [], image: ["identity", "kind", "catchId", "photoId"] };
@@ -37,6 +38,7 @@ function isAvailable(action, payload, features) {
   if (action.startsWith("waterChat.")) return features.waterPresence === true && features.waterChat === true;
   if (action.startsWith("dm.")) return features.directMessages === true;
   if (action.startsWith("crew.")) return features.crew === true;
+  if (action.startsWith("waterCommunity.")) return features.waterCommunity === true;
   return true;
 }
 export function createSocialHandler({ service, features = FEATURES }) {

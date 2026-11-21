@@ -75,6 +75,10 @@ export function createPublicProfileService({ db, auth, avatar, socialPhoto, env 
         const key = createHash("sha256").update(uid).digest("hex");
         limits.push([`social-crew-minute-${key}`, minute, 8], [`social-crew-day-${key}`, day, 30]);
       }
+      if (action === "waterCommunity.list") {
+        const key = createHash("sha256").update(uid).digest("hex");
+        limits.push([`social-water-community-minute-${key}`, minute, 6], [`social-water-community-day-${key}`, day, 40]);
+      }
       const rows = await Promise.all(limits.map(([key]) => tx.get(db.doc(`serverRateLimits/${key}`))));
       limits.forEach(([key, window, limit], i) => {
         const old = rows[i].data(), count = old?.window === window ? old.count : 0;
@@ -149,6 +153,7 @@ export function createPublicProfileService({ db, auth, avatar, socialPhoto, env 
     if (action === "crew.view") return crew.view(uid, payload.crewId);
     if (action === "crew.change") return crew.change(uid, payload);
     if (action === "crew.report") return crew.report(uid, payload);
+    if (action === "waterCommunity.list") return publications.listWaterPosts(uid, payload);
     if (action === "interactions.list") return interactions.list(uid,payload);
     if (action === "reactions.set") return interactions.setReaction(uid,payload);
     if (action === "comments.save") return interactions.saveComment(uid,payload);

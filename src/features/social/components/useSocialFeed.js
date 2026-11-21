@@ -4,11 +4,11 @@ import { socialRequest } from "../data/socialClient.js";
 import { useSocialConnection } from "./useSocialConnection.js";
 
 /** A feed lives only in memory and is discarded when its audience changes. */
-export function useSocialFeed({ mode = "global", limit = 10, enabled = true, postId, autoRefresh = true }) {
+export function useSocialFeed({ mode = "global", limit = 10, enabled = true, postId, catalogueId, autoRefresh = true }) {
   const { user } = useAuth();
   const uid = user?.uid;
   const online = useSocialConnection();
-  const key = `${uid ?? "anonymous"}:${mode}:${limit}:${postId ?? "feed"}`;
+  const key = `${uid ?? "anonymous"}:${mode}:${limit}:${postId ?? catalogueId ?? "feed"}`;
   const [result, setResult] = useState(null);
   const [refresh, setRefresh] = useState(0);
   const [busyKey, setBusyKey] = useState(null);
@@ -33,11 +33,13 @@ export function useSocialFeed({ mode = "global", limit = 10, enabled = true, pos
     if (!canRead || !online) return undefined;
     const controller = new AbortController();
     loadRef.current = controller;
-    socialRequest(postId ? "posts.view" : "feed.list", postId ? { postId } : { mode, limit }, { signal: controller.signal })
+    const action = postId ? "posts.view" : catalogueId ? "waterCommunity.list" : "feed.list";
+    const payload = postId ? { postId } : catalogueId ? { catalogueId } : { mode, limit };
+    socialRequest(action, payload, { signal: controller.signal })
       .then(value => { if (!controller.signal.aborted) setResult({ key, posts: postId ? [value.post].filter(Boolean) : value.posts, nextCursor: value.nextCursor, refresh }); })
       .catch(error => { if (!controller.signal.aborted) setResult({ key, error: error.message, refresh }); });
     return () => { controller.abort(); loadRef.current?.abort(); };
-  }, [canRead, online, key, mode, limit, postId, refresh]);
+  }, [canRead, online, key, mode, limit, postId, catalogueId, refresh]);
 
   useEffect(() => {
     if (!canRead || !online || !autoRefresh) return undefined;
@@ -56,7 +58,8 @@ export function useSocialFeed({ mode = "global", limit = 10, enabled = true, pos
     loadRef.current = controller;
     setBusyKey(`${key}:${refresh}`);
     try {
-      const value = await socialRequest("feed.list", { mode, limit, cursor: current.nextCursor }, { signal: controller.signal });
+      const value = await socialRequest(catalogueId ? "waterCommunity.list" : "feed.list",
+        { ...(catalogueId ? { catalogueId } : { mode, limit }), cursor: current.nextCursor }, { signal: controller.signal });
       if (!controller.signal.aborted) setResult(old => old?.key === key && old.refresh === refresh ? { ...old, posts: [...new Map([...old.posts, ...value.posts].map(post => [post.id, post])).values()], nextCursor: value.nextCursor, moreError: null } : old);
     } catch (error) {
       if (!controller.signal.aborted) setResult(old => old?.key === key ? { ...old, moreError: error.message } : old);

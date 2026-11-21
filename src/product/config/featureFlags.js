@@ -14,6 +14,7 @@ export const FEATURES = Object.freeze({
   waterPresence: false,
   waterChat: false,
   directMessages: false,
+  waterCommunity: false,
   crew: false,
   notifications: false,
   supporter: false,

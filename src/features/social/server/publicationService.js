@@ -82,6 +82,29 @@ export function createPublicationService({ db, media, cursors, env = {}, now = (
     ...(audience === "owner" ? { ...(row.sourceEntryId?{sourceEntryId:row.sourceEntryId}:{}),sourceCatchId:row.sourceCatchId,sourcePhotoId:row.sourcePhotoId,fields:row.fields } : {}) };
   }
   return {
+    async listWaterPosts(uid, { catalogueId, cursor } = {}) {
+      if (!waters.has(catalogueId)) fail("invalid_request");
+      const pageSize = 10, context = `water-posts:${socialUid(uid)}:${catalogueId}`;
+      const boundary = cursors.decode(cursor, context);
+      let query = db.collection("socialPosts").where("content.catalogueId", "==", catalogueId).orderBy(FieldPath.documentId());
+      if (boundary) query = query.startAfter(boundary);
+      return db.runTransaction(async tx => {
+        await guard(tx, uid, "feed");
+        if ((await tx.get(db.doc("adminConfig/social"))).data()?.waterCommunityEnabled !== true) fail("social_disabled");
+        const page = await tx.get(query.limit(pageSize + 1));
+        const candidates = page.docs.slice(0, pageSize);
+        const posts = [];
+        for (const snapshot of candidates) {
+          const row = snapshot.data();
+          if (row.id !== snapshot.id || row.visibility !== "public" || row.fields?.water !== true || (row.kind && row.kind !== "catch")) continue;
+          const allowed = await permitted(tx, uid, row, row.ownerUid === uid ? { previewAudience: "stranger" } : {});
+          if (!allowed || allowed.profile.visibility !== "public" || allowed.profile.sections?.[section(row)] !== "public"
+            || allowed.row.content.catalogueId !== catalogueId) continue;
+          posts.push(dto(allowed));
+        }
+        return { posts, nextCursor: page.size > pageSize ? cursors.encode(candidates.at(-1).id, context) : null };
+      });
+    },
     async nearbyWaterActivity(uid, catalogueId) {
       if (!waters.has(catalogueId)) throw new Error("invalid_request");
       return db.runTransaction(async tx => {
