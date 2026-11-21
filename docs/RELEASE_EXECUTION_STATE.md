@@ -149,6 +149,11 @@
 - Připraven český App Store záznam, review checklist podle aktuálních požadavků Apple a plán interního a externího TestFlight.
 - Ověření dokumentace a `git diff --check` PASS. Od 26 beze změny aplikace. Podepsaný archiv, nativní login a fotografie, beta účty a fyzický iPhone NOT TESTED. Bez uploadu či platby. Vercel produkce beze změny.
 
+### 28 — PARTIAL
+
+- Čerstvý izolovaný Chromium + Auth/Firestore ve třech účtech: skutečné ID příspěvku, B přidal reakci a komentář, A dostal obě oznámení, C ztratil přístup po odstranění. Doloženy dřívější 1689 kontrol a rozsah rolí, změn soukromí a mazání. Samostatný úplný běh čeká v 33.
+- Produkční účty, skutečný Cloudinary derivát a jeho odvolání BLOCKED. Žádné přepnutí veřejných funkcí.
+
 ## Přesný bod pokračování
 
-**Prompt 28** — ověřit existující sociální jádro v izolovaných Firebase účtech. Produkční syntetické identity a živé Cloudinary čekají na autorizaci.
+**Prompt 29** — porovnat původní Nearby s release větví a ověřit soukromí, expiraci, odvolání a vypnutý rollout.
