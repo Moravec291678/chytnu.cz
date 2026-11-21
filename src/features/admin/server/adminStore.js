@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import { Buffer } from "node:buffer";
 import { resolveAccess, hasAdminPermission, normalizeRuntimeConfig, normalizeAccountLimits, normalizeFeatureEntitlements, validAdminUid, CO_CREATOR_DELEGATABLE } from "../adminPolicy.js";
 import { adminError } from "./adminValidation.js";
+import { ZERO_COST_AI_LIMITS } from "../../ai/server/zeroCostQuota.js";
 
 const PAGE = 50, COUNT_BOUND = 1000;
 const safeDate = value => typeof value === "string" && Number.isFinite(Date.parse(value)) ? new Date(value).toISOString() : null;
@@ -213,13 +214,14 @@ export function createAdminService({ db, auth, ownerUid = "", env = {}, now = ()
     const earliest = new Date(now() - 29 * 86400000).toISOString().slice(0, 10);
     const mediaJobs = db.collectionGroup("photoDeletionJobs");
     const deletion = db.collection("accountDeletions");
-    const [diagnostics, quota, photosPending, photosBlocked, accountsPending, accountsBlocked] = await Promise.all([
+    const [diagnostics, quota, photosPending, photosBlocked, accountsPending, accountsBlocked, runtime] = await Promise.all([
       db.collection("adminAiDiagnostics").where("dayUtc", ">=", earliest).orderBy("dayUtc", "desc").limit(30).get(),
       db.doc("serverRateLimits/ai-free-cloudflare-global").get(),
       boundedCount(mediaJobs.where("status", "in", ["pending", "retry", "deleting"])).catch(() => null),
       boundedCount(mediaJobs.where("status", "in", ["blocked-reference", "permanent-failure"])).catch(() => null),
       boundedCount(deletion.where("status", "in", ["requested", "processing", "retry", "cleanup-pending"])).catch(() => null),
       boundedCount(deletion.where("status", "==", "partial-failure")).catch(() => null),
+      config(),
     ]);
     const ai = { providerRequests: 0, providerSuccesses: 0, providerErrors: 0, days: diagnostics.docs.length, lastErrorCode: null, lastRequestAt: null };
     for (const document of diagnostics.docs) {
@@ -233,7 +235,17 @@ export function createAdminService({ db, auth, ownerUid = "", env = {}, now = ()
     const configured = env.AI_PROVIDER === "cloudflare" && Boolean(env.CLOUDFLARE_ACCOUNT_ID && env.CLOUDFLARE_API_TOKEN && model);
     if (!diagnostics.docs.length) Object.assign(ai, { providerRequests: null, providerSuccesses: null, providerErrors: null });
     const currentDay = Math.floor(now() / 86400000);
-    const currentQuota = safeQuota && safeQuota.dayUtc === currentDay ? safeQuota : null;
+    let currentQuota = null;
+    if (safeQuota?.dayUtc === currentDay) {
+      const textDailyLimit = Math.min(ZERO_COST_AI_LIMITS.textDailyReservation, runtime.limits.textDailyReservation);
+      const globalDailyLimit = Math.min(ZERO_COST_AI_LIMITS.globalDailyReservation, runtime.limits.globalDailyReservation);
+      const { textRequestReservation } = ZERO_COST_AI_LIMITS;
+      const providerBlocked = safeQuota.blockedDay >= currentDay;
+      const textLimitReached = safeQuota.textReservedNeurons + textRequestReservation > textDailyLimit;
+      const globalLimitReached = safeQuota.reservedNeurons + textRequestReservation > globalDailyLimit;
+      currentQuota = { ...safeQuota, textDailyLimit, globalDailyLimit,
+        capacityWarning: providerBlocked ? "provider" : textLimitReached || globalLimitReached ? "internal" : null };
+    }
     return { ai, quota: currentQuota, version, provider: { configured, zeroCostConfirmed: null, model, status: configured ? "configured" : "unavailable", connection: "not_probed" },
       cleanup: { photosPending, photosBlocked, accountsPending, accountsBlocked },
       syncErrors: null, photoUploadFailures: null, deferredJobs: null, serviceHealth: "available" };

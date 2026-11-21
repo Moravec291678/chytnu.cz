@@ -130,6 +130,8 @@
 
 - **19 · PARTIAL · 21. listopadu 2026.** Administrace ukazuje ohraničené počty výmazů účtů a fotografií a upozornění na blokované položky. Cron loguje jen stav a počty. Simulovaný 207/503, 43 multi-account admin kontrol, 11 cílených testů, 1 192 Node, lint/build PASS. [Provoz](OPERATIONS_RUNBOOK.md), [incident](INCIDENT_RESPONSE.md), [rollback](RELEASE_ROLLBACK.md). Read-only potvrzen vypnutý PITR i delete protection. Vercel předchozí READY 65b7f62 a aktuální 68fbf04. Potvrzení provozního kontaktu, alertu a živého rollback cvičení otevřené. Vývojový commit a push. Další Prompt 20.
 
+- **20 · PARTIAL · 21. listopadu 2026.** Read-only Firebase billing vypnutý, Vercel Hobby aktivní, Cloudinary účet a Vercel Usage neověřené. 189 čtení/16 zápisů za 2 h z Firestore Monitoring. V emulátoru 5 get, 1 query a 4 agregace pro provozní přehled. Admin rozlišuje provider/internal vyčerpání, 45+83+22 dílčích emulátorových a 32 cílených testů, lint/build PASS. [Kapacitní model](CAPACITY_COST_GUARDRAILS.md). Preview 18/19 READY, produkce 68fbf04. Bez změny tarifu. Vývojový commit a push. Další Prompt 21.
+
 ## Přesný bod pokračování
 
-**Prompt 20** · ověřit tarify dostupné read-only, spočítat kapacitní model a omezit provoz bez billingu.
+**Prompt 21** · připravit bezpečný uzavřený pilot a ověřit role, izolaci a podmínky skutečných pozvánek.

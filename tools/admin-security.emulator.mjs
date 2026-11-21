@@ -92,6 +92,20 @@ try {
   assert.doesNotMatch(JSON.stringify(monitoring), /private-fixture-path|admin-test-/);
   assert.deepEqual((await request("co", "monitoring")).cleanup, monitoring.cleanup);
   await request("anonymous", "monitoring", {}, 401);
+  const globalQuota = db.doc("serverRateLimits/ai-free-cloudflare-global");
+  const dayUtc = Math.floor(Date.now() / 86_400_000);
+  const originalQuota = await globalQuota.get();
+  try {
+    await globalQuota.set({ dayUtc, reservedNeurons: 700, textReservedNeurons: 700 });
+    const internalQuota = (await request("owner", "monitoring")).quota;
+    assert.equal(internalQuota.textDailyLimit, 1000);
+    assert.equal(internalQuota.capacityWarning, "internal");
+    await globalQuota.update({ blockedDay: dayUtc });
+    assert.equal((await request("co", "monitoring")).quota.capacityWarning, "provider");
+  } finally {
+    if (originalQuota.exists) await globalQuota.set(originalQuota.data());
+    else await globalQuota.delete();
+  }
   await request("owner", "users.get", { uid: uids.user, privateCatch: true }, 400);
   console.log(`Admin security integration passed: ${checks} authenticated/unauthorized API checks; real emulator Auth, roles, revocation, suspension, limits, feature policy, task CRUD and audit.`);
 } finally { await deleteApp(app); }

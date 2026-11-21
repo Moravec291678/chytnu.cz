@@ -260,11 +260,14 @@ function MonitoringPanel({ client, ai, access }) {
   const resource = useAdminResource(client, "monitoring");
   const data = resource.data;
   return <section className="admin-panel"><h2>{ai ? "AI management" : "Provoz a monitoring"}</h2><ResourceStatus resource={resource} />{data && <>
+    {data.quota?.capacityWarning && <p role="alert" className="admin-note">{data.quota.capacityWarning === "provider"
+      ? "Poskytovatel omezil AI kapacitu. Místní deník dál funguje." : "Interní rozpočet dnes nemá kapacitu pro další příběh nebo radu."}</p>}
     <Facts items={[["Verze / nasazení", data.version], ["Admin API", data.serviceHealth === "available" ? "Dostupné" : "Nedostupné"],
       ["Poskytovatel AI", data.provider?.configured ? "Cloudflare — server nakonfigurován" : "Nedostupné"], ["AI model", data.provider?.model],
       ["Ochrana nulového rozpočtu", data.provider?.zeroCostConfirmed ? "Zapnutá" : "Nedostupné"], ["Požadavky AI (posledních 30 dnů)", metric(data.ai?.providerRequests)],
       ["Úspěšné odpovědi AI", metric(data.ai?.providerSuccesses)], ["Chyby AI", metric(data.ai?.providerErrors)], ["Poslední bezpečný kód chyby", data.ai?.lastErrorCode],
       ["Poslední požadavek", timestamp(data.ai?.lastRequestAt)], ["Rezervované neurony dnes", metric(data.quota?.reservedNeurons)], ["Rezervace textu dnes", metric(data.quota?.textReservedNeurons)],
+      ["Interní denní strop pro text", metric(data.quota?.textDailyLimit)],
       ["Odložené úlohy na zařízeních", "Nedostupné — zůstávají v soukromém místním úložišti"], ["Chyby synchronizace uživatelů", metric(data.syncErrors)], ["Selhání nahrávání fotografií", metric(data.photoUploadFailures)]]} />
     {!ai && <>
       <h3>Cloudový úklid</h3>
