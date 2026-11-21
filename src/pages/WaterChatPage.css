@@ -73,6 +73,39 @@
   line-height: 1.4;
 }
 
+.water-chat-online,
+.water-chat-online form,
+.water-chat-online label {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-2);
+}
+
+.water-chat-online button,
+.water-chat-online textarea,
+.water-chat-online select {
+  min-height: 44px;
+  max-width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+  color: var(--text-primary);
+}
+
+.water-chat-online button:disabled {
+  opacity: .65;
+}
+
+.water-chat-online textarea {
+  width: 100%;
+  resize: vertical;
+}
+
+.water-chat-online .water-chat-bubble-text {
+  overflow-wrap: anywhere;
+}
+
 .water-chat-error {
   color: var(--accent-red);
   font-size: var(--font-size-sm);

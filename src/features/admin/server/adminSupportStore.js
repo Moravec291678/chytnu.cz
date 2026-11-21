@@ -236,7 +236,13 @@ export function createAdminSupportService({ db, auth, ownerUid, actor, permit, t
         check(reportDoc.exists, "report_unavailable", 404);
         const report = reportDoc.data();
         if (input.hide) {
-          if (report.commentId) {
+          if (report.messageId) {
+            check(/^ris-[a-f0-9]{24}$/.test(report.waterId ?? "") && /^[a-f0-9]{64}$/.test(report.messageId), "report_unavailable", 404);
+            const messageRef = db.doc(`waterRooms/${report.waterId}/messages/${report.messageId}`);
+            const message = await tx.get(messageRef);
+            check(message.exists && message.data().ownerUid === report.targetUid, "report_unavailable", 404);
+            tx.update(messageRef, { moderationState: "hidden", updatedAt: now() });
+          } else if (report.commentId) {
             const commentRef = db.doc(`socialPosts/${report.postId}/comments/${report.commentId}`);
             const comment = await tx.get(commentRef);
             check(comment.exists && comment.data().deleted !== true, "comment_unavailable", 404);

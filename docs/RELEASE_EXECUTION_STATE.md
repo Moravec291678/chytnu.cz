@@ -164,6 +164,11 @@
 - 1451 skutečných RIS ID a detailů, 1263 shodných bodů, 188 bez bodu, žádná ověřená hranice. 23 cílených testů, 22 emulátorových kontrol v promptu 29 PASS. Ruční potvrzené členství je serverové, bez GPS.
 - Licence RIS, fyzické ověření a veřejné otevření čekají. Členství ani chat se veřejně nezapínají.
 
+### 31 — PARTIAL
+
+- Autorizovaný chat pro potvrzený revír, stránkování, potvrzované odeslání, soukromé hlášení, moderace a úklid při smazání účtu. 56 skutečných emulátorových kontrol, 6 cílených testů, lint/build a dva browser účty na 390 px PASS.
+- Veřejně vypnuto. Fyzická retence, moderace v produkci a fyzický offline/reconnect čekají.
+
 ## Přesný bod pokračování
 
-**Prompt 31** — ověřit a bezpečně rozšířit serverový základ chatu za vypnutou funkcí, se skutečnou kontrolou relací a moderace.
+**Prompt 32A** — soukromé zprávy s účastnickými právy. Potom samostatné milníky 32B Crew a 32C obsah revírů.

@@ -22,6 +22,9 @@ const messages = {
   comment_duplicate: "Tento komentář byl nedávno odeslán. Počkej před dalším pokusem.",
   consent_required: "Před zapnutím Okolí potvrď výslovný souhlas se sdílením pouze hrubé oblasti.",
   water_presence_conflict: "Přítomnost se změnila na jiném zařízení nebo vypršela. Načti aktuální stav.",
+  water_presence_required: "Pro chat nejdřív potvrď přítomnost na tomto revíru.",
+  message_conflict: "Zpráva se mezitím změnila nebo už není dostupná. Načti chat znovu.",
+  message_unavailable: "Zpráva už není dostupná nebo ji nemůžeš nahlásit.",
 };
 export async function socialRequest(action, payload = {}, { signal, expectedUid } = {}) {
   if (globalThis.navigator?.onLine === false) throw new Error(messages.offline);

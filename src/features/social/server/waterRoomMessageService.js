@@ -1,20 +1,23 @@
 import { createHash } from "node:crypto";
 import { FieldPath } from "firebase-admin/firestore";
 import { socialUid, validateSocialRecord } from "../data/socialModel.js";
+import { REPORT_REASONS } from "../data/socialInteractionModel.js";
 import { assertSocialInteraction } from "./socialAccess.js";
 
 const ROOM_ID = /^ris-[a-f0-9]{24}$/;
 const MESSAGE_ID = /^[a-f0-9]{64}$/;
 const PAGE_SIZE = 15;
+const MESSAGE_WINDOW_MS = 7 * 86_400_000;
 const digest = value => createHash("sha256").update(value).digest("hex");
 
 export function createWaterRoomMessageService({ db, waterPresence, cursors, now = Date.now }) {
   const collection = waterId => `waterRooms/${waterId}/messages`;
 
-  async function authorize(tx, uid, waterId) {
-    if (!ROOM_ID.test(waterId ?? "")) throw new Error("invalid_request");
-    await waterPresence.authorize(tx, uid, waterId);
-    if ((await tx.get(db.doc("adminConfig/social"))).data()?.waterChatEnabled === false) throw new Error("social_disabled");
+  async function authorize(tx, uid, waterId, sessionId) {
+    const membership = await waterPresence.authorize(tx, uid, waterId);
+    if (!sessionId || membership.sessionId !== sessionId) throw new Error("water_presence_conflict");
+    const config = (await tx.get(db.doc("adminConfig/social"))).data();
+    if (config?.waterChatEnabled !== true || config.profilesEnabled === false) throw new Error("social_disabled");
   }
 
   async function publicAuthor(tx, uid) {
@@ -28,12 +31,31 @@ export function createWaterRoomMessageService({ db, waterPresence, cursors, now 
   }
 
   return {
-    send(uid, { waterId, text, operationId } = {}) {
-      if (typeof text !== "string" || text.trim().length < 1 || text.trim().length > 500
+    report(uid, { waterId, sessionId, messageId, reason } = {}) {
+      if (!ROOM_ID.test(waterId ?? "") || !MESSAGE_ID.test(messageId ?? "") || !REPORT_REASONS.includes(reason)) throw new Error("invalid_request");
+      return db.runTransaction(async tx => {
+        await authorize(tx, uid, waterId, sessionId);
+        const row = (await tx.get(db.doc(`${collection(waterId)}/${messageId}`))).data();
+        const time = now();
+        if (!row || row.id !== messageId || row.ownerUid === uid || row.moderationState !== "visible" || !Number.isSafeInteger(row.createdAt)
+          || row.createdAt < time - MESSAGE_WINDOW_MS) throw new Error("message_unavailable");
+        await assertSocialInteraction({ tx, db, uid, targetUid: row.ownerUid });
+        if (!await publicAuthor(tx, row.ownerUid)) throw new Error("message_unavailable");
+        const reportId = digest(JSON.stringify([uid, waterId, messageId, Math.floor(time / 86_400_000)]));
+        const ref = db.doc(`socialReports/${reportId}`);
+        if (!(await tx.get(ref)).exists) tx.set(ref, {
+          reporterUid: uid, targetUid: row.ownerUid, waterId, messageId,
+          reason, status: "new", createdAt: time, updatedAt: time,
+        });
+        return { reported: true };
+      });
+    },
+    send(uid, { waterId, sessionId, text, operationId } = {}) {
+      if (!ROOM_ID.test(waterId ?? "") || typeof text !== "string" || text.trim().length < 1 || text.trim().length > 500
         || typeof operationId !== "string" || !/^[A-Za-z0-9_-]{16,80}$/.test(operationId)) throw new Error("invalid_request");
       const body = text.trim();
       return db.runTransaction(async tx => {
-        await authorize(tx, uid, waterId);
+        await authorize(tx, uid, waterId, sessionId);
         const author = await publicAuthor(tx, uid);
         if (!author) throw new Error("profile_required");
         const id = digest(JSON.stringify([uid, waterId, operationId]));
@@ -41,7 +63,8 @@ export function createWaterRoomMessageService({ db, waterPresence, cursors, now 
         const ref = db.doc(path);
         const existing = (await tx.get(ref)).data();
         if (existing) {
-          if (existing.ownerUid !== uid || existing.text !== body || existing.moderationState !== "visible") throw new Error("message_conflict");
+          if (existing.ownerUid !== uid || existing.text !== body || existing.moderationState !== "visible"
+            || existing.createdAt < now() - MESSAGE_WINDOW_MS) throw new Error("message_conflict");
           return { message: dto(existing, author) };
         }
         const time = now();
@@ -52,18 +75,19 @@ export function createWaterRoomMessageService({ db, waterPresence, cursors, now 
         return { message: dto(row, author) };
       });
     },
-    list(uid, { waterId, cursor } = {}) {
+    list(uid, { waterId, sessionId, cursor } = {}) {
       if (!ROOM_ID.test(waterId ?? "")) throw new Error("invalid_request");
-      const context = `water-room:${socialUid(uid)}:${waterId}`;
+      const context = `water-room:${socialUid(uid)}:${waterId}:${sessionId}`;
       const boundary = cursors.decode(cursor, context);
-      let query = db.collection(collection(waterId)).orderBy("createdAt", "desc").orderBy(FieldPath.documentId(), "desc");
+      let query = db.collection(collection(waterId)).where("createdAt", ">=", now() - MESSAGE_WINDOW_MS)
+        .orderBy("createdAt", "desc").orderBy(FieldPath.documentId(), "desc");
       if (boundary) {
         const match = /^(\d{1,16})_([a-f0-9]{64})$/.exec(boundary);
         if (!match || !Number.isSafeInteger(Number(match[1]))) throw new Error("invalid_cursor");
         query = query.startAfter(Number(match[1]), match[2]);
       }
       return db.runTransaction(async tx => {
-        await authorize(tx, uid, waterId);
+        await authorize(tx, uid, waterId, sessionId);
         const page = await tx.get(query.limit(PAGE_SIZE + 1));
         const candidates = page.docs.slice(0, PAGE_SIZE);
         const authors = new Map();

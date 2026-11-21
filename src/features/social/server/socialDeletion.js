@@ -8,9 +8,14 @@ export async function deleteSocialPage(db, uid, pageSize = 50, deleteAvatar) {
     const path = entry.data().path;
     // Never let a malformed manifest target the diary, configuration or credentials.
     if (typeof path !== "string" || !/^(socialPosts\/[^/]+\/(comments|reactions)\/[^/]+|waterRooms\/ris-[a-f0-9]{24}\/messages\/[^/]+)$/.test(path)) throw new Error("invalid_social_cleanup_reference");
-    const ref = db.doc(path), record = await ref.get();
-    if (record.exists && record.data().ownerUid !== uid) throw new Error("invalid_social_cleanup_owner");
-    await cleanupInteractionReference({ db, path, uid, manifestRef: entry.ref });
+    if (await cleanupInteractionReference({ db, path, uid, manifestRef: entry.ref })) continue;
+    await db.runTransaction(async tx => {
+      const ref = db.doc(path);
+      const record = await tx.get(ref);
+      if (record.exists && record.data().ownerUid !== uid) throw new Error("invalid_social_cleanup_owner");
+      tx.delete(ref);
+      tx.delete(entry.ref);
+    });
   }
   if (manifest.size) return true;
   for (const [collection, field, op] of [["publicHandles", "uid", "=="], ["socialRelationships", "memberUids", "array-contains"],

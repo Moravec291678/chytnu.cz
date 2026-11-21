@@ -6,6 +6,8 @@ import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
 import { createPublicProfileService } from "../src/features/social/server/publicProfileService.js";
 import { createSocialHandler } from "../src/features/social/server/socialApi.js";
+import { createAdminService } from "../src/features/admin/server/adminStore.js";
+import { deleteSocialPage } from "../src/features/social/server/socialDeletion.js";
 import { contentFingerprint, publicationContent, publicationId } from "../src/features/social/data/publicationModel.js";
 import catalogue from "../public/data/ris/be90ad549cf77679/index.json" with { type: "json" };
 
@@ -13,7 +15,7 @@ if (process.env.FIRESTORE_EMULATOR_HOST !== "127.0.0.1:8080" || process.env.FIRE
 const app = initializeApp({ projectId: "demo-chytnucz-local" }, `nearby-${randomUUID()}`), db = getFirestore(app), auth = getAuth(app);
 const suffix = randomUUID().replaceAll("-", "").slice(0, 8), ids = [], tokens = [];
 let time = Date.now(), checks = 0;
-const handler = createSocialHandler({ features: { nearby: true, waterPresence: true }, service: createPublicProfileService({ db, auth, env: {}, now: () => time,
+const handler = createSocialHandler({ features: { nearby: true, waterPresence: true, waterChat: true }, service: createPublicProfileService({ db, auth, env: {}, now: () => time,
   cursorSecret: "synthetic-nearby-emulator-cursor-key-over-32-characters" }) });
 async function call(index, action, payload = {}, expected = 200) {
   const response = { statusCode: 200, setHeader() {}, status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } };
@@ -130,6 +132,72 @@ try {
   assert.deepEqual(await call(0, "waterPresence.status"), { active: false }); checks++;
   await call(0, "waterPresence.refresh", { sessionId: expired.sessionId }, 409);
   console.log(`Water presence emulator: ${checks - previousChecks} checks PASS`);
+  const beforeChat = checks;
+  const config = db.doc("adminConfig/social");
+  const savedConfig = await config.get();
+  try {
+    await config.set({ waterChatEnabled: false }, { merge: true });
+    await db.doc(`publicProfiles/${ids[0]}`).set(profile(0));
+    const author = await call(0, "waterPresence.join", { waterId, confirmed: true });
+    const reader = await call(1, "waterPresence.join", { waterId, confirmed: true });
+    const room = { waterId, sessionId: reader.sessionId };
+    const draft = { waterId, sessionId: author.sessionId, text: "Syntetická zpráva", operationId: randomUUID() };
+    await call(-1, "waterChat.list", room, 401);
+    await call(0, "waterChat.send", draft, 503);
+    await config.set({ waterChatEnabled: true }, { merge: true });
+    await call(2, "waterChat.list", room, 403);
+    await call(1, "waterChat.list", { ...room, sessionId: author.sessionId }, 409);
+    const sent = await call(0, "waterChat.send", draft);
+    assert.deepEqual(await call(0, "waterChat.send", draft), sent); checks++;
+    await call(0, "waterChat.send", { ...draft, text: "Odlišná zpráva" }, 409);
+    assert.deepEqual((await call(1, "waterChat.list", room)).messages, [sent.message]); checks++;
+    assert.deepEqual(Object.keys(sent.message).sort(), ["author", "createdAt", "id", "text"]); checks++;
+    assert.deepEqual(Object.keys(sent.message.author).sort(), ["displayName", "handle"]); checks++;
+    const messageRef = db.doc(`waterRooms/${waterId}/messages/${sent.message.id}`);
+    const directMessage = await fetch(`http://127.0.0.1:8080/v1/projects/demo-chytnucz-local/databases/(default)/documents/${messageRef.path}`, { headers: { Authorization: `Bearer ${tokens[1]}` } });
+    assert.equal(directMessage.status, 403); checks++;
+    await block.set({ createdAt: time });
+    assert.deepEqual((await call(1, "waterChat.list", room)).messages, []); checks++;
+    await block.delete();
+    for (let i = 0; i < 15; i++) {
+      if (i % 4 === 0) time += 60_000;
+      await call(0, "waterChat.send", { ...draft, operationId: randomUUID() });
+    }
+    const page = await call(1, "waterChat.list", room);
+    assert.equal(page.messages.length, 15); assert.ok(page.nextCursor); checks += 2;
+    const next = await call(1, "waterChat.list", { ...room, cursor: page.nextCursor });
+    assert.deepEqual(next.messages, [sent.message]); assert.equal(next.nextCursor, null); checks += 2;
+    await call(0, "waterChat.list", { waterId, sessionId: author.sessionId, cursor: page.nextCursor }, 400);
+    await messageRef.update({ createdAt: time - 8 * 86_400_000 });
+    assert.equal((await call(1, "waterChat.list", room)).nextCursor, null); checks++;
+    const report = { ...room, messageId: page.messages[0].id, reason: "spam" };
+    await call(2, "waterChat.report", report, 403);
+    await call(1, "waterChat.report", { ...report, reason: "invalid" }, 400);
+    await call(1, "waterChat.report", report);
+    await call(1, "waterChat.report", report);
+    const reports = await db.collection("socialReports").where("reporterUid", "==", ids[1]).get();
+    assert.equal(reports.size, 1); checks++;
+    const reportDoc = reports.docs[0];
+    const directReport = await fetch(`http://127.0.0.1:8080/v1/projects/demo-chytnucz-local/databases/(default)/documents/${reportDoc.ref.path}`, { headers: { Authorization: `Bearer ${tokens[1]}` } });
+    assert.equal(directReport.status, 403); checks++;
+    const admin = createAdminService({ db, auth, ownerUid: ids[3], env: {}, now: () => time });
+    const resolution = { action: "social.report.resolve", reportId: reportDoc.id, hide: true, status: "resolved", reason: "Místní kontrola" };
+    await assert.rejects(admin.execute(resolution, await auth.verifyIdToken(tokens[2])), /forbidden/); checks++;
+    await admin.execute(resolution, await auth.verifyIdToken(tokens[3]));
+    assert.equal((await call(1, "waterChat.list", room)).messages.some(message => message.id === report.messageId), false); checks++;
+    await db.doc(`accountDeletions/${ids[0]}`).set({});
+    assert.deepEqual((await call(1, "waterChat.list", room)).messages, []); checks++;
+    assert.equal(await deleteSocialPage(db, ids[0]), true); checks++;
+    assert.equal((await messageRef.get()).exists, false); checks++;
+    assert.equal((await db.collection(`users/${ids[0]}/socialReferences`).get()).size, 0); checks++;
+    await db.doc(`accountDeletions/${ids[0]}`).delete();
+    time += 30 * 60_000;
+    await call(1, "waterChat.list", room, 403);
+  } finally {
+    if (savedConfig.exists) await config.set(savedConfig.data());
+    else await config.delete();
+  }
+  console.log(`Water room emulator: ${checks - beforeChat} checks PASS`);
 } finally {
   for (const uid of ids) { await db.doc(`accountDeletions/${uid}`).delete(); await db.doc(`accountSuspensions/${uid}`).delete(); await auth.deleteUser(uid).catch(() => {}); }
   await app.delete();

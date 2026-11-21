@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { useAuth } from "../features/auth/context/authContextValue.js";
 import { useDataScope } from "../features/auth/context/dataScopeContextValue.js";
 import { WATER_CHAT_MAX_LENGTH, waterRepository } from "../features/waters/data/waterRepository.js";
+import WaterRoomPanel from "../features/social/components/WaterRoomPanel.jsx";
 import "./WaterChatPage.css";
 
 function formatMessageTime(iso) {
@@ -19,7 +20,7 @@ function formatMessageTime(iso) {
   }
 }
 
-function WaterChatPage() {
+function WaterChatSession() {
   const { waterId } = useParams();
   const scope = useDataScope();
   const auth = useAuth();
@@ -93,13 +94,14 @@ function WaterChatPage() {
         <Link to={`/waters/${waterId}`} aria-label="Zpět na detail revíru">←</Link>
         <div>
           <h1>{water?.name || "Chat revíru"}</h1>
-          <p><span className="water-chat-presence-dot" aria-hidden="true" />Jen tvoje místní zprávy</p>
+          <p><span className="water-chat-presence-dot" aria-hidden="true" />Moje revíry</p>
         </div>
       </header>
 
-      <aside className="water-chat-backend-state" aria-label="Dostupnost zpráv">
+      {auth.user?.uid && water?.catalogueId && <WaterRoomPanel key={`${auth.user.uid}:${water.catalogueId}`} waterId={water.catalogueId} uid={auth.user.uid} />}
+      <aside className="water-chat-backend-state" aria-label="Dostupnost místních poznámek">
         <span>JEN PRO TEBE</span>
-        <p>Zprávy ostatních rybářů zatím nejsou dostupné. Tady si můžeš ukládat vlastní poznámky k revíru.</p>
+        <p>Vlastní poznámky k revíru zůstávají v tomto zařízení.</p>
       </aside>
 
       {loadError && <p className="water-chat-error" role="alert">{loadError}</p>}
@@ -145,4 +147,8 @@ function WaterChatPage() {
   );
 }
 
-export default WaterChatPage;
+export default function WaterChatPage() {
+  const { waterId } = useParams();
+  const { scopeKey } = useDataScope();
+  return <WaterChatSession key={`${scopeKey}:${waterId}`} />;
+}

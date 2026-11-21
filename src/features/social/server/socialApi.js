@@ -12,6 +12,8 @@ const actions = { friends: ["tab", "cursor"], "friends.status": ["targetUid"], s
   "nearby.join": ["latitude", "longitude"], "nearby.leave": [], "nearby.consent": ["accepted", "showProfile"], "nearby.status": [], "nearby.discover": [], "nearby.waterActivity": ["catalogueId"],
   "waterPresence.status": [], "waterPresence.join": ["waterId", "confirmed", "expectedSessionId"],
   "waterPresence.refresh": ["sessionId"], "waterPresence.leave": ["sessionId"],
+  "waterChat.send": ["waterId", "sessionId", "text", "operationId"], "waterChat.list": ["waterId", "sessionId", "cursor"],
+  "waterChat.report": ["waterId", "sessionId", "messageId", "reason"],
   "entries.save":["entryId","kind","visibility","expectedRevision","title","description","achievementId"],
   "avatar.set": ["jpegBase64"], "avatar.remove": [], image: ["identity", "kind", "catchId", "photoId"] };
 const errors = { unauthenticated: 401, authentication_required: 401, account_unavailable: 403, forbidden: 403,
@@ -19,7 +21,7 @@ const errors = { unauthenticated: 401, authentication_required: 401, account_una
   invalid_publication:400,post_unavailable:404,post_conflict:409,interaction_conflict:409,comment_unavailable:404,comment_conflict:409,comment_duplicate:429,invalid_interaction:400,photo_preparing:409,photo_unavailable:503,
   social_disabled: 503, social_unavailable: 404, profile_unavailable: 404, social_rate_limit: 429, request_limit: 429,
   handle_taken: 409, invalid_profile: 400, invalid_shared_catch: 400, invalid_shared_photo: 400, invalid_request: 400,
-  consent_required: 403, water_presence_required: 403, water_presence_conflict: 409,
+  consent_required: 403, water_presence_required: 403, water_presence_conflict: 409, message_conflict: 409, message_unavailable: 404,
   save_profile_first: 400, invalid_avatar: 400, avatar_unavailable: 503, invalid_search: 400, invalid_cursor: 400, profile_required: 409, discovery_unavailable: 503, relationship_conflict: 409 };
 function isAvailable(action, payload, features) {
   // Leave and consent withdrawal must work for stale clients after a rollout closes.
@@ -27,6 +29,7 @@ function isAvailable(action, payload, features) {
   if (action === "nearby.consent" && payload.accepted === false) return true;
   if (action.startsWith("nearby.")) return features.nearby === true;
   if (action.startsWith("waterPresence.")) return features.waterPresence === true;
+  if (action.startsWith("waterChat.")) return features.waterPresence === true && features.waterChat === true;
   return true;
 }
 export function createSocialHandler({ service, features = FEATURES }) {

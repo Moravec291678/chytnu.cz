@@ -21,6 +21,7 @@ import { createSocialInteractionService } from "./socialInteractionService.js";
 import { publicationConsentPath } from "./publicationConsent.js";
 import { createNearbyPresenceService } from "./nearbyPresenceService.js";
 import { createWaterPresenceService } from "./waterPresenceService.js";
+import { createWaterRoomMessageService } from "./waterRoomMessageService.js";
 export const profileError = (code, status = 400) => Object.assign(new Error(code), { code, status });
 export function createPublicProfileService({ db, auth, avatar, socialPhoto, env = {}, cursorSecret, now = () => Date.now() }) {
   const repository = createSocialRepository({ db, auth, now, profilesEnabled: true });
@@ -31,6 +32,7 @@ export function createPublicProfileService({ db, auth, avatar, socialPhoto, env 
   const interactions=createSocialInteractionService({db,publications,cursors:createSocialCursor({env,secret:cursorSecret,now}),env,now});
   const nearby=createNearbyPresenceService({db,now});
   const waterPresence = createWaterPresenceService({ db, now });
+  const waterChat = createWaterRoomMessageService({ db, waterPresence, cursors: createSocialCursor({ env, secret: cursorSecret, now }), now });
   async function identity(token) {
     if (!token) throw profileError("authentication_required", 401);
     try { return (await auth.verifyIdToken(token, true)).uid; } catch { throw profileError("authentication_required", 401); }
@@ -52,6 +54,14 @@ export function createPublicProfileService({ db, auth, avatar, socialPhoto, env 
       if (action === "waterPresence.join" || action === "waterPresence.refresh") {
         const key = createHash("sha256").update(uid).digest("hex");
         limits.push([`social-water-presence-minute-${key}`, minute, 4], [`social-water-presence-day-${key}`, day, 12]);
+      }
+      if (action === "waterChat.send") {
+        const key = createHash("sha256").update(uid).digest("hex");
+        limits.push([`social-water-chat-minute-${key}`, minute, 8], [`social-water-chat-day-${key}`, day, 40]);
+      }
+      if (action === "waterChat.report") {
+        const key = createHash("sha256").update(uid).digest("hex");
+        limits.push([`social-water-chat-report-day-${key}`, day, 10]);
       }
       const rows = await Promise.all(limits.map(([key]) => tx.get(db.doc(`serverRateLimits/${key}`))));
       limits.forEach(([key, window, limit], i) => {
@@ -113,6 +123,9 @@ export function createPublicProfileService({ db, auth, avatar, socialPhoto, env 
     if (action === "waterPresence.status") return waterPresence.status(uid);
     if (action === "waterPresence.join") return waterPresence.join(uid, payload);
     if (action === "waterPresence.refresh") return waterPresence.refresh(uid, payload.sessionId);
+    if (action === "waterChat.send") return waterChat.send(uid, payload);
+    if (action === "waterChat.list") return waterChat.list(uid, payload);
+    if (action === "waterChat.report") return waterChat.report(uid, payload);
     if (action === "interactions.list") return interactions.list(uid,payload);
     if (action === "reactions.set") return interactions.setReaction(uid,payload);
     if (action === "comments.save") return interactions.saveComment(uid,payload);
