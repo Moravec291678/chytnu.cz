@@ -1,4 +1,5 @@
 import { useSectionLink } from "../shared/layout/useSectionLink.js";
+import CatchMeasurements from "../features/catches/components/CatchMeasurements.jsx";
 import { useState } from "react";
 import Layout from "../shared/layout/Layout";
 import CatchCard from "../features/catches/components/CatchCard";
@@ -8,7 +9,6 @@ import { getCatchOutcomeStats } from "../features/home/utils/profileStats";
 import { getCatchPatterns, getCatchStatistics } from "../features/stats/utils/catchStatistics";
 import { getMonthlyCatchSeries, getPeriodLabel, getPeriodRange } from "../features/stats/utils/statsPeriod.js";
 import { getBiggestCatch } from "../features/home/utils/profileStats";
-import { formatCatchMeasurements } from "../features/catches/data/catchWeight.js";
 import { isFeatureEnabled } from "../shared/config/featureFlags.js";
 import { getEntitlementState } from "../features/entitlements/data/entitlementAccess.js";
 import "./StatsPage.css";
@@ -42,10 +42,10 @@ function formatCatchCount(count) {
   return `${formatNumber(count, 0)} ${noun}`;
 }
 
-function StatCard({ label, value, note }) {
+function StatCard({ label, value, note, record }) {
   return <article className="stats-metric">
     <span className="stats-metric-label">{label}</span>
-    <strong className="stats-metric-value">{value}</strong>
+    {record ? <CatchMeasurements record={record} /> : <strong className="stats-metric-value">{value}</strong>}
     {note && <span className="stats-metric-note">{note}</span>}
   </article>;
 }
@@ -152,10 +152,10 @@ function StatsPage() {
             <StatCard label="Zaznamenané úlovky" value={formatNumber(stats.catchCount, 0)} />
             <StatCard label="Různé druhy" value={formatNumber(stats.speciesCount, 0)} />
             {stats.longestLengthCm !== null && <StatCard label="Nejdelší změřený" value={`${formatNumber(stats.longestLengthCm, 0)} cm`} note={`${formatCatchCount(stats.measuredLengthCount)} se známou délkou`} />}
-            {recordCatch && <StatCard label="Nejlepší úlovek za období" value={formatCatchMeasurements(recordCatch)} note={recordCatch.species} />}
-            {allTimeRecord && <StatCard label="Osobní rekord" value={formatCatchMeasurements(allTimeRecord)} note={allTimeRecord.species} />}
-            {patterns.time && <StatCard label="Nejlepší čas" value={patterns.time.labels.join(" · ")} note={`${patterns.time.count}× z ${patterns.time.sampleCount} záznamů`} />}
-            {patterns.bait && <StatCard label="Nejlepší nástraha" value={patterns.bait.labels.join(" · ")} note={`${patterns.bait.count}× z ${patterns.bait.sampleCount} záznamů`} />}
+            {recordCatch && <StatCard label="Nejlepší úlovek za období" record={recordCatch} note={recordCatch.species} />}
+            {allTimeRecord && <StatCard label="Osobní rekord" record={allTimeRecord} note={allTimeRecord.species} />}
+            {patterns.time && <StatCard label="Nejčastější čas v záznamech" value={patterns.time.labels.join(" · ")} note={`${patterns.time.count}× z ${patterns.time.sampleCount} záznamů`} />}
+            {patterns.bait && <StatCard label="Nejčastější nástraha v záznamech" value={patterns.bait.labels.join(" · ")} note={`${patterns.bait.count}× z ${patterns.bait.sampleCount} záznamů`} />}
             {stats.species[0] && <StatCard label="Nejčastější druh" value={stats.species[0].label} note={`${stats.species[0].count}× v tomto období`} />}
             {outcomes && <StatCard label="Puštěno ze známých výsledků" value={`${outcomes.percentageReleased}%`} note={`${outcomes.released} z ${outcomes.known} úlovků se známým výsledkem`} />}
           </section>
@@ -166,13 +166,15 @@ function StatsPage() {
               <span>{period === "total" ? "Posledních 6 měsíců" : period === "year" ? "Měsíce v roce" : "Měsíce sezóny"}</span>
             </div>
             {monthlySeries.datedCatchCount === 0 ? <p className="stats-panel-note">Časový přehled se zobrazí po doplnění data úlovku.</p> : <>
-              <div className="stats-months" style={{ "--stats-month-count": monthlySeries.months.length }}>
-                {monthlySeries.months.map((month) => <div className="stats-month" key={month.key}>
-                  <strong>{month.count}</strong>
-                  <span className="stats-month-label">{month.label}</span>
-                  <span className="stats-month-track"><span className="stats-month-bar" style={{ height: `${month.count ? Math.max(8, (month.count / maxMonthlyCatchCount) * 100) : 0}%` }} /></span>
-                </div>)}
-              </div>
+              <ul className="stats-months" role="list" aria-label="Počty úlovků podle měsíců"
+                style={{ "--stats-month-count": monthlySeries.months.length, "--stats-compact-count": Math.min(6, monthlySeries.months.length) }}>
+                {monthlySeries.months.map(month => <li className="stats-month" key={month.key}>
+                  <span className="stats-month-summary">{month.fullLabel}, {formatCatchCount(month.count)}</span>
+                  <strong aria-hidden="true">{month.count}</strong>
+                  <span className="stats-month-track" aria-hidden="true"><span className="stats-month-bar" style={{ height: `${month.count / maxMonthlyCatchCount * 100}%` }} /></span>
+                  <span className="stats-month-label" aria-hidden="true" title={month.fullLabel}>{month.label}</span>
+                </li>)}
+              </ul>
               <p className="stats-panel-note">V grafu je {formatCatchCount(monthlySeries.datedCatchCount)} s platným datem v tomto časovém okně.</p>
             </>}
           </section>

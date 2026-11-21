@@ -49,7 +49,7 @@ async function renderWithCanvas(t, data, photoBlob = null, photoFrame = {}) {
   return harness;
 }
 
-test("share card gives length the lead, keeps estimated source internal, and fits a long species name", async (t) => {
+test("share card gives length the lead, identifies estimated weight, and fits a long species name", async (t) => {
   const data = createCatchShareData({
     species: "Pstruh duhový jezerní forma s mimořádně dlouhým názvem",
     speciesKey: "rainbowTrout",
@@ -58,19 +58,18 @@ test("share card gives length the lead, keeps estimated source internal, and fit
     weightSource: "estimated",
   });
   const harness = await renderWithCanvas(t, data);
-  const drawn = harness.text.map((item) => item.value).join(" ");
   const length = harness.text.find((item) => item.value === "82 cm");
-  const weight = harness.text.find((item) => item.value === "7,4 kg");
+  const weight = harness.text.find((item) => item.value === "≈ 7,4 kg");
   const species = harness.text.find((item) => item.value.endsWith("…"));
 
   assert.equal(data.weightSource, "estimated");
   assert.ok(length);
   assert.ok(weight);
+  assert.ok(harness.text.some(({ value }) => value === "ODHAD HMOTNOSTI"));
   assert.ok(length.y < weight.y);
   assert.ok(Number(length.font.match(/(\d+(?:\.\d+)?)px/)?.[1]) > Number(weight.font.match(/(\d+(?:\.\d+)?)px/)?.[1]));
   assert.ok(species);
   assert.ok(species.value.length < data.species.length);
-  assert.doesNotMatch(drawn, /odhad/i);
 });
 
 test("share card handles missing length and weight, private location, and no photo", async (t) => {

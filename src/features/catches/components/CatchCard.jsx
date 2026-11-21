@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from "react";
+import CatchMeasurements from "./CatchMeasurements.jsx";
 import { Link } from "react-router-dom";
 import {
   formatCatchDateTime,
   formatFightDuration,
 } from "../../../shared/utils/formatters";
-import { formatCatchWeight } from "../data/catchWeight.js";
 import { photoFrameStyle } from "../data/photoFraming.js";
 import { getPrimaryAvailablePhoto } from "../data/catchPhotos.js";
 import { withPhotoDeadline } from "../data/photoDeadline.js";
@@ -100,10 +100,6 @@ function CatchCard({ catchedFish, isPersonalRecord = false }) {
   const photos = preview?.scopeKey === scope.scopeKey && preview?.catchId === catchedFish.id ? buildGalleryItems([catchedFish]) : [];
   const index = photos.findIndex(item => item.photoId === preview?.photoId);
   const select = photoId => setPreview({ scopeKey: scope.scopeKey, catchId: catchedFish.id, photoId });
-  const weight = formatCatchWeight(catchedFish);
-  const length = Number.isFinite(catchedFish.lengthCm)
-    ? catchedFish.lengthCm.toLocaleString("cs-CZ", { maximumFractionDigits: 1 })
-    : null;
 
   return (
     <div className={`catch-card-link${isPersonalRecord ? " catch-card-link-record" : ""}`}>
@@ -137,11 +133,9 @@ function CatchCard({ catchedFish, isPersonalRecord = false }) {
             </div>
           </div>
 
-          <div className="catch-card-right">
-            {length && <small>{length} cm</small>}
-            {weight && <strong>{weight}</strong>}
-            {weight && <span>kg</span>}
-          </div>
+          {(Number.isFinite(catchedFish.lengthCm) || Number.isFinite(catchedFish.weightKg)) && <div className="catch-card-right">
+            <CatchMeasurements record={catchedFish} />
+          </div>}
         </div>
 
         {catchedFish.fightMinutes != null && <div className="catch-card-footer"><span>Délka boje</span><span>{formatFightDuration(catchedFish.fightMinutes)}</span></div>}

@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import CatchMeasurements from "../../catches/components/CatchMeasurements.jsx";
 import { useState } from "react";
 import { focusPhotoOpener } from "../../../shared/components/photoViewerNavigation.js";
 import CollaboratorBadge from "../../admin/CollaboratorBadge.jsx";
@@ -38,7 +39,7 @@ export function SocialPostCard({ post, refreshKey, compact = false, detail = fal
     <div className="online-post-content">
       {detail ? <h1>{title}</h1> : <h3><Link to={path}>{title}</Link></h3>}
       <SocialEntryDetails post={post} />
-      <div className="online-post-meta">{Number.isFinite(content.lengthCm) && content.lengthCm > 0 && <strong>{content.lengthCm.toLocaleString("cs-CZ")} cm</strong>}{Number.isFinite(content.weightKg) && content.weightKg > 0 && <strong>{content.weightKg.toLocaleString("cs-CZ")} kg</strong>}{date && <time dateTime={dateTime}>{caughtDate ? date : `Sdíleno ${date}`}</time>}<span>{visibilityLabels[post.visibility] ?? "Sdíleno"}</span></div>
+      <div className="online-post-meta"><CatchMeasurements record={content} size="compact" />{date && <time dateTime={dateTime}>{caughtDate ? date : `Sdíleno ${date}`}</time>}<span>{visibilityLabels[post.visibility] ?? "Sdíleno"}</span></div>
       {!compact && <>{content.description && <p className="online-post-description">{content.description}</p>}{(content.method || content.waterName) && <p className="online-post-context">{[content.method, content.waterName].filter(Boolean).join(" · ")}</p>}</>}
       {!detail && !compact && <Link className="online-post-detail" to={path}>Detail příspěvku <span aria-hidden="true">→</span></Link>}
     </div>

@@ -1,0 +1,45 @@
+.catch-measures {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-2);
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  --catch-measure-primary-size: 1.375rem;
+  --catch-measure-secondary-size: .875rem;
+}
+
+.catch-measures--compact {
+  --catch-measure-primary-size: 1.0625rem;
+  --catch-measure-secondary-size: .8125rem;
+}
+
+.catch-measures--large {
+  --catch-measure-primary-size: clamp(1.75rem, 6vw, 2.5rem);
+  --catch-measure-secondary-size: 1.125rem;
+}
+
+.catch-measure {
+  display: inline-flex;
+  align-items: baseline;
+  gap: .25em;
+  flex-wrap: wrap;
+}
+
+.catch-measures .catch-measures-primary {
+  color: inherit;
+  font-size: var(--catch-measure-primary-size);
+  font-weight: 850;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.catch-measures .catch-measures-secondary,
+.catch-measures .catch-measures-estimate {
+  color: var(--text-secondary);
+  font-size: var(--catch-measure-secondary-size);
+  font-weight: 500;
+  white-space: nowrap;
+}

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import CatchMeasurements from "../features/catches/components/CatchMeasurements.jsx";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { formatCatchMeasurements } from "../features/catches/data/catchWeight.js";
 import { compareCatchSize } from "../features/catches/data/catchSize.js";
@@ -389,7 +390,7 @@ function ProfilePage() {
       <section className="profile-stat-grid" aria-label="Souhrn profilu">
         <div><strong>{catchState.loading ? "—" : catchState.catches.length}</strong><span>ÚLOVKY</span></div>
         <div><strong>{catchState.loading ? "—" : progression.speciesCount}</strong><span>DRUHY</span></div>
-        <div className="profile-record-stat"><strong>{recordCatch ? formatCatchMeasurements(recordCatch, { maximumFractionDigits: 1 }) : "—"}</strong><span>REKORD</span></div>
+        <div className="profile-record-stat">{recordCatch ? <CatchMeasurements record={recordCatch} /> : <strong>—</strong>}<span>REKORD</span></div>
         <div><strong>{tripState.loading ? "—" : tripState.trips.length}</strong><span>VYCHÁZKY</span></div>
         <div><strong>{progression.streak.weeks}</strong><span>TÝDENNÍ SÉRIE</span></div>
         {bestWater?.water ? <Link className="profile-stat-water" to={`/waters/${bestWater.id}`}><strong>{bestWater.name}</strong><span>NEJLEPŠÍ REVÍR · {bestWater.catchCount} ÚLOVKŮ</span></Link>

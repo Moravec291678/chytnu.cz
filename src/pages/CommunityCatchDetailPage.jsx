@@ -1,4 +1,5 @@
 import { useOwnModeration } from "../features/community/useOwnModeration.js";
+import CatchMeasurements from "../features/catches/components/CatchMeasurements.jsx";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import CollaboratorBadge from "../features/admin/CollaboratorBadge.jsx";
@@ -171,8 +172,7 @@ function CommunityCatchDetailPage() {
         {projection.photos.length > 0 && <p role="status">Autorizované fotografie jsou dostupné u online příspěvku nebo ve sdílené galerii.</p>}
 
         <section className="community-detail-metrics" aria-label="Údaje úlovku">
-          {projection.lengthCm !== null && <div><strong>{projection.lengthCm.toLocaleString("cs-CZ")} cm</strong><span>Délka</span></div>}
-          {projection.weightKg !== null && <div><strong>{projection.weightSource === "estimated" ? "≈ " : ""}{projection.weightKg.toLocaleString("cs-CZ")} kg</strong><span>Váha{projection.weightSource === "estimated" ? " · odhad" : ""}</span></div>}
+          <CatchMeasurements record={projection} size="large" />
           {formattedDate && <div><strong>{formattedDate}</strong><span>Datum</span></div>}
         </section>
 

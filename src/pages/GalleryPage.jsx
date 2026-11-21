@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import CatchMeasurements from "../features/catches/components/CatchMeasurements.jsx";
 import { Link } from "react-router-dom";
 import Layout from "../shared/layout/Layout";
 import { useCatches } from "../features/catches/context/useCatches";
@@ -30,6 +31,7 @@ function GalleryTile({ item, scope, onOpen }) {
       {visible ? <GalleryPhotoImage item={item} scope={scope} style={photoFrameStyle(item)} alt={`${item.species}${item.locationName ? `, ${item.locationName}` : ""}`} loading="lazy" tile /> : <span className="gallery-missing" aria-hidden="true" />}
       {item.isPrimary && <span className="gallery-primary-badge">Hlavní</span>}
     </span>
+    {(Number.isFinite(item.lengthCm) || Number.isFinite(item.weightKg)) && <span className="gallery-tile-caption"><CatchMeasurements record={item} size="compact" /></span>}
     <button type="button" className="gallery-tile-open" onClick={onOpen} aria-label={`Otevřít fotografii: ${item.species}${item.locationName ? `, ${item.locationName}` : ""}`} />
   </div>;
 }
@@ -38,7 +40,7 @@ function GalleryViewer({ items, index, scope, onClose, onSelect, catches }) {
   const [sharingOpen, setSharingOpen] = useState(false);
   const selected = items[index];
   return <PhotoViewer items={items} index={index} onSelect={onSelect} onClose={onClose}
-    describe={item => ({ title: item.species, description: [
+    describe={item => ({ title: item.species, measurements: <CatchMeasurements record={item} size="compact" />, description: [
       item.caughtAt && new Date(item.caughtAt).toLocaleDateString("cs-CZ"), item.locationName, item.isPrimary && "Hlavní fotografie",
     ].filter(Boolean).join(" · ") })}
     renderImage={item => <GalleryPhotoImage key={item.catchId + ":" + item.photoId} item={item} scope={scope} alt={"Fotografie úlovku – " + item.species} />}

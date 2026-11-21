@@ -37,7 +37,7 @@ export default function PhotoViewer({ items, index, onSelect, onClose, describe,
   }, [shown]);
 
   if (!item) return null;
-  const { title, description } = describe(item);
+  const { title, description, measurements } = describe(item);
   const canMove = !panel && items.length > 1;
   function move(direction) {
     if (canMove && direction) onSelect(advancePhoto(index, items.length, direction));
@@ -51,7 +51,7 @@ export default function PhotoViewer({ items, index, onSelect, onClose, describe,
       if (direction) { event.preventDefault(); move(direction); }
     }}>
     <header className="photo-viewer-header">
-      <div><strong>{title}</strong>{description && <p>{description}</p>}</div>
+      <div className="photo-viewer-caption"><strong>{title}</strong>{description && <p>{description}</p>}{measurements}</div>
       <button ref={closeButton} type="button" className="photo-viewer-close" onClick={onClose}>
         <span aria-hidden="true">×</span> Zavřít
       </button>

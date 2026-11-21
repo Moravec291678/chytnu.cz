@@ -34,6 +34,7 @@ export function buildGalleryItems(catches = [], { ownerId = null } = {}) {
         isFavorite: Boolean(record.isFavorite),
         isPrimary: photo.id ? photo.id === record.primaryPhotoId || (!record.primaryPhotoId && index === 0) : index === 0,
         weightKg: Number.isFinite(record.weightKg) ? record.weightKg : null,
+        ...(record.weightSource === "estimated" ? { weightSource: "estimated" } : {}),
         lengthCm: Number.isFinite(record.lengthCm) ? record.lengthCm : null,
         hasLocalBytes: photo.blob instanceof Blob,
       };

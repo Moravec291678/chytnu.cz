@@ -478,6 +478,11 @@
   white-space: nowrap;
 }
 
+.catch-share-weight--solo > strong {
+  font-size: clamp(29px, 8vw, 40px);
+  font-weight: 850;
+}
+
 .catch-share-weight small {
   color: var(--text-secondary);
   font-size: 0.74em;

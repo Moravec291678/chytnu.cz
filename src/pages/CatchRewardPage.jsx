@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import CatchMeasurements from "../features/catches/components/CatchMeasurements.jsx";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import Layout from "../shared/layout/Layout";
 import { useCatches } from "../features/catches/context/useCatches";
@@ -101,7 +102,7 @@ export default function CatchRewardPage() {
           <span className={`catch-reward-rarity catch-reward-rarity--${rarity.color}`}>{rarity.label}</span>
           <h1>{record.species}</h1>
           {formatCatchMeasurements(record)
-            ? <strong className="catch-reward-weight">{formatCatchMeasurements(record)}</strong>
+            ? <CatchMeasurements record={record} />
             : <strong className="catch-reward-weight catch-reward-weight--empty">Záznam úlovku</strong>}
           <p className="catch-reward-record-info">
             {[

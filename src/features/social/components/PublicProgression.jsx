@@ -1,4 +1,5 @@
 import { useRef, useEffect, useState } from "react";
+import CatchMeasurements from "../../catches/components/CatchMeasurements.jsx";
 import { socialRequest } from "../data/socialClient.js";
 import "./publicProgression.css";
 
@@ -54,7 +55,7 @@ export function PublicStatistics({ statistics }) {
 
 export function PublicTrophies({ trophies }) {
   return <><h2>Trofejní vitrína</h2><p className="social-help">Největší z povolených sdílených záznamů. Přesné lokality ani soukromý deník se neotevírají.</p>
-    {trophies?.length ? <div className="public-trophy-grid">{trophies.map(item => <article className="public-trophy" key={item.id}><span aria-hidden="true">🏆</span><h3>{item.species || item.label || "Sdílený úlovek"}</h3><p>{number(item.lengthCm) && item.lengthCm > 0 ? `${format(item.lengthCm)} cm` : ""}{number(item.weightKg) && item.weightKg > 0 ? `${item.lengthCm > 0 ? " · " : ""}${format(item.weightKg)} kg` : ""}</p>{item.caughtAt && <p className="social-help">{item.caughtAt.length === 7 ? item.caughtAt : dateLabel(item.caughtAt)}</p>}</article>)}</div> : <p className="social-empty">Zatím žádné sdílené trofejní záznamy pro tento okruh návštěvníků.</p>}
+    {trophies?.length ? <div className="public-trophy-grid">{trophies.map(item => <article className="public-trophy" key={item.id}><span aria-hidden="true">🏆</span><h3>{item.species || item.label || "Sdílený úlovek"}</h3><CatchMeasurements record={item} size="compact" />{item.caughtAt && <p className="social-help">{item.caughtAt.length === 7 ? item.caughtAt : dateLabel(item.caughtAt)}</p>}</article>)}</div> : <p className="social-empty">Zatím žádné sdílené trofejní záznamy pro tento okruh návštěvníků.</p>}
   </>;
 }
 

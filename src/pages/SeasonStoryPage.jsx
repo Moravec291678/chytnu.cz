@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import CatchMeasurements from "../features/catches/components/CatchMeasurements.jsx";
 import { Link } from "react-router-dom";
 import { useDataScope } from "../features/auth/context/dataScopeContextValue.js";
 import { useCatches } from "../features/catches/context/useCatches";
@@ -89,10 +90,6 @@ export default function SeasonStoryPage() {
   };
 
   const moment = story.bestMoment?.record;
-  const momentMetrics = [
-    Number.isFinite(moment?.lengthCm) ? `${moment.lengthCm.toLocaleString("cs-CZ")} cm` : null,
-    story.bestMoment?.kind === "weight-pb" && Number.isFinite(moment?.weightKg) ? `${moment.weightKg.toLocaleString("cs-CZ")} kg` : null,
-  ].filter(Boolean);
 
   return (
     <Layout>
@@ -133,7 +130,7 @@ export default function SeasonStoryPage() {
                   <span>Nejlepší moment</span>
                   <h2>{story.bestMoment.label}</h2>
                   <strong>{moment?.species || "Zapsaný úlovek"}</strong>
-                  {momentMetrics.length > 0 && <p>{momentMetrics.join(" · ")}</p>}
+                  {moment && <CatchMeasurements record={story.bestMoment?.kind === "weight-pb" ? moment : { lengthCm: moment.lengthCm }} />}
                   {moment?.id && <Link to={`/catch/${moment.id}`}>Otevřít úlovek →</Link>}
                 </section>}
 

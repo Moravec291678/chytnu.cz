@@ -11,6 +11,7 @@ import { getMethodLabel } from "../shared/utils/getMethodLabel";
 import useLiveDuration from "../hooks/useLiveDuration";
 import { buildChallengeOverview } from "../features/progression/data/challenges";
 import { buildSeasonalChallenge } from "../features/progression/data/seasonalChallenge";
+import { readPreferences } from "../features/preferences/data/preferences.js";
 import HomeInsightCard from "../features/home/components/HomeInsightCard.jsx";
 import HomeInsightBoundary from "../features/home/components/HomeInsightBoundary.jsx";
 import { useDataScope } from "../features/auth/context/dataScopeContextValue.js";
@@ -158,6 +159,7 @@ function HomePage() {
   const { state: tripState, refresh: refreshTrips } = useTrips();
   const ledger = useProgression();
   const catches = catchState.catches;
+  const showDiaryTip = readPreferences(globalThis.localStorage, scope.scopeKey).localFishingRecommendations !== false;
   const season = getSeason(new Date());
   const seasonCatches = useMemo(() => catches.filter((item) => {
     const caughtAt = Date.parse(item.caughtAt);
@@ -279,7 +281,7 @@ function HomePage() {
           ))}
         </section>
         {FEATURES.community && user?.uid && <SocialFeed key={user.uid} mode="friends" compact />}
-        {!catchState.loading && !catchState.error && <HomeInsightBoundary key={scope.scopeKey}><HomeInsightCard catches={catches} trips={tripState.trips} contextReady={!tripState.loading && !tripState.error} /></HomeInsightBoundary>}
+        {showDiaryTip && !catchState.loading && !catchState.error && <HomeInsightBoundary key={scope.scopeKey}><HomeInsightCard catches={catches} trips={tripState.trips} contextReady={!tripState.loading && !tripState.error} /></HomeInsightBoundary>}
       </div>
     </Layout>
   );

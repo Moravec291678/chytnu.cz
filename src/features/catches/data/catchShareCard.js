@@ -1,3 +1,4 @@
+import { formatCatchWeight } from "./catchWeight.js";
 import { normalizePhotoFrame } from "./photoFraming.js";
 
 function imageDimensions(image) {
@@ -108,7 +109,7 @@ export async function renderShareCard(data, photoBlob = null, photoFrame = {}) {
   const secondaryText = readColor("--text-secondary", "#829db8");
   const font = '"Inter", "Arial", sans-serif';
   const length = formatValue(data.lengthCm, 1);
-  const weight = formatValue(data.weightKg, 2);
+  const weight = formatCatchWeight(data);
 
   let photo = null;
   if (photoBlob) {
@@ -174,9 +175,9 @@ export async function renderShareCard(data, photoBlob = null, photoFrame = {}) {
     if (weight !== null) {
       context.fillStyle = secondaryText;
       context.font = `800 20px ${font}`;
-      context.fillText("VÁHA", 540, metaY - 25);
+      context.fillText(data.weightSource === "estimated" ? "ODHAD HMOTNOSTI" : "HMOTNOST", 540, metaY - 25);
       context.fillStyle = primaryText;
-      context.font = `600 48px ${font}`;
+      context.font = `${length === null ? "800 92px" : "600 48px"} ${font}`;
       context.fillText(fitText(context, `${weight} kg`, 820), 540, metaY + 30);
       metaY += 96;
     }

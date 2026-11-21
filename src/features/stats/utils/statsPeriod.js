@@ -24,10 +24,8 @@ function pragueMonthStart(year, monthIndex) {
   return new Date(utcMidnight - pragueOffsetAt(utcMidnight));
 }
 
-function monthLabel(year, monthIndex) {
-  return new Intl.DateTimeFormat("cs-CZ", { timeZone: PRAGUE_TIME_ZONE, month: "short" })
-    .format(new Date(Date.UTC(year, monthIndex, 15))).replace(/\.$/, "");
-}
+const compactMonths = ["led", "úno", "bře", "dub", "kvě", "čvn", "čvc", "srp", "zář", "říj", "lis", "pro"];
+const fullMonthFormat = new Intl.DateTimeFormat("cs-CZ", { timeZone: PRAGUE_TIME_ZONE, month: "long", year: "numeric" });
 
 export function getPeriodRange(period, date) {
   const { year, month } = getPragueDateParts(date);
@@ -70,7 +68,7 @@ export function getMonthlyCatchSeries(catches, period, date) {
   let cursorMonth = startParts.month - 1;
   while (pragueMonthStart(cursorYear, cursorMonth).getTime() < end.getTime()) {
     const key = `${cursorYear}-${String(cursorMonth + 1).padStart(2, "0")}`;
-    months.push({ key, label: monthLabel(cursorYear, cursorMonth), count: counts.get(key) ?? 0 });
+    months.push({ key, label: compactMonths[cursorMonth], fullLabel: fullMonthFormat.format(new Date(Date.UTC(cursorYear, cursorMonth, 15))), count: counts.get(key) ?? 0 });
     cursorMonth += 1;
     if (cursorMonth > 11) { cursorMonth = 0; cursorYear += 1; }
   }

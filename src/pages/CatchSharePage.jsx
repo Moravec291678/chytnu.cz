@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import PageBackLink from "../shared/layout/PageBackLink.jsx";
 import { useCatches } from "../features/catches/context/useCatches";
+import { formatCatchWeight } from "../features/catches/data/catchWeight.js";
 import { createCatchShareData, formatCatchShareText, getCatchShareFileName, shouldIncludeCatchWater } from "../features/catches/data/catchShare.js";
 import { decodeSharePhoto, getSharePreviewFrameStyle, renderShareCard } from "../features/catches/data/catchShareCard.js";
 import { useDataScope } from "../features/auth/context/dataScopeContextValue.js";
@@ -163,7 +164,7 @@ export default function CatchSharePage() {
   if (!record) return <main className="catch-share-page"><PageBackLink to="/journal" /><section className="catch-share-error"><h1>Úlovek nenalezen</h1></section></main>;
 
   const length = formatMetric(shareData.lengthCm, 1);
-  const weight = formatMetric(shareData.weightKg, 2);
+  const weight = formatCatchWeight(shareData);
   const date = formatDate(shareData.caughtAt);
   return <main className="catch-share-page">
     <header className="catch-share-header">
@@ -179,7 +180,7 @@ export default function CatchSharePage() {
       <h2 className="catch-share-species">{shareData.species}</h2>
       <div className="catch-share-measurements" aria-label="Rozměry úlovku">
         {length !== null && <div className="catch-share-length"><span>DÉLKA</span><strong>{length}<small> cm</small></strong></div>}
-        {weight !== null && <div className={`catch-share-weight${length === null ? " catch-share-weight--solo" : ""}`}><span>VÁHA</span><strong>{weight}<small> kg</small></strong></div>}
+        {weight !== null && <div className={`catch-share-weight${length === null ? " catch-share-weight--solo" : ""}`}><span>{shareData.weightSource === "estimated" ? "ODHAD HMOTNOSTI" : "HMOTNOST"}</span><strong>{weight}<small> kg</small></strong></div>}
         {length === null && weight === null && <span className="catch-share-no-measurements">Zaznamenaný úlovek</span>}
       </div>
       <div className="catch-share-meta">

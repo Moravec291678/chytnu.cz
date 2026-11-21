@@ -23,6 +23,7 @@
 .gallery-tile-open{position:absolute;z-index:1;inset:0;width:100%;height:100%;padding:0;border:0;background:transparent;cursor:pointer}
 .gallery-tile-open:focus-visible{outline:3px solid var(--accent-green);outline-offset:-3px}
 .gallery-tile-image{position:relative;display:grid;width:100%;height:100%;place-items:center;overflow:hidden;background:var(--surface-2)}
+.gallery-tile-caption{position:absolute;inset:auto 0 0;padding:var(--space-1) var(--space-2);background:var(--app-bg);line-height:1.15}
 .gallery-tile img{width:100%;height:100%;object-fit:cover}
 .gallery-primary-badge{position:absolute;z-index:2;left:7px;top:7px;padding:var(--space-1) var(--space-1-75);border:1px solid #ffffff2b;border-radius:var(--radius-xs);background:var(--app-bg)c9;color:var(--text-primary);font-size:var(--font-size-10);font-weight:800;pointer-events:none;backdrop-filter:blur(5px)}
 .gallery-missing{min-width:0;max-width:100%;padding:var(--space-2);color:var(--text-secondary);font-size:var(--font-size-11);line-height:1.4;text-align:center;overflow-wrap:normal;word-break:normal}

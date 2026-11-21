@@ -29,7 +29,7 @@ html:has(.photo-viewer[open]) { overflow: hidden; }
 }
 
 .photo-viewer-header > div { min-width: 0; }
-.photo-viewer-header strong, .photo-viewer-header p { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.photo-viewer-caption > strong, .photo-viewer-caption > p { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .photo-viewer-header p, .photo-viewer-count { color: var(--text-secondary); font-size: var(--font-size-13); }
 .photo-viewer-close, .photo-viewer-arrow {
   display: inline-flex;

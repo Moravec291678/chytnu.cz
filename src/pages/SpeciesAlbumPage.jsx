@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
+import CatchMeasurements from "../features/catches/components/CatchMeasurements.jsx";
 import { Link } from "react-router-dom";
 import Layout from "../shared/layout/Layout";
-import { formatCatchMeasurements } from "../features/catches/data/catchWeight.js";
 import { selectBestCatch } from "../features/catches/data/catchSize.js";
 import { useDataScope } from "../features/auth/context/dataScopeContextValue.js";
 import { useCatches } from "../features/catches/context/useCatches";
@@ -150,14 +150,14 @@ function SpeciesAlbumPage() {
           </div>
           {yearRecord && <article className="album-year-record">
             <span aria-hidden="true">✦</span>
-            <div><p>NEJDELŠÍ ÚLOVEK ROKU {currentYear}</p><strong>{formatCatchMeasurements(yearRecord)}</strong><span>{yearRecord.species || "Druh neuveden"}</span></div>
+            <div><p>NEJDELŠÍ ÚLOVEK ROKU {currentYear}</p><CatchMeasurements record={yearRecord} /><span>{yearRecord.species || "Druh neuveden"}</span></div>
             {yearRecord.id && <Link to={`/catch/${yearRecord.id}`} aria-label="Otevřít nejdelší úlovek roku">›</Link>}
           </article>}
           {trophies.length
             ? <div className="album-list album-trophies">{trophies.map((record, index) => {
               const content = <><span className="album-rank">{String(index + 1).padStart(2, "0")}</span>
                 <div><h3>{record.speciesName}</h3><p>{record.catch.locationName?.trim() || "Místo neuvedeno"}</p></div>
-                <strong>{formatCatchMeasurements(record.catch)}</strong></>;
+                <CatchMeasurements record={record.catch} size="compact" /></>;
               return record.catch.id
                 ? <Link className="album-list-card album-trophy-card" to={`/catch/${record.catch.id}`} key={`${record.speciesKey}-${record.catch.id}`}>{content}</Link>
                 : <article className="album-list-card album-trophy-card" key={`${record.speciesKey}-${index}`}>{content}</article>;

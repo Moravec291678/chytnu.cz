@@ -194,12 +194,8 @@
   text-align: right;
 }
 
-.catch-map-record-measure strong {
-  color: var(--accent-orange);
-  font-size: var(--font-size-title);
-  font-weight: 900;
-  line-height: 1;
-}
+.catch-map-record-measure .catch-measures { justify-content: flex-end; }
+.catch-map-record-measure .catch-measures-primary { color: var(--accent-orange); }
 
 .catch-map-record-measure small {
   color: var(--text-secondary);

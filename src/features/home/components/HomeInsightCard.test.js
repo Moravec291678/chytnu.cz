@@ -18,7 +18,7 @@ test("Home analysis first render is safe before async cache loading for guests a
         const scope = { scopeKey: ownerId ? `account:${ownerId}` : "guest", ownerId };
         const html = renderToString(React.createElement(StaticRouter, { location: "/" },
           React.createElement(DataScopeContext.Provider, { value: scope }, React.createElement(Card, { catches, trips: [] }))));
-        assert.match(html, /home-insight-title/);
+        assert.match(html, /role="status">Načítám podklady pro deníkový tip/);
         assert.doesNotMatch(html, /Aplikaci se nepodařilo zobrazit/);
       }
     }

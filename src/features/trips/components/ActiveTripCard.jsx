@@ -1,4 +1,5 @@
 import "./ActiveTripCard.css";
+import CatchMeasurements from "../../catches/components/CatchMeasurements.jsx";
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import useLiveDuration from "../../../hooks/useLiveDuration";
@@ -7,7 +8,7 @@ import { getStartedTripDayLabel } from "../utils/getStartedTripDayLabel";
 import { Link } from "react-router-dom";
 import { useTrips } from "../context/useTrips";
 import { getDistinctTripSpecies, getTripCatchRatePerHour, getTripDurationMs } from "../data/tripModel";
-import { formatCatchMeasurements, isMeasuredCatchWeight } from "../../catches/data/catchWeight.js";
+import { isMeasuredCatchWeight } from "../../catches/data/catchWeight.js";
 
 function ActiveTripCard({ activeTrip, catches = null }) {
   const navigate = useNavigate();
@@ -65,7 +66,7 @@ function ActiveTripCard({ activeTrip, catches = null }) {
         </div>
 
         <div className="active-trip-stat">
-          <p className="active-trip-stat-value">{heaviestCatch ? formatCatchMeasurements(heaviestCatch) : "—"}</p>
+          <p className="active-trip-stat-value">{heaviestCatch ? <CatchMeasurements record={heaviestCatch} size="compact" /> : "—"}</p>
 
           <p className="active-trip-stat-label">NEJTĚŽŠÍ ÚLOVEK</p>
         </div>

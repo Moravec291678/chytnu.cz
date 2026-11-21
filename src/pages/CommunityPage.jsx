@@ -1,4 +1,5 @@
 import { useRouteMemory } from "../shared/layout/navigationMemory.js";
+import CatchMeasurements from "../features/catches/components/CatchMeasurements.jsx";
 import { useOwnModeration } from "../features/community/useOwnModeration.js";
 import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
@@ -105,8 +106,7 @@ function CommunityPage() {
                         <div className="community-feed-card-top"><strong>{profileName}</strong><span>Lokální náhled</span></div>
                         <h3>{data.species}</h3>
                         <div className="community-feed-metrics">
-                          {data.lengthCm !== null && <b>{data.lengthCm.toLocaleString("cs-CZ")} cm</b>}
-                          {data.weightKg !== null && <b>{data.weightSource === "estimated" ? "≈ " : ""}{data.weightKg.toLocaleString("cs-CZ")} kg</b>}
+                          <CatchMeasurements record={data} size="compact" />
                         </div>
                         {formatDate(data.caughtAt) && <time dateTime={data.caughtAt}>{formatDate(data.caughtAt)}</time>}
                       </Link>

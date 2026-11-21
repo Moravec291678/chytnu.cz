@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import CatchMeasurements from "../../catches/components/CatchMeasurements.jsx";
 import { Badge, Card } from "../../../shared/components/UIPrimitives.jsx";
 import { MOON_PHASE_EMOJI } from "../../../shared/constants/constants";
 import {
@@ -40,9 +41,7 @@ function SpeciesCard({ speciesKey, data, biggest }) {
           </div>
 
           <div className="species-card-right">
-            {biggest.lengthCm != null && <p>{biggest.lengthCm} cm</p>}
-
-            {biggest.weightKg != null && <p>{biggest.weightKg} kg</p>}
+            <CatchMeasurements record={biggest} size="compact" />
 
             <p>{data.count}x</p>
           </div>

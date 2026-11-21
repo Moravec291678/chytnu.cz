@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import CatchMeasurements from "../features/catches/components/CatchMeasurements.jsx";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import Layout from "../shared/layout/Layout";
-import { formatCatchWeight } from "../features/catches/data/catchWeight.js";
+import { formatCatchMeasurements } from "../features/catches/data/catchWeight.js";
 import { useCatches } from "../features/catches/context/useCatches";
 import { buildPrivateCatchMarkers } from "../features/map/data/catchMap";
 import "./MapPage.css";
@@ -24,10 +25,7 @@ function locatedCatchCountLabel(count) {
 }
 
 function measurement(marker) {
-  const values = [];
-  if (marker.lengthCm !== null) values.push(`${marker.lengthCm.toLocaleString("cs-CZ")} cm`);
-  if (marker.weightKg !== null) values.push(`${marker.weightKg.toLocaleString("cs-CZ")} kg`);
-  return values.join(" · ") || "Míry neuvedeny";
+  return formatCatchMeasurements(marker) || "Míry neuvedeny";
 }
 
 function popupContent(marker, openDetail) {
@@ -142,8 +140,7 @@ function MapPage() {
             </span>
           </span>
           <span className="catch-map-record-measure">
-            {Number.isFinite(selectedMarker.lengthCm) && <small>{selectedMarker.lengthCm.toLocaleString("cs-CZ")} cm</small>}
-            {Number.isFinite(selectedMarker.weightKg) && <><strong>{formatCatchWeight(selectedMarker)}</strong><small>kg</small></>}
+            <CatchMeasurements record={selectedMarker} size="compact" />
             {!Number.isFinite(selectedMarker.weightKg) && !Number.isFinite(selectedMarker.lengthCm) && <small>Míry neuvedeny</small>}
           </span>
         </Link>}

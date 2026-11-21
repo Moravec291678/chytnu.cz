@@ -1,18 +1,18 @@
 import { useMemo, useState } from "react";
+import CatchMeasurements from "../features/catches/components/CatchMeasurements.jsx";
 import { Link } from "react-router-dom";
 import Layout from "../shared/layout/Layout";
 import { useCatches } from "../features/catches/context/useCatches";
 import { useTrips } from "../features/trips/context/useTrips";
 import { buildYearSummary, getAvailableSummaryYears } from "../features/retrospectives/data/retrospectives.js";
 import { getPragueDateParts } from "../features/stats/utils/statsPeriod.js";
-import { formatCatchMeasurements } from "../features/catches/data/catchWeight.js";
 import "./YearSummaryPage.css";
 
 const EMPTY_ROWS = Object.freeze([]);
 
-function SummaryCard({ value, label, tone = "green", note = "" }) {
+function SummaryCard({ value, record, label, tone = "green", note = "" }) {
   return <article className={`year-summary-card year-summary-card-${tone}`}>
-    <strong>{value}</strong>
+    {record ? <CatchMeasurements record={record} /> : <strong>{value}</strong>}
     <span>{label}</span>
     {note && <small>{note}</small>}
   </article>;
@@ -61,10 +61,11 @@ export default function YearSummaryPage() {
                 <SummaryCard value={summary.trips.toLocaleString("cs-CZ")} label="vycházek" />
                 <SummaryCard value={summary.catches.toLocaleString("cs-CZ")} label="úlovků" />
                 <SummaryCard
-                  value={largest ? formatCatchMeasurements(largest) : "—"}
+                  record={largest}
+                  value="—"
                   label="nejlepší úlovek"
                   tone="gold"
-                  note={largest?.weightSource === "estimated" ? `${largest.species || "Ryba"} · hmotnost je odhad` : largest?.species || "Zvážená hmotnost není uvedena"}
+                  note={largest?.species || "Zvážená hmotnost není uvedena"}
                 />
                 <SummaryCard value={summary.bestMonth?.label || "—"} label="nejlepší měsíc" />
                 <SummaryCard value={summary.bestBait?.label || "—"} label="nejlepší nástraha" />

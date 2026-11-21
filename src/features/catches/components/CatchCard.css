@@ -143,30 +143,13 @@
   text-align: right;
 }
 
-.catch-card-right strong {
-  color: var(--text-primary);
-  font-size: var(--font-size-25);
-  font-weight: 900;
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
+.catch-card-right .catch-measures {
+  flex-direction: column;
+  align-items: flex-end;
 }
 
-.catch-card-link-record .catch-card-right strong {
-  color: var(--accent-orange);
-}
-
-.catch-card-right span {
-  color: var(--text-secondary);
-  font-size: var(--font-size-11);
-  line-height: 1.2;
-}
-
-.catch-card-right small {
-  margin-top: var(--space-0-75);
-  color: var(--text-muted);
-  font-size: var(--font-size-11);
-  white-space: nowrap;
-}
+.catch-card-right .catch-measure { justify-content: flex-end; }
+.catch-card-link-record .catch-card-right .catch-measures-primary { color: var(--accent-orange); }
 
 .catch-card-footer {
   display: flex;

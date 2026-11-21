@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import CatchMeasurements from "../../catches/components/CatchMeasurements.jsx";
 import { Link } from "react-router-dom";
 import { useAuth } from "../../auth/context/authContextValue.js";
 import { focusPhotoOpener } from "../../../shared/components/photoViewerNavigation.js";
@@ -42,11 +43,8 @@ const postTitle = post => post.content.title || post.content.species || "Přísp
 
 export function PostPhotoViewer({ posts, index, onSelect, onClose, refreshKey, previewAudience, onDelete, deleting }) {
   return <PhotoViewer items={posts} index={index} onSelect={onSelect} onClose={onClose}
-    describe={post => ({ title: postTitle(post), description: [
-      post.content.lengthCm > 0 && post.content.lengthCm + " cm",
-      post.content.weightKg > 0 && post.content.weightKg + " kg",
-      post.content.caughtAt, post.content.waterName, visibilityLabels[post.visibility],
-    ].filter(Boolean).join(" · ") })}
+    describe={post => ({ title: postTitle(post), description: [post.content.caughtAt, post.content.waterName, visibilityLabels[post.visibility]].filter(Boolean).join(" · "),
+      measurements: <CatchMeasurements record={post.content} size="compact" /> })}
     renderImage={post => <PostImage key={post.id + ":" + post.revision} post={post} refreshKey={refreshKey} previewAudience={previewAudience} full />}
     actions={post => <>
       <Link to={"/u/" + encodeURIComponent(post.author.uid)} onClick={onClose}>{post.author.displayName}</Link>
@@ -107,7 +105,7 @@ export default function SocialGallery({ identity, photosOnly = false, previewAud
     <div className="social-gallery-tools"><label>Hledat v načtených příspěvcích<input type="search" value={query} maxLength={100} onChange={event => setQuery(event.target.value)} placeholder="Druh nebo sdílený revír" /></label><button type="button" disabled={!online} onClick={() => { setResult(null); setRefresh(value => value + 1); }}>Obnovit</button></div>
     {!online ? <p className="social-empty" role="status">Sdílená galerie vyžaduje připojení. Soukromý deník zůstává dostupný offline.</p> : !current ? <p role="status" className="social-post-loading">Načítám sdílené příspěvky…</p> : current.error ? <p role="alert" className="social-error">{current.error}</p> : <>
       {posts.length ? <div className="social-post-grid">{posts.map(post => {
-        const caption = <span className="social-post-caption"><strong>{postTitle(post)}</strong><small>{post.content.lengthCm > 0 ? post.content.lengthCm + " cm · " : ""}{visibilityLabels[post.visibility] ?? "Sdíleno"}</small></span>;
+        const caption = <span className="social-post-caption"><strong>{postTitle(post)}</strong><CatchMeasurements record={post.content} size="compact" /><small>{visibilityLabels[post.visibility] ?? "Sdíleno"}</small></span>;
         return <article key={post.id + ":" + post.revision} className="social-post-tile">
           {post.hasPhoto ? <button type="button" onClick={event => { focusPhotoOpener(event); select(post); }} aria-label={"Otevřít fotografii: " + postTitle(post)}>
             <PostImage post={post} refreshKey={refresh} previewAudience={previewAudience} />{caption}

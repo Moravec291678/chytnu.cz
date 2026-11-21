@@ -38,9 +38,10 @@ export default function DiaryAiExplanation({ report }) {
   }, [client, scope.ownerId, cancelRequests]);
   if (!AI_FEATURES.recommendations) return null;
   if (!scope.ownerId) return <div><h3>Volitelný tip AI z deníku</h3><p>Pro AI se <Link to="/login">přihlas</Link>. Místní rozbor funguje i bez ní.</p></div>;
-  const consent = consentState.ownerId === scope.ownerId ? consentState.consent : null;
+  const consentResolved = consentState.ownerId === scope.ownerId;
+  const consent = consentResolved ? consentState.consent : null;
   const run = async (capability) => {
-    if (requestBusy.current) return;
+    if (requestBusy.current || !hasAiConsent(consent, capability, AI_PROVIDER) || !report?.evidenceIds?.length) return;
     requestBusy.current = true;
     const currentSequence = ++sequence.current;
     const sourceFingerprint = fingerprint;
@@ -59,19 +60,21 @@ export default function DiaryAiExplanation({ report }) {
       if (currentSequence === sequence.current) setState((previous) => ({ ...previous, busy: "", error: error.message }));
     } finally { requestBusy.current = false; }
   };
-  const capabilities = [["recommendations", "Vytvořit tip pro další vycházku"]]
+  const capabilities = [["recommendations", "Vyžádat tip od AI"]]
     .filter(([key]) => AI_FEATURES[key]);
   return <div className="insights-ai-explanation">
     <h3>Volitelný tip AI z deníku</h3>
     <p>Cloudflare dostane pouze vypočítané souhrny synchronizovaných úlovků, bez fotografií, poznámek, názvů revírů a přesné polohy. Místní výpočty výše zůstávají podkladem pro ověření.</p>
     <p>Tip může chybovat; je to hypotéza, nikoli předpověď ani náhrada statistik. <Link to="/settings">Nastavit souhlas s AI</Link></p>
+    {!consentResolved && <p role="status">Ověřuji souhlas s AI…</p>}
     {capabilities.map(([key, label]) => {
       const allowed = hasAiConsent(consent, key, AI_PROVIDER);
       const result = state.results[key];
       const resultAuthorized = canDisplayAiResult(result, { ownerId: scope.ownerId, consent, capability: key });
       return <div key={key}>
         <button className="insights-analysis-button" type="button" disabled={Boolean(state.busy) || !allowed || !report?.evidenceIds?.length} onClick={() => void run(key)}>{label}</button>
-        {!allowed && <p>Pro tuto funkci nejdřív uděl souhlas v nastavení.</p>}
+        {consentResolved && !consentState.error && !allowed && <p>Pro tuto funkci nejdřív uděl souhlas v nastavení.</p>}
+        {allowed && !report?.evidenceIds?.length && <p>Pro tip z deníku potřebuje AI alespoň jeden platný záznam.</p>}
         {resultAuthorized && result.fingerprint === fingerprint && <div>
           <h4>Návrhy AI — hypotézy</h4>
           <p style={{ whiteSpace: "pre-wrap" }}>{result.text}</p>

@@ -200,16 +200,17 @@
 
 .stats-months {
   display: grid;
-  min-height: 104px;
-  grid-template-columns: repeat(var(--stats-month-count, 6), minmax(0, 1fr));
-  align-items: end;
-  gap: var(--space-1-75);
+  grid-template-columns: repeat(var(--stats-month-count), minmax(0, 1fr));
+  gap: var(--space-3) var(--space-1-75);
+  list-style: none;
+  margin: 0;
+  padding: 0;
 }
 
 .stats-month {
   display: grid;
   min-width: 0;
-  grid-template-rows: 14px 62px 14px;
+  grid-template-rows: 1rem 62px auto;
   gap: var(--space-1);
   text-align: center;
 }
@@ -217,30 +218,46 @@
 .stats-month strong {
   color: var(--text-secondary);
   font-size: var(--font-size-10);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stats-month-summary {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  clip-path: inset(50%);
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 .stats-month-track {
   display: flex;
-  height: 62px;
+  min-height: 0;
   align-items: flex-end;
   overflow: hidden;
-  border-radius: var(--radius-2xs) 5px 0 0;
+  box-shadow: 0 1px var(--border-strong);
+  border-radius: var(--radius-2xs) var(--radius-2xs) 0 0;
   background: var(--surface-2);
 }
 
 .stats-month-bar {
   display: block;
   width: 100%;
-  border-radius: var(--radius-2xs) 5px 0 0;
+  max-height: 100%;
+  border-radius: var(--radius-2xs) var(--radius-2xs) 0 0;
   background: var(--accent-green);
 }
 
 .stats-month-label {
-  overflow: hidden;
-  color: var(--text-muted);
-  font-size: var(--font-size-9);
-  text-overflow: ellipsis;
-  text-transform: uppercase;
+  color: var(--text-secondary);
+  font-size: var(--font-size-10);
+  white-space: nowrap;
+}
+
+@media (max-width: 560px) {
+  .stats-months { grid-template-columns: repeat(var(--stats-compact-count), minmax(0, 1fr)); }
 }
 
 .stats-panel-note {

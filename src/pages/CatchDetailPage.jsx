@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import CatchMeasurements from "../features/catches/components/CatchMeasurements.jsx";
 import { Link, useNavigate, useParams, useLocation } from "react-router-dom";
 import Layout from "../shared/layout/Layout";
 import { useCatches } from "../features/catches/context/useCatches";
@@ -18,7 +19,6 @@ import { getVerificationPresentation } from "../features/catches/data/verificati
 import { focusPhotoOpener } from "../shared/components/photoViewerNavigation.js";
 import PhotoViewer, { ViewerImage } from "../shared/components/PhotoViewer.jsx";
 import { isFeatureEnabled } from "../shared/config/featureFlags.js";
-import { formatCatchWeight } from "../features/catches/data/catchWeight.js";
 import ConfirmDialog from "../shared/components/ConfirmDialog";
 import "../features/catches/components/PhotoSyncStatus.css";
 import "./AddCatchPage.css";
@@ -246,9 +246,12 @@ function CatchDetailPage() {
         onClose={() => setPreview(null)} describe={() => ({ title: item.species, description: catchDateLabel })}
         renderImage={photo => <ViewerImage key={photo.url} src={photo.url} alt={`Fotografie úlovku – ${item.species}`} />} />}
       <section className="catch-detail-measures" aria-label="Míry úlovku">
-        <div><strong>{Number.isFinite(item.lengthCm) ? formatNumber(item.lengthCm) : "—"}</strong><span>cm</span><small>DÉLKA</small>{isLengthRecord && <em>Nový rekord</em>}{isPersonalBest && recognition.personalBestUnit === "cm" && <em>{recognition.personalBestDelta > 0 ? `+${formatNumber(recognition.personalBestDelta, 1)} cm rekord` : "Osobní rekord"}</em>}</div>
-        <div><strong>{Number.isFinite(item.weightKg) ? formatCatchWeight(item) : "—"}</strong><span>kg</span><small>{item.weightSource === "estimated" ? "ODHAD HMOTNOSTI" : "HMOTNOST"}</small>{isPersonalBest && recognition.personalBestUnit === "kg" && <em>{recognition.personalBestDelta > 0 ? `+${formatNumber(recognition.personalBestDelta, 2)} kg rekord` : "Osobní rekord"}</em>}</div>
-        <div><strong>{Number.isFinite(item.fightMinutes) ? item.fightMinutes : "—"}</strong><span>{Number.isFinite(item.fightMinutes) ? "min" : ""}</span><small>BOJ</small></div>
+        {Number.isFinite(item.lengthCm) || Number.isFinite(item.weightKg)
+          ? <CatchMeasurements record={item} size="large"
+              lengthNote={<>{isLengthRecord && <em>Nový rekord</em>}{isPersonalBest && recognition.personalBestUnit === "cm" && <em>{recognition.personalBestDelta > 0 ? `+${formatNumber(recognition.personalBestDelta, 1)} cm rekord` : "Osobní rekord"}</em>}</>}
+              weightNote={isPersonalBest && recognition.personalBestUnit === "kg" && <em>{recognition.personalBestDelta > 0 ? `+${formatNumber(recognition.personalBestDelta, 2)} kg rekord` : "Osobní rekord"}</em>} />
+          : <p>Míry neuvedeny</p>}
+        {Number.isFinite(item.fightMinutes) && <p className="catch-detail-fight">Délka boje · {item.fightMinutes} min</p>}
       </section>
       {recognition.personalBest || recognition.speciesRecord || recognition.seasonRecord || recognition.newLocation ? (
         <section className="catch-detail-section" aria-labelledby="catch-detail-awards-title">

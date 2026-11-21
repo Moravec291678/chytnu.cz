@@ -70,3 +70,11 @@ test("period boundaries and month charts use Europe/Prague dates across UTC midn
   assert.equal(series.months[10].count, 1);
   assert.equal(series.datedCatchCount, 2);
 });
+
+test("annual catch series uses compact Czech ticks and names each accessible month including the year", () => {
+  const series = getMonthlyCatchSeries([{ caughtAt: "2026-07-04T13:00:00Z" }], "year", new Date("2026-11-21T12:00:00Z"));
+  assert.equal(series.months.length, 12);
+  assert.ok(series.months.every(month => month.label.length === 3));
+  assert.deepEqual(series.months[6], { key: "2026-07", label: "čvc", fullLabel: "červenec 2026", count: 1 });
+  assert.deepEqual(series.months[5], { key: "2026-06", label: "čvn", fullLabel: "červen 2026", count: 0 });
+});
