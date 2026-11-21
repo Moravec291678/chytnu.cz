@@ -41,3 +41,15 @@ test("Capacitor declares foreground location and camera purposes for existing ca
   assert.match(ios, /<key>NSLocationWhenInUseUsageDescription<\/key>\s*<string>[^<]+<\/string>/);
   assert.doesNotMatch(ios, /NSLocationAlways|<key>UIBackgroundModes<\/key>/);
 });
+
+test("iOS app resources include the required reason for sandbox file timestamps", async () => {
+  const [manifest, project] = await Promise.all([
+    readFile(new URL("../../ios/App/App/PrivacyInfo.xcprivacy", import.meta.url), "utf8"),
+    readFile(new URL("../../ios/App/App.xcodeproj/project.pbxproj", import.meta.url), "utf8"),
+  ]);
+  assert.match(manifest, /<string>NSPrivacyAccessedAPICategoryFileTimestamp<\/string>/);
+  assert.match(manifest, /<string>C617\.1<\/string>/);
+  assert.match(project, /path = PrivacyInfo\.xcprivacy;/);
+  const resources = project.split("/* Begin PBXResourcesBuildPhase section */")[1]?.split("/* End PBXResourcesBuildPhase section */")[0];
+  assert.match(resources ?? "", /PrivacyInfo\.xcprivacy in Resources/);
+});

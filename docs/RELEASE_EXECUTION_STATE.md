@@ -142,6 +142,8 @@
 
 - **25 · BLOCKED · 21. listopadu 2026.** [Google Play balíček](GOOGLE_PLAY_SUBMISSION_PACK.md) obsahuje aktuální API 36, 16KiB, testovací program, data, výmaz, označení oprávnění, návrhy listing a OWNER-ONLY postup. Zdroj targetSdk 36 ověřen v 24, AAB/podpis/Play účet a skutečný track chybí. Žádný upload ani platba. Dokumentační commit a vývojový push, produkce 68fbf04. Další Prompt 26.
 
+- **26 · BLOCKED XCODE/DEVICE · 21. listopadu 2026.** Izolované Capacitor copy a sync iOS PASS na Windows. Doplněn PrivacyInfo pro Filesystem C617.1 a App resources, 16 testů, parsování plist a lint PASS. iOS origin živý preflight 405 bez CORS. [Důkaz a Mac kroky](IOS_NATIVE_BUILD_EVIDENCE.md). Xcode/SDK, podpis, skutečný archiv a iPhone čekají. Vývojový commit a push, produkce 68fbf04. Další Prompt 27.
+
 ## Přesný bod pokračování
 
-**Prompt 26** · ověřit iOS zdrojovou konfiguraci, instalovatelné nástroje a přiložit reprodukovatelný Mac postup.
+**Prompt 27** · připravit App Store a TestFlight podle aktuálních oficiálních požadavků a přesně odlišit schválení vlastníkem.
