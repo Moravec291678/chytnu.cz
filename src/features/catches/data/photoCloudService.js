@@ -120,16 +120,22 @@ function tokenReadError(error, path) {
 
 export function createAuthenticatedPhotoEndpointCaller({
   getIdToken = (forceRefresh) => firebaseAuth.currentIdToken(forceRefresh),
+  getCurrentUserId = () => firebaseAuth.currentUserId(),
   fetchImpl = globalThis.fetch,
   apiUrl = resolveApiUrl,
 } = {}) {
-  return async function callAuthenticatedPhotoEndpoint(path, payload, { responseType = "json" } = {}) {
+  return async function callAuthenticatedPhotoEndpoint(path, payload, { responseType = "json", expectedUid = getCurrentUserId() } = {}) {
+    function checkOwner() {
+      if (getCurrentUserId() !== expectedUid) throw Object.assign(new Error("Přihlášený účet se změnil."), { code: "photo_account_changed", endpoint: path });
+    }
+    checkOwner();
     let idToken;
     try { idToken = await withPhotoDeadline(() => getIdToken(false)); }
     catch (error) { throw tokenReadError(error, path); }
     if (!idToken) throw Object.assign(new Error("Pro synchronizaci fotografií je potřeba přihlášení."), { code: "missing_firebase_user", endpoint: path });
 
     const send = (token) => withPhotoDeadline(async (signal) => {
+      checkOwner();
       let response;
       const requestUrl = apiUrl(path);
       try {
@@ -160,11 +166,13 @@ export function createAuthenticatedPhotoEndpointCaller({
     });
 
     let attempt = await send(idToken);
+    checkOwner();
     if (attempt.response.status === 401 && ["invalid_auth", "firebase_token_expired"].includes(attempt.result.error)) {
       try { idToken = await withPhotoDeadline(() => getIdToken(true)); }
       catch (error) { throw tokenReadError(error, path); }
       if (!idToken) throw Object.assign(new Error("Firebase přihlášení po obnovení není dostupné."), { code: "token_refresh_failed", status: 401, endpoint: path });
       attempt = await send(idToken);
+      checkOwner();
       if (attempt.response.status === 401 && ["invalid_auth", "firebase_token_expired"].includes(attempt.result.error)) {
         throw Object.assign(new Error("Server odmítl obnovené Firebase přihlášení."), { code: "firebase_token_invalid", status: 401, endpoint: path });
       }
@@ -372,7 +380,7 @@ export function createPhotoCloudService({
     if (photo.uploadReady === false) throw Object.assign(new Error("Fotografii se nepodařilo převést. Zkus znovu synchronizovat, nebo vyber fotografii z Photos znovu."), { code: "photo_prepare_failed" });
     const shouldRecover = Boolean(localBlobError) || operation.status === "conflict" || operation.status === "failed" || ["uploading", "verifying", "persisting"].includes(previousStage);
     if (shouldRecover && typeof provider.recoverUpload === "function") {
-      const recovered = await provider.recoverUpload({ ...job, requestUploadVerification: (payload) => authenticatedRequest("/api/cloudinary/verify-upload", payload) });
+      const recovered = await provider.recoverUpload({ ...job, requestUploadVerification: (payload) => authenticatedRequest("/api/cloudinary/verify-upload", payload, { expectedUid: operation.ownerId }) });
       if (recovered) {
         if (!isActive(getCurrentOwnerId, operation.ownerId)) return { uploaded: 0, deleted: 0, stopped: true };
         if (!await queue.isCurrent(operation.operationId, operation.localRevision)) return { uploaded: 0, deleted: 0 };
@@ -395,7 +403,7 @@ export function createPhotoCloudService({
     const requestEndpoint = async (path, payload, label) => {
       recordPhotoUploadTrace(job.photoId, `${label}_started`);
       try {
-        const result = await authenticatedRequest(path, payload);
+        const result = await authenticatedRequest(path, payload, { expectedUid: operation.ownerId });
         recordPhotoUploadTrace(job.photoId, `${label}_pass`, { httpStatus: 200 });
         return result;
       } catch (error) {
@@ -462,7 +470,7 @@ export function createPhotoCloudService({
       provider: job.provider,
       objectKey: job.objectKey,
       sha256: job.sha256,
-      requestDeleteGrant: (photo) => authenticatedRequest("/api/cloudinary/delete", photo),
+      requestDeleteGrant: (photo) => authenticatedRequest("/api/cloudinary/delete", photo, { expectedUid: operation.ownerId }),
     });
     if (!isActive(getCurrentOwnerId, operation.ownerId)) return { uploaded: 0, deleted: 0, stopped: true };
     await queue.complete(operation.operationId, operation.localRevision);
@@ -510,6 +518,10 @@ export function createPhotoCloudService({
         deleted += result?.deleted ?? 0;
         if (result?.stopped) { stopScheduling = true; return; }
       } catch (failure) {
+        if (failure?.code === "photo_account_changed" || !isActive(getCurrentOwnerId, ownerId)) {
+          stopScheduling = true;
+          return;
+        }
         if (failure?.code === "photo_job_superseded") continue;
         const localBlobUnreadable = photoBlobErrorCode(failure) === PHOTO_LOCAL_BLOB_UNREADABLE;
         const failureCode = localBlobUnreadable ? PHOTO_LOCAL_BLOB_UNREADABLE : failure?.code;
@@ -640,7 +652,7 @@ export function createPhotoCloudService({
         if (record?.sync?.status !== "metadata-synced" || !Number.isSafeInteger(revision) || revision < 1) return null;
         let blob;
         try {
-          blob = await authenticatedRequest("/api/cloudinary/export", { catchId, photoId: photo.id, recoverAtRevision: revision }, { responseType: "blob" });
+          blob = await authenticatedRequest("/api/cloudinary/export", { catchId, photoId: photo.id, recoverAtRevision: revision }, { responseType: "blob", expectedUid: ownerId });
         } catch (error) {
           if (error.code === "photo_metadata_not_ready") return null;
           throw error;
@@ -675,8 +687,8 @@ export function createPhotoCloudService({
           photoId: photo.id,
           objectKey: photo.cloud.objectKey,
           sha256: photo.cloud.sha256,
-          requestPhotoDownload: (identity) => authenticatedRequest("/api/cloudinary/export", { ...identity, expectedSha256: photo.cloud.sha256 }, { responseType: "blob" }),
-          requestDownloadGrant: (photo) => authenticatedRequest("/api/cloudinary/delivery", photo),
+          requestPhotoDownload: (identity) => authenticatedRequest("/api/cloudinary/export", { ...identity, expectedSha256: photo.cloud.sha256 }, { responseType: "blob", expectedUid: ownerId }),
+          requestDownloadGrant: (photo) => authenticatedRequest("/api/cloudinary/delivery", photo, { expectedUid: ownerId }),
         });
         if (!(blob instanceof Blob)) throw Object.assign(new Error("Cloudová fotografie není dostupná."), {
           code: blob === null ? "cloudinary_asset_missing" : "cloudinary_download_failed",

@@ -3,6 +3,11 @@
   "appName": "ChytnuCz",
   "webDir": "dist",
   "backgroundColor": "#111820",
+  "server": {
+    "hostname": "localhost",
+    "iosScheme": "capacitor",
+    "androidScheme": "https"
+  },
   "android": {
     "backgroundColor": "#111820"
   }

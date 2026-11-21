@@ -12,7 +12,9 @@ export function createAccountDeletionHandler({ verifyToken, service, protectedOw
   return async function handler(req, res) {
     res.setHeader?.("Cache-Control", "no-store");
     if (req.method !== "POST") return res.status(405).json({ error: "method_not_allowed" });
-    if (req.body && (typeof req.body !== "object" || Object.keys(req.body).length > 0)) {
+    const body = req.body ?? {};
+    if (typeof body !== "object" || Array.isArray(body) || Object.keys(body).some(key => key !== "expectedUid")
+      || ("expectedUid" in body && (typeof body.expectedUid !== "string" || !/^[^/]{1,128}$/.test(body.expectedUid)))) {
       return res.status(400).json({ error: "invalid_request" });
     }
     const bearer = req.headers?.authorization?.match(/^Bearer ([^\s]+)$/);
@@ -24,6 +26,7 @@ export function createAccountDeletionHandler({ verifyToken, service, protectedOw
     if (typeof uid !== "string" || !uid || uid.length > 128 || uid.includes("/")) {
       return res.status(403).json({ error: "invalid_identity" });
     }
+    if (body.expectedUid !== undefined && body.expectedUid !== uid) return res.status(403).json({ error: "account_mismatch" });
     if (protectedOwnerUid && uid === protectedOwnerUid) return res.status(403).json({ error: "owner_deletion_protected" });
     const authTime = identity.auth_time;
     if (!Number.isSafeInteger(authTime) || authTime > Math.floor(now() / 1000) + 60

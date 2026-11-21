@@ -80,6 +80,33 @@ test("photo metadata 404 is not mislabeled as a missing Cloudinary asset", async
     (error) => error.code === "photo_metadata_not_ready" && error.status === 404 && error.providerStatus === undefined);
 });
 
+test("photo request cannot retry with the new account's Firebase token", async () => {
+  let uid = "A";
+  const sent = [];
+  const call = createAuthenticatedPhotoEndpointCaller({
+    getCurrentUserId: () => uid,
+    getIdToken: async refresh => { if (refresh) uid = "B"; return uid; },
+    fetchImpl: async (_url, options) => {
+      sent.push(options.headers.Authorization);
+      return new Response(JSON.stringify({ error: "invalid_auth" }), { status: 401 });
+    },
+  });
+  const run = () => call("/api/cloudinary/sign", {}, { expectedUid: "A" });
+  await assert.rejects(run, { code: "photo_account_changed" });
+  await assert.rejects(run, { code: "photo_account_changed" });
+  assert.deepEqual(sent, ["Bearer A"]);
+});
+
+test("photo result is discarded when the account switches while receiving bytes", async () => {
+  let uid = "A";
+  const call = createAuthenticatedPhotoEndpointCaller({
+    getCurrentUserId: () => uid,
+    getIdToken: async () => "fixture",
+    fetchImpl: async () => ({ ok: true, async blob() { uid = "B"; return new Blob(["fixture"]); } }),
+  });
+  await assert.rejects(call("/api/cloudinary/export", {}, { responseType: "blob" }), { code: "photo_account_changed" });
+});
+
 function makeCatch(ownerId, id, photos, primaryPhotoId = photos[0]?.id ?? null) {
   const now = new Date(fixedNow).toISOString();
   return {
@@ -679,6 +706,7 @@ test("photo upload refreshes an invalid Firebase token once and completes with t
   const authorizationHeaders = [];
   const requestEndpoint = createAuthenticatedPhotoEndpointCaller({
     getIdToken,
+    getCurrentUserId: () => ownerId,
     fetchImpl: async (path, options) => {
       authorizationHeaders.push(options.headers.Authorization);
       if (path === "/api/cloudinary/sign" && options.headers.Authorization.endsWith("cached-firebase-id-token")) {
@@ -728,6 +756,7 @@ test("photo upload stops after exactly one forced refresh and retains a precise 
   const tokenCalls = [];
   let requests = 0;
   const requestEndpoint = createAuthenticatedPhotoEndpointCaller({
+    getCurrentUserId: () => ownerId,
     getIdToken: async (forceRefresh) => { tokenCalls.push(forceRefresh); return forceRefresh ? "fresh-token" : "old-token"; },
     fetchImpl: async () => {
       requests += 1;

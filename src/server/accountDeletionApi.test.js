@@ -25,10 +25,17 @@ test("account deletion requires verified recent identity and ignores client owne
   const forged = response();
   await handler({ method: "POST", headers: { authorization: "Bearer good" }, body: { uid: "ownerB" } }, forged);
   assert.equal(forged.statusCode, 400);
+  const switched = response();
+  await handler({ method: "POST", headers: { authorization: "Bearer good" }, body: { expectedUid: "ownerB" } }, switched);
+  assert.equal(switched.statusCode, 403);
+  assert.equal(switched.body.error, "account_mismatch");
   const valid = response();
   await handler({ method: "POST", headers: { authorization: "Bearer good" }, body: {} }, valid);
   assert.equal(valid.statusCode, 202);
-  assert.deepEqual(requested, ["ownerA"]);
+  const bound = response();
+  await handler({ method: "POST", headers: { authorization: "Bearer good" }, body: { expectedUid: "ownerA" } }, bound);
+  assert.equal(bound.statusCode, 202);
+  assert.deepEqual(requested, ["ownerA", "ownerA"]);
 });
 
 test("account deletion rejects stale login", async () => {

@@ -184,8 +184,13 @@ export const firebaseAuth = {
     const auth = await getAuthInstance();
     return firebaseAuthApi.signOut(auth);
   },
-  async reauthenticateForAccountDeletion(password) {
+  async signOutIfCurrent(expectedUid) {
     const auth = await getAuthInstance();
+    if (auth.currentUser?.uid === expectedUid) await firebaseAuthApi.signOut(auth);
+  },
+  async reauthenticateForAccountDeletion(password, expectedUid) {
+    const auth = await getAuthInstance();
+    if (expectedUid !== undefined && auth.currentUser?.uid !== expectedUid) throw new Error("Přihlášený účet se změnil.");
     return runAccountDeletionReauthentication(auth, firebaseAuthApi, password);
   },
   async resetPassword(email) {

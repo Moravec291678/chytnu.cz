@@ -1,4 +1,15 @@
 import { createProductionAccountDeletionHandler } from "../../src/server/accountDeletionApi.js";
+import { withNativeApiCors } from "../../src/server/nativeApiCors.js";
+
+const deleteAccount = withNativeApiCors(async (req, res) => {
+  try {
+    const accountDeletion = await createProductionAccountDeletionHandler();
+    return await accountDeletion(req, res);
+  } catch {
+    res.setHeader("Cache-Control", "no-store");
+    return res.status(503).json({ error: "account_deletion_unavailable" });
+  }
+});
 
 export default async function handler(req, res) {
   if (req.query?.social === "1") {
@@ -19,10 +30,5 @@ export default async function handler(req, res) {
       return res.status(503).json({ error: "admin_unavailable" });
     }
   }
-  try {
-    const accountDeletion = await createProductionAccountDeletionHandler();
-    return await accountDeletion(req, res);
-  } catch {
-    return res.status(503).json({ error: "account_deletion_unavailable" });
-  }
+  return deleteAccount(req, res);
 }

@@ -369,20 +369,27 @@ async function readCollectionPage({ ownerId, collectionName, cursor, pageSize })
 }
 
 async function downloadCloudPhoto({ ownerId, catchId, photoId, metadata }) {
-  if (firebaseAuth.currentUserId() !== ownerId) throw new Error("Přihlášený účet se změnil. Export byl zastaven.");
+  const checkOwner = () => assertOwner(ownerId, firebaseAuth.currentUserId);
+  checkOwner();
   let token = await firebaseAuth.currentIdToken();
-  const send = (idToken) => fetch(resolveApiUrl("/api/cloudinary/export"), {
-    method: "POST", credentials: "same-origin", cache: "no-store",
-    headers: { Authorization: `Bearer ${idToken}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ catchId, photoId }),
-  });
+  const send = (idToken) => {
+    checkOwner();
+    if (!idToken) throw new Error("Přihlášení k exportu se nepodařilo obnovit.");
+    return fetch(resolveApiUrl("/api/cloudinary/export"), {
+      method: "POST", credentials: "same-origin", cache: "no-store",
+      headers: { Authorization: `Bearer ${idToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ catchId, photoId }),
+    });
+  };
   let response = await send(token);
+  checkOwner();
   if (response.status === 401) {
     token = await firebaseAuth.currentIdToken(true);
     response = await send(token);
   }
   if (!response.ok) throw Object.assign(new Error("Stažení cloudové fotografie se nezdařilo."), { code: `photo_http_${response.status}` });
   const buffer = await response.arrayBuffer();
+  checkOwner();
   if (buffer.byteLength !== metadata.size || buffer.byteLength > MAX_PHOTO_BYTES) throw new Error("photo_size_mismatch");
   const contentType = response.headers.get("content-type")?.split(";")[0];
   if (contentType && contentType !== metadata.type) throw new Error("photo_type_mismatch");
