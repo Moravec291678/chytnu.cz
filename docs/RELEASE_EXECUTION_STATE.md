@@ -134,6 +134,8 @@
 
 - **21 · BLOCKED · 21. listopadu 2026.** [Příručka a návrh pozvánky](PILOT_RUNBOOK.md), [GO/NO-GO](PILOT_EXIT_CRITERIA.md). Chromium 4 kontroly opt-in a soukromého režimu PASS. Preview 319b520 READY, anonymní 302 na vercel.com ověřena; data preview nejsou doložená jako oddělená. Bez pozvánek a skutečných testerů. Chybí role a prostředí potvrzené Davidem, fyzické přístroje a živá média. Dokumentační commit a vývojový push, produkce 68fbf04. Další Prompt 22.
 
+- **22 · BLOCKED WAITING FOR PILOT · 21. listopadu 2026.** [Výsledky](PILOT_RESULTS.md) a [evidence závad](PILOT_ISSUE_LOG.md) připraveny. Žádní pozvaní testeři ani zaznamenané dny. Testy z předchozích promptů zůstávají oddělené. Dokumentační commit a vývojový push, produkce 68fbf04. Veřejný web NO-GO. Další Prompt 23.
+
 ## Přesný bod pokračování
 
-**Prompt 22** · připravit důkazní strukturu výsledků a evidovat, že pilot bez účtů a schválení ještě neproběhl.
+**Prompt 23** · ověřit release kandidáta úplnou sadou a read-only produkční smoke, nepřesouvat alias před pilotem a podpisem.
