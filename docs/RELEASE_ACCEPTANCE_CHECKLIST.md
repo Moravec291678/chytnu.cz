@@ -2,6 +2,8 @@
 
 Zaškrtnuto znamená ověřeno v uvedeném prostředí. Nový kandidát musí mít vlastní připojený protokol se SHA, datem, verzí zařízení, testovací rolí a výsledkem. Pro veřejnou betu projít celé jádro, produkční a fyzickou část a položky odpovídající povolenému společenskému rozsahu. Podmínky podrobněji v [backlogu](PUBLIC_LAUNCH_BACKLOG.md) a [QA](QA_COVERAGE_MATRIX.md).
 
+Výsledky Promptu 33 a stav nového kandidáta eviduje [závěrečná matice](FINAL_ACCEPTANCE_MATRIX.md). Níže uvedené dřívější počty patří k původnímu produkčnímu auditu.
+
 ## Základ a CI
 
 - [x] HEAD auditu, origin/main a Vercel READY shodně `68fbf04b70e123b226bac90ee83f12dde1dc352b`; HTTPS Home, /privacy-policy, /terms, SW a manifest vracejí 200.

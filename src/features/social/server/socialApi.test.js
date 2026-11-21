@@ -24,7 +24,7 @@ test("provider errors never leak their messages, stack or credentials", async ()
   assert.deepEqual(res.body, { error: "social_unavailable" });
 });
 
-test("closed location modules deny reads and new presence for every bearer context", async () => {
+test("closed social modules deny reads and writes for every bearer context", async () => {
   const cases = [
     { action: "nearby.join", latitude: 50, longitude: 14 },
     { action: "nearby.consent", accepted: true },
@@ -32,15 +32,23 @@ test("closed location modules deny reads and new presence for every bearer conte
     { action: "nearby.waterActivity", catalogueId: "fixture" },
     { action: "waterPresence.status" }, { action: "waterPresence.join", confirmed: true },
     { action: "waterPresence.refresh", sessionId: "fixture" },
+    { action: "waterChat.list", waterId: "fixture", sessionId: "fixture" },
+    { action: "waterChat.send", waterId: "fixture", sessionId: "fixture", text: "test", operationId: "fixture" },
+    { action: "waterChat.report", waterId: "fixture", sessionId: "fixture", messageId: "fixture", reason: "spam" },
+    { action: "dm.conversations" }, { action: "dm.send", targetUid: "fixture", text: "test", operationId: "fixture" },
+    { action: "crew.list", mode: "public" }, { action: "crew.create", name: "Test", operationId: "fixture" },
+    { action: "waterCommunity.list", catalogueId: "fixture" },
   ];
   for (const authorization of [undefined, "Bearer ordinary", "Bearer owner"]) {
     for (const body of cases) {
-      const res = await request({ method: "POST", headers: { authorization }, body }, () => assert.fail("disabled action reached service"));
+      let called = false;
+      const res = await request({ method: "POST", headers: { authorization }, body }, () => { called = true; return {}; });
+      assert.equal(called, false, body.action);
       assert.equal(res.statusCode, 404, body.action);
     }
   }
 });
-test("release closure preserves authenticated opt out and denies unfinished API namespaces", async () => {
+test("release closure preserves authenticated opt out and rejects unknown action names", async () => {
   for (const body of [{ action: "nearby.consent", accepted: false }, { action: "nearby.leave" }, { action: "waterPresence.leave", sessionId: "fixture" }]) {
     const res = await request({ method: "POST", headers: { authorization: "Bearer fixture" }, body }, async (action, _payload, token) => {
       assert.equal(action, body.action);
@@ -49,7 +57,7 @@ test("release closure preserves authenticated opt out and denies unfinished API 
     });
     assert.equal(res.statusCode, 200);
   }
-  for (const action of ["crew.join", "waterChat.send", "dm.send"]) {
+  for (const action of ["crew.join", "waterChat.publish", "dm.broadcast", "waterCommunity.publish"]) {
     assert.equal((await request({ method: "POST", body: { action } })).statusCode, 400);
   }
 });

@@ -119,13 +119,13 @@ Relativní názvy komponent jsou v `src/pages/`, pokud není uvedeno jinak. ID j
 | 7 Feed | Global/friends, bounded query, 209 kontrol; anon 401 | Kontrola zátěže, media, sekce |
 | 8 Interakce | 136 kontrol reakce/komentář/report/moderace | Pojmenovaná služba moderace |
 | 9 Oznámení | In-app eventy a prefs, Web Push vypnutý | Omezená sociální beta; externí odesílač později |
-| 10 Okolí | Opt-in buňka a TTL, 83 kontrol | Fyzická soukromá beta, bez mapy lidí |
+| 10 Okolí | Opt-in buňka a TTL, 86 kontrol | Fyzická soukromá beta, bez mapy lidí |
 | 11 Geometrie | Katalog a referenční body, 188 chybí; skutečné hranice chybí | Použít jen návrhy a manuální potvrzení |
 | 12 Přítomnost | Server, UI a 22 kontrol; ověřuje potvrzení, ne hranici | Samostatná beta a TTL |
-| 13 Živý chat | Serverový room základ, lokální UI; serverová integrace a moderace chybí | Skrýt veřejnou variantu |
-| 14 Soukromé zprávy | Rezervovaný Firestore prostor, chybí koncová služba a UI | P3, uzavřeno |
-| 15 Crew | Lokální koncept, chybí online role a výzvy | P3, uzavřít přímou trasu |
-| 16 Obsah revírů | Výběr a omezené activity endpoint, plná komunita revíru chybí | P3, nezaměnit s geometrií |
+| 13 Živý chat | Autorizovaný server, klient, hlášení, 56 kontrol a dva browser účty | Vypnuto. Fyzická retence, reconnect a provozní moderace. [Důkazy](SOCIAL_WATER_CHAT_ACCEPTANCE.md) |
+| 14 Soukromé zprávy | Konverzace přátel, nepřečtené, moderace, 67 kontrol a dva browser účty | Vypnuto. Retence a fyzická akceptace. [Důkazy](SOCIAL_DM_ACCEPTANCE.md) |
+| 15 Crew | Serverové skupiny, role, pozvání, předání, moderace, 60 kontrol a dva browser účty | Vypnuto. Pilot, moderace a další skupinový obsah. [Důkazy](SOCIAL_CREW_ACCEPTANCE.md) |
+| 16 Obsah revírů | Stránkované výslovně sdílené úlovky s RIS ID, 44 kontrol a dva browser účty | Vypnuto. Licence RIS, živá média a textové příspěvky. [Důkazy](SOCIAL_WATER_CONTENT_ACCEPTANCE.md) |
 | 17 Administrace | RBAC, support a moderace existují, ověřeno emulátorem | Provozní postupy, výkon, delegace |
 | 18 Integrace | Dílčí A/B/C a navigační testy, plná živá akceptace chybí | Před všeobecným sociálním vydáním |
 

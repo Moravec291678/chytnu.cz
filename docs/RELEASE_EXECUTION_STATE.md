@@ -184,6 +184,13 @@
 - Stránkované veřejně a výslovně sdílené úlovky na potvrzeném RIS revíru, se stávající moderací a bez kopie soukromých dat. 44 emulátorových ověření a dva účty v mobilním Chromium PASS. Feature flag zůstává zavřený.
 - Textové příspěvky navázané na revír, fyzický/live průchod a potvrzená práva k RIS zbývají.
 
+### 33 — PARTIAL · veřejné vydání NO-GO
+
+- Kandidát `e45f963f4d4433d5542b1209beaf2574e523d848` má Vercel preview READY. Produkce READY na `68fbf04b70e123b226bac90ee83f12dde1dc352b`. Pravidla a indexy Firebase read-only shodné, bez deploye.
+- 1 193 Node testů, 1 919 Auth/Firestore kontrol a samostatné Auth, Sync a Photos PASS. Dále lint, build, produkt a diff PASS. Nový test ověřuje odmítnutí vypnutých modulů před dosažením služby i neznámé akce.
+- Aktuální Chromium 57 tras × 2 šířky; 180 hostovských průchodů, 6 offline, zachovaná skutečná JPEG po studeném restartu, 14 hostovských a 5 přihlášených přímých zákazů. Větev release push; původní worktree má 27 zachovaných změn.
+- [Závěrečný report](FINAL_PRODUCT_RELEASE_REPORT.md) a [matice](FINAL_ACCEPTANCE_MATRIX.md). Hlavní otevřené brány jsou schválený pilot, izolované živé účty a média, fyzická zařízení, provozní a právní schválení, nativní síťová akceptace a podpisy. Rozšíření sociální sítě zůstává zavřené.
+
 ## Přesný bod pokračování
 
-**Prompt 33** — závěrečná regresní sada, přesné ověření kandidáta, produkčního SHA, obou worktrees a všech podmínek vydání.
+**Po promptu 33** — David potvrdí izolaci a přístup ke dvěma syntetickým účtům, schválí test živého Cloudinary a zajistí fyzický Android/iPhone. Potom provést REL-03/04/06 podle [webového sign-off](PUBLIC_WEB_RELEASE_SIGNOFF.md). Výběr rozsahu, licence, moderace a pilot následují před schválením `main`. Android/iOS postupují vlastním podpisovým a store checklistem.
