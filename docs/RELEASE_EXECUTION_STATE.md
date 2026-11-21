@@ -132,6 +132,8 @@
 
 - **20 · PARTIAL · 21. listopadu 2026.** Read-only Firebase billing vypnutý, Vercel Hobby aktivní, Cloudinary účet a Vercel Usage neověřené. 189 čtení/16 zápisů za 2 h z Firestore Monitoring. V emulátoru 5 get, 1 query a 4 agregace pro provozní přehled. Admin rozlišuje provider/internal vyčerpání, 45+83+22 dílčích emulátorových a 32 cílených testů, lint/build PASS. [Kapacitní model](CAPACITY_COST_GUARDRAILS.md). Preview 18/19 READY, produkce 68fbf04. Bez změny tarifu. Vývojový commit a push. Další Prompt 21.
 
+- **21 · BLOCKED · 21. listopadu 2026.** [Příručka a návrh pozvánky](PILOT_RUNBOOK.md), [GO/NO-GO](PILOT_EXIT_CRITERIA.md). Chromium 4 kontroly opt-in a soukromého režimu PASS. Preview 319b520 READY, anonymní 302 na vercel.com ověřena; data preview nejsou doložená jako oddělená. Bez pozvánek a skutečných testerů. Chybí role a prostředí potvrzené Davidem, fyzické přístroje a živá média. Dokumentační commit a vývojový push, produkce 68fbf04. Další Prompt 22.
+
 ## Přesný bod pokračování
 
-**Prompt 21** · připravit bezpečný uzavřený pilot a ověřit role, izolaci a podmínky skutečných pozvánek.
+**Prompt 22** · připravit důkazní strukturu výsledků a evidovat, že pilot bez účtů a schválení ještě neproběhl.
