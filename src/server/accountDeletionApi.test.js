@@ -50,3 +50,33 @@ test("configured OWNER cannot remove the final administration identity through a
   await handler({ method: "POST", headers: { authorization: "Bearer token" }, body: {} }, res);
   assert.equal(res.statusCode, 403); assert.equal(res.body.error, "owner_deletion_protected");
 });
+
+test("accepted deletion stays accepted if advancing the durable workflow fails", async () => {
+  const request = { method: "POST", headers: { authorization: "Bearer token" }, body: {} };
+  let markerSaved = false;
+  let available = true;
+  const handler = createAccountDeletionHandler({ now: () => 1_000_000,
+    verifyToken: async () => ({ uid: "ownerA", auth_time: 999 }),
+    service: {
+      async request() {
+        if (!available) throw new Error("receipt unavailable");
+        markerSaved = true;
+        return { status: "requested" };
+      },
+      async advanceOwner() {
+        assert.ok(markerSaved);
+        throw new Error("worker temporarily unavailable");
+      },
+    },
+  });
+  const accepted = response();
+  await handler(request, accepted);
+  assert.equal(accepted.statusCode, 202);
+  assert.deepEqual(accepted.body, { status: "requested" });
+  available = false;
+  markerSaved = false;
+  const unavailable = response();
+  await handler(request, unavailable);
+  assert.equal(unavailable.statusCode, 503);
+  assert.equal(markerSaved, false);
+});

@@ -86,7 +86,7 @@ export const PRIVACY_POLICY = Object.freeze({
     },
     {
       heading: "9. Export údajů",
-      paragraphs: ["V Nastavení můžeš stáhnout export cloudových údajů svého přihlášeného účtu včetně dostupných cloudových fotografií. U fotografií bez cloudové kopie export uvede, co chybí. Můžeš také stáhnout místní JSON zálohu údajů dostupných na právě používaném zařízení. Místní rozepsané úlovky, starší záznamy bez přiřazeného účtu a jiné údaje uložené pouze na jiném zařízení nemusí být v cloudovém exportu. Exportovaný soubor není šifrovaný; uchovávej ho bezpečně. O přístup k dalším údajům můžeš požádat správce e-mailem."],
+      paragraphs: ["V Nastavení můžeš stáhnout export cloudových údajů svého přihlášeného účtu včetně dostupných cloudových fotografií. U fotografií bez cloudové kopie export uvede, co chybí. Můžeš také stáhnout místní JSON zálohu údajů dostupných na právě používaném zařízení. Místní rozepsané úlovky, starší záznamy bez přiřazeného účtu a jiné údaje uložené pouze na jiném zařízení nemusí být v cloudovém exportu. Exportovaný soubor není šifrovaný; uchovávej ho bezpečně. Samoobslužný export neobsahuje příspěvky, komentáře a reakce z Komunity. O jejich kopii nebo o přístup k dalším údajům můžeš požádat správce e-mailem."],
     },
     {
       heading: "10. Smazání účtu",

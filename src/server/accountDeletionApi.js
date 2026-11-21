@@ -30,13 +30,20 @@ export function createAccountDeletionHandler({ verifyToken, service, protectedOw
       || Math.floor(now() / 1000) - authTime > RECENT_AUTH_SECONDS) {
       return res.status(403).json({ error: "recent_auth_required" });
     }
+    let receipt;
     try {
-      await service.request(uid);
-      const result = await service.advanceOwner(uid);
-      return res.status(202).json({ status: result?.status ?? "requested" });
+      receipt = await service.request(uid);
     } catch {
       return res.status(503).json({ error: "account_deletion_unavailable" });
     }
+    let status = receipt?.status ?? "requested";
+    try {
+      const result = await service.advanceOwner(uid);
+      status = result?.status ?? status;
+    } catch {
+      // The persistent marker already blocks access. Scheduled cleanup can resume.
+    }
+    return res.status(202).json({ status });
   };
 }
 

@@ -243,3 +243,15 @@ test("account marker expires after Auth removal even when photo job is still ret
   assert.equal(db.rows.has("accountDeletions/A"), false);
   assert.equal(db.rows.has("users/A/photoDeletionJobs/j1"), true);
 });
+
+test("a repeated request preserves the deletion receipt and never restarts completed work", async () => {
+  const { db, service, queued, deleted } = fixture();
+  const first = await service.request("A");
+  assert.deepEqual(await service.request("A"), first);
+  const complete = await drain(service);
+  assert.equal(complete.status, "completed");
+  assert.deepEqual(await service.request("A"), db.rows.get("accountDeletions/A"));
+  assert.equal((await service.processOwner("A")).status, "completed");
+  assert.deepEqual(queued, [{ ownerId: "A", catchId: "c1", photoId: "p1" }]);
+  assert.deepEqual(deleted, ["A"]);
+});

@@ -293,7 +293,7 @@ export default function SettingsPage() {
       <section className="settings-card" aria-labelledby="settings-export-title">
         <h2 id="settings-export-title">Export dat</h2>
         {scope.ownerId ? <>
-          <p>Stáhne kopii dat uložených k vašemu účtu. Zahrnuje synchronizované úlovky, Vycházky, vody, dostupné fotografie a postup; přidá také profilová nastavení z tohoto zařízení. Nesynchronizovaná data z jiných zařízení v něm nejsou.</p>
+          <p>Stáhne kopii dat uložených k vašemu účtu. Zahrnuje synchronizované úlovky, Vycházky, vody, dostupné fotografie a postup; přidá také profilová nastavení z tohoto zařízení. Export nezahrnuje nesynchronizovaná data z jiných zařízení ani příspěvky, komentáře a reakce z Komunity. O kopii dalších údajů můžeš požádat přes kontakt v zásadách ochrany osobních údajů.</p>
           <p>Soubor může obsahovat přesnou polohu a fotografie. Uchovávej ho bezpečně.</p>
           <button className="settings-primary-button" type="button" onClick={exportCloudAccount} disabled={scope.status !== "ready" || exportingCloud || exporting || deleting}>
             {exportingCloud ? "Připravuji export účtu…" : "Exportovat moje data"}
