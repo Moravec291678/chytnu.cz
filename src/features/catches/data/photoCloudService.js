@@ -1,3 +1,5 @@
+import { describeSyncFailure } from "../../sync/data/syncDiagnostics.js";
+import { isDueForSync, parseRetryAfter } from "../../sync/context/syncRetry.js";
 import { withPhotoDeadline } from "./photoDeadline.js";
 import { accountScopeKey, validateDataScope } from "../../auth/data/localDataScope.js";
 import { firebaseAuth } from "../../auth/data/firebaseAuth.js";
@@ -21,8 +23,7 @@ const repairablePhotoConflict = operation => operation.status === "conflict"
 
 function due(operation, now, force, probeLocalPhoto) {
   if (operation.status === "conflict") return (force || probeLocalPhoto) && repairablePhotoConflict(operation);
-  if (operation.status !== "failed") return true;
-  return force || !operation.nextAttemptAt || Date.parse(operation.nextAttemptAt) <= now;
+  return isDueForSync(operation, { now, force });
 }
 
 function isActive(getCurrentOwnerId, ownerId) {
@@ -105,7 +106,7 @@ function photoEndpointError(path, response, result) {
     : response.status === 403 ? "K této fotografii nemáš přístup."
       : response.status === 429 ? "Cloudové úložiště dočasně omezuje požadavky."
         : response.status >= 500 ? "Server cloudových fotografií dočasně není dostupný."
-          : "Cloudový požadavek na fotografii nebyl přijat."), { code, status: response.status, endpoint: path,
+          : "Cloudový požadavek na fotografii nebyl přijat."), { code, status: response.status, endpoint: path, retryAfterAt: parseRetryAfter(response.headers?.get?.("Retry-After")),
     ...(Number.isInteger(result.providerStatus) ? { providerStatus: result.providerStatus } : {}) });
   return error;
 }
@@ -114,7 +115,7 @@ function tokenReadError(error, path) {
   const permanent = ["auth/user-disabled", "auth/user-token-expired", "auth/invalid-user-token", "auth/user-not-found"]
     .includes(error?.code);
   return Object.assign(new Error("Přihlášení k fotografiím se nepodařilo obnovit."), {
-    code: permanent ? "firebase_token_invalid" : "token_refresh_failed", endpoint: path,
+    code: permanent ? "firebase_token_invalid" : "token_refresh_failed", retryable: !permanent, endpoint: path,
   });
 }
 
@@ -487,12 +488,21 @@ export function createPhotoCloudService({
     const probeLocalPhoto = now() >= (localPhotoProbeAt.get(ownerId) ?? 0);
     const reconciliation = await reconcileUploads(ownerId, { force: force || probeLocalPhoto });
     const queued = reconciliation.queued;
-    if (!await provider.isAvailable({ ownerId })) return { status: "local-only", uploaded: 0, deleted: 0, queued };
+    if (provider.id === "none") return { status: "local-only", uploaded: 0, deleted: 0, queued };
+    const operations = (await queue.list()).filter(item => item.ownerId === ownerId);
+    if (operations.some(item => due(item, now(), force, probeLocalPhoto))) {
+      try {
+        if (!await provider.isAvailable({ ownerId, reportFailure: true })) return { status: "local-only", uploaded: 0, deleted: 0, queued };
+      } catch (error) {
+        const failure = describeSyncFailure(error);
+        return { status: "error", uploaded: 0, deleted: 0, queued, error: failure.message, errorCode: failure.code,
+          retryable: failure.retryable, retryAfterAt: failure.retryAfterAt, preflightFailed: true };
+      }
+    }
     try { await provider.reconcileUploads?.(); } catch { /* Firestore outbox reconciliation can still recover interrupted native uploads. */ }
     let uploaded = 0;
     let deleted = 0;
     let error = null;
-    const operations = await queue.list();
     let nextOperationIndex = 0;
     let stopScheduling = false;
     const processNextOperation = async () => {
@@ -529,15 +539,19 @@ export function createPhotoCloudService({
         recordPhotoUploadTrace(operation.photoCloud.photoId, "upload_fail", { errorCode: failureCode, httpStatus: failure?.status,
           retryable: failureCode !== "photo_prepare_failed" && !TERMINAL_UPLOAD_ERRORS.has(failureCode),
           errorName: failure?.name, operationStage: failure?.photoStage || "photo-upload" });
+        const diagnostic = describeSyncFailure(failure);
         const terminal = operation.operation === "photo-upload" && (TERMINAL_UPLOAD_ERRORS.has(failure?.code) || localBlobUnreadable);
         if (operation.operation === "photo-upload") {
           if (!await queue.failUpload(operation, { terminal, code: failureCode, message: failure?.message,
-            providerCode: failure?.providerCode, endpoint: failure?.endpoint, unreadable: localBlobUnreadable })) continue;
+            providerCode: failure?.providerCode, endpoint: failure?.endpoint, unreadable: localBlobUnreadable,
+            retryable: diagnostic.retryable, retryAfterAt: diagnostic.retryAfterAt })) continue;
         } else {
           await operationOutbox.markFailed(operation.operationId, failure?.message, {
-            code: failureCode, providerCode: failure?.providerCode, endpoint: failure?.endpoint });
+            code: failureCode, providerCode: failure?.providerCode, endpoint: failure?.endpoint,
+            retryable: diagnostic.retryable, retryAfterAt: diagnostic.retryAfterAt, expectedLocalRevision: operation.localRevision });
         }
         error ??= failure;
+        if (["rate_limited", "unauthenticated", "firebase_token_expired", "firebase_token_invalid"].includes(diagnostic.code)) stopScheduling = true;
         // Failure belongs to this photo; the other worker and remaining jobs continue.
       }
       }
@@ -557,7 +571,7 @@ export function createPhotoCloudService({
       needsAttention: Boolean(needsAttention), error: error?.message ?? "",
       errorCode: needsAttention && photoBlobErrorCode(error) !== PHOTO_LOCAL_BLOB_UNREADABLE ? PHOTO_LOCAL_BLOB_UNREADABLE
         : photoBlobErrorCode(error) === PHOTO_LOCAL_BLOB_UNREADABLE ? PHOTO_LOCAL_BLOB_UNREADABLE : error?.code ?? "photo_cloud_failed",
-      errorEndpoint: error?.endpoint ?? "" };
+      httpStatus: error?.status, retryable: error?.retryable, retryAfterAt: error?.retryAfterAt ?? null, errorEndpoint: error?.endpoint ?? "" };
   }
 
   const loadPhotoForDisplay = createPhotoDisplayLoader(loadPhotoBlob);

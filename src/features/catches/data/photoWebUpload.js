@@ -1,3 +1,5 @@
+import { parseRetryAfter } from "../../sync/context/syncRetry.js";
+
 /** Reset only on increasing transferred bytes, with an absolute upper bound. */
 export function uploadPhotoWithProgress({ url, form, createRequest = () => new XMLHttpRequest(),
   idleMs = 60_000, maximumMs = 10 * 60_000,
@@ -34,7 +36,7 @@ export function uploadPhotoWithProgress({ url, form, createRequest = () => new X
       let body;
       try { body = JSON.parse(request.responseText); } catch { body = {}; }
       finish(null, { state: request.status >= 200 && request.status < 300 ? "completed" : "failed_retryable",
-        httpStatus: request.status, body });
+        httpStatus: request.status, retryAfterAt: parseRetryAfter(request.getResponseHeader?.("Retry-After")), body });
     };
     request.onerror = request.onabort = () => finish(Object.assign(new Error("Přenos fotografie byl přerušen."), { code: "cloudinary_network_error" }));
     resetIdle();

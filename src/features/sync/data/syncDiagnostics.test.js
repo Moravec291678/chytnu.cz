@@ -62,3 +62,15 @@ test("provider errors without a recognized code stay retryable and expose only s
   assert.equal(failure.errorName, "FirebaseError");
   assert.doesNotMatch(JSON.stringify(failure), /token|must-not-leak|secret/);
 });
+
+test("HTTP 429, 500 and 503 respect deadlines and HTTP 401 and 403 require an action", () => {
+  const retryAfterAt = 1_800_000_000_000;
+  for (const status of [429, 500, 503]) {
+    const result = describeSyncFailure({ status, retryAfterAt });
+    assert.equal(result.retryable, true);
+    assert.equal(result.retryAfterAt, retryAfterAt);
+    assert.equal(result.code, status === 429 ? "rate_limited" : "unavailable");
+  }
+  assert.equal(describeSyncFailure({ status: 401 }).retryable, false);
+  assert.equal(describeSyncFailure({ status: 403 }).retryable, false);
+});

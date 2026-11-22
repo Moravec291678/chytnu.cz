@@ -1,3 +1,4 @@
+import { syncRetryAt } from "../../sync/context/syncRetry.js";
 import {
   accountScopeKey,
   createGuestScopeKey,
@@ -111,6 +112,9 @@ export function queueOutboxOperation(transaction, {
         status: "pending",
         attemptCount: 0,
         lastError: null,
+        lastErrorCode: null,
+        nextAttemptAt: null,
+        retryable: true,
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
       };
@@ -878,7 +882,7 @@ export const photoCloudOutboxRepository = {
   list: async () => (await outboxRepository.list()).filter((operation) => operation.entityType === "photoCloud"),
   // A late network response and a new READY snapshot can arrive in either order.
   // Compare and update the queue and the photo in the SAME IndexedDB transaction.
-  failUpload: async (attempt, { terminal, code = "unknown", message, endpoint, providerCode, unreadable }) => {
+  failUpload: async (attempt, { terminal, code, message, providerCode, endpoint, unreadable, retryable = true, retryAfterAt }) => {
     const db = await openLocalDatabase();
     return new Promise((resolve, reject) => {
       const tx = db.transaction([OUTBOX_STORE_NAME, CATCH_STORE_NAME], "readwrite");
@@ -904,7 +908,8 @@ export const photoCloudOutboxRepository = {
           const now = Date.now();
           jobs.put({ ...op, status: terminal ? "conflict" : "failed", attemptCount: count, lastError: String(message || code),
             lastErrorCode: code, lastProviderCode: providerCode ?? null, lastEndpoint: ["/api/cloudinary/sign", "/api/cloudinary/verify-upload"].includes(endpoint) ? endpoint : null,
-            nextAttemptAt: terminal ? null : new Date(now + 1000 * 2 ** Math.min(count, 10)).toISOString(),
+            retryable: !terminal && retryable, retryAfterAt: retryAfterAt ?? null,
+            nextAttemptAt: terminal || !retryable ? null : syncRetryAt(count, { now, retryAfterAt }),
             updatedAt: new Date(now).toISOString(), photoCloud: { ...job, state: terminal ? "failed_terminal" : "failed_retryable" } });
           const cloud = { state: terminal ? "unavailable" : "uploadFailed", provider: job.provider,
             objectKey: job.objectKey, sha256: job.sha256, ...(terminal ? { errorCode: code } : {}) };
@@ -984,6 +989,7 @@ export const outboxRepository = {
       request.onsuccess = () => {
         if (!request.result) return;
         const operation = request.result;
+        if (details.expectedLocalRevision != null && operation.localRevision !== details.expectedLocalRevision) return;
         operation.status = "failed";
         if (operation.entityType === "photoCloud" && operation.photoCloud) operation.photoCloud.state = "failed_retryable";
         operation.attemptCount += 1;
@@ -992,7 +998,9 @@ export const outboxRepository = {
         operation.lastProviderCode = typeof details.providerCode === "string" ? details.providerCode : null;
         operation.lastEndpoint = ["/api/cloudinary/sign", "/api/cloudinary/verify-upload", "/api/cloudinary/delivery", "/api/cloudinary/delete", "/api/cloudinary/metadata"].includes(details.endpoint)
           ? details.endpoint : null;
-        operation.nextAttemptAt = new Date(Date.now() + Math.min(30 * 60_000, 1000 * 2 ** Math.min(operation.attemptCount, 10))).toISOString();
+        operation.retryable = details.retryable !== false;
+        operation.retryAfterAt = details.retryAfterAt ?? null;
+        operation.nextAttemptAt = operation.retryable ? syncRetryAt(operation.attemptCount, { retryAfterAt: operation.retryAfterAt }) : null;
         operation.updatedAt = new Date().toISOString();
         store.put(operation);
         result = true;

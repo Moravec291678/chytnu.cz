@@ -2,14 +2,12 @@ import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useDataScope } from "../features/auth/context/dataScopeContextValue.js";
 import { useNotifications } from "../features/notifications/context/notificationContextValue.js";
-import { useOptionalSync } from "../features/sync/context/syncContextValue.js";
 import { normalizeNotificationDeepLink, normalizeSocialNotificationPreferences } from "../features/notifications/data/notificationModel.js";
 import { notificationRepository } from "../features/notifications/data/notificationRepository.js";
 import { readPreferences, savePreferences } from "../features/preferences/data/preferences.js";
 import { getNotificationAdapter } from "../platform/notifications/index.js";
 import { NOTIFICATION_PREFERENCES, NOTIFICATION_TYPE_PRESENTATION, SOCIAL_NOTIFICATION_PREFERENCES } from "../product/config/notifications.js";
 import Layout from "../shared/layout/Layout";
-import { getSyncDetailMessage } from "../shared/layout/syncStatusView.js";
 import { isFeatureEnabled } from "../shared/config/featureFlags.js";
 import { useSectionLink } from "../shared/layout/useSectionLink.js";
 import "./NotificationsPage.css";
@@ -41,7 +39,6 @@ export default function NotificationsPage() {
   const from = state?.from;
   const backTo = INBOX_RETURN_PATHS.has(from) && (from !== "/community" || isFeatureEnabled("community")) ? from : "/profile";
   const { notifications, unreadCount, loading, error: inboxError, markAsRead, markAllAsRead } = useNotifications();
-  const sync = useOptionalSync();
   const [preferenceOverride, setPreferenceOverride] = useState({ scopeKey: null, value: null });
   const [preferenceError, setPreferenceError] = useState("");
   const [destinationUnavailable, setDestinationUnavailable] = useState(false);
@@ -149,17 +146,6 @@ export default function NotificationsPage() {
             {unreadCount > 0 && <button type="button" className="notifications-mark-all" onClick={markAll}>Označit vše jako přečtené</button>}
           </div>
         </header>
-
-        {sync?.syncEnabled && <details className="notifications-preferences">
-          <summary>Synchronizace</summary>
-          <p className="notifications-preferences-intro">
-            {getSyncDetailMessage(sync.status)}
-          </p>
-          {(sync.pending > 0 || sync.pullPending > 0) && <p className="notifications-preferences-intro">Čekající záznamy: {sync.pending + sync.pullPending}</p>}
-          <button type="button" className="notifications-mark-all" disabled={sync.status === "syncing"} onClick={() => sync.syncNow()}>
-            Synchronizovat nyní
-          </button>
-        </details>}
 
         {destinationUnavailable && <p className="notifications-inbox-status" role="status">Toto oznámení odkazuje na sekci, která v tomto režimu není dostupná.</p>}
         {inboxError && <p className="notifications-error" role="alert">{inboxError}</p>}

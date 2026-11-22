@@ -5,6 +5,7 @@ import { applyRemotePage, readPendingPulls, readSyncCursor } from "./localSyncRe
 import { accountScopeKey } from "../../auth/data/localDataScope.js";
 import { describeSyncFailure } from "./syncDiagnostics.js";
 import { withSyncStage } from "./syncPort.js";
+import { getPullRetryAt, isDueForSync } from "../context/syncRetry.js";
 import { withPhotoDeadline } from "../../catches/data/photoDeadline.js";
 
 const REPOSITORIES = { catch: catchRepository, trip: tripRepository, water: waterRepository };
@@ -12,6 +13,7 @@ const PAGE_SIZE = 100;
 const MAX_PARALLEL_READS = 4;
 const MAX_PULL_PAGES = 100;
 const MAX_PUSH_PASSES = 3;
+const STOP_SYNC_CODES = new Set(["permission_denied", "unauthenticated", "rate_limited"]);
 function activeOwner(getCurrentOwnerId, ownerId) {
   return getCurrentOwnerId() === ownerId;
 }
@@ -25,11 +27,6 @@ function makeChangeSnapshot(change, remote) {
   };
 }
 
-function isDue(operation, now) {
-  if (operation.status === "conflict") return false;
-  if (operation.status !== "failed") return true;
-  return !operation.nextAttemptAt || Date.parse(operation.nextAttemptAt) <= now;
-}
 
 function pullStage(entityType, firestoreStage) {
   if (entityType === "catch" && firestoreStage === "get-catch-photo-metadata") return "pull:photos";
@@ -39,9 +36,9 @@ function pullStage(entityType, firestoreStage) {
 function retryPullRecord(change, failure, previous, now) {
   const attempts = (previous?.attempts ?? 0) + 1;
   const retryable = failure?.retryable !== false;
-  const delay = Math.min(30 * 60_000, 45_000 * (2 ** Math.min(attempts - 1, 5)));
+
   return { entityType: change.entityType, entityId: change.entityId, attempts, retryable,
-    nextAttemptAt: retryable ? new Date(now + delay).toISOString() : null,
+    nextAttemptAt: getPullRetryAt(retryable, now, attempts, failure?.retryAfterAt), retryAfterAt: failure?.retryAfterAt ?? null,
     errorCode: typeof failure?.code === "string" ? failure.code : "unknown",
     errorMessage: describeSyncFailure(failure).message,
     syncStage: failure?.syncStage ?? pullStage(change.entityType, failure?.firestoreStage),
@@ -49,6 +46,7 @@ function retryPullRecord(change, failure, previous, now) {
 }
 
 function pendingPullDue(item, now, force) {
+  if (item.retryAfterAt > now) return false;
   if (!item.retryable) return force;
   return force || !item.nextAttemptAt || Date.parse(item.nextAttemptAt) <= now;
 }
@@ -192,7 +190,7 @@ export function createSyncService({ port, getCurrentOwnerId, now = () => Date.no
     let transientFailure = null;
     const operations = await outboxRepository.list();
     for (const operation of operations) {
-      if (operation.ownerId !== ownerId || (!force && !isDue(operation, now()))) continue;
+      if (operation.ownerId !== ownerId || !isDueForSync(operation, { now: now(), force })) continue;
       if (!activeOwner(getCurrentOwnerId, ownerId)) return { sent, conflicts, stopped: true, transientFailure };
       const repository = REPOSITORIES[operation.entityType];
       if (!repository) continue;
@@ -225,6 +223,7 @@ export function createSyncService({ port, getCurrentOwnerId, now = () => Date.no
       } catch (error) {
         if (error?.code === "conflict") {
           const remote = await remoteCall("read", { ownerId, entityType: operation.entityType, entityId: operation.entityId });
+          if (!activeOwner(getCurrentOwnerId, ownerId)) return { sent, conflicts, stopped: true, transientFailure };
           const cursor = await readSyncCursor(ownerId);
           const appliedRemote = await applyRemotePage({
             ownerId,
@@ -242,12 +241,13 @@ export function createSyncService({ port, getCurrentOwnerId, now = () => Date.no
         }
         const stagedError = withSyncStage(error, `push:${operation.operation}`, error?.firestoreStage);
         const failure = describeSyncFailure(stagedError, operation);
-        await outboxRepository.markFailed(operation.operationId, failure.message, failure);
+        if (!activeOwner(getCurrentOwnerId, ownerId)) return { sent, conflicts, stopped: true, transientFailure };
+        await outboxRepository.markFailed(operation.operationId, failure.message, { ...failure, expectedLocalRevision: operation.localRevision });
         onDiagnostic({ event: "push-failed", ...failure });
         transientFailure = failure;
         // One record's transient failure must not starve unrelated catches/photos.
         // Authentication/ownership failures affect the whole account, so stop those.
-        if (error?.code === "permission_denied" || error?.code === "unauthenticated") break;
+        if (STOP_SYNC_CODES.has(failure.code)) break;
       }
     }
     return { sent, conflicts, stopped: false, transientFailure };
@@ -273,15 +273,17 @@ export function createSyncService({ port, getCurrentOwnerId, now = () => Date.no
           pullFailure = describeSyncFailure(error);
           applied += Number.isSafeInteger(error?.partialApplied) ? error.partialApplied : 0;
         }
-        const pushed = await push(ownerId, force);
+        if (STOP_SYNC_CODES.has(pullFailure?.code)) break;
+        const pushed = await push(ownerId, force && pass === 0);
         sent += pushed.sent;
         conflicts += pushed.conflicts;
         failure = pushed.transientFailure;
-        if (pushed.stopped || !activeOwner(getCurrentOwnerId, ownerId) || pushed.sent === 0) break;
+        if (pushed.stopped || !activeOwner(getCurrentOwnerId, ownerId) || pushed.sent === 0 || STOP_SYNC_CODES.has(failure?.code)) break;
       }
-      if (failure) return { status: "error", sent, applied, conflicts, error: failure.message, errorCode: failure.code, failedOperation: failure.operation };
+      if (failure && (!pullFailure || !failure.retryable)) return { status: "error", sent, applied, conflicts, error: failure.message, errorCode: failure.code, retryable: failure.retryable, retryAfterAt: failure.retryAfterAt, failedOperation: failure.operation };
       if (pullFailure) return { status: "error", sent, applied, conflicts, error: pullFailure.message,
-        errorCode: pullFailure.code, retryable: pullFailure.retryable, errorName: pullFailure.errorName,
+        errorCode: pullFailure.code, retryable: pullFailure.retryable,
+        retryAfterAt: Math.max(pullFailure.retryAfterAt ?? 0, failure?.retryAfterAt ?? 0), errorName: pullFailure.errorName,
         providerCode: pullFailure.providerCode, syncStage: pullFailure.syncStage, firestoreStage: pullFailure.firestoreStage,
         entityType: pullFailure.entityType, operation: pullFailure.operation };
       return { status: "success", sent, applied, conflicts };

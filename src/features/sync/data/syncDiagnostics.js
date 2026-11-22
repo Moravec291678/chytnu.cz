@@ -7,6 +7,7 @@ const USER_MESSAGES = Object.freeze({
   invalid_request: "Záznam se nepodařilo synchronizovat kvůli neplatným datům. Místní kopie zůstala zachovaná.",
   rules_schema_rejection: "Server odmítl strukturu záznamu. Místní kopie zůstala zachovaná.",
   cloudinary_signing_failure: "Cloudové úložiště odmítlo připravit upload fotografie.",
+  cloudinary_signature_expired: "Platnost uploadu vypršela. Při dalším pokusu se obnoví.",
   cloudinary_upload_failure: "Upload fotografie do cloudového úložiště selhal.",
   remote_delivery_failure: "Stažení fotografie z cloudového úložiště selhalo.",
   missing_auth: "Cloudová fotografie vyžaduje přihlášení.",
@@ -18,6 +19,11 @@ const USER_MESSAGES = Object.freeze({
   firebase_admin_config_invalid: "Server nemá platnou konfiguraci ověřování fotografií.",
   firebase_project_mismatch: "Server ověřuje fotografie proti nesprávnému Firebase projektu.",
   ownership_denied: "Server odmítl přístup k fotografii tohoto účtu.",
+  rate_limited: "Server dočasně omezuje počet požadavků. Synchronizace počká na povolený čas.",
+  photo_blob_missing: "Místní soubor fotografie chybí. Otevři úlovek a zkontroluj fotografii.",
+  photo_local_blob_unreadable: "Fotografii se nepodařilo přečíst z místního úložiště. Zkontroluj ji v úlovku.",
+  photo_content_mismatch: "Fotografie neodpovídá uloženým údajům. Zkontroluj ji v úlovku.",
+  invalid_photo_identity: "Server odmítl identitu fotografie. Zkontroluj ji v úlovku.",
   unknown: "Synchronizaci se nepodařilo dokončit. Místní změny zůstávají ve frontě.",
 });
 
@@ -26,7 +32,12 @@ export function describeSyncFailure(error, operation = {}) {
   const provider = typeof error?.providerCode === "string" ? error.providerCode.toLowerCase()
     : typeof error?.cause?.code === "string" ? error.cause.code.toLowerCase() : "";
   const classificationCode = raw === "unknown" && provider ? provider : raw;
-  const code = classificationCode.includes("network") ? "network"
+  const status = error?.status ?? error?.cause?.status;
+  const code = status === 429 || classificationCode.includes("rate_limit") || provider.includes("resource-exhausted") ? "rate_limited"
+    : status === 401 && !Object.hasOwn(USER_MESSAGES, classificationCode) ? "unauthenticated"
+    : status === 403 && !Object.hasOwn(USER_MESSAGES, classificationCode) ? "permission_denied"
+    : status >= 500 ? "unavailable"
+    : classificationCode.includes("network") ? "network"
     : Object.prototype.hasOwnProperty.call(USER_MESSAGES, classificationCode) ? classificationCode
     : classificationCode === "invalid_auth" ? "firebase_token_invalid"
       : classificationCode === "invalid_owner" || classificationCode === "photo_not_owned" ? "ownership_denied"
@@ -46,11 +57,14 @@ export function describeSyncFailure(error, operation = {}) {
   const providerCode = provider && /^[A-Za-z0-9_./:-]{1,100}$/.test(provider) ? provider : null;
   const retryable = typeof error?.retryable === "boolean" ? error.retryable
     : !["permission_denied", "unauthenticated", "rules_schema_rejection", "firebase_token_invalid",
-      "missing_firebase_user", "ownership_denied", "invalid_auth_header"].includes(code);
+      "missing_firebase_user", "ownership_denied", "invalid_auth_header", "firebase_token_expired",
+      "token_refresh_failed", "missing_auth", "invalid_request", "photo_blob_missing",
+      "photo_local_blob_unreadable", "photo_content_mismatch", "invalid_photo_identity"].includes(code);
   return Object.freeze({
     code,
     message: USER_MESSAGES[code],
     retryable,
+    retryAfterAt: error?.retryAfterAt ?? error?.cause?.retryAfterAt ?? null,
     entityType: operation.entityType ?? error?.entityType ?? "sync",
     operation: operation.operation ?? error?.operation ?? "pull",
     errorName: safeName,

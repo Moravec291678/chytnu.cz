@@ -530,3 +530,28 @@ test("a committed READY page notifies the receiver before later pages finish; re
   assert.equal((await run).applied, 6);
   assert.deepEqual(events, [ownerId, ownerId]);
 });
+
+test("a rate-limited mutation retains its stable operation and ignores forced retries until the deadline", async () => {
+  await resetDatabase();
+  const base = createInMemorySyncAdapter();
+  const retryAfterAt = Date.now() + 60_000;
+  let calls = 0;
+  let now = Date.now();
+  await catchRepository.put(makeCatch("rate-limit", "angler-a"), accountScope());
+  const [original] = await outboxRepository.list();
+  const { service } = makeService({
+    ...base,
+    write: async input => {
+      calls++;
+      if (calls === 1) throw Object.assign(new Error("rate-limited"), { status: 429, retryAfterAt });
+      return base.write(input);
+    },
+  }, { now: () => now });
+  assert.equal((await service.run("angler-a")).errorCode, "rate_limited");
+  assert.equal((await outboxRepository.list())[0].operationId, original.operationId);
+  await service.run("angler-a", { force: true });
+  assert.equal(calls, 1);
+  now = retryAfterAt + 1;
+  assert.equal((await service.run("angler-a")).sent, 1);
+  assert.equal((await outboxRepository.list()).length, 0);
+});

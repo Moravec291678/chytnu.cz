@@ -5,7 +5,6 @@ import SyncStatus from "./SyncStatus.js";
 import PwaUpdateNotice from "./PwaUpdateNotice.jsx";
 import "./Layout.css";
 import "./SyncStatus.css";
-import { SYNC_STATUS_COMPACT_DELAY_MS } from "./syncStatusView.js";
 import { navigationSection } from "./navigationSection.js";
 import { isFeatureEnabled } from "../config/featureFlags.js";
 import PageBackLink from "./PageBackLink.jsx";
@@ -65,13 +64,6 @@ function Layout({ children, back }) {
   const adminRoute = pathname === "/admin" || pathname.startsWith("/admin/");
   const sync = useOptionalSync();
   const [isOnline, setIsOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine !== false);
-  const [compactSyncId, setCompactSyncId] = useState(null);
-  const syncPresentationId = sync?.presentationId;
-  useEffect(() => {
-    if (sync?.status !== "syncing" || !sync.showSyncStatus || !syncPresentationId) return undefined;
-    const timer = window.setTimeout(() => setCompactSyncId(syncPresentationId), SYNC_STATUS_COMPACT_DELAY_MS);
-    return () => window.clearTimeout(timer);
-  }, [sync?.status, sync?.showSyncStatus, syncPresentationId]);
   useEffect(() => {
     const update = () => setIsOnline(navigator.onLine !== false);
     window.addEventListener("online", update);
@@ -90,7 +82,7 @@ function Layout({ children, back }) {
   const profileActive = section === "profile" || (!communityEnabled && pathname === "/notifications");
   return (
         <div className={adminRoute ? "layout layout-admin" : pathname === "/gallery" ? "layout layout-gallery" : "layout"}>
-      <SyncStatus sync={sync} isOnline={isOnline} compact={sync?.status === "syncing" && sync?.showSyncStatus && compactSyncId === syncPresentationId} />
+      <SyncStatus key={sync?.ownerId} sync={sync} isOnline={isOnline} />
       <PwaUpdateNotice syncing={sync?.status === "syncing"} />
       <main className="layout-main">
         {backTo && <div className="layout-back"><PageBackLink {...back} to={backTo} /></div>}

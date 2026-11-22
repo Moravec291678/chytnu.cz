@@ -34,7 +34,7 @@ import { buildSpeciesAlbum } from "../features/species/data/speciesAlbum";
 import { DEFAULT_SPECIES } from "../shared/constants/constants";
 import { readTrophySelection, saveTrophySelection } from "../features/species/data/trophySelection.js";
 import { waterRepository } from "../features/waters/data/waterRepository.js";
-import { runManualSync } from "../shared/layout/syncStatusView.js";
+import { runManualSync, isSyncAuthError } from "../shared/layout/syncStatusView.js";
 import { isFeatureEnabled } from "../shared/config/featureFlags.js";
 import "./ProfilePage.css";
 import CollaboratorBadge from "../features/admin/CollaboratorBadge.jsx";
@@ -635,9 +635,16 @@ function ProfilePage() {
         {auth.error && auth.status === "ready" && <p className="profile-error" role="alert">{auth.error}</p>}
         {authMessage && <p className="profile-feedback" role="status">{authMessage}</p>}
         {auth.user && <div id="sync-status">
-          <button className="profile-account-secondary" type="button" disabled={sync.status === "syncing"} onClick={() => runManualSync(sync)}>
-            {sync.status === "syncing" ? "Synchronizuji…" : "Synchronizovat"}
-          </button>
+          <h3>Synchronizace</h3>
+          <p>Počty čekajících změn a poslední úspěch najdeš v indikátoru nahoře.</p>
+          {sync.status === "user-action-required" && <div className="profile-restore-preview">
+            <p><strong>Synchronizace vyžaduje zásah</strong></p>
+            {sync.error && <p>{sync.error}</p>}
+            {isSyncAuthError(sync.errorCode) ? <p>Pokud obnovení relace nepomůže, odhlas se a přihlas ke stejnému účtu.</p> : null}
+            {sync.errorCode && <button className="profile-account-secondary" type="button" disabled={Boolean(sync.retryAfterAt)} onClick={() => runManualSync(sync)}>
+              {isSyncAuthError(sync.errorCode) ? "Obnovit relaci" : "Zkusit po opravě"}
+            </button>}
+          </div>}
           {conflicts.length > 0 && <div className="profile-restore-preview" aria-live="polite">
             <p><strong>Konflikty synchronizace ({conflicts.length})</strong></p>
             <p className="profile-privacy-note">Stejný záznam se změnil na více zařízeních. Vyber verzi; bez volby se nic nepřepíše.</p>

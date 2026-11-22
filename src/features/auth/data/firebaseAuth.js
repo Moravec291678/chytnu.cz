@@ -132,6 +132,14 @@ export const firebaseAuth = {
     const auth = await getAuthInstance();
     return getFirebaseIdToken(auth, forceRefresh);
   },
+  observeToken(listener) {
+    let active = true;
+    let unsubscribe = () => {};
+    getAuthInstance().then(auth => {
+      if (active) unsubscribe = firebaseAuthApi.onIdTokenChanged(auth, listener);
+    }).catch(() => {});
+    return () => { active = false; unsubscribe(); };
+  },
   observe(listener, onError) {
     let active = true;
     let unsubscribe = () => {};

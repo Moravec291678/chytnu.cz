@@ -1,3 +1,4 @@
+import { parseRetryAfter } from "../../sync/context/syncRetry.js";
 import { withPhotoDeadline } from "./photoDeadline.js";
 import { uploadPhotoWithProgress } from "./photoWebUpload.js";
 import { Capacitor, registerPlugin } from "@capacitor/core";
@@ -55,7 +56,7 @@ export function createPhotoUploadTransport({ platform = () => Capacitor.getPlatf
       catch { throw Object.assign(new Error("Cloudinary image upload failed because of a network error."), { code: "cloudinary_network_error" }); }
       let body;
       try { body = await response.json(); } catch { body = {}; }
-      return { state: response.ok ? "completed" : "failed_retryable", httpStatus: response.status, body };
+      return { state: response.ok ? "completed" : "failed_retryable", httpStatus: response.status, retryAfterAt: parseRetryAfter(response.headers?.get?.("Retry-After")), body };
       }, 120_000);
     }
 

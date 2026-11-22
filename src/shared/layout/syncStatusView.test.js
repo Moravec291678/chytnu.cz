@@ -1,43 +1,25 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { getSyncDetailMessage, getSyncPendingCount, getSyncStatusView, runManualSync, runSyncRetry, SYNC_STATUS_COMPACT_DELAY_MS } from "./syncStatusView.js";
-import SyncStatus from "./SyncStatus.js";
+import { getSyncPendingCount, getSyncStatusView, runManualSync } from "./syncStatusView.js";
 
-test("short, offline, retrying and completed sync never show a global banner", () => {
-  assert.equal(SYNC_STATUS_COMPACT_DELAY_MS, 2_500);
-  for (const status of ["idle", "local-pending", "retry-wait", "synced", "user-action-required"]) {
-    assert.equal(getSyncStatusView({ status, showSyncStatus: true }, true, true).kind, "hidden");
+test("compact indicator represents all account states and stays hidden for guests", () => {
+  assert.equal(getSyncStatusView({ status: "idle" }).kind, "hidden");
+  for (const status of ["synced", "syncing", "local-pending", "retry-wait", "user-action-required", "paused"]) {
+    assert.equal(getSyncStatusView({ syncEnabled: true, status }).kind, status);
   }
-  assert.equal(getSyncStatusView({ status: "syncing", showSyncStatus: true }, true, false).kind, "hidden");
-  assert.equal(getSyncStatusView({ status: "syncing", showSyncStatus: true }, false, true).kind, "hidden");
+  assert.equal(getSyncStatusView({ syncEnabled: true, status: "local-pending" }, false).label, "Čeká na internet");
+  assert.equal(getSyncPendingCount({ pending: 4, pullPending: 1, photoPending: 3 }), 5);
 });
 
-test("long active sync has only a small delayed accessible indicator with real logical pending count and hide action", () => {
-  assert.equal(getSyncPendingCount({ pending: 1, pullPending: 0 }), 1);
-  assert.deepEqual(getSyncStatusView({ status: "syncing", showSyncStatus: true, pending: 10 }, true, true), { kind: "syncing" });
-  let hidden = false;
-  const view = SyncStatus({ sync: { hideStatus: () => { hidden = true; }, status: "syncing", showSyncStatus: true, pending: 10 }, isOnline: true, compact: true });
-  assert.equal(view.props.role, "status");
-  assert.equal(view.props["aria-label"], "Synchronizace probíhá");
-  assert.match(view.props.className, /minimal/);
-  assert.equal(JSON.stringify(view).includes("Zbývá 10"), true);
-  view.props.children[2].props.onClick();
-  assert.equal(hidden, true);
-  assert.equal(SyncStatus({ sync: { status: "retry-wait", error: "timeout" }, isOnline: true, compact: true }), null);
-});
-
-test("manual sync remains available in detail", () => {
-  let manualRuns = 0;
-  let retries = 0;
-  assert.equal(runManualSync({ syncNow: () => ++manualRuns }), 1);
-  assert.equal(runSyncRetry({ retry: () => ++retries }), 1);
-});
-
-test("detail distinguishes pending, syncing, synchronized and failed without treating an unknown state as complete", () => {
-  assert.match(getSyncDetailMessage("local-pending"), /čekají/);
-  assert.match(getSyncDetailMessage("syncing"), /Probíhá/);
-  assert.match(getSyncDetailMessage("synced"), /synchronizované/);
-  assert.match(getSyncDetailMessage("retry-wait"), /nepodařila/);
-  assert.match(getSyncDetailMessage("user-action-required"), /pomoc/);
-  assert.match(getSyncDetailMessage("idle"), /nebyla ověřena/);
+test("third failure removes manual retry; meaningful actions remain visible offline", () => {
+  const state = { syncEnabled: true, status: "retry-wait", manualAttempts: 3 };
+  assert.equal(getSyncStatusView(state).exhausted, true);
+  assert.equal(getSyncStatusView(state).canRetry, false);
+  assert.equal(getSyncStatusView({ ...state, manualAttempts: 2 }).canRetry, true);
+  assert.equal(getSyncStatusView({ ...state, manualAttempts: 2, retryAfterAt: 10 }).canRetry, false);
+  const auth = getSyncStatusView({ ...state, status: "user-action-required", errorCode: "firebase_token_expired" }, false);
+  assert.equal(auth.exhausted, false);
+  assert.match(auth.action.label, /Obnovit přihlášení/);
+  assert.equal(getSyncStatusView({ ...state, conflicts: 1 }, false).kind, "conflict");
+  assert.equal(runManualSync({ syncNow: () => 1 }), 1);
 });

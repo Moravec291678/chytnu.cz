@@ -1,3 +1,4 @@
+import { parseRetryAfter } from "../../sync/context/syncRetry.js";
 import { withPhotoDeadline } from "./photoDeadline.js";
 import { Capacitor } from "@capacitor/core";
 import { createPhotoObjectKey, sha256Blob } from "./photoCloudProvider.js";
@@ -34,14 +35,20 @@ function grantParams(grant) {
 export function createCloudinaryPhotoProvider({ fetchImpl = globalThis.fetch, apiUrl = resolveApiUrl,
   getPlatform = () => Capacitor.getPlatform(), transport = null } = {}) {
   const uploadTransport = transport ?? createPhotoUploadTransport({ platform: getPlatform, webFetch: fetchImpl });
-  async function available() {
+  async function available({ reportFailure = false } = {}) {
     try {
       return await withPhotoDeadline(async (signal) => {
-      const response = await fetchImpl(apiUrl("/api/cloudinary/capability"), { method: "GET", credentials: "same-origin", signal });
-      const body = await readJson(response);
-      return response.ok && body.enabled === true;
+        const response = await fetchImpl(apiUrl("/api/cloudinary/capability"), { method: "GET", credentials: "same-origin", signal });
+        if (!response.ok && reportFailure) {
+          throw Object.assign(providerError("Cloudové úložiště není dostupné.", "cloudinary_capability_failed"), {
+            status: response.status, retryAfterAt: parseRetryAfter(response.headers?.get?.("Retry-After")),
+          });
+        }
+        const body = await readJson(response);
+        return response.ok && body.enabled === true;
       });
-    } catch {
+    } catch (error) {
+      if (reportFailure) throw error;
       return false;
     }
   }
@@ -95,13 +102,13 @@ export function createCloudinaryPhotoProvider({ fetchImpl = globalThis.fetch, ap
           const expired = [400, 401, 403].includes(transported.httpStatus)
             && /stale request|expired (?:signature|timestamp)|signature (?:has )?expired/i.test(result?.error?.message ?? "");
           throw Object.assign(providerError("Cloudinary did not accept the image upload.",
-            expired ? "cloudinary_signature_expired" : "cloudinary_upload_failed"), { status: transported.httpStatus });
+            expired ? "cloudinary_signature_expired" : "cloudinary_upload_failed"), { status: transported.httpStatus, retryAfterAt: transported.retryAfterAt });
         }
       } catch (error) {
         const status = error?.status;
         const code = (status === 420 || status === 429) || error?.code === "cloudinary_rate_limited" ? "cloudinary_rate_limited" : error?.code || "cloudinary_upload_failed";
         input.onDiagnostic?.("cloud_upload_fail", { errorCode: code, httpStatus: status });
-        throw Object.assign(providerError("Cloudinary image upload failed.", code), Number.isInteger(status) ? { status } : {});
+        throw Object.assign(providerError("Cloudinary image upload failed.", code), Number.isInteger(status) ? { status, retryAfterAt: error?.retryAfterAt ?? null } : {});
       }
       if (getPlatform() === "ios") {
         result = { bytes: input.size, format: expectedFormat };

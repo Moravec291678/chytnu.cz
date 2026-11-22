@@ -57,15 +57,21 @@ export async function readSyncSummary(ownerId) {
       requestResult(transaction.objectStore(SYNC_STATE_STORE_NAME).get(ownerId)),
     ]);
     const scoped = operations.filter((operation) => operation.ownerId === ownerId);
-    const lastFailed = scoped.find((operation) => (operation.status === "failed"
-      || (operation.entityType === "photoCloud" && operation.status === "conflict")) && operation.lastError);
+    const failures = scoped.filter(operation => (operation.status === "failed"
+      || (operation.entityType === "photoCloud" && operation.status === "conflict")) && operation.lastError)
+      .sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""));
+    const lastFailed = failures[0];
+    const attentionFailure = failures.find(item => item.retryable === false || item.status === "conflict");
     const pendingPulls = Array.isArray(syncState?.pendingPulls) ? syncState.pendingPulls : [];
-    const lastPendingPull = pendingPulls.at(-1);
+    const lastPendingPull = pendingPulls.find(item => !item.retryable) ?? pendingPulls.at(-1);
     const retryAt = [
       ...scoped.filter((operation) => operation.status === "failed" && operation.nextAttemptAt).map((operation) => operation.nextAttemptAt),
       ...pendingPulls.filter((operation) => operation.retryable && operation.nextAttemptAt).map((operation) => operation.nextAttemptAt),
     ].sort()[0] ?? null;
     return {
+      control: syncState?.control ?? {},
+      photoPending: new Set(scoped.filter(operation => operation.entityType === "photoCloud").map(operation => operation.entityId)).size,
+      attentionErrorCode: attentionFailure?.lastErrorCode ?? "",
       pending: new Set(scoped.filter((operation) => operation.status !== "conflict").map(logicalSyncKey)).size,
       outboxCount: scoped.filter((operation) => operation.status !== "conflict").length,
       photoConflicts: scoped.filter((operation) => operation.entityType === "photoCloud" && operation.status === "conflict").length,

@@ -19,6 +19,7 @@ export class SyncPortError extends Error {
     this.code = ERROR_CODES.has(code) ? code : "unknown";
     this.retryable = typeof options.retryable === "boolean" ? options.retryable : code === "unavailable" || code === "unknown";
     this.providerCode = safeDiagnosticValue(options.providerCode ?? options.cause?.code, 100);
+    this.retryAfterAt = options.retryAfterAt ?? options.cause?.retryAfterAt ?? null;
     this.sourceName = safeDiagnosticValue(options.sourceName ?? options.cause?.name, 64) ?? "Error";
     this.syncStage = safeDiagnosticValue(options.syncStage, 64);
     this.firestoreStage = safeDiagnosticValue(options.firestoreStage, 64);

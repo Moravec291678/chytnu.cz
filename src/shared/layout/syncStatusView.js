@@ -1,31 +1,40 @@
-export const SYNC_STATUS_COMPACT_DELAY_MS = 2_500;
+import { isSyncAuthError, MANUAL_SYNC_LIMIT } from "../../features/sync/context/syncRetry.js";
+export { isSyncAuthError };
+
+const statusLabels = {
+  idle: "Čeká na první kontrolu",
+  synced: "Zcela synchronizováno",
+  syncing: "Synchronizuji",
+  offline: "Čeká na internet",
+  "local-pending": "Změny čekají na synchronizaci",
+  "retry-wait": "Čeká na automatické opakování",
+  "user-action-required": "Některé změny vyžadují zásah",
+  conflict: "Konflikt synchronizace",
+  paused: "Synchronizace je pozastavená",
+};
+
+export const SYNC_AUTOMATIC_MESSAGE = "Změny jsou uložené. Synchronizace proběhne automaticky, jakmile to bude možné.";
 
 export function getSyncPendingCount(sync) {
-  const pending = Math.max(0, Number(sync?.pending) || 0);
-  const pullPending = Math.max(0, Number(sync?.pullPending) || 0);
-  return pending + pullPending;
+  return Math.max(0, Number(sync?.pending) || 0) + Math.max(0, Number(sync?.pullPending) || 0);
 }
 
-export function getSyncStatusView(sync, isOnline = true, delayed = false) {
-  if (!isOnline || !delayed || sync?.status !== "syncing" || !sync.showSyncStatus) return { kind: "hidden" };
-  return { kind: "syncing" };
-}
-
-export function getSyncDetailMessage(status) {
-  switch (status) {
-    case "local-pending": return "Změny čekají v tomto zařízení na synchronizaci.";
-    case "syncing": return "Probíhá synchronizace změn.";
-    case "retry-wait": return "Synchronizace se zatím nepodařila. Změny zůstávají uložené, další pokus proběhne automaticky.";
-    case "user-action-required": return "Některé změny potřebují tvou pomoc. Zkontroluj konflikty v Profilu, přihlášení nebo místní fotografii.";
-    case "synced": return "Změny jsou synchronizované.";
-    default: return "Synchronizace zatím nebyla ověřena.";
-  }
+export function getSyncStatusView(sync, isOnline = true) {
+  if (!sync?.syncEnabled) return { kind: "hidden" };
+  const kind = sync.conflicts > 0 ? "conflict"
+    : sync.status === "user-action-required" ? sync.status
+    : !isOnline ? "offline" : sync.status;
+  const exhausted = kind === "retry-wait" && sync.manualAttempts >= MANUAL_SYNC_LIMIT;
+  const authRequired = isSyncAuthError(sync.errorCode);
+  const serverWait = Boolean(sync.retryAfterAt);
+  const canRetry = isOnline && !exhausted && !serverWait && ["idle", "synced", "local-pending", "retry-wait"].includes(kind);
+  const action = kind === "conflict" || kind === "user-action-required" ? {
+    href: "/profile#sync-status",
+    label: kind === "conflict" ? "Vyřešit konflikt v Profilu" : authRequired ? "Obnovit přihlášení v Profilu" : "Řešení synchronizace v Profilu",
+  } : null;
+  return { kind, label: statusLabels[kind] ?? statusLabels.idle, exhausted, canRetry, action };
 }
 
 export function runManualSync(sync) {
   return sync?.syncNow?.();
-}
-
-export function runSyncRetry(sync) {
-  return sync?.retry?.();
 }
