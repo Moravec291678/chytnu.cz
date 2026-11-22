@@ -1,12 +1,12 @@
-const PRAGUE_TIME_ZONE = "Europe/Prague";
+const pragueDayFormat = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Europe/Prague", year: "numeric", month: "2-digit", day: "2-digit",
+});
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
 function pragueParts(value) {
   const timestamp = value instanceof Date ? value.getTime() : typeof value === "number" ? value : Date.parse(value);
   if (!Number.isFinite(timestamp)) return null;
-  return Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
-    timeZone: PRAGUE_TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit",
-  }).formatToParts(new Date(timestamp)).map((part) => [part.type, part.value]));
+  return Object.fromEntries(pragueDayFormat.formatToParts(new Date(timestamp)).map((part) => [part.type, part.value]));
 }
 
 export function getPragueStreakWeekKey(value) {

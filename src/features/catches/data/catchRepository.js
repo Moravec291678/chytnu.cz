@@ -400,12 +400,14 @@ async function getScopedMetadataRecord(storeName, id, scopeKey) {
 }
 
 async function hydratePhotoBinaryRecords(records, scopeKey) {
+  if (!records.some(record => record.photos?.length)) return records;
   const db = await openLocalDatabase();
   let binaryGroups;
   try {
     const transaction = db.transaction(PHOTO_BINARY_STORE_NAME, "readonly");
     const index = transaction.objectStore(PHOTO_BINARY_STORE_NAME).index("catchPhoto");
-    binaryGroups = await Promise.all(records.map((record) => requestValue(index.getAll([scopeKey, record.id]))));
+    binaryGroups = await Promise.all(records.map(record => record.photos?.length
+      ? requestValue(index.getAll([scopeKey, record.id])) : []));
   } finally { db.close(); }
   return records.map((record, recordIndex) => {
     const byKey = new Map(binaryGroups[recordIndex].map((item) => [item.key, item]));

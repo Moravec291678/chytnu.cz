@@ -1,5 +1,6 @@
 import { useRouteMemory } from "../shared/layout/navigationMemory.js";
-import { useMemo } from "react";
+import { useDeferredValue, useMemo } from "react";
+import { useRoutePageSize } from "../shared/layout/useRoutePageSize.js";
 import { Link } from "react-router-dom";
 import Layout from "../shared/layout/Layout";
 import { EmptyState, ErrorState, LoadingSkeleton, NoResultsState } from "../shared/components/UIStates.jsx";
@@ -28,14 +29,17 @@ function JournalPage() {
   const { state: tripState } = useTrips();
   const [filters, setFilters] = useRouteMemory("filters", EMPTY_FILTERS);
   const [filtersExpanded, setFiltersExpanded] = useRouteMemory("filtersExpanded", false);
+  const appliedFilters = useDeferredValue(filters);
+  const [visibleCount, showMore] = useRoutePageSize(filters, 24);
   const species = useMemo(() => [...new Map(state.catches.filter(item => item.speciesKey || item.captureMode !== "quick").map((item) => [item.speciesKey, { key: item.speciesKey, label: item.species }])).values()]
     .sort((a, b) => normalizeText(a.label).localeCompare(normalizeText(b.label), "cs")), [state.catches]);
-  const results = useMemo(() => filterAndSortCatches(state.catches, filters, tripState.trips), [state.catches, filters, tripState.trips]);
+  const results = useMemo(() => filterAndSortCatches(state.catches, appliedFilters, tripState.trips), [state.catches, appliedFilters, tripState.trips]);
   const activeFilters = hasActiveJournalFilters(filters);
   const activeFilterCount = [filters.speciesKey, filters.dateFrom, filters.dateTo, filters.favoriteOnly, filters.result, filters.methodKey, filters.tripId]
     .filter(Boolean).length;
   const tripsById = useMemo(() => new Map(tripState.trips.map((trip) => [trip.id, trip.title])), [tripState.trips]);
-  const visibleCatches = results.map((item) => ({ ...item, tripTitle: tripsById.get(item.tripId) }));
+  const visibleCatches = useMemo(() => results.slice(0, visibleCount)
+    .map((item) => ({ ...item, tripTitle: tripsById.get(item.tripId) })), [results, tripsById, visibleCount]);
   const setFilter = (key, value) => setFilters((current) => ({ ...current, [key]: value }));
   const resetFilters = () => setFilters(EMPTY_FILTERS);
 
@@ -94,7 +98,10 @@ function JournalPage() {
       : state.error ? <ErrorState className="journal-empty" title="Deník se nepodařilo načíst" message="Zkontroluj místní úložiště a zkus načtení zopakovat." onRetry={refresh} />
         : state.catches.length === 0 ? <EmptyState className="journal-empty" title="Zatím tu nic není" description="Zapiš svůj první úlovek a začni budovat rybářský příběh." action={<Link to="/add">Zapsat první úlovek</Link>} />
           : visibleCatches.length === 0 ? <NoResultsState className="empty-search" title="Žádné výsledky" description="Úlovek neodpovídá zvolenému hledání a filtrům." action={<button type="button" onClick={resetFilters}>Vymazat filtry</button>} />
-            : visibleCatches.map((item) => <CatchCard key={item.id} catchedFish={item} />)}
+            : <div aria-busy={appliedFilters !== filters}>
+              {visibleCatches.map((item) => <CatchCard key={item.id} catchedFish={item} />)}
+              {results.length > visibleCount && <button className="list-load-more" type="button" onClick={showMore}>Zobrazit další úlovky</button>}
+            </div>}
   </div></Layout>;
 }
 

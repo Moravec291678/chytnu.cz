@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { useNearViewport } from "../../../shared/hooks/useNearViewport.js";
 import { useDataScope } from "../../auth/context/dataScopeContextValue.js";
 import { buildTripCatchMarkers, groupNearbyTripMarkers, tripMapViewport } from "../../map/data/tripCatchMap.js";
 import { getPhotoBlobForDisplay } from "../../catches/data/photoCloudService.js";
@@ -39,7 +40,9 @@ function popupContent(markers) {
 export default function TripCatchMap({ trip, catches }) {
   const scope = useDataScope();
   const markers = useMemo(() => buildTripCatchMarkers(catches, trip, scope), [catches, trip, scope]);
-  const mapNode = useRef(null), mapApi = useRef(null), circles = useRef(new Map());
+  const mapNode = useRef(null), mapApi = useRef(null), circles = useRef(new Map()), pendingFocus = useRef(null);
+  const [requested, setRequested] = useState(false);
+  const [viewportRef, nearViewport] = useNearViewport({ immediate: requested });
   const [tileError, setTileError] = useState(false), [mapError, setMapError] = useState(false), [retry, setRetry] = useState(0);
   useEffect(() => {
     const connected = () => { if (tileError || mapError) setRetry(value => value + 1); };
@@ -47,7 +50,7 @@ export default function TripCatchMap({ trip, catches }) {
     return () => window.removeEventListener("online", connected);
   }, [tileError, mapError]);
   useEffect(() => {
-    if (!mapNode.current || markers.length === 0) return undefined;
+    if (!nearViewport || !mapNode.current || markers.length === 0) return undefined;
     let active = true, map;
     const stopPhotos = new Set();
     void (async () => {
@@ -65,9 +68,11 @@ export default function TripCatchMap({ trip, catches }) {
         for (const group of groupNearbyTripMarkers(markers)) {
           for (const marker of group) {
             const circle = L.circleMarker([marker.latitude, marker.longitude], { radius: 9, color: "#effff8", fillColor: "#19c58c", fillOpacity: 1, weight: 2 });
-            const popup = popupContent(group);
-            circle.bindPopup(popup.root, { maxWidth: 270, maxHeight: 320 });
-            circle.bindTooltip(`${marker.species}${group.length > 1 ? ` · ${group.length} úlovků v místě` : ""}`);
+            let popup;
+            circle.bindPopup(() => (popup ??= popupContent(group)).root, { maxWidth: 270, maxHeight: 320 });
+            const tooltip = document.createElement("span");
+            tooltip.textContent = `${marker.species}${group.length > 1 ? ` · ${group.length} úlovků v místě` : ""}`;
+            circle.bindTooltip(tooltip);
             let dispose = () => {};
             circle.on("popupopen", () => {
               dispose();
@@ -88,15 +93,27 @@ export default function TripCatchMap({ trip, catches }) {
         const viewport = tripMapViewport(markers);
         if (viewport.center) map.setView(viewport.center, viewport.zoom);
         else map.fitBounds(viewport.bounds, { padding: [28, 28], maxZoom: viewport.maxZoom });
+        const selected = markers.find(marker => marker.id === pendingFocus.current);
+        if (selected) {
+          pendingFocus.current = null;
+          map.setView([selected.latitude, selected.longitude], Math.max(map.getZoom(), 15));
+          circles.current.get(selected.id)?.openPopup();
+        }
       } catch { if (active) setMapError(true); }
     })();
     return () => { active = false; for (const stop of stopPhotos) stop(); circles.current.clear(); mapApi.current = null; map?.remove(); };
-  }, [markers, retry]);
+  }, [markers, nearViewport, retry]);
   const focusMarker = marker => {
     const circle = circles.current.get(marker.id);
-    if (circle && mapApi.current) { mapApi.current.setView([marker.latitude, marker.longitude], Math.max(mapApi.current.getZoom(), 15)); circle.openPopup(); }
+    if (circle && mapApi.current) {
+      mapApi.current.setView([marker.latitude, marker.longitude], Math.max(mapApi.current.getZoom(), 15));
+      circle.openPopup();
+    } else {
+      pendingFocus.current = marker.id;
+      setRequested(true);
+    }
   };
-  return <section className="trip-catch-map" aria-labelledby="trip-catch-map-title">
+  return <section ref={viewportRef} className="trip-catch-map" aria-labelledby="trip-catch-map-title">
     <h2 id="trip-catch-map-title">Mapa vycházky</h2>
     <p>Soukromá mapa jednotlivých úlovků. Zobrazuje jen uložené polohy této vycházky.</p>
     {markers.length === 0 ? <p className="trip-map-note">Zatím tu nejsou úlovky s použitelnou GPS. Polohu můžeš kdykoliv doplnit v úpravách konkrétního úlovku.</p> : <>

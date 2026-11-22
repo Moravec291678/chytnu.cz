@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
+import { useNearViewport } from "../../../shared/hooks/useNearViewport.js";
 import CatchMeasurements from "./CatchMeasurements.jsx";
 import { Link } from "react-router-dom";
 import {
@@ -69,7 +70,7 @@ function CatchPhoto({ blob, species, photo, ownerId, catchId }) {
   if (availability === PHOTO_AVAILABILITY.RETRYABLE_ERROR) {
     return <div className="catch-card-photo-error" role="status" aria-label="Fotografii se nepodařilo načíst. Otevři úlovek a zkus to znovu."><span aria-hidden="true">!</span></div>;
   }
-  return photoUrl ? <img className="catch-card-photo" src={photoUrl} alt={`Úlovek – ${species}`} style={photoFrameStyle(photo)} onError={async () => {
+  return photoUrl ? <img className="catch-card-photo" src={photoUrl} decoding="async" alt={`Úlovek – ${species}`} style={photoFrameStyle(photo)} onError={async () => {
     if (attemptedFallback.current || !ownerId || !photo.cloud?.objectKey) { setLoadState("error"); return; }
     attemptedFallback.current = true;
     setLoadState("loading");
@@ -97,6 +98,7 @@ function CatchCard({ catchedFish, isPersonalRecord = false }) {
   const scope = useDataScope();
   const [preview, setPreview] = useState(null);
   const primaryPhoto = getPrimaryAvailablePhoto(catchedFish);
+  const [photoButtonRef, photoNear] = useNearViewport({ enabled: Boolean(primaryPhoto) });
   const photos = preview?.scopeKey === scope.scopeKey && preview?.catchId === catchedFish.id ? buildGalleryItems([catchedFish]) : [];
   const index = photos.findIndex(item => item.photoId === preview?.photoId);
   const select = photoId => setPreview({ scopeKey: scope.scopeKey, catchId: catchedFish.id, photoId });
@@ -105,10 +107,10 @@ function CatchCard({ catchedFish, isPersonalRecord = false }) {
     <div className={`catch-card-link${isPersonalRecord ? " catch-card-link-record" : ""}`}>
       <Card as="article" density="compact" interactive className={`catch-card${isPersonalRecord ? " catch-card-record" : ""}`}>
         <div className="catch-card-main">
-          {primaryPhoto ? <button type="button" className="photo-open-button catch-card-photo-button"
+          {primaryPhoto ? <button ref={photoButtonRef} type="button" className="photo-open-button catch-card-photo-button"
             aria-label={`Otevřít fotografii úlovku – ${catchedFish.species}`}
             onClick={event => { focusPhotoOpener(event); select(primaryPhoto.id); }}>
-            <CatchPhoto key={JSON.stringify([catchedFish.ownerId, catchedFish.id, primaryPhoto.id, primaryPhoto.cloud?.sha256])} blob={primaryPhoto.blob} species={catchedFish.species} photo={primaryPhoto} ownerId={catchedFish.ownerId} catchId={catchedFish.id} />
+            {photoNear ? <CatchPhoto key={JSON.stringify([catchedFish.ownerId, catchedFish.id, primaryPhoto.id, primaryPhoto.cloud?.sha256])} blob={primaryPhoto.blob} species={catchedFish.species} photo={primaryPhoto} ownerId={catchedFish.ownerId} catchId={catchedFish.id} /> : <span className="catch-card-icon" aria-hidden="true">🐟</span>}
           </button> : <FishMark speciesKey={catchedFish.speciesKey} />}
 
           <div className="catch-card-info">
@@ -147,4 +149,4 @@ function CatchCard({ catchedFish, isPersonalRecord = false }) {
   );
 }
 
-export default CatchCard;
+export default memo(CatchCard);

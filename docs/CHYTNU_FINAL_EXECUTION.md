@@ -122,3 +122,65 @@ SOC-01 až SOC-18 odpovídají původním číslům v [matici QA](QA_COVERAGE_MA
 - Cloudinary účet, Firestore pravidla a datový model se neměnily. Proxy zpracovává náhledy v aplikačním serveru. Cloudinary eager varianta by ušetřila přenos z úložiště na server, ale vyžaduje další deriváty a ověření kvót a revokace. Authenticated originály i eager deriváty vyžadují podepsané doručení. [Oprávnění médií](https://cloudinary.com/documentation/control_access_to_media) · [Eager transformace](https://cloudinary.com/documentation/eager_and_incoming_transformations) · [Optimalizace formátu a kvality](https://cloudinary.com/documentation/image_optimization) · [Invalidace cache](https://cloudinary.com/documentation/invalidate_cached_media_assets_on_the_cdn)
 - Ověřeno 1 217 testů, lint, build, product, Photos, Sync, Auth, Firebase Rules a šest scénářů v Chromiu. Nativní foto API prošlo 26 kontrolami HTTP/Firebase. Chromium ověřil soukromé varianty, zákaz cizímu účtu, galerii 20 snímků a odvolání veřejného sdílení. Pro doručení byl použit autorizovaný aplikační server a testovací Cloudinary odpověď. Fyzická a živá akceptace zůstává BLOCKED.
 - Na druhém zařízení jsou offline dostupné již uložené originály. Samotný zmenšený síťový náhled se do trvalé cache neukládá, takže k jeho prvnímu či opětovnému načtení po restartu může být potřeba připojení.
+
+## Prompt 05/11 · výkon mobilního webu · PARTIAL
+
+- Výchozí vývojová větev `cd7d0db75540dc586be7b3785a63dff038114647`. Deník vykreslí 24 karet a galerie 36 dlaždic na první dávku. Další lze přidat bez stropu. Filtry vyhodnocují celou sbírku a galerie ji celou zpřístupní i v prohlížeči fotografií. Pozice a dávka se obnoví při návratu z detailu. Příprava filtru běží s nižší prioritou než textové pole.
+- Domů načítá náhled přátel a deníkový tip poblíž výřezu po načtení lokálních souhrnů. Náhledy karet a sociální avatary načítají data podle výřezu. Feed zachovává stránkování a (po změně účtu, publika nebo připojení) ruší staré požadavky. Souběžné kliknutí na další stranu nespouští druhý požadavek. Kód HEIC zůstává oddělený a offline instalace stále ukládá plný shell. Firestore oprávnění a data se neměnila.
+- Statistiky a XP znovu používají stejné formátovače času. Statistiky spočítají měsíce v jednom průchodu. Tři běhy shodné sady výpočtů na 100 / 1 000 / 5 000 záznamech měly medián 105 / 1 046 / 5 844 ms před změnou a 10 / 73 / 372 ms poté. Výstupy statistik, výzev a série byly přesně shodné.
+- Soukromá mapa seskupuje viditelné body po 48 px, Leaflet se zavádí až s dostupnými body. Test s 5 000 body zobrazil 2 730 bodů v 63 vrstvách. Záznamy ve skupině se procházejí po 20. Revírová mapa používá skutečný referenční bod z RIS, mapa výpravy a revíru odkládají dlaždice podle výřezu.
+- Chromium v izolaci měřil gzip a studenou cache u produkčních sestavení s Firebase emulátorem, syntetickými účty a 100 úlovky. Mobilní profil 390 px, zpomalení CPU 4×, 80 ms, 1,6 Mbit/s. Slabší profil 6×, 150 ms, 0,85 Mbit/s. U jednotlivých tras jde o jednotlivé běhy, ne o percentil reálných uživatelů. Fotodekódování měří čekání na `img.decode()` vzorku, často ještě před měřením již dekódovaného. Počet HTTP požadavků Firestore je transportní metrika a počet účtovaných čtení dokumentů z ní nelze odvodit. Registrace service workeru byla při porovnávání záměrně vypnutá a jeho offline chování se ověřilo zvlášť. Vercel a Cloudinary se pro benchmark nepoužily.
+
+### Mobilní profil · PŘED → PO
+
+| Trasa | Obsah / LCP (ms) | CLS | JS / přeneseno (kB) | HTTP / Firestore HTTP | Heap (MiB) / dlouhé úlohy | Dekódování (ms) |
+| --- | --- | --- | --- | --- | --- | --- |
+| Domů | 2602 → 2213 · 1412 → 1340 | 0,000 → 0,000 | 408,1 → 401,2 · 441,9 → 433,9 | 15 → 19 · 0 → 1 | 10,5 → 10,6 · 3 → 2 | — → — |
+| Deník | 4452 → 3686 · 1536 → 1500 | 0,000 → 0,000 | 411,8 → 396,1 · 450,5 → 432,7 | 30 → 30 · 6 → 5 | 9,1 → 11,8 · 7 → 6 | — → — |
+| Galerie | 3104 → 3049 · 3328 → 3296 | 0,000 → 0,000 | 413,9 → 398,2 · 454,2 → 437,5 | 29 → 30 · 5 → 5 | 13,5 → 10,3 · 5 → 5 | 3 → 0 |
+| Detail úlovku | 3066 → 3573 · 3048 → 3444 | 0,208 → 0,000 | 423,3 → 407,5 · 463,5 → 445,4 | 28 → 28 · 5 → 5 | 9,5 → 5,5 · 5 → 5 | 5 → 2 |
+| Komunita | 3566 → 3438 · 2808 → 2788 | 0,000 → 0,000 | 416,7 → 411,7 · 461,5 → 459,0 | 30 → 39 · 5 → 5 | 10,2 → 9,3 · 5 → 5 | — → — |
+| Veřejný profil | 3078 → 3116 · 1392 → 1276 | 0,000 → 0,000 | 414,5 → 403,3 · 454,1 → 447,6 | 28 → 34 · 5 → 4 | 11,9 → 6,9 · 5 → 5 | — → — |
+| Revíry | 2770 → 2911 · 1364 → 1308 | 0,000 → 0,000 | 419,5 → 403,6 · 459,3 → 441,0 | 28 → 28 · 2 → 2 | 11,2 → 9,3 · 5 → 6 | — → — |
+| Soukromá mapa | 3014 → 2745 · 1348 → 2768 | 0,006 → 0,006 | 454,6 → 439,7 · 497,6 → 480,8 | 24 → 28 · 2 → 6 | 13,7 → 11,3 · 6 → 1 | — → — |
+| Statistiky | 3612 → 2258 · 1364 → 1288 | 0,000 → 0,000 | 415,0 → 399,1 · 452,0 → 433,7 | 24 → 25 · 2 → 3 | 16,3 → 6,4 · 7 → 0 | — → — |
+| Přátelé | 2691 → 2622 · 2692 → 2616 | 0,000 → 0,000 | 411,3 → 397,0 · 448,7 → 433,5 | 22 → 27 · 2 → 2 | 10,5 → 19,3 · 6 → 5 | — → — |
+| Oznámení | 1480 → 1382 · 1372 → 1280 | 0,000 → 0,000 | 413,9 → 397,9 · 309,7 → 291,4 | 18 → 18 · 0 → 0 | 17,8 → 14,8 · 0 → 0 | — → — |
+| Chat revíru | 3419 → 3087 · 3360 → 3052 | 0,165 → 0,165 | 411,4 → 395,7 · 447,4 → 429,5 | 21 → 22 · 2 → 2 | 13,3 → 17,6 · 5 → 5 | — → — |
+
+### Slabší profil · PŘED → PO
+
+| Trasa | Obsah / LCP (ms) | CLS | Klávesa filtru (ms) | JS / přeneseno (kB) |
+| --- | --- | --- | --- | --- |
+| Domů | 4746 → 4218 · 2552 → 2360 | 0,067 → 0,036 | — → — | 408,1 → 412,0 · 442,1 → 309,0 |
+| Deník | 7887 → 5328 · 2544 → 2408 | 0,000 → 0,000 | 400 → 48 | 411,8 → 396,1 · 449,5 → 431,6 |
+| Galerie | 6742 → 14186 · 6876 → 14544 | 0,000 → 0,000 | <16 → 120 | 413,9 → 398,2 · 453,2 → 436,5 |
+| Detail úlovku | 6763 → 6041 · 6508 → 5812 | 0,208 → 0,000 | — → — | 423,3 → 407,5 · 463,5 → 445,4 |
+| Komunita | 5913 → 6988 · 5284 → 6088 | 0,000 → 0,000 | — → — | 416,7 → 411,7 · 460,5 → 458,6 |
+| Veřejný profil | 5434 → 5700 · 2520 → 2356 | 0,000 → 0,000 | — → — | 414,5 → 403,3 · 458,0 → 447,2 |
+| Revíry | 5448 → 5201 · 2556 → 2408 | 0,000 → 0,000 | — → — | 419,5 → 403,6 · 459,3 → 441,0 |
+| Soukromá mapa | 5468 → 5791 · 2528 → 2404 | 0,006 → 0,006 | — → — | 454,6 → 439,7 · 497,6 → 480,4 |
+| Statistiky | 6951 → 5728 · 2540 → 2492 | 0,000 → 0,000 | — → — | 415,0 → 399,1 · 452,0 → 433,7 |
+| Přátelé | 5210 → 5183 · 5160 → 4924 | 0,000 → 0,000 | — → — | 411,3 → 397,0 · 448,3 → 433,5 |
+| Oznámení | 2567 → 2444 · 2540 → 2384 | 0,000 → 0,000 | — → — | 259,4 → 243,5 · 252,8 → 234,5 |
+| Chat revíru | 6517 → 5168 · 6360 → 5160 | 0,165 → 0,165 | — → — | 411,4 → 395,7 · 447,4 → 429,5 |
+
+### Deník a galerie při růstu dat · PŘED → PO
+
+| Data a trasa | První obsah (ms) | Klávesa filtru (ms) | Uzly DOM | Heap (MiB) |
+| --- | --- | --- | --- | --- |
+| 0 · Deník | 2140 → 1929 | 48 → 24 | 116 → 117 | 19,3 → 15,7 |
+| 0 · Galerie | 2038 → 1924 | 24 → 24 | 103 → 105 | 18,1 → 18,2 |
+| 10 · Deník | 2157 → 2016 | 48 → 32 | 272 → 274 | 17,5 → 15,8 |
+| 10 · Galerie | 2122 → 2116 | 24 → 24 | 211 → 214 | 23,3 → 21,6 |
+| 100 · Deník | 4452 → 3686 | 200 → 48 | 1707 → 494 | 9,1 → 11,8 |
+| 100 · Galerie | 3104 → 3049 | 72 → 40 | 1196 → 496 | 13,5 → 10,3 |
+| 1000 · Deník | 16253 → 11952 | 1704 → 24 | 16812 → 499 | 39,5 → 25,5 |
+| 1000 · Galerie | 17095 → 12889 | 144 → 40 | 3397 → 501 | 54,8 → 34,5 |
+| 5000 · Deník | 56685 → 6947 | 9504 → 32 | 84808 → 494 | 105,8 → 19,7 |
+| 5000 · Galerie | 11267 → 3988 | 144 → 40 | 3397 → 496 | 113,7 → 61,7 |
+
+- Při 5 000 úlovcích výchozí porovnatelné měření chybí. Po úpravách se zobrazilo 24 karet Deníku a 36 dlaždic Galerie. Pomalé jednotlivé průchody Galerie mají velký rozptyl. V jednom byly 6,74 → 14,19 s do obsahu při slabém profilu. Cíle LCP a CLS proto hodnotíme jako částečně splněné. Doba jednotlivé interakce je laboratorní vzorek a nezastupuje skutečné INP mobilních uživatelů.
+- V prohlížeči se ověřilo 24 → 48 karet Deníku a návrat z detailu přesně na 2 691 px, ve vieweru přechod z 37. na 38. fotografii ze 100 a offline načtení první dávky JPEG. Prošel i samostatný offline restart po úplném zavření Chromia se soukromou fotografií z HEIC. U detailu úlovku po rezervaci místa kleslo CLS z 0,208 na 0,000 v obou profilech. Chat běžel jen proti izolovanému Firebase.
+- Prošlo 1 220 unit a komponentových testů, lint, build, product, diff check, Photos, Sync, Auth a 211 integračních kontrol feedu s Firebase. Hlavní test feedu prošel 25 příspěvky se shodným časem v paginaci. Změnu účtu ověřila Auth sada v izolaci. Git release je na vývojové větvi, produkce zůstává na původním buildu.
+- Další krok je Prompt 06. Pro veřejnou akceptaci zbývá měření na fyzickém telefonu, skutečná telemetrie INP a počty čtení dokumentů. Produkční pilot, sdílení a placené služby se v této etapě neměnily.

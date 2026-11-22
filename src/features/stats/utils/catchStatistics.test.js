@@ -99,3 +99,14 @@ test("patterns stay unavailable with fewer than three records or no repeated cat
     { caughtAt: "2026-10-04T12:30:00" },
   ]).time, null);
 });
+
+test("monthly totals use the local Prague month at a UTC boundary", () => {
+  const now = new Date("2026-10-10T12:00:00Z");
+  const stats = getCatchStatistics([
+    { caughtAt: "2026-09-30T21:59:59Z" },
+    { caughtAt: "2026-09-30T22:00:00Z" },
+    { caughtAt: "invalid" },
+  ], [], now);
+  assert.deepEqual(stats.monthlyCatchCounts.slice(-2).map(({ key, count }) => [key, count]),
+    [["2026-09", 1], ["2026-10", 1]]);
+});

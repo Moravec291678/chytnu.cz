@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildPrivateCatchMarkers, getCatchCoordinates } from "./catchMap.js";
+import { buildPrivateCatchMarkers, getCatchCoordinates, groupVisibleCatchMarkers } from "./catchMap.js";
 import { isRecordVisible } from "../../auth/data/localDataScope.js";
 
 test("private map includes only catches with valid structured or unambiguous legacy coordinates", () => {
@@ -43,4 +43,26 @@ test("the private map does not mark a personal record unless that real record ha
   assert.equal(markers.length, 1);
   assert.equal(markers[0].id, "mapped");
   assert.equal(markers[0].isPersonalRecord, false);
+});
+
+test("private map bounds rendered groups on mobile while preserving every visible catch", () => {
+  const markers = Array.from({ length: 5000 }, (_, id) => ({
+    id, latitude: id % 600 - 50, longitude: Math.floor(id / 600) * 50 - 50,
+  }));
+  const project = ([latitude, longitude]) => ({ x: latitude, y: longitude });
+  const viewport = { x: 390, y: 330 };
+  const groups = groupVisibleCatchMarkers(markers, project, viewport);
+  assert.ok(groups.length <= Math.ceil(390 / 48) * Math.ceil(330 / 48));
+  assert.ok(groups.length < 100);
+  const visible = markers.filter(({ latitude, longitude }) =>
+    latitude >= 0 && latitude < viewport.x && longitude >= 0 && longitude < viewport.y);
+  assert.deepEqual(groups.flat().map(marker => marker.id).sort((a,b) => a-b), visible.map(marker => marker.id));
+  for (const group of groups) assert.equal(group[0], markers[group[0].id]);
+});
+
+test("zoom separates nearby private catch markers without changing their coordinates", () => {
+  const markers = [{ latitude: 1, longitude: 2 }, { latitude: 2, longitude: 3 }];
+  const viewport = { x: 390, y: 330 };
+  assert.deepEqual(groupVisibleCatchMarkers(markers, ([lat, lon]) => ({ x: lat, y: lon }), viewport), [markers]);
+  assert.deepEqual(groupVisibleCatchMarkers(markers, ([lat, lon]) => ({ x: lat * 48, y: lon * 48 }), viewport), markers.map(marker => [marker]));
 });

@@ -55,11 +55,13 @@ function caughtInMonths(record, months) {
   return Number.isFinite(timestamp) && months.includes(new Date(timestamp).getMonth());
 }
 
+const catchHourFormat = new Intl.DateTimeFormat("en-GB", {
+  hour: "2-digit", hourCycle: "h23", timeZone: "Europe/Prague",
+});
+
 function isNightCatch(record, startHour = PRODUCT_LIMITS.nightCatchStartHour, endHour = PRODUCT_LIMITS.nightCatchEndHour) {
   if (!record.caughtAt || Number.isNaN(Date.parse(record.caughtAt))) return false;
-  const hour = Number(new Intl.DateTimeFormat("en-GB", {
-    hour: "2-digit", hourCycle: "h23", timeZone: "Europe/Prague",
-  }).format(new Date(record.caughtAt)));
+  const hour = Number(catchHourFormat.format(new Date(record.caughtAt)));
   return hour >= startHour || hour < endHour;
 }
 

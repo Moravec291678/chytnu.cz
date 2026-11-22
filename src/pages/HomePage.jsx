@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { lazy, Suspense, useMemo } from "react";
 import { Link } from "react-router-dom";
 import Layout from "../shared/layout/Layout";
 import CatchCard from "../features/catches/components/CatchCard";
@@ -12,17 +12,26 @@ import useLiveDuration from "../hooks/useLiveDuration";
 import { buildChallengeOverview } from "../features/progression/data/challenges";
 import { buildSeasonalChallenge } from "../features/progression/data/seasonalChallenge";
 import { readPreferences } from "../features/preferences/data/preferences.js";
-import HomeInsightCard from "../features/home/components/HomeInsightCard.jsx";
+import { useNearViewport } from "../shared/hooks/useNearViewport.js";
 import HomeInsightBoundary from "../features/home/components/HomeInsightBoundary.jsx";
 import { useDataScope } from "../features/auth/context/dataScopeContextValue.js";
 import { useProgression } from "../features/progression/context/progressionContextValue.js";
 import { useNotifications } from "../features/notifications/context/notificationContextValue.js";
 import "./HomePage.css";
 import QuickCatchButton from "../features/catches/components/QuickCatchButton.jsx";
-import SocialFeed from "../features/social/components/SocialFeed.jsx";
 import { FEATURES } from "../product/config/featureFlags.js";
 import { useAuth } from "../features/auth/context/authContextValue.js";
 import { QUICK_CATCH_FEATURES } from "../product/config/quickCatchFlags.js";
+
+const SocialFeed = lazy(() => import("../features/social/components/SocialFeed.jsx"));
+const HomeInsightCard = lazy(() => import("../features/home/components/HomeInsightCard.jsx"));
+
+function HomeBelowFold({ children }) {
+  const [ref, near] = useNearViewport();
+  return <div ref={ref} style={{ minHeight: 1 }}>
+    {near && <Suspense fallback={null}>{children}</Suspense>}
+  </div>;
+}
 
 const SEASONS = [
   { key: "winter", label: "Zima", months: [11, 0, 1] },
@@ -59,11 +68,10 @@ function pluralize(count, forms) {
 
 function ActiveTripSummary({ trip, catches }) {
   const duration = useLiveDuration(trip.startedAt);
-  const tripCatches = catches.filter((item) => item.tripId === trip.id);
   const today = new Date().toDateString();
-  const catchesToday = tripCatches.filter(
-    (item) => item.caughtAt && new Date(item.caughtAt).toDateString() === today,
-  ).length;
+  const catchesToday = useMemo(() => catches.filter(
+    item => item.tripId === trip.id && item.caughtAt && new Date(item.caughtAt).toDateString() === today,
+  ).length, [catches, today, trip.id]);
 
   return (
     <Link className="home-active-trip" to={`/trips/${trip.id}`}>
@@ -190,6 +198,8 @@ function HomePage() {
       })),
     };
   }, [catches, ledger]);
+  const showFriendActivity = FEATURES.community && user?.uid
+    && !catchState.loading && !tripState.loading && !ledger.loading;
   const weeklyStreak = ledger.summary.streak;
   const tripsById = useMemo(() => new Map(tripState.trips.map((trip) => [trip.id, trip.title])), [tripState.trips]);
 
@@ -225,22 +235,6 @@ function HomePage() {
             </span>
             <span aria-hidden="true">→</span>
           </Link>
-        )}
-
-        {!ledger.loading && !ledger.error && <Link className="home-progress-card home-xp-card" to="/levels" aria-label={`Úroveň ${ledger.summary.level}, ${ledger.summary.xp} XP, hodnost ${ledger.summary.rank.name}. Otevřít postup`}>
-          <div className="home-progress-heading"><span className="home-progress-kicker">Tvůj postup</span><span>Úrovně a XP →</span></div>
-          <h2>Úroveň {ledger.summary.level} · {ledger.summary.rank.name}</h2>
-          <p>{ledger.summary.xp} XP{ledger.summary.nextThreshold ? ` · další úroveň při ${ledger.summary.nextThreshold} XP` : " · nejvyšší úroveň"}</p>
-          <div className="home-progress-meter" role="progressbar" aria-label="Postup do další úrovně" aria-valuemin="0" aria-valuemax="100" aria-valuenow={ledger.summary.progressPercent}>
-            <span style={{ width: `${ledger.summary.progressPercent}%` }} />
-          </div>
-        </Link>}
-
-        {!catchState.loading && !tripState.loading && !ledger.loading && !catchState.error && !tripState.error && !ledger.error && (
-          <>
-            <SeasonalChallengeCard challenge={seasonalChallenge} />
-          <WeeklyProgressCard tasks={[challenges.daily[0], challenges.weekly[0]]} streak={weeklyStreak} />
-          </>
         )}
 
         {(catchState.error || tripState.error || ledger.error) && (
@@ -280,8 +274,24 @@ function HomePage() {
             />
           ))}
         </section>
-        {FEATURES.community && user?.uid && <SocialFeed key={user.uid} mode="friends" compact />}
-        {showDiaryTip && !catchState.loading && !catchState.error && <HomeInsightBoundary key={scope.scopeKey}><HomeInsightCard catches={catches} trips={tripState.trips} contextReady={!tripState.loading && !tripState.error} /></HomeInsightBoundary>}
+        {!ledger.loading && !ledger.error && <Link className="home-progress-card home-xp-card" to="/levels" aria-label={`Úroveň ${ledger.summary.level}, ${ledger.summary.xp} XP, hodnost ${ledger.summary.rank.name}. Otevřít postup`}>
+          <div className="home-progress-heading"><span className="home-progress-kicker">Tvůj postup</span><span>Úrovně a XP →</span></div>
+          <h2>Úroveň {ledger.summary.level} · {ledger.summary.rank.name}</h2>
+          <p>{ledger.summary.xp} XP{ledger.summary.nextThreshold ? ` · další úroveň při ${ledger.summary.nextThreshold} XP` : " · nejvyšší úroveň"}</p>
+          <div className="home-progress-meter" role="progressbar" aria-label="Postup do další úrovně" aria-valuemin="0" aria-valuemax="100" aria-valuenow={ledger.summary.progressPercent}>
+            <span style={{ width: `${ledger.summary.progressPercent}%` }} />
+          </div>
+        </Link>}
+
+        {!catchState.loading && !tripState.loading && !ledger.loading && !catchState.error && !tripState.error && !ledger.error && (
+          <>
+            <SeasonalChallengeCard challenge={seasonalChallenge} />
+          <WeeklyProgressCard tasks={[challenges.daily[0], challenges.weekly[0]]} streak={weeklyStreak} />
+          </>
+        )}
+
+        {showFriendActivity && <HomeBelowFold key={user.uid}><SocialFeed mode="friends" compact /></HomeBelowFold>}
+        {showDiaryTip && !catchState.loading && !catchState.error && <HomeBelowFold key={scope.scopeKey}><HomeInsightBoundary><HomeInsightCard catches={catches} trips={tripState.trips} contextReady={!tripState.loading && !tripState.error} /></HomeInsightBoundary></HomeBelowFold>}
       </div>
     </Layout>
   );

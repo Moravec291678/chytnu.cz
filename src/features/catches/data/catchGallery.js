@@ -103,12 +103,10 @@ export function filterAndSortGallery(items, filters = {}, now = new Date()) {
   const currentYear = now.getFullYear();
   const monthKey = `${currentYear}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   const filtered = items.filter((item) => {
-    const day = dateKey(item.caughtAt);
-    const waterKey = item.waterId ? `id:${item.waterId}` : item.locationName ? `name:${normalizeText(item.locationName)}` : "";
-    const searchText = normalizeText(`${item.species} ${item.locationName}`);
-    return (!query || searchText.includes(query))
+    const day = filters.period && filters.period !== "all" ? dateKey(item.caughtAt) : "";
+    return (!query || normalizeText(`${item.species} ${item.locationName}`).includes(query))
       && (!filters.speciesKey || item.speciesKey === filters.speciesKey)
-      && (!filters.waterKey || waterKey === filters.waterKey)
+      && (!filters.waterKey || filters.waterKey === (item.waterId ? `id:${item.waterId}` : item.locationName ? `name:${normalizeText(item.locationName)}` : ""))
       && (!filters.favoriteOnly || item.isFavorite)
       && (filters.period !== "month" || day.startsWith(monthKey))
       && (filters.period !== "year" || day.startsWith(String(currentYear)))

@@ -1,3 +1,14 @@
+.list-load-more {
+  display: block;
+  min-height: 44px;
+  margin: var(--ui-space-4, 16px) auto;
+  padding: 8px 18px;
+  border: 1px solid var(--bd);
+  border-radius: 12px;
+  color: var(--t1);
+  background: var(--s1);
+}
+
 .layout {
   width: 100%;
   max-width: 487px;

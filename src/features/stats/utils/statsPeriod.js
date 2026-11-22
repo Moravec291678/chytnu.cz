@@ -1,17 +1,18 @@
 const PRAGUE_TIME_ZONE = "Europe/Prague";
 
+const pragueDateFormat = new Intl.DateTimeFormat("en-CA", {
+  timeZone: PRAGUE_TIME_ZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hourCycle: "h23",
+});
+
 export function getPragueDateParts(date) {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: PRAGUE_TIME_ZONE,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(date);
-  return Object.fromEntries(parts.map(({ type, value }) => [type, Number(value)]));
+  return Object.fromEntries(pragueDateFormat.formatToParts(date).map(({ type, value }) => [type, Number(value)]));
 }
 
 function pragueOffsetAt(timestamp) {

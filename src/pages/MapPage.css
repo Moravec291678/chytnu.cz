@@ -287,3 +287,8 @@
     min-height: clamp(290px, 36vh, 330px);
   }
 }
+
+.catch-map-canvas .leaflet-interactive:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 3px;
+}

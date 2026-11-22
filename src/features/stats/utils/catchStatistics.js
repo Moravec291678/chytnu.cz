@@ -3,6 +3,10 @@ import { isMeasuredCatchWeight } from "../../catches/data/catchWeight.js";
 import { getPragueDateParts } from "./statsPeriod.js";
 import { PRODUCT_LIMITS } from "../../../product/config/limits.js";
 
+const monthFormat = new Intl.DateTimeFormat("cs-CZ", { timeZone: "Europe/Prague", month: "long" });
+const compactMonthFormat = new Intl.DateTimeFormat("cs-CZ", { timeZone: "Europe/Prague", month: "short" });
+const monthLabels = Array.from({ length: 12 }, (_, month) => monthFormat.format(new Date(Date.UTC(2020, month, 15))));
+
 export const PATTERN_MIN_SAMPLE_SIZE = PRODUCT_LIMITS.statsPatternMinimumSample;
 
 function groupBy(items, getKey, getLabel) {
@@ -56,7 +60,7 @@ export function getCatchPatterns(catches) {
       const endHour = (startHour + 3) % 24;
       const label = `${String(startHour).padStart(2, "0")}–${String(endHour).padStart(2, "0")} h`;
       timeSlots.push({ key: String(startHour), label });
-      months.push({ key: String(date.month), label: new Intl.DateTimeFormat("cs-CZ", { timeZone: "Europe/Prague", month: "long" }).format(new Date(Date.UTC(2020, date.month - 1, 15))) });
+      months.push({ key: String(date.month), label: monthLabels[date.month - 1] });
     }
 
     const location = typeof record.locationName === "string" ? record.locationName.trim() : "";
@@ -91,19 +95,22 @@ export function getCatchStatistics(catches, trips = [], now = new Date()) {
   const completedTripIds = new Set(completedTrips.map((trip) => trip.id));
   const linkedCatchCount = catches.filter((item) => completedTripIds.has(item.tripId)).length;
   const nowParts = getPragueDateParts(now);
+  const counts = new Map();
+  for (const item of catches) {
+    const timestamp = Date.parse(item.caughtAt);
+    if (!Number.isFinite(timestamp)) continue;
+    const { year, month } = getPragueDateParts(new Date(timestamp));
+    const key = year * 12 + month - 1;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
   const monthlyCatchCounts = Array.from({ length: 6 }, (_, index) => {
     const month = new Date(Date.UTC(nowParts.year, nowParts.month - 1 - (5 - index), 15));
     const year = month.getUTCFullYear();
     const monthIndex = month.getUTCMonth();
-    const count = catches.filter((item) => {
-      const timestamp = Date.parse(item.caughtAt);
-      if (!Number.isFinite(timestamp)) return false;
-      const date = getPragueDateParts(new Date(timestamp));
-      return date.year === year && date.month === monthIndex + 1;
-    }).length;
+    const count = counts.get(year * 12 + monthIndex) ?? 0;
     return {
       key: `${year}-${String(monthIndex + 1).padStart(2, "0")}`,
-      label: new Intl.DateTimeFormat("cs-CZ", { timeZone: "Europe/Prague", month: "short" }).format(month).replace(/\.$/, ""),
+      label: compactMonthFormat.format(month).replace(/\.$/, ""),
       count,
     };
   });

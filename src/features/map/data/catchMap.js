@@ -24,3 +24,19 @@ export function buildPrivateCatchMarkers(catches) {
     }];
   });
 }
+
+// Group only visible points into fixed screen cells. Keep the original position of
+// every catch and use the first actual point as the anchor for a group.
+const MAP_CELL_PIXELS = 48;
+export function groupVisibleCatchMarkers(markers, project, { x: width, y: height }) {
+  const groups = new Map();
+  for (const marker of markers) {
+    const { x, y } = project([marker.latitude, marker.longitude]);
+    if (x < 0 || y < 0 || x >= width || y >= height) continue;
+    const cell = `${Math.floor(x / MAP_CELL_PIXELS)}:${Math.floor(y / MAP_CELL_PIXELS)}`;
+    const group = groups.get(cell);
+    if (group) group.push(marker);
+    else groups.set(cell, [marker]);
+  }
+  return [...groups.values()];
+}

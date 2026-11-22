@@ -1,5 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useDeferredValue, useMemo, useRef, useState } from "react";
 import CatchMeasurements from "../features/catches/components/CatchMeasurements.jsx";
+import { useNearViewport } from "../shared/hooks/useNearViewport.js";
+import { useRouteMemory } from "../shared/layout/navigationMemory.js";
+import { useRoutePageSize } from "../shared/layout/useRoutePageSize.js";
 import { Link } from "react-router-dom";
 import Layout from "../shared/layout/Layout";
 import { useCatches } from "../features/catches/context/useCatches";
@@ -16,16 +19,7 @@ import "./GalleryPage.css";
 import "../features/catches/components/PhotoSyncStatus.css";
 
 function GalleryTile({ item, scope, onOpen }) {
-  const ref = useRef(null);
-  const [visible, setVisible] = useState(typeof IntersectionObserver === "undefined");
-  useEffect(() => {
-    if (!ref.current || visible || typeof IntersectionObserver === "undefined") return undefined;
-    const observer = new IntersectionObserver(([entry]) => {
-      if (entry.isIntersecting) { setVisible(true); observer.disconnect(); }
-    }, { rootMargin: "180px" });
-    observer.observe(ref.current);
-    return () => observer.disconnect();
-  }, [visible]);
+  const [ref, visible] = useNearViewport();
   return <div ref={ref} className="gallery-tile">
     <span className="gallery-tile-image">
       {visible ? <GalleryPhotoImage item={item} scope={scope} style={photoFrameStyle(item)} alt={`${item.species}${item.locationName ? `, ${item.locationName}` : ""}`} loading="lazy" tile /> : <span className="gallery-missing" aria-hidden="true" />}
@@ -59,7 +53,9 @@ const EMPTY_FILTERS = { speciesKey: "", waterKey: "", period: "all", dateFrom: "
 function GalleryPage() {
   const { state } = useCatches();
   const scope = useDataScope();
-  const [filters, setFilters] = useState(INITIAL_FILTERS);
+  const [filters, setFilters] = useRouteMemory("filters", INITIAL_FILTERS);
+  const appliedFilters = useDeferredValue(filters);
+  const [visibleCount, showMore] = useRoutePageSize(filters, 36);
   const [filterDraft, setFilterDraft] = useState(EMPTY_FILTERS);
   const [filterPanelOpen, setFilterPanelOpen] = useState(false);
   const [selectedPhoto, setSelectedPhoto] = useState(null);
@@ -67,9 +63,11 @@ function GalleryPage() {
   const filterCloseRef = useRef(null);
   useModalFocusTrap(filterDialogRef, { active: filterPanelOpen, initialFocusRef: filterCloseRef, onEscape: () => setFilterPanelOpen(false) });
   const allItems = useMemo(() => buildGalleryItems(state.catches, { ownerId: scope.ownerId }), [scope.ownerId, state.catches]);
-  const options = useMemo(() => getGalleryOptions(allItems), [allItems]);
-  const photos = useMemo(() => filterAndSortGallery(allItems, filters), [allItems, filters]);
-  const viewerIndex = photos.findIndex(item => selectedPhoto?.scopeKey === scope.scopeKey && selectedPhoto.catchId === item.catchId && selectedPhoto.photoId === item.photoId);
+  const options = useMemo(() => filterPanelOpen ? getGalleryOptions(allItems) : null, [allItems, filterPanelOpen]);
+  const photos = useMemo(() => filterAndSortGallery(allItems, appliedFilters), [allItems, appliedFilters]);
+  const visiblePhotos = useMemo(() => photos.slice(0, visibleCount), [photos, visibleCount]);
+  const viewerIndex = selectedPhoto?.scopeKey === scope.scopeKey
+    ? photos.findIndex(item => selectedPhoto.catchId === item.catchId && selectedPhoto.photoId === item.photoId) : -1;
   const selectPhoto = item => setSelectedPhoto({ scopeKey: scope.scopeKey, catchId: item.catchId, photoId: item.photoId });
   const clearFilters = () => setFilters(resetGalleryFilters);
   const set = (key, value) => setFilters((current) => ({ ...current, [key]: value }));
@@ -109,7 +107,10 @@ function GalleryPage() {
         <label className="gallery-sort-control"><span className="sr-only">Řazení fotografií</span><select value={filters.sort} onChange={(event) => set("sort", event.target.value)}><option value="newest">Nejnovější</option><option value="oldest">Nejstarší</option><option value="longest">Nejdelší úlovek</option><option value="heaviest">Nejtěžší úlovek</option></select></label>
       </div>
     </section>
-    {state.loading ? <p className="gallery-state" role="status">Načítám fotografie…</p> : state.error ? <p className="gallery-state" role="alert">{state.error}</p> : !allItems.length ? <section className="gallery-state"><p>Zatím tu nejsou žádné fotografie.</p><Link to="/add">Přidat úlovek</Link></section> : !photos.length ? <section className="gallery-state"><p>Nenalezeny žádné fotografie pro zvolené filtry.</p><button type="button" className="gallery-reset" onClick={clearFilters}>Vymazat filtry</button></section> : <div className="gallery-grid">{photos.map(item => <GalleryTile key={`${item.catchId}:${item.photoId}`} item={item} scope={scope} onOpen={event => { focusPhotoOpener(event); selectPhoto(item); }} />)}</div>}
+    {state.loading ? <p className="gallery-state" role="status">Načítám fotografie…</p> : state.error ? <p className="gallery-state" role="alert">{state.error}</p> : !allItems.length ? <section className="gallery-state"><p>Zatím tu nejsou žádné fotografie.</p><Link to="/add">Přidat úlovek</Link></section> : !photos.length ? <section className="gallery-state"><p>Nenalezeny žádné fotografie pro zvolené filtry.</p><button type="button" className="gallery-reset" onClick={clearFilters}>Vymazat filtry</button></section> : <div aria-busy={appliedFilters !== filters}>
+      <div className="gallery-grid">{visiblePhotos.map(item => <GalleryTile key={`${item.catchId}:${item.photoId}`} item={item} scope={scope} onOpen={event => { focusPhotoOpener(event); selectPhoto(item); }} />)}</div>
+      {photos.length > visibleCount && <button className="list-load-more" type="button" onClick={showMore}>Zobrazit další fotografie</button>}
+    </div>}
     {viewerIndex >= 0 && photos[viewerIndex] && <GalleryViewer items={photos} index={viewerIndex} scope={scope} onClose={() => setSelectedPhoto(null)} onSelect={index => selectPhoto(photos[index])} catches={state.catches} />}
   </div></Layout>;
 }

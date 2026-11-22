@@ -6,12 +6,15 @@ export { DAILY_CHALLENGES, WEEKLY_CHALLENGES } from "../../../product/config/cha
 const WATER_VISIT_GAP_MS = WATER_VISIT_GAP_DAYS * 24 * 60 * 60 * 1000;
 const DAILY_CHALLENGE_BY_ID = new Map(DAILY_CHALLENGES.map((item) => [item.id, item]));
 const WEEKLY_CHALLENGE_BY_ID = new Map(WEEKLY_CHALLENGES.map((item) => [item.id, item]));
+const challengeDayFormat = new Intl.DateTimeFormat("en-GB", {
+  timeZone: CHALLENGE_TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit",
+});
 const challengeXp = (challenge) => XP_RULES[challenge.xpKey];
 
 function localDayKey(value) {
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) return null;
-  const parts = new Intl.DateTimeFormat("en-GB", { timeZone: CHALLENGE_TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
+  const parts = challengeDayFormat.formatToParts(date);
   const fields = Object.fromEntries(parts.map((part) => [part.type, part.value]));
   return `${fields.year}-${fields.month}-${fields.day}`;
 }

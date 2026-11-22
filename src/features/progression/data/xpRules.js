@@ -9,12 +9,14 @@ export function applyCatchVerificationMultiplier(baseXp, level) {
   return Math.round(xp * multiplier);
 }
 
+const xpDayFormat = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Europe/Prague", year: "numeric", month: "2-digit", day: "2-digit",
+});
+
 function pragueDayKey(value) {
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) return null;
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Europe/Prague", year: "numeric", month: "2-digit", day: "2-digit",
-  }).format(date);
+  return xpDayFormat.format(date);
 }
 
 /** Pure daily reward policy so the same calculation can later run server-side. */

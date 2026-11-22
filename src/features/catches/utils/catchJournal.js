@@ -21,19 +21,18 @@ export function filterAndSortCatches(catches, filters, trips = []) {
   const query = normalizeText(filters.search ?? "");
   const tripNames = new Map(trips.map((trip) => [trip.id, trip.title]));
   const filtered = catches.filter((item) => {
-    const searchable = [item.species, item.speciesLatin, item.locationName, item.method?.label,
-      ...(item.baits ?? []).map((bait) => bait.label), item.notes, tripNames.get(item.tripId)]
-      .filter(Boolean).map(normalizeText).join(" ");
-    const date = localDate(item.caughtAt);
-    return (!query || searchable.includes(query))
-      && (!filters.incompleteOnly || isIncompleteQuickCatch(item))
+    const date = filters.dateFrom || filters.dateTo ? localDate(item.caughtAt) : "";
+    return (!filters.incompleteOnly || isIncompleteQuickCatch(item))
       && (!filters.speciesKey || item.speciesKey === filters.speciesKey)
       && (!filters.dateFrom || date >= filters.dateFrom)
       && (!filters.dateTo || date <= filters.dateTo)
       && (!filters.favoriteOnly || item.isFavorite)
       && (!filters.result || item.result === filters.result)
       && (!filters.methodKey || item.method?.key === filters.methodKey)
-      && (!filters.tripId || item.tripId === filters.tripId);
+      && (!filters.tripId || item.tripId === filters.tripId)
+      && (!query || [item.species, item.speciesLatin, item.locationName, item.method?.label,
+        ...(item.baits ?? []).map((bait) => bait.label), item.notes, tripNames.get(item.tripId)]
+        .filter(Boolean).map(normalizeText).join(" ").includes(query));
   });
   const sort = filters.sort ?? "newest";
   const valueKey = sort === "heaviest" || sort === "lightest" ? "weightKg" : "lengthCm";

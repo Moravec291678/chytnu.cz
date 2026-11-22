@@ -3,6 +3,7 @@ import { risCatalogue } from "../data/risCatalogue.js";
 import { waterPoint, publicWaterMapLinks } from "../data/waterLocation.js";
 import { distanceBetweenCoordinatesMeters } from "../data/nearbyWaterMatch.js";
 import { useWaterPosition } from "./useWaterPosition.js";
+import { useNearViewport } from "../../../shared/hooks/useNearViewport.js";
 import "leaflet/dist/leaflet.css";
 import "./CatalogueWaterMap.css";
 
@@ -15,20 +16,25 @@ export default function CatalogueWaterMap({ catalogueId, row }) {
   return point ? <PointMap key={water.id} water={water} point={point} /> : <p>Souřadnice tohoto revíru nejsou ve zdroji uvedeny. Polohu ani hranice nedopočítáváme.</p>;
 }
 function PointMap({water,point}) {
-  const node=useRef(null), mapRef=useRef(null), [error,setError]=useState(""), [retry,setRetry]=useState(0), [ready,setReady]=useState(0), position=useWaterPosition();
+  const mapRef=useRef(null), requestedZoom=useRef(13);
+  const [error,setError]=useState(""), [retry,setRetry]=useState(0), [ready,setReady]=useState(0);
+  const [requested,setRequested]=useState(false);
+  const [node,nearViewport]=useNearViewport({immediate:requested});
+  const position=useWaterPosition();
   const links=publicWaterMapLinks(point), lat=point.latitude,lon=point.longitude;
   useEffect(()=>{
+    if(!nearViewport)return undefined;
     let live=true,map;
     void import("leaflet").then(({default:L})=>{
       if(!live)return;
-      map=L.map(node.current,{scrollWheelZoom:false}).setView([lat,lon],13);mapRef.current={map,L};
+      map=L.map(node.current,{scrollWheelZoom:false}).setView([lat,lon],requestedZoom.current);mapRef.current={map,L};
       const label=document.createElement("span");label.textContent=`${water.number} · ${water.name} — bod RIS, nikoli hranice revíru`;
       L.circleMarker([lat,lon],{radius:10,color:"#effff8",fillColor:"#19c58c",fillOpacity:1,weight:2}).addTo(map).bindPopup(label).openPopup();
       L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'}).on("tileerror",()=>{if(live)setError("Mapový podklad není dostupný. Bod a souřadnice zůstávají platné; podklad vyžaduje připojení.");}).addTo(map);
       setReady(value=>value+1);
     }).catch(()=>{if(live)setError("Mapu se nepodařilo načíst. Použij souřadnice nebo externí mapu.");});
     return()=>{live=false;mapRef.current=null;map?.remove();};
-  },[lat,lon,water.name,water.number,retry]);
+  },[lat,lon,water.name,water.number,retry,nearViewport,node]);
   useEffect(()=>{
     if(!position.evidence || !mapRef.current)return undefined;
     const {map,L}=mapRef.current,{coordinates,accuracyMeters}=position.evidence;
@@ -43,8 +49,8 @@ function PointMap({water,point}) {
     <p>Oficiální bod RIS ({lat}, {lon}), nikoli hranice vody. Podklad poskytuje OpenStreetMap; porovnání GPS probíhá v zařízení.</p>
     <div ref={node} className="catalogue-water-map-canvas" role="region" aria-label="Interaktivní mapa referenčního bodu RIS" />
     {error && <p role="status">{error} <button type="button" onClick={()=>{setError("");setRetry(value=>value+1);}}>Obnovit mapu</button></p>}
-    <div className="catalogue-water-map-actions"><button type="button" onClick={()=>mapRef.current?.map.setView([lat,lon],15)}>Zobrazit na mapě</button><a href={links.osm} target="_blank" rel="noopener noreferrer">Otevřít v OpenStreetMap ↗</a><a href={links.navigation} target="_blank" rel="noopener noreferrer">Navigovat k bodu revíru ↗</a>
-    <button type="button" disabled={position.status === "loading"} onClick={()=>void position.request()}>{position.status === "loading" ? "Zjišťuji polohu…" : "Zobrazit moji polohu"}</button></div>
+    <div className="catalogue-water-map-actions"><button type="button" onClick={()=>{requestedZoom.current=15;setRequested(true);mapRef.current?.map.setView([lat,lon],15);}}>Zobrazit na mapě</button><a href={links.osm} target="_blank" rel="noopener noreferrer">Otevřít v OpenStreetMap ↗</a><a href={links.navigation} target="_blank" rel="noopener noreferrer">Navigovat k bodu revíru ↗</a>
+    <button type="button" disabled={position.status === "loading"} onClick={()=>{setRequested(true);void position.request();}}>{position.status === "loading" ? "Zjišťuji polohu…" : "Zobrazit moji polohu"}</button></div>
     {position.error && <p role="alert">{position.error}</p>}{distance !== null && <p role="status">Vzdušnou čarou k bodu RIS přibližně {(distance/1000).toLocaleString("cs-CZ",{maximumFractionDigits:2})} km · přesnost GPS ±{Math.round(position.evidence.accuracyMeters)} m · zjištěno {new Date(position.evidence.capturedAt).toLocaleTimeString("cs-CZ")}. Nejde o vzdálenost k hranici vody ani trasu.</p>}
   </section>;
 }

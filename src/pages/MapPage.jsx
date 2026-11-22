@@ -1,17 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import CatchMeasurements from "../features/catches/components/CatchMeasurements.jsx";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import Layout from "../shared/layout/Layout";
 import { formatCatchMeasurements } from "../features/catches/data/catchWeight.js";
 import { useCatches } from "../features/catches/context/useCatches";
-import { buildPrivateCatchMarkers } from "../features/map/data/catchMap";
+import { buildPrivateCatchMarkers, groupVisibleCatchMarkers } from "../features/map/data/catchMap";
 import "./MapPage.css";
+
+const mapDateFormatter = new Intl.DateTimeFormat("cs-CZ", { dateStyle: "medium" });
 
 function formatDate(value) {
   if (!value || Number.isNaN(Date.parse(value))) return "Datum neuvedeno";
-  return new Intl.DateTimeFormat("cs-CZ", { dateStyle: "medium" }).format(new Date(value));
+  return mapDateFormatter.format(new Date(value));
 }
 
 function catchCountLabel(count) {
@@ -43,6 +44,32 @@ function popupContent(marker, openDetail) {
   return root;
 }
 
+const POPUP_PAGE_SIZE = 20;
+
+function groupPopupContent(group, openDetail) {
+  const root = document.createElement("div");
+  root.className = "catch-map-popup";
+  function showPage(offset, focus) {
+    const heading = document.createElement("strong");
+    heading.textContent = locatedCatchCountLabel(group.length);
+    root.replaceChildren(heading);
+    for (const marker of group.slice(offset, offset + POPUP_PAGE_SIZE)) {
+      root.append(popupContent(marker, () => openDetail(marker.id)));
+    }
+    for (const [target, label] of [[offset - POPUP_PAGE_SIZE, "Předchozí úlovky"], [offset + POPUP_PAGE_SIZE, "Další úlovky"]]) {
+      if (target < 0 || target >= group.length) continue;
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = label;
+      button.addEventListener("click", () => showPage(target, true));
+      root.append(button);
+    }
+    if (focus) root.querySelector("button")?.focus();
+  }
+  showPage(0, false);
+  return root;
+}
+
 function MapPage() {
   const { state, refresh } = useCatches();
   const navigate = useNavigate();
@@ -55,55 +82,107 @@ function MapPage() {
   const [mapError, setMapError] = useState("");
   const [mapRetry, setMapRetry] = useState(0);
 
+  const mapActions = useRef(null);
+  const selection = useRef(null);
   useEffect(() => {
-    if (!mapNode.current || markers.length === 0) return undefined;
+    selection.current = { selectedMarker, navigate, setSearchParams };
+    if (selectedMarker) mapActions.current?.focusCatch(selectedMarker);
+  }, [selectedMarker, navigate, setSearchParams]);
+
+  useEffect(() => {
+    const node = mapNode.current;
+    if (!node || markers.length === 0) return undefined;
     let map;
+    let frame;
     let active = true;
-    setTileError(false);
-    try {
-      map = L.map(mapNode.current, { scrollWheelZoom: false, zoomControl: true });
+    void import("leaflet").then(({ default: L }) => {
+      if (!active) return;
+      setTileError(false);
+      map = L.map(node, { scrollWheelZoom: false, zoomControl: true });
       const tiles = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: 19,
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       });
       tiles.on("tileerror", () => { if (active) setTileError(true); });
       tiles.addTo(map);
-      const bounds = [];
-      const mapStyles = getComputedStyle(document.documentElement);
-      let selectedMarker;
-      markers.forEach((marker) => {
+
+      const layers = L.layerGroup().addTo(map);
+      const styles = getComputedStyle(document.documentElement);
+      const border = styles.getPropertyValue("--map-marker-border").trim();
+      const regular = styles.getPropertyValue("--map-marker-fill").trim();
+      const record = styles.getPropertyValue("--accent-orange").trim();
+      const openDetail = id => selection.current.navigate(`/catch/${encodeURIComponent(id)}`);
+      let focusedId = null;
+      const openPopup = (point, content) => L.popup({ maxHeight: 220 })
+        .setLatLng(point).setContent(content).openOn(map);
+      const focusCatch = (marker, center = true) => {
+        if (focusedId === marker.id) return;
+        focusedId = marker.id;
         const point = [marker.latitude, marker.longitude];
-        bounds.push(point);
-        const circle = L.circleMarker(point, {
-          radius: 8,
-          color: mapStyles.getPropertyValue("--map-marker-border").trim(),
-          weight: 2,
-          fillColor: marker.isPersonalRecord
-            ? mapStyles.getPropertyValue("--accent-orange").trim()
-            : mapStyles.getPropertyValue("--map-marker-fill").trim(),
-          fillOpacity: 1,
-        });
-        circle.bindPopup(popupContent(marker, () => navigate(`/catch/${marker.id}`)));
-        circle.bindTooltip(marker.species, { direction: "top" });
-        circle.on("click", () => setSearchParams({ catch: marker.id }, { replace: true }));
-        circle.addTo(map);
-        if (marker.id === selectedCatchId) selectedMarker = { circle, point };
-      });
-      if (selectedMarker) {
-        map.setView(selectedMarker.point, 14);
-        selectedMarker.circle.openPopup();
-      } else if (bounds.length === 1) map.setView(bounds[0], 13);
-      else map.fitBounds(bounds, { padding: [28, 28], maxZoom: 14 });
-    } catch {
-      queueMicrotask(() => {
-        if (active) setMapError("Mapu se nepodařilo zobrazit. Úlovky a jejich souřadnice zůstávají bezpečně uložené v deníku.");
-      });
-    }
+        if (center) map.setView(point, Math.max(14, map.getZoom() || 0));
+        return openPopup(point, popupContent(marker, () => openDetail(marker.id)));
+      };
+      mapActions.current = { focusCatch };
+
+      const renderMarkers = () => {
+        layers.clearLayers();
+        const groups = groupVisibleCatchMarkers(markers, point => map.latLngToContainerPoint(point), map.getSize());
+        for (const group of groups) {
+          const marker = group[0], clustered = group.length > 1;
+          const point = [marker.latitude, marker.longitude];
+          const circle = L.circleMarker(point, {
+            radius: clustered ? 13 : 8, color: border, weight: clustered ? 3 : 2,
+            fillColor: group.some(item => item.isPersonalRecord) ? record : regular, fillOpacity: 1,
+          }).addTo(layers);
+          const label = clustered ? locatedCatchCountLabel(group.length) : marker.species;
+          const tooltip = document.createElement("span");
+          tooltip.textContent = label;
+          circle.bindTooltip(tooltip, { direction: "top" });
+          const select = (keyboard = false) => {
+            if (clustered) {
+              focusedId = null;
+              const popup = openPopup(point, groupPopupContent(group, openDetail));
+              if (keyboard) popup.getElement()?.querySelector("button")?.focus({ preventScroll: true });
+              return;
+            }
+            focusedId = null;
+            const popup = focusCatch(marker, false);
+            if (keyboard) popup?.getElement()?.querySelector("button")?.focus({ preventScroll: true });
+            selection.current.setSearchParams({ catch: marker.id }, { replace: true });
+          };
+          circle.on("click", () => select());
+          const element = circle.getElement();
+          element?.setAttribute("tabindex", "0");
+          element?.setAttribute("role", "button");
+          element?.setAttribute("aria-label", label);
+          element?.addEventListener("keydown", event => {
+            if (event.key !== "Enter" && event.key !== " ") return;
+            event.preventDefault();
+            select(true);
+          });
+        }
+      };
+      const scheduleRender = () => {
+        if (frame !== undefined) cancelAnimationFrame(frame);
+        frame = requestAnimationFrame(renderMarkers);
+      };
+
+      const initial = selection.current.selectedMarker;
+      if (initial) focusCatch(initial);
+      else if (markers.length === 1) map.setView([markers[0].latitude, markers[0].longitude], 13);
+      else map.fitBounds(markers.map(marker => [marker.latitude, marker.longitude]), { padding: [28, 28], maxZoom: 14 });
+      renderMarkers();
+      map.on("moveend zoomend resize", scheduleRender);
+    }).catch(() => {
+      if (active) setMapError("Mapu se nepodařilo zobrazit. Úlovky a jejich souřadnice zůstávají bezpečně uložené v deníku.");
+    });
     return () => {
       active = false;
+      mapActions.current = null;
+      if (frame !== undefined) cancelAnimationFrame(frame);
       map?.remove();
     };
-  }, [markers, navigate, selectedCatchId, setSearchParams, mapRetry]);
+  }, [markers, state.loading, state.error, mapRetry]);
 
   const retryMap = () => { setMapError(""); setTileError(false); setMapRetry((value) => value + 1); };
 

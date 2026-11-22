@@ -15,6 +15,9 @@ import { getCatchRarity } from "../../catches/utils/rarity.js";
 import { DEFAULT_SPECIES } from "../../../shared/constants/speciesCatalog.js";
 import { CATCH_VERIFICATION_LEVEL, filterEligibleCatchRecords, getCatchPhotoHash, isCatchDateEligibleForProgression, isCatchProgressionEligible, isValidPhotoHash } from "../../catches/data/catchVerification.js";
 
+const catchHourFormat = new Intl.DateTimeFormat("en-GB", {
+  hour: "2-digit", hourCycle: "h23", timeZone: "Europe/Prague",
+});
 const DEFINITION_VERSION = 2;
 const claimedRewardEventIds = new Set();
 function hasContext(record) {
@@ -159,9 +162,7 @@ function achievementSource(achievementId, catches, trips, nowIso) {
   });
   if (achievementId === "night-catch") source = catches.find((record) => {
     if (!Number.isFinite(Date.parse(record.caughtAt))) return false;
-    const hour = Number(new Intl.DateTimeFormat("en-GB", {
-      hour: "2-digit", hourCycle: "h23", timeZone: "Europe/Prague",
-    }).format(new Date(record.caughtAt)));
+    const hour = Number(catchHourFormat.format(new Date(record.caughtAt)));
     return hour >= 22 || hour < 4;
   });
   if (achievementId === "marathon-trip") {

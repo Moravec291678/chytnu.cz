@@ -227,9 +227,14 @@ function CatchDetailPage() {
       {error && <p role="alert" className="catch-form-error">{error}</p>}
       {tripState.error && item.tripId && <p role="alert" className="catch-form-error">Přiřazenou vycházku se nepodařilo načíst: {tripState.error}</p>}
       {tripState.loading && item.tripId && <p role="status">Načítám přiřazenou vycházku…</p>}
-      {heroPhoto && <section className="catch-detail-photo-gallery" aria-label="Fotografie úlovku">
-        <figure className="photo-preview-item catch-detail-hero-photo"><button type="button" className="photo-open-button" onClick={event => openPhoto(event, heroPhoto)} aria-label={`Otevřít hlavní fotografii úlovku – ${item.species}`}><img src={heroPhoto.url} style={photoFrameStyle(heroPhoto)} alt="" /></button><figcaption>Hlavní fotografie</figcaption></figure>
-        {viewerPhotos.length > 1 && <div className="catch-detail-photo-strip">{viewerPhotos.slice(1).map((photo, index) => <button type="button" key={photo.id} onClick={event => openPhoto(event, photo)} aria-label={`Zobrazit fotografii ${index + 2} – ${item.species}`}><img src={photo.url} style={photoFrameStyle(photo)} alt="" /></button>)}</div>}
+      {(heroPhoto || (primaryPhoto && !photoLoadFailed && !missingCloudPhoto && !hasBrokenPhotos)) && <section className="catch-detail-photo-gallery" aria-label="Fotografie úlovku">
+        <figure className="photo-preview-item catch-detail-hero-photo">
+          {heroPhoto ? <button type="button" className="photo-open-button" onClick={event => openPhoto(event, heroPhoto)} aria-label={`Otevřít hlavní fotografii úlovku – ${item.species}`}>
+            <img src={heroPhoto.url} style={photoFrameStyle(heroPhoto)} alt="" />
+          </button> : <div className="catch-detail-photo-placeholder" aria-hidden="true" />}
+          <figcaption>Hlavní fotografie</figcaption>
+        </figure>
+        {viewerPhotos.length > 1 && <div className="catch-detail-photo-strip">{viewerPhotos.slice(1).map((photo, index) => <button type="button" key={photo.id} onClick={event => openPhoto(event, photo)} aria-label={`Zobrazit fotografii ${index + 2} – ${item.species}`}><img src={photo.url} decoding="async" style={photoFrameStyle(photo)} alt="" /></button>)}</div>}
       </section>}
       {(item.photos ?? []).some((photo) => photo.uploadReady === false && photo.blob instanceof Blob)
         ? <p className="catch-photo-unavailable" role="status">Původní fotografie zůstává uložená v tomto zařízení, ale není připravená k synchronizaci. Převeď ji na JPG, PNG nebo WebP a <Link to={`/catch/${item.id}/edit`}>nahraď ji</Link>.</p>

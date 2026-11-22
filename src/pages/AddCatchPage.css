@@ -149,6 +149,7 @@
 .photo-actions { display: flex; flex-wrap: wrap; gap: var(--space-1-5); padding: var(--space-2); }
 .catch-detail-photo-gallery { display: grid; gap: var(--space-2); margin: 0 var(--space-5); min-width: 0; }
 .catch-detail-photo-gallery .photo-preview-item { margin: 0; }
+.catch-detail-photo-placeholder { width: 100%; max-height: 320px; aspect-ratio: 4 / 3; }
 .catch-detail-hero-photo figcaption { padding: var(--space-1-75) var(--space-2-5); color: var(--text-secondary); font-size: var(--font-size-12); }
 .catch-detail-photo-strip { display: flex; gap: var(--space-2); overflow-x: auto; padding: var(--space-0-5) 0 var(--space-1-5); }
 .catch-detail-photo-strip button { flex: 0 0 76px; width: 76px; height: 64px; overflow: hidden; padding: 0; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); }
