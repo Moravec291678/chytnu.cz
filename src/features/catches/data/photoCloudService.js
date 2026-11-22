@@ -1,5 +1,6 @@
 import { describeSyncFailure } from "../../sync/data/syncDiagnostics.js";
 import { isDueForSync, parseRetryAfter } from "../../sync/context/syncRetry.js";
+import { getPhotoVariant } from "./photoVariants.js";
 import { withPhotoDeadline } from "./photoDeadline.js";
 import { accountScopeKey, validateDataScope } from "../../auth/data/localDataScope.js";
 import { firebaseAuth } from "../../auth/data/firebaseAuth.js";
@@ -345,10 +346,8 @@ export function createPhotoCloudService({
     });
   }
 
-  async function processUpload(operation) {
+  async function processUpload(operation, catchRecord) {
     const job = operation.photoCloud;
-    const scope = { ownerId: operation.ownerId, scopeKey: operation.scopeKey };
-    const catchRecord = await catches.get(job.catchId, scope);
     const photo = catchRecord?.photos?.find((item) => item.id === job.photoId);
     if (isPhotoCloudReady(photo, job)) {
 
@@ -380,7 +379,9 @@ export function createPhotoCloudService({
       }
     } else localBlobError = Object.assign(new Error("Lokální data fotografie už nejsou dostupná."), { code: "photo_blob_missing" });
     if (photo.uploadReady === false) throw Object.assign(new Error("Fotografii se nepodařilo převést. Zkus znovu synchronizovat, nebo vyber fotografii z Photos znovu."), { code: "photo_prepare_failed" });
-    const shouldRecover = Boolean(localBlobError) || operation.status === "conflict" || operation.status === "failed" || ["uploading", "verifying", "persisting"].includes(previousStage);
+    const recoveryStage = operation.status === "failed" ? job.resumeFrom ?? previousStage : previousStage;
+    const shouldRecover = Boolean(localBlobError) || operation.status === "conflict"
+      || ["uploading", "verifying", "persisting", "failed_retryable"].includes(recoveryStage);
     if (shouldRecover && typeof provider.recoverUpload === "function") {
       const recovered = await provider.recoverUpload({ ...job, requestUploadVerification: (payload) => authenticatedRequest("/api/cloudinary/verify-upload", payload, { expectedUid: operation.ownerId }) });
       if (recovered) {
@@ -400,8 +401,7 @@ export function createPhotoCloudService({
     await stage("preparing");
     const prepared = await prepare(photo);
     const blob = prepared.original;
-    const actualHash = await sha256Blob(blob);
-    if (actualHash !== job.sha256) throw new Error("Příprava fotografie změnila její originální bytes.");
+    if (blob !== photo.blob && await sha256Blob(blob) !== job.sha256) throw new Error("Příprava fotografie změnila její originální bytes.");
     const requestEndpoint = async (path, payload, label) => {
       recordPhotoUploadTrace(job.photoId, `${label}_started`);
       try {
@@ -511,9 +511,10 @@ export function createPhotoCloudService({
         if (!operation) return;
         if (operation.ownerId !== ownerId) continue;
       try {
+        let record;
         // Confirmed READY metadata supersedes even terminal or backoff-only stale jobs.
         if (operation.operation === "photo-upload") {
-          const record = await catches.get(operation.photoCloud.catchId, { ownerId, scopeKey: accountScopeKey(ownerId) });
+          record = await catches.get(operation.photoCloud.catchId, { ownerId, scopeKey: accountScopeKey(ownerId) });
           if (isPhotoCloudReady(record?.photos?.find((photo) => photo.id === operation.photoCloud.photoId), operation.photoCloud)) {
             await queue.complete(operation.operationId, operation.localRevision);
             continue;
@@ -521,7 +522,7 @@ export function createPhotoCloudService({
         }
         if (!due(operation, now(), force, probeLocalPhoto)) continue;
         const result = operation.operation === "photo-upload"
-          ? await processUpload(operation)
+          ? await processUpload(operation, record)
           : operation.operation === "photo-delete"
             ? await processDelete(operation)
             : null;
@@ -625,7 +626,7 @@ export function createPhotoCloudService({
     },
     getPhotoBlob: loadPhotoForDisplay,
   });
-  async function loadPhotoBlob({ photo, ownerId, catchId, scopeKey }) {
+  async function loadPhotoBlob({ photo, ownerId, catchId, scopeKey, variant }) {
       const scope = validateDataScope({ scopeKey, ownerId });
       if (!isActive(getCurrentOwnerId, ownerId)) return null;
       if (!(photo?.blob instanceof Blob)) {
@@ -692,6 +693,7 @@ export function createPhotoCloudService({
         }
         return null;
       }
+      const preview = downloadProvider.supportsPreviews && getPhotoVariant(variant);
       const deliveryStart = globalThis.performance?.now?.() ?? Date.now();
       recordPhotoUploadTrace(photo.id, "photo_delivery_started", { catchId, bytes: photo.size, mimeType: photo.type });
       let blob;
@@ -702,14 +704,16 @@ export function createPhotoCloudService({
           photoId: photo.id,
           objectKey: photo.cloud.objectKey,
           sha256: photo.cloud.sha256,
-          requestPhotoDownload: (identity) => authenticatedRequest("/api/cloudinary/export", { ...identity, expectedSha256: photo.cloud.sha256 }, { responseType: "blob", expectedUid: ownerId }),
+          requestPhotoDownload: (identity) => authenticatedRequest("/api/cloudinary/export", { ...identity, expectedSha256: photo.cloud.sha256, ...(preview ? { variant } : {}) }, { responseType: "blob", expectedUid: ownerId }),
           requestDownloadGrant: (photo) => authenticatedRequest("/api/cloudinary/delivery", photo, { expectedUid: ownerId }),
         });
         if (!(blob instanceof Blob)) throw Object.assign(new Error("Cloudová fotografie není dostupná."), {
           code: blob === null ? "cloudinary_asset_missing" : "cloudinary_download_failed",
         });
-        if (blob.size !== photo.size || (photo.type && blob.type !== photo.type)
-          || await sha256Blob(blob) !== photo.cloud.sha256) {
+        const invalidPreview = preview && (blob.size < 1 || blob.size > preview.maxBytes || blob.type !== "image/jpeg");
+        const invalidOriginal = !preview && (blob.size !== photo.size || (photo.type && blob.type !== photo.type)
+          || await sha256Blob(blob) !== photo.cloud.sha256);
+        if (invalidPreview || invalidOriginal) {
           throw Object.assign(new Error("Stažená fotografie neodpovídá uloženým metadatům."), { code: "photo_content_mismatch" });
         }
       } catch (error) {
@@ -726,6 +730,8 @@ export function createPhotoCloudService({
       if (!latestPhoto || latestPhoto.cloud?.sha256 !== photo.cloud.sha256
         || latestPhoto.cloud?.objectKey !== photo.cloud.objectKey
         || latestPhoto.cloud?.provider !== photo.cloud.provider) return null;
+      // Derivatives are display-only. The offline original cache accepts only the exact source hash.
+      if (preview) return isActive(getCurrentOwnerId, ownerId) ? blob : null;
       const cached = await catches.cachePhotoBlob(catchId, photo.id, blob, {
         ...scope, expectedPhotoCloud: { sha256: photo.cloud.sha256, objectKey: photo.cloud.objectKey, provider: photo.cloud.provider },
       });
@@ -742,7 +748,7 @@ export function createPhotoDisplayLoader(load) {
     const photo = options.photo;
     const key = JSON.stringify([options.ownerId, options.scopeKey, options.catchId,
       photo?.photoId ?? photo?.id, photo?.cloud?.provider, photo?.cloud?.objectKey,
-      photo?.cloud?.sha256, photo?.cloud?.state, photo?.size, photo?.type]);
+      photo?.cloud?.sha256, photo?.cloud?.state, photo?.size, photo?.type, options.variant]);
     if (pending.has(key)) return pending.get(key);
     const promise = Promise.resolve().then(() => load(options)).finally(() => {
       if (pending.get(key) === promise) pending.delete(key);
@@ -752,9 +758,14 @@ export function createPhotoDisplayLoader(load) {
   };
 }
 
-export const getPhotoBlobForDisplay = createPhotoDisplayLoader((options) => createPhotoCloudService({
-  provider: getPhotoCloudProvider(),
-  getCurrentOwnerId: () => {
+export const getPhotoBlobForDisplay = createPhotoDisplayLoader(async (options) => {
+  const service = createPhotoCloudService({ provider: getPhotoCloudProvider(), getCurrentOwnerId: () => {
     try { return firebaseAuth.currentUserId(); } catch { return null; }
-  },
-}).getPhotoBlob(options));
+  } });
+  try { return await service.getPhotoBlob(options); }
+  catch (error) {
+    // A legacy image outside preview limits remains viewable on explicit detail open.
+    if (options.variant !== "detail" || error?.code !== "photo_preview_unavailable") throw error;
+    return service.getPhotoBlob({ ...options, variant: undefined });
+  }
+});

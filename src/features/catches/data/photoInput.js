@@ -49,7 +49,7 @@ async function toSupportedSource(file, fileName, convertHeic) {
 
 async function decodeImage(blob) {
   if (typeof createImageBitmap === "function") {
-    try { return await createImageBitmap(blob); } catch { /* Try the browser's Image decoder. */ }
+    try { return await createImageBitmap(blob, { imageOrientation: "from-image" }); } catch { /* Try the browser's Image decoder. */ }
   }
   if (typeof Image === "undefined" || typeof URL?.createObjectURL !== "function") throw new Error("Toto zařízení neumí připravit fotografii pro synchronizaci.");
   const url = URL.createObjectURL(blob);
@@ -79,6 +79,7 @@ export async function normalizePhotoForUpload(file, { fileName = file?.name ?? "
       canvas.height = Math.max(1, Math.round(bitmap.height * scale));
       const context = canvas.getContext("2d");
       if (!context) throw new Error("Fotografii se nepodařilo připravit.");
+      context.imageSmoothingQuality = "high";
       context.drawImage(bitmap.image ?? bitmap, 0, 0, canvas.width, canvas.height);
       const jpeg = await new Promise((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("Fotografii se nepodařilo připravit.")), "image/jpeg", 0.82));
       if (jpeg.type !== "image/jpeg" || jpeg.size < 1) throw new Error("Fotografii se nepodařilo převést na podporovaný JPEG.");

@@ -5,6 +5,8 @@ import { pipeline } from "node:stream/promises";
 import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
+import { renderPrivatePhotoPreview, reservePrivatePhotoPreview, sendPrivatePhotoPreview } from "./privatePhotoPreview.js";
+import { getPhotoVariant } from "../features/catches/data/photoVariants.js";
 import { PRODUCT_LIMITS } from "../product/config/limits.js";
 import { createCloudinaryPhotoDeletionService, identityFromPhotoPath, pruneScannedReceipt, PHOTO_DELETE_RECEIPT_PRUNE_MS } from "./cloudinaryPhotoDeletion.js";
 import { createAccountDeletionService } from "./accountDeletion.js";
@@ -345,9 +347,10 @@ export function createCloudinaryApi({
 
   async function exportPhoto(req, res) {
     const started = performance.now();
-    const request = await prepare(req, res, ["catchId", "photoId", "expectedSha256", "recoverAtRevision"], "export");
+    const request = await prepare(req, res, ["catchId", "photoId", "expectedSha256", "recoverAtRevision", "variant"], "export");
     if (!request) return;
     const { uid, body } = request;
+    let releasePreview;
     try {
       const access = await getPhotoAccess(uid, body.catchId, body.photoId);
       if (!activePhotoAccess(access, uid, body.catchId, body.photoId)) {
@@ -356,6 +359,10 @@ export function createCloudinaryApi({
       const expectedKey = `users/${uid}/catches/${body.catchId}/photos/${body.photoId}/original`;
       const photo = access.photoRecord;
       const recovery = body.recoverAtRevision !== undefined;
+      const variant = body.variant === undefined ? null : getPhotoVariant(body.variant);
+      if (body.variant !== undefined && (!variant || recovery || !SHA_PATTERN.test(body.expectedSha256 ?? ""))) {
+        return send(res, 400, { error: "invalid_request", message: "Invalid photo preview." });
+      }
       if (recovery && (!Number.isSafeInteger(body.recoverAtRevision) || body.recoverAtRevision < 1
         || access.catchRecord.serverRevision !== body.recoverAtRevision)) {
         return send(res, 409, { error: "photo_metadata_not_ready", message: "Catch revision has changed." });
@@ -388,6 +395,10 @@ export function createCloudinaryApi({
       if (body.expectedSha256 !== undefined && body.expectedSha256 !== expectedHash) {
         return send(res, 409, { error: "photo_metadata_not_ready", message: "Photo revision has changed." });
       }
+      if (variant && !(releasePreview = reservePrivatePhotoPreview())) {
+        res.setHeader?.("Retry-After", "2");
+        return send(res, 503, { error: "photo_preview_busy", message: "Photo previews are busy." });
+      }
       const expiresAt = Math.floor(now() / 1000) + 300;
       const url = cloudinary.utils.private_download_url(cloudinaryPublicId(uid, body.catchId, body.photoId), expectedFormat(photo.type), {
         resource_type: "image", type: "authenticated", expires_at: expiresAt,
@@ -402,7 +413,7 @@ export function createCloudinaryApi({
       // Stream large originals so the first bytes can leave Vercel before the
       // whole Cloudinary body arrives. The client verifies SHA-256 before display.
       // A failed digest destroys the response instead of completing the stream.
-      if (photo.size > 4 * 1024 * 1024 && typeof res.write === "function") {
+      if (!variant && photo.size > 4 * 1024 * 1024 && typeof res.write === "function") {
         res.setHeader?.("Server-Timing", `cloudinary-headers;dur=${(performance.now() - upstreamStart).toFixed(1)}`);
         res.setHeader?.("Cache-Control", "no-store");
         res.setHeader?.("Content-Type", photo.type);
@@ -442,6 +453,10 @@ export function createCloudinaryApi({
       if (byteCount !== photo.size || digest.digest("hex") !== expectedHash) {
         return send(res, 502, { error: "photo_content_mismatch", message: "Cloud photo could not be verified." });
       }
+      if (variant) {
+        try { return sendPrivatePhotoPreview(res, await renderPrivatePhotoPreview(Buffer.concat(chunks, byteCount), photo.type, variant)); }
+        catch { return send(res, 422, { error: "photo_preview_unavailable", message: "Photo preview could not be generated." }); }
+      }
       res.setHeader?.("Cache-Control", "no-store");
       res.setHeader?.("Content-Type", photo.type);
       res.setHeader?.("Content-Length", String(byteCount));
@@ -455,7 +470,7 @@ export function createCloudinaryApi({
         return;
       }
       return safeError(res, error);
-    }
+    } finally { releasePreview?.(); }
   }
 
   async function remove(req, res) {

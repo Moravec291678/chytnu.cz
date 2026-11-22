@@ -38,7 +38,7 @@ function CatchPhoto({ blob, species, photo, ownerId, catchId }) {
       load: () => {
         if (blob instanceof Blob) return blob;
         if (!ownerId) return null;
-        return getPhotoBlobForDisplay({ photo: currentPhoto.current, ownerId, catchId, scopeKey: accountScopeKey(ownerId) });
+        return getPhotoBlobForDisplay({ photo: currentPhoto.current, ownerId, catchId, scopeKey: accountScopeKey(ownerId), variant: "card" });
       },
       onState: ({ blob: recovered, status, errorCode }) => {
         setDisplayBlob(recovered);
@@ -74,7 +74,7 @@ function CatchPhoto({ blob, species, photo, ownerId, catchId }) {
     attemptedFallback.current = true;
     setLoadState("loading");
     try {
-      const recovered = await withPhotoDeadline(() => getPhotoBlobForDisplay({ photo, ownerId, catchId, scopeKey: accountScopeKey(ownerId) }));
+      const recovered = await withPhotoDeadline(() => getPhotoBlobForDisplay({ photo, ownerId, catchId, scopeKey: accountScopeKey(ownerId), variant: "card" }));
       if (recovered && recovered !== displayBlob) { setDisplayBlob(recovered); setLoadState("ready"); setLoadErrorCode(""); }
       else setLoadState("error");
     } catch (error) { setLoadErrorCode(error?.code ?? ""); setLoadState("error"); }

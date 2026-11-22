@@ -72,7 +72,7 @@ function CatchDetailPage() {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   useEffect(() => {
-    const controller = createDetailPhotoDelivery(getPhotoBlobForDisplay, (ready, errors) => {
+    const controller = createDetailPhotoDelivery(options => getPhotoBlobForDisplay({ ...options, variant: "detail" }), (ready, errors) => {
       setDeliveredPhotos({ key: photoScope, items: ready });
       setPhotoLoadFailed(errors.some(code => code !== "cloudinary_asset_missing"));
       setMissingCloudPhotoId(errors.includes("cloudinary_asset_missing") ? id : null);

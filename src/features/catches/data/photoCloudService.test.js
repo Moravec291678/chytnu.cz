@@ -1,3 +1,4 @@
+import { env } from "node:process";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { completedSyncState } from "../../sync/data/syncLifecycleState.js";
@@ -1126,4 +1127,44 @@ test("expired signature leaves a retry job, verifies before retry and signs anew
   assert.notEqual(grants[0], grants[1]);
   assert.equal((await photoCloudOutboxRepository.list()).length, 0);
   assert.equal((await catchRepository.get(catchId, scope)).photos[0].cloud.state, "synced");
+});
+
+test("signing failure retries without probing an upload that never started", async () => {
+  await resetDatabase();
+  const ownerId = "failed-sign-owner", catchId = "failed-sign-catch", photoId = "first-photo";
+  const scope = { ownerId, scopeKey: accountScopeKey(ownerId) };
+  const photo = makePhoto(photoId);
+  await catchRepository.put(makeCatch(ownerId, catchId, [photo]), scope);
+  await acknowledgeCatchOperations(ownerId);
+  const publicId = "chytnucz/" + createPhotoObjectKey(ownerId, catchId, photoId);
+  let grants = 0, verifications = 0, uploads = 0;
+  const latency = Number(env.CHYTNU_SIGNING_FIXTURE_LATENCY_MS || 0);
+  const delay = () => latency ? new Promise(resolve => setTimeout(resolve, latency)) : undefined;
+  const provider = createCloudinaryPhotoProvider({ fetchImpl: async url => {
+    if (url.endsWith("/capability")) return Response.json({ enabled: true });
+    uploads++;
+    await delay();
+    return Response.json({ public_id: publicId, resource_type: "image", type: "authenticated", bytes: photo.size, format: "jpg" });
+  } });
+  const service = createPhotoCloudService({ provider, getCurrentOwnerId: () => ownerId, authenticatedRequest: async path => {
+    await delay();
+    if (path.endsWith("/sign")) {
+      if (++grants === 1) throw Object.assign(new Error("synthetic unavailable"), { status: 503 });
+      return { cloudName: "test-cloud", apiKey: "1234567890", resourceType: "image", timestamp: 1800000000,
+        signature: "a".repeat(64), params: { public_id: publicId, type: "authenticated", overwrite: false } };
+    }
+    verifications++;
+    if (!uploads) throw Object.assign(new Error("not uploaded"), { status: 404, code: "asset_not_found" });
+    return { verified: true, bytes: photo.size, format: "jpg" };
+  } });
+  assert.equal((await service.run(ownerId)).status, "error");
+  const id = (await photoCloudOutboxRepository.list())[0].operationId;
+  const start = performance.now();
+  const result = await service.run(ownerId, { force: true });
+  if (latency) console.log(JSON.stringify({ retryMs: Math.round(performance.now() - start), grants, uploads, verifications, result: result.status }));
+  assert.equal(result.uploaded, 1);
+  assert.equal(verifications, 1);
+  assert.equal(uploads, 1);
+  assert.ok(id);
+  assert.equal((await photoCloudOutboxRepository.list()).length, 0);
 });

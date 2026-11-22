@@ -73,6 +73,6 @@ test("a PC with metadata only and no upload job displays and caches the recovere
       } },
   });
   const args = { ownerId, scopeKey: accountScopeKey(ownerId), catchId, photo };
-  assert.equal(await service.getPhotoBlob(args), blob);
+  assert.equal(await service.getPhotoBlob({ ...args, variant: "card" }), blob);
   assert.equal(await service.getPhotoBlob(args), blob);
 });

@@ -138,6 +138,7 @@ export function createCloudinaryPhotoProvider({ fetchImpl = globalThis.fetch, ap
     cancelUpload: uploadTransport.cancelUpload,
     cancelUploadsForPhoto: uploadTransport.cancelUploadsForPhoto,
     cancelUploadsForOwner: uploadTransport.cancelUploadsForOwner,
+    supportsPreviews: true,
     async download(input) {
       const expectedKey = createPhotoObjectKey(input.ownerId, input.catchId, input.photoId);
       if (input.objectKey !== expectedKey) throw providerError("Photo cloud key is invalid.", "invalid_photo_identity");

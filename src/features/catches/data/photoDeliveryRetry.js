@@ -19,8 +19,9 @@ export function startPhotoDelivery({ load, onState, events = globalThis.window,
   let terminal = false;
   let exhausted = false;
   let timer;
+  let serverRetryAt = 0;
   const retry = async (event) => {
-    if (stopped || ready) return;
+    if (stopped || ready || serverRetryAt > Date.now()) return;
     const changed = event?.type === "chytnu:local-data-restored";
     const explicit = event?.type === "chytnu:photo-delivery-retry";
     // Realtime events are shared across the account: an unrelated catch update
@@ -59,9 +60,18 @@ export function startPhotoDelivery({ load, onState, events = globalThis.window,
       onState({ blob: null, status: "error", errorCode });
       exhausted = attempts >= maxAutomaticRetries;
       terminal = ["photo_not_owned", "ownership_denied", "firebase_token_invalid", "missing_firebase_user",
-        "cloudinary_asset_missing", "invalid_photo_identity", "photo_local_blob_unreadable", "photo_content_mismatch"].includes(errorCode);
+        "cloudinary_asset_missing", "invalid_photo_identity", "photo_local_blob_unreadable", "photo_content_mismatch", "photo_preview_unavailable"].includes(errorCode);
       if (!terminal && attempts < maxAutomaticRetries) {
-        timer = schedule(retry, Math.min(30_000, 1000 * 2 ** Math.min(attempts++, 5)));
+        const delay = Math.min(30_000, 1000 * 2 ** Math.min(attempts++, 5));
+        serverRetryAt = Number.isFinite(error?.retryAfterAt) ? error.retryAfterAt : 0;
+        const scheduleRetry = () => {
+          if (stopped) return;
+          const remaining = serverRetryAt - Date.now();
+          if (remaining > 0) timer = schedule(scheduleRetry, Math.min(2_147_000_000, remaining));
+          else void retry();
+        };
+        timer = schedule(serverRetryAt > 0 ? scheduleRetry : retry,
+          Math.min(2_147_000_000, Math.max(delay, serverRetryAt - Date.now())));
       }
     } finally {
       running = false;

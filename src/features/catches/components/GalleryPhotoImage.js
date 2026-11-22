@@ -40,11 +40,11 @@ export default function GalleryPhotoImage({ item, scope = null, style, alt, load
         const current = requestRef.current;
         const request = getGalleryPhotoLoadRequest(current.item, current.scope);
         return request.kind === "local" ? request.blob
-          : request.kind === "remote" ? loadPhoto(request.options) : null;
+          : request.kind === "remote" ? loadPhoto({ ...request.options, variant: tile ? "gallery" : "detail" }) : null;
       },
       onState: (next) => setLoaded({ deliveryKey, localBlob, ...next }),
     });
-  }, [enabled, deliveryKey, localBlob, retryVersion, loadPhoto]);
+  }, [enabled, deliveryKey, localBlob, retryVersion, loadPhoto, tile]);
   const setImage = useCallback((image) => {
     if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
     objectUrlRef.current = null;

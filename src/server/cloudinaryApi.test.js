@@ -558,3 +558,31 @@ test("15 and 25 MB originals are rejected by the current product limit before Cl
     assert.equal((await request(harness.api.exportPhoto)).statusCode, 404);
   }
 });
+
+test("authenticated previews have bounded dimensions, verify the original, and leave its bytes intact", async () => {
+  const { default: sharp } = await import("sharp");
+  const source = await sharp({ create: { width: 2600, height: 1700, channels: 3, background: "#276654" } })
+    .withMetadata({ orientation: 6 }).jpeg().toBuffer();
+  const hash = createHash("sha256").update(source).digest("hex");
+  const access = makePhotoAccess();
+  access.photoRecord.size = source.length;
+  access.photoRecord.cloud.sha256 = hash;
+  const harness = createHarness({ access, fetchImpl: async () => new Response(source) });
+  const identity = { catchId, photoId, expectedSha256: hash };
+  const original = await request(harness.api.exportPhoto, { body: identity });
+  assert.deepEqual(original.body, source);
+  for (const [variant, edge] of [["card", 384], ["gallery", 800], ["detail", 1600]]) {
+    const response = await request(harness.api.exportPhoto, { body: { ...identity, variant } });
+    assert.equal(response.statusCode, 200);
+    assert.match(response.headers["Cache-Control"], /private, no-store/);
+    const image = await sharp(response.body).metadata();
+    assert.equal(image.height, edge);
+    assert.ok(image.width < edge);
+    assert.equal(image.exif, undefined);
+  }
+  assert.equal((await request(harness.api.exportPhoto, { body: { ...identity, variant: "original" } })).statusCode, 400);
+  assert.equal((await request(harness.api.exportPhoto, { body: { catchId, photoId, variant: "card" } })).statusCode, 400);
+  assert.equal((await request(harness.api.exportPhoto, { authorization: "Bearer owner-b-token", body: { ...identity, variant: "card" } })).statusCode, 403);
+  access.catchRecord.deleted = true;
+  assert.equal((await request(harness.api.exportPhoto, { body: { ...identity, variant: "card" } })).statusCode, 403);
+});

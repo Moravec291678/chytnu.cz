@@ -910,7 +910,7 @@ export const photoCloudOutboxRepository = {
             lastErrorCode: code, lastProviderCode: providerCode ?? null, lastEndpoint: ["/api/cloudinary/sign", "/api/cloudinary/verify-upload"].includes(endpoint) ? endpoint : null,
             retryable: !terminal && retryable, retryAfterAt: retryAfterAt ?? null,
             nextAttemptAt: terminal || !retryable ? null : syncRetryAt(count, { now, retryAfterAt }),
-            updatedAt: new Date(now).toISOString(), photoCloud: { ...job, state: terminal ? "failed_terminal" : "failed_retryable" } });
+            updatedAt: new Date(now).toISOString(), photoCloud: { ...job, resumeFrom: job.state === "failed_retryable" ? job.resumeFrom : job.state, state: terminal ? "failed_terminal" : "failed_retryable" } });
           const cloud = { state: terminal ? "unavailable" : "uploadFailed", provider: job.provider,
             objectKey: job.objectKey, sha256: job.sha256, ...(terminal ? { errorCode: code } : {}) };
           catches.put({ ...record, photos: record.photos.map(p => p.id !== job.photoId ? p : { ...p, cloud,

@@ -74,7 +74,7 @@ export default function TripCatchMap({ trip, catches }) {
               const urls = [], stops = [];
               for (const { marker: photoMarker, img } of popup.photos) {
                 stops.push(startPhotoDelivery({ maxAutomaticRetries: 1,
-                  load: () => getPhotoBlobForDisplay({ photo: photoMarker.photo, ownerId: photoMarker.ownerId, catchId: photoMarker.id, scopeKey: photoMarker.scopeKey }),
+                  load: () => getPhotoBlobForDisplay({ photo: photoMarker.photo, ownerId: photoMarker.ownerId, catchId: photoMarker.id, scopeKey: photoMarker.scopeKey, variant: "card" }),
                   onState: ({ blob }) => { if (active && blob instanceof Blob) { const url = URL.createObjectURL(blob); urls.push(url); img.src = url; img.hidden = false; } },
                 }));
               }

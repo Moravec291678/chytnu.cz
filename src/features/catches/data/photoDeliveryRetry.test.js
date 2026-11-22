@@ -125,3 +125,19 @@ test("an unrelated refresh during a slow successful thumbnail does not discard i
     assert.equal(getPhotoAvailability({}, { loadState: state.status, resolvedBlob: state.blob }), "available");
   } finally { stop(); }
 });
+
+test("a photo preview honors the HTTP retry deadline despite focus and reconnect", async () => {
+  const events = new EventTarget();
+  let attempts = 0;
+  let scheduledDelay;
+  const stop = startPhotoDelivery({ events, schedule: (_, delay) => { scheduledDelay = delay; return 1; }, cancel: () => {},
+    load: async () => { attempts++; throw { code: "photo_preview_busy", retryAfterAt: Date.now() + 5_000 }; }, onState: () => {} });
+  try {
+    await setImmediate();
+    assert.ok(scheduledDelay >= 4_900);
+    events.dispatchEvent(new Event("focus"));
+    events.dispatchEvent(new Event("online"));
+    await setImmediate();
+    assert.equal(attempts, 1);
+  } finally { stop(); }
+});
